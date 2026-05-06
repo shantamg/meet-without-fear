@@ -45,7 +45,8 @@ The product direction is not "tune current Stage 4." It is a structural replacem
 Build in this order unless there is a concrete reason to change sequencing.
 
 - [x] [#363 - Stage 4 redesign: data model migration](https://github.com/shantamg/meet-without-fear/issues/363)
-  - Status: implementation-ready locally.
+  - Status: draft PR opened.
+  - PR: [#373 - Stage 4/Tending data model and state API](https://github.com/shantamg/meet-without-fear/pull/373)
   - Local files touched:
     - `backend/prisma/schema.prisma`
     - `backend/prisma/migrations/20260506000000_add_stage4_tending_models/migration.sql`
@@ -59,11 +60,12 @@ Build in this order unless there is a concrete reason to change sequencing.
     - `npm test --workspace backend -- --runTestsByPath src/__tests__/prisma-schema.test.ts --runInBand`
   - Result: schema valid; targeted Prisma schema test passed with 35 passed, 2 skipped.
 
-- [ ] [#364 - Stage 4 redesign: state service and /stage4 API](https://github.com/shantamg/meet-without-fear/issues/364)
+- [x] [#364 - Stage 4 redesign: state service and /stage4 API](https://github.com/shantamg/meet-without-fear/issues/364)
   - Depends on: #363.
   - Add `GET /sessions/:id/stage4`.
   - Compute redesigned Stage 4 phase and return inventory, coverage, selections, outcome, and tending preview.
-  - Status: implementation-ready locally; PR still needed before the issue can be marked complete.
+  - Status: draft PR opened.
+  - PR: [#373 - Stage 4/Tending data model and state API](https://github.com/shantamg/meet-without-fear/pull/373)
   - Local files touched:
     - `shared/src/enums.ts`
     - `shared/src/dto/strategy.ts`
@@ -88,7 +90,6 @@ Build in this order unless there is a concrete reason to change sequencing.
     - `npm test --workspace backend -- --runTestsByPath src/__tests__/prisma-schema.test.ts --runInBand`
   - Result: targeted Stage 4 route tests passed with 26 passed; backend and shared typechecks passed; Prisma schema valid; targeted Prisma schema test passed with 35 passed, 2 skipped.
   - Remaining #364 work:
-    - Open a PR for the #363/#364 backend contract slice.
     - Optional before mobile integration: move DTOs from `shared/src/dto/strategy.ts` into a dedicated `stage4.ts` file if shared DTO organization becomes noisy.
     - Optional before external clients depend on it: add route-level response contract validation if the shared contract layer is preferred over DTO-only typing.
 
