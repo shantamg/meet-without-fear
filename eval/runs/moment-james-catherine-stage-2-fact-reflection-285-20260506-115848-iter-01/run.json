@@ -1,0 +1,12 @@
+{
+  "duration_seconds": 16.569,
+  "entrypoint": "scripts/mwf_moment_eval.py",
+  "git_branch": "feat/autonomous-alignment-20260506",
+  "git_sha": "32340ce3e008958812db3ce7613feb2e64894060",
+  "iteration": 1,
+  "mode": "real",
+  "moment": "james-catherine-stage-2-fact-reflection-285",
+  "prompt_version": null,
+  "session_id": "cmou07o7v0007pxbjpr9axnei",
+  "started_at": "2026-05-06T11:58:48.656050Z"
+}
