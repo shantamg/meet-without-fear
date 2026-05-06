@@ -1,0 +1,12 @@
+{
+  "duration_seconds": 15.563,
+  "entrypoint": "scripts/mwf_moment_eval.py",
+  "git_branch": "feat/autonomous-alignment-20260506",
+  "git_sha": "32340ce3e008958812db3ce7613feb2e64894060",
+  "iteration": 1,
+  "mode": "real",
+  "moment": "core-protocol-update-stage-2-emotional-handling-84",
+  "prompt_version": null,
+  "session_id": "cmou0158e0007pxm5v9sillos",
+  "started_at": "2026-05-06T11:53:44.175868Z"
+}
