@@ -645,7 +645,6 @@ class TestAlignmentStatus(unittest.TestCase):
                  mock.patch.object(status, "MOMENT_RUNS_ROOT", tmp_path / "runs"), \
                  mock.patch.object(status, "ALIGNMENT_RUNS_ROOT", tmp_path / "alignment-runs"), \
                  mock.patch.object(status, "TRANSCRIPTS_ROOT", transcripts), \
-                 mock.patch.object(status, "git_head", return_value="abc123"), \
                  mock.patch.object(status, "open_loop_prs", return_value=[]):
                 first = status.render(limit=5)
                 second = status.render(limit=5)

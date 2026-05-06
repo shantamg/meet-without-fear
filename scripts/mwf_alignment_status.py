@@ -38,11 +38,6 @@ def display_path(path: Path) -> str:
         return str(path)
 
 
-def git_head() -> str:
-    result = run_command(["git", "rev-parse", "--short", "HEAD"])
-    return result.stdout.strip() if result.returncode == 0 else "unknown"
-
-
 def load_json(path: Path) -> dict[str, Any] | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -144,7 +139,6 @@ def render(limit: int) -> str:
         "",
         "## Production Prompt",
         "",
-        f"- Git HEAD: `{git_head()}`",
         f"- `backend/src/services/stage-prompts.ts` SHA: `{sha(STAGE_PROMPTS)}`",
         "",
         "## Latest Candidate Revisions",
