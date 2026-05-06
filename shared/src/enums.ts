@@ -130,6 +130,50 @@ export enum AgreementStatus {
   ABANDONED = 'ABANDONED',
 }
 
+export enum Stage4ProposalKind {
+  SHARED_PROPOSAL = 'SHARED_PROPOSAL',
+  INDIVIDUAL_COMMITMENT = 'INDIVIDUAL_COMMITMENT',
+}
+
+export enum Stage4ProposalStatus {
+  ACTIVE = 'ACTIVE',
+  REVISED = 'REVISED',
+  REMOVED = 'REMOVED',
+  CONVERTED_TO_AGREEMENT = 'CONVERTED_TO_AGREEMENT',
+}
+
+export enum Stage4SelectionDecision {
+  WILLING = 'WILLING',
+  NOT_WILLING = 'NOT_WILLING',
+  NEEDS_DISCUSSION = 'NEEDS_DISCUSSION',
+}
+
+export enum Stage4ClosureKind {
+  SHARED_AGREEMENT = 'SHARED_AGREEMENT',
+  NO_SHARED_AGREEMENT = 'NO_SHARED_AGREEMENT',
+}
+
+export enum Stage4ClosureReason {
+  MUTUAL_SELECTION = 'MUTUAL_SELECTION',
+  NO_OVERLAP = 'NO_OVERLAP',
+  BOUNDARY_HONORED = 'BOUNDARY_HONORED',
+  USER_STOPPED = 'USER_STOPPED',
+}
+
+export enum TendingEntryType {
+  SCHEDULED_SHARED_AGREEMENT_CHECKIN = 'SCHEDULED_SHARED_AGREEMENT_CHECKIN',
+  USER_INITIATED_REENTRY = 'USER_INITIATED_REENTRY',
+}
+
+export enum TendingEntryStatus {
+  SCHEDULED = 'SCHEDULED',
+  OPEN = 'OPEN',
+  PARTIAL = 'PARTIAL',
+  COMPLETED = 'COMPLETED',
+  EXPIRED = 'EXPIRED',
+  CANCELLED = 'CANCELLED',
+}
+
 // ============================================================================
 // Global Library
 // ============================================================================

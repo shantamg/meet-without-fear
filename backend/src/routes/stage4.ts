@@ -4,6 +4,7 @@
  * Routes for the Strategic Repair stage of the Meet Without Fear process.
  * - GET /sessions/:id/strategies - Get anonymous strategy pool
  * - POST /sessions/:id/strategies - Propose a strategy
+ * - GET /sessions/:id/stage4 - Get redesigned Stage 4 state
  * - POST /sessions/:id/strategies/rank - Submit ranking
  * - GET /sessions/:id/strategies/overlap - Get ranking overlap
  * - POST /sessions/:id/agreements - Create agreement
@@ -15,6 +16,7 @@ import { requireAuth, requireSessionAccess } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errors';
 import {
   getStrategies,
+  getStage4State,
   proposeStrategy,
   submitRanking,
   getOverlap,
@@ -26,6 +28,14 @@ import {
 } from '../controllers/stage4';
 
 const router = Router();
+
+// Get redesigned Stage 4 state
+router.get(
+  '/sessions/:id/stage4',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(getStage4State)
+);
 
 // Get anonymous strategy pool
 router.get(

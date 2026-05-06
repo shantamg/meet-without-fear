@@ -27,6 +27,7 @@ import {
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
+import { getStage4State as buildStage4State, Stage4StateNotFoundError } from '../services/stage4-state';
 import { z } from 'zod';
 
 // ============================================================================
@@ -109,6 +110,34 @@ const createAgreementRequestSchema = z.object({
 // ============================================================================
 // Controllers
 // ============================================================================
+
+/**
+ * Get redesigned Stage 4 state for proposal inventory, coverage, selections,
+ * outcome, and Tending preview.
+ * GET /sessions/:id/stage4
+ */
+export async function getStage4State(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const state = await buildStage4State(sessionId, user.id);
+
+    successResponse(res, state);
+  } catch (error) {
+    if (error instanceof Stage4StateNotFoundError) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+
+    logger.error('[getStage4State] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to get Stage 4 state', 500);
+  }
+}
 
 /**
  * Get anonymous strategy pool for the session
