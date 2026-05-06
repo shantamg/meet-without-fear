@@ -22,13 +22,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
-import {
-  StrategyPool,
-  StrategyRanking,
-  OverlapReveal,
-  AgreementCard,
-  WaitingRoom,
-} from '../components';
+import { StrategyPool } from '../components/StrategyPool';
+import { StrategyRanking } from '../components/StrategyRanking';
+import { OverlapReveal } from '../components/OverlapReveal';
+import { AgreementCard } from '../components/AgreementCard';
+import { WaitingRoom } from '../components/WaitingRoom';
+import { Stage4RedesignPanel } from '../components/Stage4RedesignPanel';
 import {
   useStrategies,
   useRequestStrategySuggestions,
@@ -40,9 +39,18 @@ import {
   useConfirmAgreement,
   useResolveSession,
   useCreateAgreement,
+  useStage4State,
+  useSubmitStage4ProposalSelection,
+  useCloseStage4,
 } from '../hooks/useStages';
 import { useSession } from '../hooks/useSessions';
-import { StrategyPhase, AgreementType } from '@meet-without-fear/shared';
+import {
+  StrategyPhase,
+  AgreementType,
+  Stage4ClosureKind,
+  Stage4ClosureReason,
+  Stage4SelectionDecision,
+} from '@meet-without-fear/shared';
 import { colors } from '@/theme';
 
 // ============================================================================
@@ -407,6 +415,9 @@ export function StrategicRepairScreen() {
   const { mutate: confirmAgreement } = useConfirmAgreement();
   const { mutate: resolveSession } = useResolveSession();
   const { mutate: createAgreement } = useCreateAgreement();
+  const { data: stage4State } = useStage4State(sessionId);
+  const submitStage4Selection = useSubmitStage4ProposalSelection();
+  const closeStage4 = useCloseStage4();
 
   // Determine current phase
   const phase = strategyData?.phase || StrategyPhase.COLLECTING;
@@ -418,6 +429,39 @@ export function StrategicRepairScreen() {
     description: s.description,
     duration: s.duration || undefined,
   }));
+
+  if (stage4State) {
+    const partnerName = session?.partner?.nickname ?? session?.partner?.name ?? undefined;
+
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <ScrollView style={styles.scrollContainer}>
+          <Stage4RedesignPanel
+            state={stage4State}
+            partnerName={partnerName}
+            isSelecting={submitStage4Selection.isPending}
+            isClosing={closeStage4.isPending}
+            onSelectProposal={(proposalId: string, decision: Stage4SelectionDecision) => {
+              if (!sessionId) return;
+              submitStage4Selection.mutate({
+                sessionId,
+                proposalId,
+                decision,
+              });
+            }}
+            onCloseStage4={(kind: Stage4ClosureKind, reason: Stage4ClosureReason) => {
+              if (!sessionId) return;
+              closeStage4.mutate({
+                sessionId,
+                kind,
+                reason,
+              });
+            }}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   // Handle loading state
   if (isLoadingStrategies) {

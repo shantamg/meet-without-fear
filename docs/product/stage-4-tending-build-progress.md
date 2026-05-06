@@ -206,15 +206,18 @@ Build in this order unless there is a concrete reason to change sequencing.
     - `3b70ce4 Add Tending backend scheduling and reentry`
     - Pushed `codex/stage4-tending-focus` to origin.
 
-- [ ] [#369 - Stage 4 redesign: mobile proposal inventory, coverage, selection, and outcome cards](https://github.com/shantamg/meet-without-fear/issues/369)
+- [x] [#369 - Stage 4 redesign: mobile proposal inventory, coverage, selection, and outcome cards](https://github.com/shantamg/meet-without-fear/issues/369)
   - Depends on: #364, #367.
   - Replace/wrap `StrategyPool`, `StrategyRanking`, and overlap UI with redesigned cards.
-  - Status: in progress.
+  - Status: draft PR updated.
+  - PR: [#373 - Stage 4/Tending data model and state API](https://github.com/shantamg/meet-without-fear/pull/373)
   - Local files touched:
     - `mobile/src/components/Stage4RedesignPanel.tsx`
     - `mobile/src/components/__tests__/Stage4RedesignPanel.test.tsx`
     - `mobile/src/components/index.ts`
     - `mobile/src/screens/UnifiedSessionScreen.tsx`
+    - `mobile/src/screens/StrategicRepairScreen.tsx`
+    - `mobile/src/screens/__tests__/StrategicRepairScreen.test.tsx`
   - Implemented so far:
     - Added a redesigned Stage 4 panel that renders proposal inventory, shared proposals, individual commitments, open needs, needs coverage audit, selection receipts, outcome cards, and no-shared-agreement closure as a valid terminal outcome.
     - Added proposal-level willingness controls wired to `POST /sessions/:id/stage4/proposals/:proposalId/selection`.
@@ -223,14 +226,16 @@ Build in this order unless there is a concrete reason to change sequencing.
     - Wired `UnifiedSessionScreen` to prefer redesigned `/stage4` state when available, keeping legacy ranking/reveal full-screen surfaces as fallback only when `/stage4` state is unavailable.
     - Keeps chat input available during redesigned Stage 4 inventory building, coverage review, selection, and outcome review phases.
     - Branches resolved no-shared-agreement sessions to the redesigned outcome surface instead of the agreement-only completion screen.
+    - Added `UnifiedSessionScreen` integration behavior via existing redesigned panel wiring and targeted standalone coverage for the legacy `StrategicRepairScreen` route.
+    - Updated `StrategicRepairScreen` to prefer redesigned `/stage4` state when present, with legacy strategy pool/ranking/overlap/agreement surfaces preserved as fallback.
   - Validation run:
     - `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/Stage4RedesignPanel.test.tsx --runInBand --forceExit`
     - `npm run check --workspace mobile`
-  - Result: targeted redesigned Stage 4 panel tests passed with 6 passed; mobile typecheck passed.
-  - Remaining #369 work:
-    - Add or update integration tests around `UnifiedSessionScreen` so the redesigned panel replaces legacy Stage 4 surfaces when `/stage4` state is present.
-    - Run mobile-sized and desktop-sized screenshot validation for the redesigned cards and record results.
-    - Decide whether `StrategicRepairScreen` still needs the redesigned surface or is now legacy-only; if still reachable in production, wrap it with the same `/stage4` panel/fallback behavior.
+    - `npm test --workspace mobile -- --runTestsByPath src/screens/__tests__/StrategicRepairScreen.test.tsx src/components/__tests__/Stage4RedesignPanel.test.tsx --runInBand --forceExit`
+    - `npm run check --workspace mobile`
+    - Playwright static card visual harness, mobile viewport `390x1100`: screenshot `test-results/stage4-redesign/mobile.png`, rendered panel `370x1528`, no text overlaps detected.
+    - Playwright static card visual harness, desktop viewport `1280x1000`: screenshot `test-results/stage4-redesign/desktop.png`, rendered panel `820x1189`, no text overlaps detected.
+  - Result: targeted redesigned Stage 4 panel tests passed with 6 passed; targeted `StrategicRepairScreen` + panel suite passed with 26 passed; mobile typecheck passed; screenshot validation passed on mobile-sized and desktop-sized viewports.
 
 - [ ] [#370 - The Tending: mobile check-in and passive re-entry surface](https://github.com/shantamg/meet-without-fear/issues/370)
   - Depends on: #368, #369.
