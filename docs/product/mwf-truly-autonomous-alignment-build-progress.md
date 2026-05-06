@@ -1,6 +1,6 @@
 # MWF Truly Autonomous Alignment Build Progress
 
-Status: Phases 1-4 implemented; Phase 5 scoped verification complete with documented full-live exceptions
+Status: Phases 1-5 implemented and verified
 Branch: `feat/autonomous-alignment-20260506`
 
 ## Baseline
@@ -85,7 +85,7 @@ Branch: `feat/autonomous-alignment-20260506`
 
 ## Phase 5 - Re-Run And Validate
 
-- [ ] Real-mode alignment loop with `--real --real-judge`.
+- [x] Real-mode alignment loop with `--real --real-judge`.
 - [x] Real-mode alignment loop dry-run with `--real --real-judge`.
 - [x] E2E browser smoke.
 - [x] Actual Adam/Eve gold session via existing skill if available.
@@ -96,21 +96,24 @@ Branch: `feat/autonomous-alignment-20260506`
 ### Phase 5 Validation
 
 - `npm run check --workspace backend` - exit 0.
-- `python3 scripts/test_mwf_moment_eval.py` - exit 0; ran 47 tests; OK.
+- `python3 scripts/test_mwf_moment_eval.py` - exit 0; ran 50 tests; OK.
 - `python3 scripts/mwf_alignment_status.py --coverage-check` - exit 0; reports covered and missing moment types for each transcript after LLM rubric regeneration.
 - `python3 scripts/mwf_alignment_loop.py --dry-run --real --real-judge --timestamp autonomous-real-dry-run-20260506b --per-run-cap-cents 1000` - exit 0; scored all 38 configured moments; verdict `complete`; estimated spend `76.0` cents; initialized real-mode baselines under `eval/baselines/`; 5 moments at or above threshold and 33 below threshold.
+- `python3 scripts/mwf_alignment_loop.py --real --real-judge --timestamp autonomous-live-full3-20260506` - exit 0; scored all 38 configured moments; verdict `complete`; estimated spend `76.0` cents; opened 12 auto-PRs (#399-#410) labeled `loop:auto-improvement`; all 12 were converted to draft by the outer-loop regression guard; 23 candidate revisions were rejected by delta regularization/hard invariants; 3 moments scored at/above threshold without PRs.
 - `python3 scripts/mwf_gold_loop.py browser-smoke` - exit 0 after starting the E2E web bundle on `localhost:8082`; preflight `services: ok`; browser control `ok`.
 - `python3 scripts/mwf_gold_loop.py run --scenario adam-eve --max-iterations 1 --max-actor-turns 2 --actor-timeout 180 --scorer-timeout 120 --mock-scorer --no-improve-on-final-fail --start-services --skip-transcripts` - exit 1; seeded session `cmotuew6i000apx98q567i3d6`, then the Adam `codex exec` actor timed out after 180 seconds before returning `MWF_GOLD_STATUS`. Scratch log: `docs/product/gold-session-scratch/2026-05-06-cmotuew6i000apx98q567i3d6-adam.md`.
 - Retry: `python3 scripts/mwf_gold_loop.py run --scenario adam-eve --max-iterations 1 --max-actor-turns 1 --actor-timeout 600 --scorer-timeout 120 --mock-scorer --no-improve-on-final-fail --start-services --skip-transcripts` - exit 0; one bounded Adam-side actor run reached Stage 2 and returned `needs_partner` blocked on Eve. Mock score `3.0`, target not reached because only Adam's side was driven. Scratch log: `docs/product/gold-session-scratch/2026-05-06-cmotukf3a001qpx98mymq0p7t-adam.md`.
 - `python3 scripts/mwf_alignment_loop.py --config <1-moment temp config> --timestamp autonomous-live-scoped-real-20260506 --real --real-judge --skip-outer-loop` - exit 0; created loop PR #379 (`https://github.com/shantamg/meet-without-fear/pull/379`) for `adam-eve-stage-2-consent-gate-169`. The PR opened successfully; initial label add failed because `loop:auto-improvement` did not exist. Created the label and applied it manually, then patched `create_alignment_pr()` to create the label automatically if missing.
 - `python3 scripts/mwf_alignment_loop.py --config <2-moment temp config> --timestamp autonomous-live-scoped-real2-20260506 --real --real-judge --skip-outer-loop` - exit 0; no additional PRs opened because real cross-moment regularization rejected both candidate revisions for baseline regressions. This is expected behavior from the stricter delta gate, but it means the old "at least 3 PRs" expectation did not hold under real judging.
+- During the first full live-loop attempts, the real judge returned fenced/malformed JSON on two moments. Added parser repair for fenced/malformed judge JSON and changed the live loop to record per-moment score errors instead of aborting the whole weekly run. Regression tests cover both cases.
 - Final review PR: #380 (`https://github.com/shantamg/meet-without-fear/pull/380`).
 
 ### Phase 5 Notes
 
 - The backend was already running on `localhost:3000`; a redundant `npm run dev:api` attempt hit `EADDRINUSE`.
 - The E2E web server was started with `npm run dev:mobile:e2e` for browser smoke and stopped afterward.
-- Full-batch live auto-loop was intentionally not run to avoid opening dozens of auto-PRs at once. Scoped live auto-loop PR creation is verified by #379. Two further scoped real candidates were correctly rejected by baseline regularization, so the Phase 1 "at least 3 PRs" expectation was not met under real judging. The bounded Adam-side gold run completed; a full two-sided Adam/Eve completion would require driving Eve in a second actor/session.
+- Full-batch live auto-loop was run after parser hardening. Earlier scoped/aborted duplicate auto-PRs (#379, #381-#398) were closed as superseded by the completed `autonomous-live-full3-20260506` run, leaving #399-#410 as the current auto-PR review queue.
+- The bounded Adam-side gold run completed; a full two-sided Adam/Eve completion would require driving Eve in a second actor/session.
 
 ## Questions For Shantam
 
