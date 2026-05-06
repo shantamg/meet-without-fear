@@ -1,0 +1,43 @@
+{
+  "convergence_target": 95,
+  "max_iterations": 5,
+  "scenarios": [
+    {
+      "id": "adam-eve",
+      "enabled": true
+    },
+    {
+      "id": "james-catherine",
+      "enabled": true
+    }
+  ],
+  "domains": {
+    "character_fidelity": {
+      "weight": 0.25,
+      "threshold": 95
+    },
+    "ai_response_quality": {
+      "weight": 0.35,
+      "threshold": 95
+    },
+    "technical_bugs": {
+      "weight": 0.20,
+      "threshold": 95
+    },
+    "ux_quality": {
+      "weight": 0.20,
+      "threshold": 95
+    }
+  },
+  "cost_caps": {
+    "per_iteration_cents": 500,
+    "per_run_cents": 2000,
+    "per_day_cents": 5000
+  },
+  "gold_loop": {
+    "stop_after_stage": 4,
+    "actor_timeout": 600,
+    "api_url": "http://localhost:3000",
+    "app_url": "http://localhost:8082"
+  }
+}
