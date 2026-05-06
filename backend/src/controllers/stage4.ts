@@ -33,6 +33,7 @@ import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
 import { getStage4State as buildStage4State, Stage4StateNotFoundError } from '../services/stage4-state';
+import { scheduleSharedAgreementTendingEntries } from '../services/tending.service';
 import { z } from 'zod';
 
 // ============================================================================
@@ -627,10 +628,16 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
 
     const agreementIds = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const createdAgreementIds: string[] = [];
+      const agreementsForTending: Array<{
+        id: string;
+        description: string;
+        followUpDate: Date | null;
+      }> = [];
 
       if (closureKind === Stage4ClosureKind.SHARED_AGREEMENT) {
         for (const proposal of mutuallyWillingSharedProposals) {
           const followUpDate = parseResult.data.followUpDatesByProposalId?.[proposal.id];
+          const parsedFollowUpDate = followUpDate ? new Date(followUpDate) : null;
           const agreement = await tx.agreement.create({
             data: {
               sharedVesselId: sharedVessel.id,
@@ -639,7 +646,7 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
               type: AgreementType.MICRO_EXPERIMENT,
               duration: proposal.duration,
               measureOfSuccess: proposal.measureOfSuccess,
-              followUpDate: followUpDate ? new Date(followUpDate) : null,
+              followUpDate: parsedFollowUpDate,
               status: 'AGREED',
               agreedByA: true,
               agreedByB: true,
@@ -647,6 +654,11 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
             },
           });
           createdAgreementIds.push(agreement.id);
+          agreementsForTending.push({
+            id: agreement.id,
+            description: proposal.description,
+            followUpDate: parsedFollowUpDate,
+          });
 
           await tx.strategyProposal.update({
             where: { id: proposal.id },
@@ -665,6 +677,8 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
             },
           });
         }
+
+        await scheduleSharedAgreementTendingEntries(tx, sessionId, agreementsForTending, now);
       }
 
       await tx.stage4Closure.create({

@@ -270,6 +270,54 @@ export interface TendingPreviewDTO {
   passiveReentryAvailable: boolean;
 }
 
+export interface TendingEntryDTO {
+  id: string;
+  sessionId: string;
+  agreementId: string | null;
+  type: TendingEntryType;
+  status: TendingEntryStatus;
+  scheduledFor: string | null;
+  openedAt: string | null;
+  completedAt: string | null;
+  summary: string | null;
+  createdAt: string;
+  updatedAt: string;
+  myResponse: TendingResponseDTO | null;
+  responseCount: number;
+}
+
+export interface TendingResponseDTO {
+  id: string;
+  tendingEntryId: string;
+  userId: string;
+  status: string;
+  reflection: string | null;
+  continueChoice: string | null;
+  submittedAt: string;
+}
+
+export interface GetTendingEntriesResponse {
+  entries: TendingEntryDTO[];
+}
+
+export interface SubmitTendingResponseRequest {
+  status: string;
+  reflection?: string;
+  continueChoice?: string;
+}
+
+export interface SubmitTendingResponseResponse {
+  entry: TendingEntryDTO;
+}
+
+export interface CreateTendingReentryRequest {
+  intent?: string;
+}
+
+export interface CreateTendingReentryResponse {
+  entry: TendingEntryDTO;
+}
+
 export interface GetStage4StateResponse {
   phase: Stage4Phase;
   inventory: ProposalInventoryDTO;

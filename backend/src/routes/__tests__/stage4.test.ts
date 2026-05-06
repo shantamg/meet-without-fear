@@ -861,6 +861,16 @@ describe('Stage 4 API', () => {
           }),
         })
       );
+      expect(prisma.tendingEntry.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            agreementId: 'agreement-1',
+            type: TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
+            status: TendingEntryStatus.SCHEDULED,
+            scheduledFor: new Date('2026-05-13T10:00:00.000Z'),
+          }),
+        })
+      );
       expect(prisma.session.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ status: 'RESOLVED' }),
@@ -993,6 +1003,7 @@ describe('Stage 4 API', () => {
       await closeStage4(req as Request, res as Response);
 
       expect(prisma.agreement.create).not.toHaveBeenCalled();
+      expect(prisma.tendingEntry.create).not.toHaveBeenCalled();
       expect(prisma.stage4Closure.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({

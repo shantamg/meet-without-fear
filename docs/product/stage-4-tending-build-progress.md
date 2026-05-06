@@ -175,6 +175,32 @@ Build in this order unless there is a concrete reason to change sequencing.
 - [ ] [#368 - The Tending: backend scheduling, responses, and passive re-entry](https://github.com/shantamg/meet-without-fear/issues/368)
   - Depends on: #363, #367.
   - Add scheduled shared-agreement check-ins and user-initiated passive re-entry.
+  - Status: backend implementation complete locally; needs commit/push and PR update before marking done.
+  - Local files touched:
+    - `shared/src/dto/strategy.ts`
+    - `backend/src/services/tending.service.ts`
+    - `backend/src/services/__tests__/tending.service.test.ts`
+    - `backend/src/controllers/tending.ts`
+    - `backend/src/routes/tending.ts`
+    - `backend/src/routes/index.ts`
+    - `backend/src/controllers/stage4.ts`
+    - `backend/src/scripts/open-due-tending-entries.ts`
+  - Implemented:
+    - Added shared Tending DTOs for entries, responses, list responses, response submission, and passive re-entry creation.
+    - Added a Tending service that schedules shared-agreement check-ins only for agreements with follow-up timing.
+    - Wired Stage 4 shared-agreement closure to create scheduled/open Tending entries inside the same transaction as agreement creation.
+    - Added `GET /sessions/:id/tending`.
+    - Added `POST /sessions/:id/tending/:entryId/responses` with one response per entry/user via upsert.
+    - Response aggregation marks entries `PARTIAL` after one side responds and `COMPLETED` once all session members have responded; it does not invent absent partner feedback.
+    - Added `POST /sessions/:id/tending/reentry` for user-initiated passive re-entry on any resolved session.
+    - Passive re-entry summary is seeded from Stage 4 closure, shared agreements, individual commitments, open/partial needs, optional user intent, and available session summary.
+    - Added `backend/src/scripts/open-due-tending-entries.ts` as the scheduler/cron entrypoint for opening due scheduled check-ins and publishing pending-action events.
+    - No-shared-agreement closure remains free of scheduled shared check-ins because scheduling is only invoked in the shared-agreement closure branch.
+  - Validation run:
+    - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts src/routes/__tests__/stage4.test.ts --runInBand`
+    - `npm run check --workspace backend`
+    - `npm run check --workspace shared`
+  - Result: targeted Tending service and Stage 4 route tests passed with 36 passed; backend and shared typechecks passed.
 
 - [ ] [#369 - Stage 4 redesign: mobile proposal inventory, coverage, selection, and outcome cards](https://github.com/shantamg/meet-without-fear/issues/369)
   - Depends on: #364, #367.
@@ -194,7 +220,7 @@ Build in this order unless there is a concrete reason to change sequencing.
 
 ## Current Local State
 
-The branch currently contains implementation patches for #363, #364, #365, #366, and #367:
+The branch currently contains implementation patches for #363, #364, #365, #366, #367, and an in-progress backend pass for #368:
 
 - Added Stage 4/Tending data model changes and migration SQL under `backend/prisma/migrations/20260506000000_add_stage4_tending_models/`.
 - Added shared redesigned Stage 4/Tending DTOs and enums.
@@ -202,6 +228,7 @@ The branch currently contains implementation patches for #363, #364, #365, #366,
 - Added structured Stage 4 capture service and wired streaming Stage 4 turns through it.
 - Added persisted Stage 4 needs coverage refresh from confirmed Stage 3 needs and active proposal inventory.
 - Added redesigned Stage 4 selection and closure mutation endpoints, including shared-agreement and no-shared-agreement closure.
+- Added backend Tending scheduling, list/response/reentry endpoints, and a due-entry opener script.
 - Added mobile hooks/query keys for the redesigned `/stage4` state and mutations so #369 can build cards against typed contracts.
 - Kept legacy `/strategies` and `/agreements` compatibility endpoints alive.
 - Kept `ProposedStrategy:` micro-tag compatibility as a fallback into structured capture.
@@ -210,13 +237,12 @@ Before continuing implementation, inspect `git diff` carefully. Do not overwrite
 
 ## Recommended Next Step
 
-Move to #368:
+Finish #368 handoff:
 
-1. Inspect the new `TendingEntry`/`TendingResponse` models and current agreement follow-up handling.
-2. Add backend scheduling for shared-agreement check-ins created during Stage 4 shared closure.
-3. Add response endpoints for scheduled Tending entries and user-initiated passive re-entry.
-4. Keep no-shared-agreement closure free of scheduled shared check-ins while preserving passive re-entry.
-5. Add tests for scheduled shared check-ins, response aggregation, passive re-entry creation, and no-shared-agreement no-schedule behavior.
+1. Commit and push the backend Tending pass.
+2. Update PR #373 with #368 scope if the pushed branch is still attached to that draft PR.
+3. Optionally add mobile hooks for `/tending` now, or leave them to #370 with the backend contract already in place.
+4. Then move to #369 mobile Stage 4 proposal inventory, coverage, selection, and outcome cards.
 
 ## Parallelization Guidance
 

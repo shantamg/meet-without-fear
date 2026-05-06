@@ -20,6 +20,7 @@ import notificationsRoutes from './notifications';
 import stage2Routes from './stage2';
 import stage3Routes from './stage3';
 import stage4Routes from './stage4';
+import tendingRoutes from './tending';
 import ttsRoutes from './tts';
 import voiceRoutes from './voice';
 import e2eRoutes from './e2e';
@@ -56,6 +57,7 @@ router.use(notificationsRoutes); // Pending actions & badge counts
 router.use(reconcilerRoutes); // Post-Stage 2 empathy gap analysis
 router.use(stage3Routes);
 router.use(stage4Routes);
+router.use(tendingRoutes);
 
 // Health check endpoint
 router.get('/health', (_, res) => {
