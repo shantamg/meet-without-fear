@@ -490,6 +490,15 @@ def score_with_real_judge(moment: dict[str, Any], response: str) -> tuple[dict[s
     }
     judge_result = run_real_helper("judge", stdin=payload)
     parsed = judge_result.get("parsed")
+    if not isinstance(parsed, dict) or parsed.get("parse_error"):
+        raw = str(judge_result.get("raw") or "").strip()
+        cleaned = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"\s*```$", "", cleaned).strip()
+        try:
+            parsed = json.loads(cleaned)
+            judge_result["parsed"] = parsed
+        except json.JSONDecodeError:
+            pass
     if isinstance(parsed, dict) and "dimensions" not in parsed:
         normalized_dimensions: dict[str, dict[str, Any]] = {}
         for dimension in moment["rubric"]["dimensions"]:

@@ -530,6 +530,26 @@ class TestRealModePlumbing(unittest.TestCase):
         self.assertEqual(parsed["dimensions"]["emotional_reflection"]["score"], 4.0)
         self.assertEqual(parsed["dimensions"]["no_premature_gate"]["score"], 5.0)
 
+    def test_fenced_real_judge_raw_json_is_reparsed(self) -> None:
+        moment = mme.load_moment("stage-3-mutual-reveal")
+        fenced = {
+            "parsed": {"parse_error": True},
+            "raw": """```json
+{
+  "dimensions": {
+    "mutual_need_visibility": {"score": 4, "rationale": "Good"},
+    "no_overlap_analysis": {"score": 4, "rationale": "Good"},
+    "open_non_directive_question": {"score": 3, "rationale": "Adequate"}
+  }
+}
+```""",
+        }
+        with mock.patch.object(mme, "run_real_helper", return_value=fenced):
+            parsed, _raw = mme.score_with_real_judge(moment, "What do you notice as both needs are visible?")
+
+        self.assertEqual(parsed["dimensions"]["mutual_need_visibility"]["score"], 4)
+        self.assertEqual(parsed["dimensions"]["open_non_directive_question"]["score"], 3)
+
 
 class TestAlignmentLoop(unittest.TestCase):
     def write_loop_config(self, path: Path, moment_ids: list[str], estimated_cost_cents: float = 2.0) -> Path:

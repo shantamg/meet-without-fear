@@ -698,7 +698,8 @@ async function generateRubric(input: {
   const text = textBlock && textBlock.type === 'text' ? textBlock.text : '{}';
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim());
+    const cleaned = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+    parsed = JSON.parse(cleaned);
   } catch {
     parsed = { parse_error: true, raw: text };
   }
