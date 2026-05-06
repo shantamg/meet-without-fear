@@ -171,9 +171,14 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
     return 'reconciler-analyzing';
   }
 
-  // User needs to respond to share suggestion (Subject side)
-  // This takes priority over other waiting states, but only during Stage 2
-  if (shareOffer?.hasSuggestion && myStage === Stage.PERSPECTIVE_STRETCH) {
+  // User needs to respond to share suggestion (Subject side). Do not surface
+  // this while the subject is still doing their own perspective stretch; an
+  // early offer can interrupt the work and make the current prompt feel dead.
+  if (
+    shareOffer?.hasSuggestion &&
+    myStage === Stage.PERSPECTIVE_STRETCH &&
+    empathyDraft?.alreadyConsented
+  ) {
     return 'awaiting-context-share';
   }
 

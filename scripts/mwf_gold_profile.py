@@ -102,6 +102,56 @@ def participant_names(turns: list[extractor.TranscriptTurn]) -> list[str]:
     return names
 
 
+def infer_role_shape(turns: list[extractor.TranscriptTurn], participants: list[str]) -> dict[str, Any]:
+    fallback = {
+        "initiator": participants[0] if participants else None,
+        "invited": participants[1] if len(participants) > 1 else None,
+        "confidence": "unknown",
+        "source": "participant_order",
+        "evidence": [],
+    }
+    if len(participants) != 2:
+        return fallback
+
+    stage0_ai = [turn for turn in turns if turn.role == "ai" and turn.stage == 0]
+    invited_matches: list[tuple[str, str]] = []
+    initiator_matches: list[tuple[str, str]] = []
+    for participant in participants:
+        name = re.escape(participant)
+        invited_patterns = [
+            rf"\bmessage\s+for\s+{name}\b",
+            rf"\bmessage\s+{name}\s+will\s+receive\b",
+            rf"\bso\s+{name}\s+knows\b",
+        ]
+        initiator_patterns = [rf"\bthank\s+you,\s*{name}\b"]
+        for turn in stage0_ai:
+            text = f"MWF lines {turn.start_line}-{turn.end_line}: {short_quote(turn.content)}"
+            if any(re.search(pattern, turn.content, re.I) for pattern in invited_patterns):
+                invited_matches.append((participant, text))
+            if any(re.search(pattern, turn.content, re.I) for pattern in initiator_patterns):
+                initiator_matches.append((participant, text))
+
+    invited_candidates = {name for name, _ in invited_matches}
+    initiator_candidates = {name for name, _ in initiator_matches}
+    invited = next(iter(invited_candidates)) if len(invited_candidates) == 1 else None
+    initiator = next(iter(initiator_candidates)) if len(initiator_candidates) == 1 else None
+    if invited and not initiator:
+        initiator = next(participant for participant in participants if participant != invited)
+    if initiator and not invited:
+        invited = next(participant for participant in participants if participant != initiator)
+    if not initiator or not invited or initiator == invited:
+        return fallback
+
+    evidence = [text for name, text in initiator_matches + invited_matches if name in {initiator, invited}]
+    return {
+        "initiator": initiator,
+        "invited": invited,
+        "confidence": "high" if initiator_candidates and invited_candidates else "medium",
+        "source": "stage_0_transcript_mwf_effect",
+        "evidence": evidence[:4],
+    }
+
+
 def count_terms(text: str, terms: set[str]) -> int:
     lower = text.lower()
     return sum(lower.count(term) for term in terms)
@@ -220,6 +270,7 @@ def build_profile(transcript: Path, scenario_id: str | None = None) -> dict[str,
         "source_transcript": display_path(transcript),
         "generated_by": "scripts/mwf_gold_profile.py",
         "participants": participants,
+        "role_shape": infer_role_shape(turns, participants),
         "scenario_shape": shape,
         "participant_profiles": participant_profiles,
         "stage_profiles": stage_profiles(turns),

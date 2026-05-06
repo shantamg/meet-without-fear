@@ -99,6 +99,56 @@ class TestYamlParsing(unittest.TestCase):
             REPO_ROOT / "eval/gold-profiles/james-catherine.json",
         )
 
+    def test_gold_loop_uses_profile_initiator_separate_from_registry_order(self) -> None:
+        james_catherine = gold_loop.infer_role_shape_from_profile("james-catherine")
+        self.assertEqual(james_catherine["initiator"], "Catherine")
+        self.assertEqual(james_catherine["invited"], "James")
+        self.assertEqual(gold_loop.scenario_start_character("james-catherine"), "Catherine")
+
+        adam_eve = gold_loop.infer_role_shape_from_profile("adam-eve")
+        self.assertEqual(adam_eve["initiator"], "Adam")
+        self.assertEqual(adam_eve["invited"], "Eve")
+        self.assertEqual(gold_loop.scenario_start_character("adam-eve"), "Adam")
+
+    def test_gold_loop_profile_initiator_inference_generalizes_from_stage0_evidence(self) -> None:
+        profile = {
+            "stage_profiles": {
+                "stage_0": {
+                    "mwf_effect_to_preserve": [
+                        "MWF lines 1-2: Before we begin, let's put together a short message for Blair.",
+                    ],
+                },
+            },
+        }
+        with mock.patch.dict(gold_loop.SCENARIOS, {"alex-blair": ("Alex", "Blair")}), \
+             mock.patch.object(gold_loop, "load_gold_profile", return_value=profile):
+            role_shape = gold_loop.infer_role_shape_from_profile("alex-blair")
+
+        self.assertEqual(role_shape["initiator"], "Alex")
+        self.assertEqual(role_shape["invited"], "Blair")
+        self.assertEqual(role_shape["confidence"], "medium")
+
+    def test_fresh_session_initiator_invariant_catches_mismatch(self) -> None:
+        run_data = {
+            "start": {"mode": "fresh"},
+            "role_shape": {"initiator": "Catherine", "invited": "James", "confidence": "high"},
+            "session_roles": {"assigned_character": "James", "partner_character": "Catherine"},
+        }
+
+        result = gold_loop.check_session_started_with_profile_initiator(run_data, "james-catherine")
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("profile initiator", result["evidence"][0])
+
+    def test_gold_profile_generator_emits_role_shape(self) -> None:
+        profile = gold_profile.build_profile(
+            REPO_ROOT / "docs/product/source-material/golden-transcripts/james-catherine.md",
+            "james-catherine",
+        )
+
+        self.assertEqual(profile["role_shape"]["initiator"], "Catherine")
+        self.assertEqual(profile["role_shape"]["invited"], "James")
+
     def test_trajectory_moment_schema_validation(self) -> None:
         for moment_id in TRAJECTORY_MOMENT_IDS:
             with self.subTest(moment_id=moment_id):

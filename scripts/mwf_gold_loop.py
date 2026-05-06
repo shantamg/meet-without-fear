@@ -130,6 +130,108 @@ def scenario_gold_profile_path(scenario: str) -> Path | None:
     return fallback if fallback.exists() else None
 
 
+def load_gold_profile(scenario: str) -> dict[str, Any]:
+    path = scenario_gold_profile_path(scenario)
+    if not path or not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def character_from_name(value: Any, participants: Iterable[str]) -> str | None:
+    lowered = str(value or "").strip().lower()
+    if not lowered:
+        return None
+    for participant in participants:
+        if participant.lower() == lowered:
+            return participant
+    return None
+
+
+def infer_role_shape_from_profile(scenario: str) -> dict[str, Any]:
+    """Infer session initiation roles from profile evidence without scenario exceptions."""
+    participants = list(SCENARIOS[scenario])
+    fallback = {
+        "initiator": participants[0],
+        "invited": participants[1],
+        "confidence": "unknown",
+        "source": "scenario_registry_order",
+        "evidence": [],
+    }
+    profile = load_gold_profile(scenario)
+    if not profile:
+        return fallback
+
+    explicit = profile.get("role_shape")
+    if isinstance(explicit, dict):
+        initiator = character_from_name(explicit.get("initiator"), participants)
+        invited = character_from_name(explicit.get("invited"), participants)
+        if initiator and invited and initiator != invited:
+            return {
+                "initiator": initiator,
+                "invited": invited,
+                "confidence": str(explicit.get("confidence") or "high"),
+                "source": str(explicit.get("source") or "profile_role_shape"),
+                "evidence": [str(item) for item in explicit.get("evidence") or []],
+            }
+
+    stage0 = (profile.get("stage_profiles") or {}).get("stage_0") or {}
+    evidence_items = stage0.get("mwf_effect_to_preserve") or []
+    evidence_text = "\n".join(str(item) for item in evidence_items)
+    if not evidence_text:
+        return fallback
+
+    invited_matches: list[tuple[str, str]] = []
+    initiator_matches: list[tuple[str, str]] = []
+    for participant in participants:
+        name = re.escape(participant)
+        invited_patterns = [
+            rf"\bmessage\s+for\s+{name}\b",
+            rf"\bmessage\s+{name}\s+will\s+receive\b",
+            rf"\bso\s+{name}\s+knows\b",
+        ]
+        initiator_patterns = [
+            rf"\bthank\s+you,\s*{name}\b",
+        ]
+        for item in evidence_items:
+            text = str(item)
+            if any(re.search(pattern, text, re.I) for pattern in invited_patterns):
+                invited_matches.append((participant, text))
+            if any(re.search(pattern, text, re.I) for pattern in initiator_patterns):
+                initiator_matches.append((participant, text))
+
+    invited_candidates = {name for name, _ in invited_matches}
+    initiator_candidates = {name for name, _ in initiator_matches}
+    invited = next(iter(invited_candidates)) if len(invited_candidates) == 1 else None
+    initiator = next(iter(initiator_candidates)) if len(initiator_candidates) == 1 else None
+    if invited and not initiator and len(participants) == 2:
+        initiator = next(participant for participant in participants if participant != invited)
+    if initiator and not invited and len(participants) == 2:
+        invited = next(participant for participant in participants if participant != initiator)
+    if not initiator or not invited or initiator == invited:
+        return fallback
+
+    evidence = [text for name, text in initiator_matches + invited_matches if name in {initiator, invited}]
+    confidence = "high" if initiator_candidates and invited_candidates else "medium"
+    return {
+        "initiator": initiator,
+        "invited": invited,
+        "confidence": confidence,
+        "source": "stage_0_profile_mwf_effect",
+        "evidence": evidence[:4],
+    }
+
+
+def scenario_start_character(scenario: str) -> str:
+    role_shape = infer_role_shape_from_profile(scenario)
+    if role_shape.get("confidence") in {"medium", "high"}:
+        return str(role_shape["initiator"])
+    return SCENARIOS[scenario][0]
+
+
 @dataclass
 class ActorStatus:
     side: str
@@ -1382,9 +1484,59 @@ def check_actor_operated_correct_side(run_data: dict[str, Any], scenario: str) -
     )
 
 
+def check_session_started_with_profile_initiator(run_data: dict[str, Any], scenario: str) -> dict[str, Any]:
+    role_shape = run_data.get("role_shape") if isinstance(run_data.get("role_shape"), dict) else {}
+    confidence = str(role_shape.get("confidence") or "unknown")
+    start = run_data.get("start") if isinstance(run_data.get("start"), dict) else {}
+    mode = str(start.get("mode") or "")
+    session_roles = run_data.get("session_roles") if isinstance(run_data.get("session_roles"), dict) else {}
+    assigned = str(session_roles.get("assigned_character") or "")
+    initiator = str(role_shape.get("initiator") or "")
+
+    evidence: list[str] = []
+    if mode != "fresh":
+        return invariant_result(
+            "fresh_session_starts_with_profile_initiator",
+            True,
+            severity="soft",
+            owner="eval_harness",
+            dimension="actor_orchestration",
+            details="Profile-derived initiator checks apply to fresh sessions; seeded and restored sessions may intentionally begin mid-flow.",
+            evidence=[f"start mode {mode!r} skipped"],
+        )
+    if confidence not in {"medium", "high"}:
+        return invariant_result(
+            "fresh_session_starts_with_profile_initiator",
+            True,
+            severity="soft",
+            owner="eval_harness",
+            dimension="actor_orchestration",
+            details="The gold profile did not clearly identify the initiator, so registry order remains the fallback.",
+            evidence=[f"profile confidence {confidence!r}"],
+        )
+    if not assigned:
+        evidence.append("run.json missing session_roles.assigned_character")
+    if not initiator:
+        evidence.append("run.json missing role_shape.initiator")
+    if assigned and initiator and assigned.lower() != initiator.lower():
+        evidence.append(f"fresh session assigned {assigned!r}, but profile initiator is {initiator!r}")
+    return invariant_result(
+        "fresh_session_starts_with_profile_initiator",
+        not evidence,
+        owner="eval_harness",
+        dimension="actor_orchestration",
+        details="Fresh gold-loop sessions should start with the participant identified by the gold profile's Stage 0 initiation evidence.",
+        evidence=evidence,
+    )
+
+
 def check_felt_heard_gate_after_witnessing(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
     evidence: list[str] = []
     for path, text in transcripts:
+        metadata = transcript_metadata(text)
+        stage_text = metadata.get("stage", "").strip("`")
+        if stage_text != "1":
+            continue
         lowered = text.lower()
         marker = lowered.find("felt heard")
         if marker < 0:
@@ -1398,7 +1550,7 @@ def check_felt_heard_gate_after_witnessing(transcripts: list[tuple[Path, str]]) 
         not evidence,
         owner="product_code",
         dimension="stage_gates",
-        details="A felt-heard gate should not appear before any substantive transcript context.",
+        details="A live Stage 1 felt-heard gate should not appear before any substantive transcript context.",
         evidence=evidence,
     )
 
@@ -1428,6 +1580,7 @@ def run_invariant_checks(run_dir: Path, run_data: dict[str, Any], scenario: str,
     checks.append(check_partner_private_leakage(transcripts))
     checks.append(check_stage_limit_reached(run_data, scenario, max_stage))
     checks.append(check_actor_operated_correct_side(run_data, scenario))
+    checks.append(check_session_started_with_profile_initiator(run_data, scenario))
     checks.append(check_felt_heard_gate_after_witnessing(transcripts))
     hard_failures = [check for check in checks if check["severity"] == "hard" and check["status"] == "fail"]
     result = {
@@ -2673,14 +2826,17 @@ def run_iteration(
     run_dir.mkdir(parents=True, exist_ok=True)
 
     first_character, second_character = SCENARIOS[args.scenario]
+    role_shape = infer_role_shape_from_profile(args.scenario)
+    start_character = scenario_start_character(args.scenario)
+    start_partner_character = next(character for character in (first_character, second_character) if character != start_character)
     start_info: dict[str, Any] = {"mode": "mock" if args.mock_actor else "fresh"}
     if args.mock_actor:
         session = {
             "SESSION_ID": f"mock-session-{iteration}",
-            "ASSIGNED_CHARACTER": first_character,
-            "PARTNER_CHARACTER": second_character,
-            "ASSIGNED_URL": f"{args.app_url}/session/mock-session-{iteration}?e2e-user-id=mock-{first_character.lower()}",
-            "PARTNER_URL": f"{args.app_url}/session/mock-session-{iteration}?e2e-user-id=mock-{second_character.lower()}",
+            "ASSIGNED_CHARACTER": start_character,
+            "PARTNER_CHARACTER": start_partner_character,
+            "ASSIGNED_URL": f"{args.app_url}/session/mock-session-{iteration}?e2e-user-id=mock-{start_character.lower()}",
+            "PARTNER_URL": f"{args.app_url}/session/mock-session-{iteration}?e2e-user-id=mock-{start_partner_character.lower()}",
         }
     elif args.from_snapshot:
         start_info = restore_snapshot(args.from_snapshot, run_dir)
@@ -2691,7 +2847,7 @@ def run_iteration(
         session = seeded_session_from_target_stage(args.scenario, args.seed_target_stage, args.api_url, args.app_url)
         start_info = {"mode": "target_stage", "target_stage": args.seed_target_stage, "session_id": session["SESSION_ID"]}
     else:
-        session = create_gold_session(first_character, args.api_url, args.app_url)
+        session = create_gold_session(start_character, args.api_url, args.app_url)
 
     session_id = session["SESSION_ID"]
     actors = {
@@ -2717,6 +2873,11 @@ def run_iteration(
         "prompt_skill_versions": prompt_skill_versions,
         "prompt_skill_version_changes": prompt_skill_version_changes,
         "start": start_info,
+        "role_shape": role_shape,
+        "session_roles": {
+            "assigned_character": session["ASSIGNED_CHARACTER"],
+            "partner_character": session["PARTNER_CHARACTER"],
+        },
         "services": service_info,
         "created_at": datetime.now().isoformat(),
         "urls": {side: actor.url for side, actor in actors.items()},
