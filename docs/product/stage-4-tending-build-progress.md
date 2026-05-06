@@ -93,9 +93,27 @@ Build in this order unless there is a concrete reason to change sequencing.
     - Optional before mobile integration: move DTOs from `shared/src/dto/strategy.ts` into a dedicated `stage4.ts` file if shared DTO organization becomes noisy.
     - Optional before external clients depend on it: add route-level response contract validation if the shared contract layer is preferred over DTO-only typing.
 
-- [ ] [#365 - Stage 4 redesign: structured conversation capture service](https://github.com/shantamg/meet-without-fear/issues/365)
+- [x] [#365 - Stage 4 redesign: structured conversation capture service](https://github.com/shantamg/meet-without-fear/issues/365)
   - Depends on: #363, #364.
   - Replace Stage 4 reliance on `ProposedStrategy:` micro-tags with structured capture after each user turn.
+  - Status: draft PR opened.
+  - PR: [#373 - Stage 4/Tending data model and state API](https://github.com/shantamg/meet-without-fear/pull/373)
+  - Local files touched:
+    - `backend/src/services/stage4-capture.service.ts`
+    - `backend/src/services/__tests__/stage4-capture.service.test.ts`
+    - `backend/src/controllers/messages.ts`
+    - `backend/src/services/stage-tools.ts`
+  - Implemented:
+    - Added a typed Stage 4 capture service contract for inventory operations, selection capture, closure signals, and Tending timing signals.
+    - Added deterministic v1 capture/application for add, revise, remove, restore, and willingness selection phrases.
+    - Records `Stage4ProposalRevision` history for created, revised, removed, restored, and low-confidence destructive captures that match a proposal.
+    - Requires higher confidence for destructive operations; low-confidence removal language does not mutate inventory.
+    - Routes legacy `ProposedStrategy:` micro-tag output through the structured capture service as compatibility fallback instead of direct proposal writes.
+    - Selection capture writes `Stage4ProposalSelection` only; it does not create shared agreements from one user's willingness.
+  - Validation run:
+    - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/stage4-capture.service.test.ts --runInBand`
+    - `npm run check --workspace backend`
+  - Result: targeted Stage 4 capture tests passed with 5 passed; backend typecheck passed.
 
 - [ ] [#366 - Stage 4 redesign: needs coverage audit](https://github.com/shantamg/meet-without-fear/issues/366)
   - Depends on: #363, #364.
@@ -128,30 +146,26 @@ Build in this order unless there is a concrete reason to change sequencing.
 
 ## Current Local State
 
-The branch currently contains an implementation-ready #363 patch:
+The branch currently contains implementation patches for #363, #364, and #365:
 
-- Added proposal kind/status/removal fields to `StrategyProposal`.
-- Added `Stage4ProposalSelection`.
-- Added `Stage4ProposalRevision`.
-- Added `Stage4NeedCoverage`.
-- Added `Stage4Closure`.
-- Added `TendingEntry`.
-- Added `TendingResponse`.
-- Added `duration` and `measureOfSuccess` to `Agreement`.
-- Added migration SQL manually under `backend/prisma/migrations/20260506000000_add_stage4_tending_models/`.
-- Added Prisma schema type tests for the new delegates, enums, no-shared-agreement closure input, and Tending input shapes.
+- Added Stage 4/Tending data model changes and migration SQL under `backend/prisma/migrations/20260506000000_add_stage4_tending_models/`.
+- Added shared redesigned Stage 4/Tending DTOs and enums.
+- Added `GET /sessions/:id/stage4` with backend state derivation for inventory, coverage, selections, outcome, and Tending preview.
+- Added structured Stage 4 capture service and wired streaming Stage 4 turns through it.
+- Kept legacy `/strategies` and `/agreements` compatibility endpoints alive.
+- Kept `ProposedStrategy:` micro-tag compatibility as a fallback into structured capture.
 
 Before continuing implementation, inspect `git diff` carefully. Do not overwrite these local changes unless the user explicitly asks.
 
 ## Recommended Next Step
 
-Move to #364:
+Move to #366:
 
-1. Inspect existing strategy/agreement routes and shared DTOs.
-2. Define the `GET /sessions/:id/stage4` response contract in the shared package or backend route types using the technical spec.
-3. Implement a backend Stage 4 state service that computes phase, proposal inventory, coverage, selections, closure outcome, and Tending preview from the new schema plus legacy `StrategyProposal`/`Agreement` rows.
-4. Add route tests for compatibility with existing Stage 4 rows and no-closure/no-selection initial state.
-5. Keep the existing `/strategies` and `/agreements` endpoints alive until mobile has moved to `/stage4`.
+1. Inspect Stage 3 confirmed/shared need persistence and the `GET /sessions/:id/stage4` coverage DTO.
+2. Implement a needs coverage audit service that compares Stage 3 needs against active Stage 4 proposals.
+3. Persist covered, partial, and open rows in `Stage4NeedCoverage`.
+4. Add route/service tests covering covered, partial, and open needs plus proposal removal/revision effects.
+5. Keep coverage semantics conservative and update the question list if the exact partial/covered threshold needs product judgment.
 
 ## Parallelization Guidance
 

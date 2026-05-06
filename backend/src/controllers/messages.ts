@@ -39,8 +39,8 @@ import { getMilestoneContext, getSharedContentContext } from '../services/shared
 import { CONTEXT_WINDOW, trimConversationHistory } from '../utils/token-budget';
 import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from '../services/llm-telemetry';
 import { captureProposedNeedsForUser } from '../services/needs';
-import { filterNewStrategiesAgainstExisting } from '../utils/strategy-dedupe';
 import { cleanVisibleAIText } from '../utils/visible-text';
+import { captureStage4Turn } from '../services/stage4-capture.service';
 
 // ============================================================================
 // Helpers
@@ -2053,43 +2053,37 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       });
     }
 
-    // Save proposed strategies (Stage 4)
-    if (currentStage === 4 && metadata.proposedStrategies && metadata.proposedStrategies.length > 0) {
-      // Deduplicate: check existing strategies to avoid duplicates from re-proposals
-      const existingStrategies = await prisma.strategyProposal.findMany({
-        where: { sessionId, createdByUserId: user.id },
-        select: { id: true, description: true },
+    // Stage 4 structured capture. ProposedStrategy micro-tags remain only as a
+    // compatibility fallback feeding the same capture/apply path.
+    if (currentStage === 4) {
+      const captureResult = await captureStage4Turn({
+        sessionId,
+        userId: user.id,
+        messageId: userMessage.id,
+        userMessage: content,
+        aiResponse: aiMessage.content,
+        compatibilityProposedStrategies: metadata.proposedStrategies,
       });
+      metadata.stage4Capture = {
+        appliedOperationCount: captureResult.appliedOperationCount,
+        skippedOperationCount: captureResult.skippedOperationCount,
+        selectionCaptured: Boolean(captureResult.selection),
+        confidence: captureResult.confidence,
+      };
 
-      const { newStrategies, supersededIds } = filterNewStrategiesAgainstExisting(
-        existingStrategies,
-        metadata.proposedStrategies
-      );
-
-      if (newStrategies.length > 0) {
-        await prisma.$transaction(async (tx) => {
-          if (supersededIds.length > 0) {
-            await tx.strategyProposal.deleteMany({
-              where: { id: { in: supersededIds } },
-            });
-          }
-          await tx.strategyProposal.createMany({
-            data: newStrategies.map((description) => ({
-              sessionId,
-              createdByUserId: user.id,
-              description,
-              needsAddressed: [],
-              source: 'AI_SUGGESTED' as const,
-            })),
-          });
+      if (captureResult.appliedOperationCount > 0 || captureResult.selection) {
+        logger.info(`[sendMessageStream:${requestId}] Stage 4 capture applied`, {
+          appliedOperationCount: captureResult.appliedOperationCount,
+          skippedOperationCount: captureResult.skippedOperationCount,
+          selectionCaptured: Boolean(captureResult.selection),
         });
-        logger.info(`[sendMessageStream:${requestId}] Created ${newStrategies.length} strategy proposals for user ${user.id}`);
 
         await publishSessionEvent(sessionId, 'session.strategies_updated', {
           stage: 4,
           updatedBy: user.id,
-          createdCount: newStrategies.length,
-          removedSupersededCount: supersededIds.length,
+          appliedOperationCount: captureResult.appliedOperationCount,
+          skippedOperationCount: captureResult.skippedOperationCount,
+          selectionCaptured: Boolean(captureResult.selection),
         });
       }
     }

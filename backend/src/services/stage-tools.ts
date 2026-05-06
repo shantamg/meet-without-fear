@@ -68,6 +68,12 @@ export interface SessionStateToolInput {
   proposedStrategies?: string[];
   proposedNeeds?: CapturedNeedInput[];
   needsCaptured?: boolean;
+  stage4Capture?: {
+    appliedOperationCount: number;
+    skippedOperationCount: number;
+    selectionCaptured: boolean;
+    confidence: number;
+  };
   /** Stage 0: AI's proposed topic frame extracted from <draft> tag */
   topicFrame?: string;
 }
