@@ -381,7 +381,40 @@ Build in this order unless there is a concrete reason to change sequencing.
   - `backend/src/services/stage-prompts.ts:901` is currently `- Cards are receipts of the conversation. Do not force ranking, form-like proposal submission, or private top-three choices.`
   - `rg "FOLLOW-UP CHECK-IN|strategy without a follow-up|CELEBRATING" backend/src/services/stage-prompts.ts` finds no matches.
   - Remaining audit-matching prompt drift still exists at `backend/src/services/stage-prompts.ts:936` (`Solid experiment` grading praise) and `:950` (`Normalize that experiments can fail`).
-- Status: stopped before editing Fix 4 code per goal stop condition. Waiting for Shantam to confirm whether to proceed with the remaining Fix 4 prompt cleanup despite the missing exact audit-cited line/block.
+- Resolved 2026-05-06: Shantam clarified that the audit finding was about the prompt contradictions, not exact line locations. The audit-cited lines were superseded by intervening work. Two of three contradictions were already removed; the third (grading voice at `backend/src/services/stage-prompts.ts:936`) was addressed in Fix 4 commit `33aaf50`. Regression tests now codify the posture for future drift detection.
+
+### Fix 4 — Stage 4 Prompt Contradictions Removed
+
+- Recorded: 2026-05-05 23:14:26 PDT.
+- Commit: `33aaf50` (`Fix 4 remove Stage 4 grading prompt voice`).
+- Criteria covered: 9, 10.
+- Fix location:
+  - `backend/src/services/stage-prompts.ts:903` — replaced `MICRO-EXPERIMENT CRITERIA (good vs bad)` with observational `PROPOSAL SHAPE` wording.
+  - `backend/src/services/stage-prompts.ts:936` — replaced `Solid experiment` grading praise with observational shape-naming.
+  - `backend/src/services/stage-prompts.ts:950` — replaced the failure-normalizing early Stage 4 line with reversible/provisional proposal framing.
+- Line-950 judgment record:
+  - Surrounding prompt excerpt after the fix:
+    - `Length: default 1-3 sentences. Go longer only if they explicitly ask for help or detail.`
+    - `${LATERAL_PROBING_GUIDANCE}`
+    - `Do NOT mirror the user's emotional intensity in your tone.`
+    - `EXAMPLE GOOD RESPONSES (adapt to context):`
+    - `- User: "We should communicate better." -> "What would that actually look like? Like, a specific time or place where you'd check in?"`
+    - `- User: "A 10-minute check-in after dinner each night for a week." -> "That gives this a clear shape: after dinner, each night, for one week. What would you want to talk about during those check-ins?"`
+    - `- User: "I don't know where to start." -> "That's totally normal. Think about the needs we named - what's one small thing that might help with the most important one?"`
+    - `- User: "Take that one off." -> "Okay, we'll take that off the table. Which need still feels most important to keep open?"`
+    - `- User: "I don't think we have overlap." -> "Then we can close this without forcing a shared agreement. What, if anything, do you still want to carry as your own commitment?"`
+    - `EARLY STAGE 4: User may need help shifting from needs to action. Start in INVITING mode. Keep proposals provisional and reversible; the point is learning what is actually workable, not proving anything.`
+  - Reasoning: the former line (`Normalize that experiments can fail`) introduced failure-language as a stance rather than simply treating abandoned or non-working commitments as information. The replacement keeps the gold posture by making proposals reversible and informational without preparing the user for failure.
+- Test reference:
+  - `backend/src/services/__tests__/stage-prompts.test.ts:230` — no-shared-agreement scenario avoids failure-language tokens.
+  - `backend/src/services/__tests__/stage-prompts.test.ts:254` — individual-only commitment scenario has no follow-up mandate language.
+  - `backend/src/services/__tests__/stage-prompts.test.ts:275` — prompt avoids grading praise tokens.
+- Validation:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/stage-prompts.test.ts --runInBand`
+  - Exit code: 0.
+  - Result: 1 passed suite; 82 passed tests.
+  - `npm run check --workspace backend`
+  - Exit code: 0.
 
 ## Current Local State
 
