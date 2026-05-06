@@ -44,8 +44,8 @@ Status: implemented and real-run verified for `stage-1-fact-reflection` on 2026-
 
 ### Real Mode Validation Runs
 
-- Real-mode implementation commit: `3e7650e` (`Add real-mode moment evaluator`), pushed to `origin/codex/mwf-gold-self-improve-stage1`.
-- Real Bedrock run artifacts were produced before the final commit at source SHA `4a2395e612d2d33a1f5b0b9ce316ca56e3bd4c35`; the scoped implementation was then committed as `3e7650e`.
+- Real-mode implementation commit: `d8627ae` (`Add real-mode moment evaluator`), pushed to `origin/codex/mwf-gold-self-improve-stage1`.
+- Real Bedrock run artifacts were produced before the implementation commit at source SHA `4a2395e612d2d33a1f5b0b9ce316ca56e3bd4c35`; the scoped implementation was then committed as `d8627ae`.
 - `python3 scripts/mwf_moment_eval.py seed --moment stage-1-fact-reflection --real --print-state` — exit 0; printed real cuid session `cmoto1z1x0007px37cw9mxaxp`, 2 users, 2 relationship members, 4 stage progress rows, 5 prior messages.
 - `python3 scripts/mwf_moment_eval.py seed-cleanup --older-than 0h` — exit 0; removed 11 tagged test sessions, 11 relationships, 22 test users.
 - `/usr/bin/time -p python3 scripts/mwf_moment_eval.py run --moment stage-1-fact-reflection --real --max-iterations 1 --no-improve` — exit 0; created `eval/runs/moment-stage-1-fact-reflection-20260506-061931-iter-01/`; observed `real 18.45`. The run contains `seed-state.json`, `ai-response.md`, `state-delta.json`, `score.json`, `score-rationale.md`, `run.json`, and `judge-raw.json`.
