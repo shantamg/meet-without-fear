@@ -1,0 +1,12 @@
+{
+  "duration_seconds": 12.327,
+  "entrypoint": "scripts/mwf_moment_eval.py",
+  "git_branch": "feat/autonomous-alignment-20260506",
+  "git_sha": "7fe4831d521bb0f4760a9a12ac3798ab4f86336b",
+  "iteration": 1,
+  "mode": "real",
+  "moment": "stage-4-no-shared-agreement",
+  "prompt_version": null,
+  "session_id": "cmotvysz90007pxzmez3ghr29",
+  "started_at": "2026-05-06T09:59:56.507465Z"
+}
