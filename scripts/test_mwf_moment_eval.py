@@ -676,13 +676,14 @@ class TestAlignmentLoop(unittest.TestCase):
                 moment_id="stage-2-empathy-validation",
                 stage_label="stage-2",
                 timestamp="20260506-120000",
-                delta=0.42,
+                score=1.25,
+                threshold=4.0,
                 body="## Candidate\n\nPrompt revision details.",
                 artifact_paths=[REPO_ROOT / "eval/alignment-loop-config.yaml"],
                 borderline=True,
             )
             with mock.patch.object(loop, "ALIGNMENT_RUNS_ROOT", Path(tmp)), \
-                 mock.patch.object(loop, "git_current_branch", return_value="feat/gold-alignment-system-20260506"), \
+                 mock.patch.object(loop, "git_current_branch", return_value="main"), \
                  mock.patch.object(loop, "run_command", side_effect=fake_run):
                 result = loop.create_alignment_pr(request)
 
@@ -691,11 +692,26 @@ class TestAlignmentLoop(unittest.TestCase):
         self.assertEqual(result["label"], "loop:auto-improvement")
         self.assertTrue(result["draft"])
         self.assertIn(["git", "switch", "-c", request.branch_name], commands)
-        self.assertIn(["git", "switch", "feat/gold-alignment-system-20260506"], commands)
+        self.assertIn(["git", "switch", "main"], commands)
         pr_create = [cmd for cmd in commands if cmd[:3] == ["gh", "pr", "create"]][0]
         self.assertIn(request.title, pr_create)
+        self.assertIn("(score 1.25/target 4.00)", request.title)
         self.assertIn("--draft", pr_create)
         self.assertIn(["gh", "pr", "edit", result["url"], "--add-label", "loop:auto-improvement"], commands)
+
+    def test_gold_comparison_artifact_includes_reference_and_response(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            (run_dir / "ai-response.md").write_text("Candidate response under review.\n", encoding="utf-8")
+            (run_dir / "score-rationale.md").write_text("Overall score: 1.0\n", encoding="utf-8")
+            moment = mme.load_moment("adam-eve-stage-2-consent-gate-169")
+            score = {"overall_score": 1.0, "verdict": "eval_fail"}
+
+            comparison = loop.write_gold_comparison(run_dir, moment, score)
+            text = comparison.read_text(encoding="utf-8")
+        self.assertIn("docs/product/source-material/golden-transcripts/adam-eve.md", text)
+        self.assertIn("Candidate response under review.", text)
+        self.assertIn("Overall score: 1.0", text)
 
     def test_outer_loop_regression_converts_pr_to_draft_and_comments(self) -> None:
         def completed(cmd: list[str], stdout: str = "") -> subprocess.CompletedProcess[str]:
