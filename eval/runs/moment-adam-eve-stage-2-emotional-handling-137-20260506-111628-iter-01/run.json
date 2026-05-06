@@ -1,0 +1,12 @@
+{
+  "duration_seconds": 16.532,
+  "entrypoint": "scripts/mwf_moment_eval.py",
+  "git_branch": "feat/autonomous-alignment-20260506",
+  "git_sha": "3d1d47405a052f9297a92b140588d46815a68275",
+  "iteration": 1,
+  "mode": "real",
+  "moment": "adam-eve-stage-2-emotional-handling-137",
+  "prompt_version": null,
+  "session_id": "cmotyp7xi0007pxqm9ellqf1s",
+  "started_at": "2026-05-06T11:16:28.187024Z"
+}
