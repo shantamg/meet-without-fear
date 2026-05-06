@@ -1,0 +1,12 @@
+{
+  "duration_seconds": 13.586,
+  "entrypoint": "scripts/mwf_moment_eval.py",
+  "git_branch": "feat/autonomous-alignment-20260506",
+  "git_sha": "32340ce3e008958812db3ce7613feb2e64894060",
+  "iteration": 1,
+  "mode": "real",
+  "moment": "james-catherine-stage-2-emotional-handling-237",
+  "prompt_version": null,
+  "session_id": "cmou065c00007pxoqt41dnz48",
+  "started_at": "2026-05-06T11:57:37.079909Z"
+}
