@@ -126,6 +126,7 @@ interface ChatInterfaceProps {
   onEmotionChange?: (value: number) => void;
   onHighEmotion?: (value: number) => void;
   compactEmotionSlider?: boolean;
+  /** Render guided action content after the input so chat remains attached to the transcript. */
   renderAboveInput?: () => React.ReactNode;
   /** Render content below the input area (e.g., persistent review affordances) */
   renderBelowInput?: () => React.ReactNode;
@@ -837,7 +838,6 @@ export function ChatInterface({
             testID="chat-emotion-slider"
           />
         )}
-        {renderAboveInput?.()}
         {!hideInput && (
           <ChatInput
             onSend={onSendMessage}
@@ -845,6 +845,7 @@ export function ChatInterface({
             onVoicePress={onVoicePress}
           />
         )}
+        {renderAboveInput?.()}
         {renderBelowInput?.()}
       </View>
     </KeyboardAvoidingView>

@@ -2428,7 +2428,7 @@ export function UnifiedSessionScreen({
   ]);
 
   // -------------------------------------------------------------------------
-  // Render Above Input (switch on aboveInputPanel from useChatUIState)
+  // Render guided input panel (now positioned below the chat input by ChatInterface)
   // -------------------------------------------------------------------------
   const renderAboveInput = useCallback((): React.ReactNode | undefined => {
     switch (aboveInputPanel) {
@@ -3151,7 +3151,7 @@ export function UnifiedSessionScreen({
           onValidateNotQuite={handleValidationNotQuite}
         />
 
-        {/* Waiting banner removed - now handled in renderAboveInput */}
+        {/* Waiting banner removed - now handled by the guided input panel renderer */}
 
         {/* Note: Compact is now rendered via renderCustomEmptyState in ChatInterface */}
 

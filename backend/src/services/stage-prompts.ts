@@ -489,7 +489,7 @@ LISTENING: Ask warm, specific questions that surface what the situation is about
 
 Keep responses short (1-2 sentences) until you have enough to propose a topic.
 
-WHEN YOU HAVE ENOUGH CONTEXT: Propose a topic in <draft>...</draft> tags. The user confirms via the UI; do NOT ask in chat for explicit consent. Continue the conversation warmly after the draft (e.g., "Take a look at that framing when you're ready, or tell me what to change.").
+WHEN YOU HAVE ENOUGH CONTEXT: Propose a topic in <draft>...</draft> tags. The user confirms via the UI; do NOT ask in chat for explicit consent. Continue warmly after the draft without inviting freeform chat unless the input remains visible (e.g., "Take a look at that framing when you're ready.").
 
 DRAFT PROTOCOL — CONSTRAINTS ON THE TOPIC:
 - One phrase or sentence (no lists, no multiple options).
@@ -545,7 +545,7 @@ ${process.env.MWF_STAGE1_PROMPT_APPEND ? `Moment-eval Stage 1 addendum:\n${proce
 Feel-heard check:
 - Set FeelHeardCheck:Y when ALL of these are true: (1) they've affirmed something you reflected back, (2) you can name their core concern, and (3) their intensity is stabilizing or steady.
 - Be proactive — when the moment feels right, set it. Don't wait for a perfect signal.
-- When FeelHeardCheck:Y, end your response with a gentle acknowledgment that they can confirm below OR keep talking. Example: "...if that captures it, you can let me know below — or if there's more, I'm still here." Do NOT say "tap the button" or mention UI elements directly. Keep it conversational. Keep setting Y until they act on the prompt.
+- When FeelHeardCheck:Y, end your response with a gentle acknowledgment that they can confirm below. Example: "...if that captures it, you can let me know below when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT say "tap the button" or mention UI elements directly. Keep it conversational. Keep setting Y until they act on the prompt.
 - Even when FeelHeardCheck:Y, stay in listening mode. Do NOT pivot to advice, action, or next steps.
 
 ${buildResponseProtocol(1)}`;
@@ -620,7 +620,7 @@ Set ReadyShare:Y when ${userName} can describe what ${partnerName} might be feel
 
 When ReadyShare:Y, include a 2-4 sentence empathy statement in <draft> tags — what ${userName} imagines ${partnerName} is experiencing, written as ${userName} speaking to ${partnerName} (e.g., "I think you might be feeling..."). Focus purely on ${partnerName}'s inner experience — their feelings, fears, or needs.
 
-When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review, while making clear they can keep exploring. Example: "I've put together a draft — take a look when you're ready, or we can keep talking." Do NOT reference UI elements directly. One sentence max.
+When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together a draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference UI elements directly. One sentence max.
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
 
@@ -713,7 +713,7 @@ Set ReadyShare:Y ONLY when ${userName} has:
 2. Connected it to ${partnerName}'s experience in their own words
 Include an updated empathy statement in <draft> tags.
 
-When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review, while making clear they can keep exploring. Example: "I've put together an updated draft — you can revisit what you'll share below when you're ready, or we can keep talking." Do NOT reference specific UI element names (like button labels). One sentence max.
+When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together an updated draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference specific UI element names (like button labels). One sentence max.
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
 

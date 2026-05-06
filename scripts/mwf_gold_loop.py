@@ -543,16 +543,43 @@ def parse_key_values(text: str) -> dict[str, str]:
 
 
 def create_gold_session(character: str, api_url: str, app_url: str) -> dict[str, str]:
-    env = os.environ.copy()
-    env["MWF_API_URL"] = api_url
-    env["MWF_APP_URL"] = app_url
-    result = run_command([str(TESTER_SCRIPT), character], env=env, timeout=60)
-    if result.returncode != 0:
-        raise GoldLoopError(f"create_gold_session.sh failed:\n{result.stderr}\n{result.stdout}")
-    values = parse_key_values(result.stdout)
-    for key in ("SESSION_ID", "ASSIGNED_URL", "PARTNER_URL", "ASSIGNED_CHARACTER", "PARTNER_CHARACTER"):
-        require(key in values, f"create_gold_session.sh output missing {key}")
-    return values
+    scenarios_by_character = {
+        "adam": ("Adam", "Eve"),
+        "eve": ("Eve", "Adam"),
+        "james": ("James", "Catherine"),
+        "catherine": ("Catherine", "James"),
+    }
+    assigned_name, partner_name = scenarios_by_character.get(character.lower(), (None, None))
+    if not assigned_name or not partner_name:
+        raise GoldLoopError(f"Unknown character {character!r}; expected Adam, Eve, James, or Catherine")
+
+    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    assigned_email = f"gold-loop-{assigned_name.lower()}-{stamp}@e2e.test"
+    partner_email = f"gold-loop-{partner_name.lower()}-{stamp}@e2e.test"
+    seeded = post_json(
+        f"{api_url}/api/e2e/seed-session",
+        {
+            "userA": {"email": assigned_email, "name": assigned_name},
+            "userB": {"email": partner_email, "name": partner_name},
+            "targetStage": "CREATED",
+        },
+    )
+    if not seeded.get("success"):
+        raise GoldLoopError(f"seed-session failed: {seeded}")
+    data = seeded["data"]
+    page_urls = data.get("pageUrls") or {}
+    require(page_urls.get("userA") and page_urls.get("userB"), f"seed-session response missing both page URLs: {seeded}")
+    return {
+        "SESSION_ID": data["session"]["id"],
+        "ASSIGNED_CHARACTER": assigned_name,
+        "PARTNER_CHARACTER": partner_name,
+        "ASSIGNED_ID": data["userA"]["id"],
+        "ASSIGNED_EMAIL": data["userA"]["email"],
+        "PARTNER_ID": data["userB"]["id"],
+        "PARTNER_EMAIL": data["userB"]["email"],
+        "ASSIGNED_URL": page_urls["userA"].replace("http://localhost:8081", app_url),
+        "PARTNER_URL": page_urls["userB"].replace("http://localhost:8081", app_url),
+    }
 
 
 def seeded_session_from_target_stage(scenario: str, target_stage: str, api_url: str, app_url: str) -> dict[str, str]:
@@ -1323,6 +1350,11 @@ CONTROL_TAG_RE = re.compile(
 )
 TRANSCRIPT_METADATA_RE = re.compile(r"^- (side|stage|privacy|visible_cta_state):\s*(.+?)\s*$", re.MULTILINE)
 TRANSCRIPT_EVENT_RE = re.compile(r"^(?:\d+\.|\*\*\[|###|---|\[)", re.MULTILINE)
+CHAT_PROMISE_RE = re.compile(
+    r"\b(?:keep (?:talking|exploring|going)|tell me what needs to change|if there's more|if there is more|I'm still here|I am still here)\b",
+    re.I,
+)
+INPUT_VISIBLE_RE = re.compile(r"\b(?:input|textbox|chat-input|text input)\s*(?:=|:|is)?\s*(?:visible|shown|available|enabled)\b", re.I)
 
 
 def invariant_result(
@@ -1555,6 +1587,30 @@ def check_felt_heard_gate_after_witnessing(transcripts: list[tuple[Path, str]]) 
     )
 
 
+def check_chat_copy_has_visible_input(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
+    evidence: list[str] = []
+    for path, text in transcripts:
+        metadata = transcript_metadata(text)
+        visible_cta_state = metadata.get("visible_cta_state", "")
+        if INPUT_VISIBLE_RE.search(visible_cta_state):
+            continue
+        for match in CHAT_PROMISE_RE.finditer(text):
+            start = max(0, match.start() - 80)
+            end = min(len(text), match.end() + 80)
+            snippet = " ".join(text[start:end].split())
+            evidence.append(f"{path.name}: chat-promising copy without input-visible metadata: {snippet}")
+            if len(evidence) >= 10:
+                break
+    return invariant_result(
+        "chat_copy_promises_visible_input",
+        not evidence,
+        owner="product_code",
+        dimension="ui_state",
+        details="If visible copy invites the user to keep talking, transcript state must show a visible/enabled textbox.",
+        evidence=evidence,
+    )
+
+
 def check_partner_private_leakage(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
     evidence: list[str] = []
     leak_markers = ("PRIVATE_LEAK", "PARTNER_PRIVATE_LEAK")
@@ -1582,6 +1638,7 @@ def run_invariant_checks(run_dir: Path, run_data: dict[str, Any], scenario: str,
     checks.append(check_actor_operated_correct_side(run_data, scenario))
     checks.append(check_session_started_with_profile_initiator(run_data, scenario))
     checks.append(check_felt_heard_gate_after_witnessing(transcripts))
+    checks.append(check_chat_copy_has_visible_input(transcripts))
     hard_failures = [check for check in checks if check["severity"] == "hard" and check["status"] == "fail"]
     result = {
         "schema_version": 1,
@@ -1599,6 +1656,21 @@ def apply_invariants_to_score(score: dict[str, Any], invariants: dict[str, Any],
         score["hard_invariants"] = []
         return score
     score["hard_invariants"] = hard_failures
+    not_evaluable_failures = [
+        failure for failure in hard_failures
+        if failure.get("dimension") in {"actor_orchestration", "transcript_extraction"}
+        or failure.get("id") in {"stage_limit_reached_correctly", "transcript_side_stage_complete"}
+    ]
+    if not_evaluable_failures:
+        score["evaluation_scope"] = {
+            **(score.get("evaluation_scope") if isinstance(score.get("evaluation_scope"), dict) else {}),
+            "prompt_quality": "not_evaluable_for_prompt_quality",
+            "reasons": [failure.get("id") for failure in not_evaluable_failures],
+        }
+        gold_alignment = score.get("gold_alignment") if isinstance(score.get("gold_alignment"), dict) else {}
+        gold_alignment["status"] = "not_evaluable_for_prompt_quality"
+        gold_alignment["notes"] = "Prompt-quality conclusions are blocked by seeding/access/orchestration/transcript failures."
+        score["gold_alignment"] = gold_alignment
     score["verdict"] = "eval_fail"
     try:
         current = float(score.get("overall_score"))
@@ -1918,6 +1990,7 @@ Scenario: {scenario}
 {regression_context_prompt(regression_context or {"status": "none"})}
 
 Use transcripts/*.md as the primary evidence when present; use codex-*.jsonl only to understand execution errors or missing transcript gaps.
+If seeding, access control, browser orchestration, or transcript extraction failed before both sides produced usable stage evidence, mark prompt-quality/MWF-quality conclusions as not_evaluable_for_prompt_quality and route the primary target to eval_harness or product_code instead of scoring the MWF prompt as if the conversation completed.
 When prior context is available, compare this run against the previous score, gold_alignment, improvement_targets, and patch/proposal artifacts. Identify likely regression causes when score drops.
 Use the golden references, gold scenario profile, and rubric in the meet-without-fear repo. The output must be valid JSON matching the rubric shape from docs/product/gold-flow-eval-harness-spec.md.
 """

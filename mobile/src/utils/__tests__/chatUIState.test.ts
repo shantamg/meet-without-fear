@@ -325,7 +325,7 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(false);
   });
 
-  it('hides input while the empathy review panel owns the next action', () => {
+  it('keeps input visible while the empathy review panel is offered', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -336,10 +336,10 @@ describe('Input Hiding (shouldHideInput)', () => {
 
     const result = computeChatUIState(inputs);
     expect(result.aboveInputPanel).toBe('empathy-statement');
-    expect(result.shouldHideInput).toBe(true);
+    expect(result.shouldHideInput).toBe(false);
   });
 
-  it('hides input while the feel-heard panel owns the next action', () => {
+  it('keeps input visible while the feel-heard panel is offered', () => {
     const inputs = createInputs({
       myStage: Stage.WITNESS,
       compactMySigned: true,
@@ -350,7 +350,7 @@ describe('Input Hiding (shouldHideInput)', () => {
 
     const result = computeChatUIState(inputs);
     expect(result.aboveInputPanel).toBe('feel-heard');
-    expect(result.shouldHideInput).toBe(true);
+    expect(result.shouldHideInput).toBe(false);
   });
 
   it('hides input while empathy review is running', () => {
@@ -438,7 +438,7 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(true);
   });
 
-  it('hides input while the needs reveal validation panel owns the next action', () => {
+  it('keeps input visible while the needs reveal validation panel is offered', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -456,7 +456,7 @@ describe('Input Hiding (shouldHideInput)', () => {
 
     const result = computeChatUIState(inputs);
     expect(result.aboveInputPanel).toBe('needs-reveal-validation');
-    expect(result.shouldHideInput).toBe(true);
+    expect(result.shouldHideInput).toBe(false);
   });
 
   it('hides input while Stage 4 agreement review owns the next action', () => {

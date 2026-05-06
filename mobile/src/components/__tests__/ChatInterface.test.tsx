@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { Text } from 'react-native';
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { render } from '../../utils/test-utils';
 import { ChatInterface } from '../ChatInterface';
@@ -187,6 +188,34 @@ describe('ChatInterface', () => {
 
       const input = screen.getByTestId('chat-input');
       expect(input.props.editable).toBe(false);
+    });
+
+    it('keeps guided action panels below the chat input', () => {
+      render(
+        <ChatInterface
+          messages={[]}
+          onSendMessage={mockOnSendMessage}
+          renderAboveInput={() => <Text testID="guided-panel">Guided action</Text>}
+        />
+      );
+
+      const input = screen.getByTestId('chat-input');
+      const panel = screen.getByTestId('guided-panel');
+      const contains = (root: any, child: any): boolean => (
+        root === child ||
+        root.children?.some((candidate: any) => typeof candidate !== 'string' && contains(candidate, child)) === true
+      );
+
+      let ancestor: any = input.parent;
+      while (ancestor && !contains(ancestor, panel)) {
+        ancestor = ancestor.parent;
+      }
+
+      const inputBranch = ancestor?.children.find((child: any) => typeof child !== 'string' && contains(child, input));
+      const panelBranch = ancestor?.children.find((child: any) => typeof child !== 'string' && contains(child, panel));
+
+      expect(ancestor).toBeTruthy();
+      expect(ancestor.children.indexOf(panelBranch)).toBeGreaterThan(ancestor.children.indexOf(inputBranch));
     });
   });
 
