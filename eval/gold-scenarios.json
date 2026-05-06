@@ -1,0 +1,16 @@
+{
+  "scenarios": [
+    {
+      "id": "adam-eve",
+      "participants": ["Adam", "Eve"],
+      "reference_transcript": "docs/product/source-material/golden-transcripts/adam-eve.md",
+      "live_enabled": true
+    },
+    {
+      "id": "james-catherine",
+      "participants": ["James", "Catherine"],
+      "reference_transcript": "docs/product/source-material/golden-transcripts/james-catherine.md",
+      "live_enabled": true
+    }
+  ]
+}

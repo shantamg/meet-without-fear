@@ -22,6 +22,7 @@ import mwf_alignment_loop as loop  # noqa: E402
 import mwf_add_gold_example as add_gold  # noqa: E402
 import mwf_alignment_status as status  # noqa: E402
 import mwf_extract_moments as extract  # noqa: E402
+import mwf_gold_loop as gold_loop  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOMENT_ID = "stage-4-no-shared-agreement-closure"
@@ -87,6 +88,11 @@ class TestYamlParsing(unittest.TestCase):
         moment_ids = set(mme.list_moments())
         for moment_id in PHASE1_MOMENT_IDS:
             self.assertIn(moment_id, moment_ids)
+
+    def test_gold_loop_scenarios_come_from_registry(self) -> None:
+        self.assertEqual(gold_loop.SCENARIOS["adam-eve"], ("Adam", "Eve"))
+        self.assertEqual(gold_loop.SCENARIOS["james-catherine"], ("James", "Catherine"))
+        self.assertEqual(gold_loop.scenario_sides("james-catherine"), ["james", "catherine"])
 
     def test_trajectory_moment_schema_validation(self) -> None:
         for moment_id in TRAJECTORY_MOMENT_IDS:
@@ -787,13 +793,18 @@ class TestGoldExampleOnboarding(unittest.TestCase):
             with mock.patch.object(add_gold, "TRANSCRIPTS_ROOT", tmp_path / "golden-transcripts"), \
                  mock.patch.object(add_gold, "MOMENTS_ROOT", tmp_path / "moments"), \
                  mock.patch.object(add_gold, "INDEX_PATH", tmp_path / "moments/README.md"), \
+                 mock.patch.object(add_gold, "SCENARIOS_PATH", tmp_path / "gold-scenarios.json"), \
                  mock.patch.object(add_gold, "run_command", side_effect=completed) as run_tests:
                 result = add_gold.onboard(fixture)
 
             self.assertEqual(result["tests"], 0)
             self.assertTrue((tmp_path / "golden-transcripts/new-couple.md").exists())
             self.assertEqual(len(result["drafts"]), 2)
+            self.assertEqual(result["scenario"]["participants"], ["Alex", "Blair"])
+            self.assertTrue(result["scenario"]["live_enabled"])
             self.assertTrue((tmp_path / "moments/new-couple-stage-1-moment-01.yaml.draft").exists())
+            scenarios = json.loads((tmp_path / "gold-scenarios.json").read_text(encoding="utf-8"))
+            self.assertEqual(scenarios["scenarios"][0]["id"], "new-couple")
             self.assertIn("new-couple-stage-2-moment-01.yaml.draft", (tmp_path / "moments/README.md").read_text(encoding="utf-8"))
             run_tests.assert_called_once()
 
@@ -829,6 +840,7 @@ class TestGoldExampleOnboarding(unittest.TestCase):
                  mock.patch.object(add_gold, "MOMENTS_ROOT", tmp_path / "moments"), \
                  mock.patch.object(add_gold, "INDEX_PATH", tmp_path / "moments/README.md"), \
                  mock.patch.object(add_gold, "ALIGNMENT_CONFIG", tmp_path / "alignment-loop-config.yaml"), \
+                 mock.patch.object(add_gold, "SCENARIOS_PATH", tmp_path / "gold-scenarios.json"), \
                  mock.patch.object(extract, "MOMENTS_ROOT", tmp_path / "moments"), \
                  mock.patch.object(extract, "JUDGE_PROMPTS_ROOT", tmp_path / "judge-prompts"), \
                  mock.patch.object(add_gold, "run_command", side_effect=completed):
