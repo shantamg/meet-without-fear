@@ -86,6 +86,7 @@ Branch: `feat/autonomous-alignment-20260506`
 ## Phase 5 - Re-Run And Validate
 
 - [ ] Real-mode alignment loop with `--real --real-judge`.
+- [x] Real-mode alignment loop dry-run with `--real --real-judge`.
 - [x] E2E browser smoke.
 - [ ] Actual Adam/Eve gold session via existing skill if available.
 - [ ] Documentation updates.
@@ -94,13 +95,15 @@ Branch: `feat/autonomous-alignment-20260506`
 ### Phase 5 Validation
 
 - `npm run check --workspace backend` - exit 0.
+- `python3 scripts/mwf_alignment_loop.py --dry-run --real --real-judge --timestamp autonomous-real-dry-run-20260506b --per-run-cap-cents 1000` - exit 0; scored all 38 configured moments; verdict `complete`; estimated spend `76.0` cents; initialized real-mode baselines under `eval/baselines/`; 5 moments at or above threshold and 33 below threshold.
 - `python3 scripts/mwf_gold_loop.py browser-smoke` - exit 0 after starting the E2E web bundle on `localhost:8082`; preflight `services: ok`; browser control `ok`.
+- `python3 scripts/mwf_gold_loop.py run --scenario adam-eve --max-iterations 1 --max-actor-turns 2 --actor-timeout 180 --scorer-timeout 120 --mock-scorer --no-improve-on-final-fail --start-services --skip-transcripts` - exit 1; seeded session `cmotuew6i000apx98q567i3d6`, then the Adam `codex exec` actor timed out after 180 seconds before returning `MWF_GOLD_STATUS`. Scratch log: `docs/product/gold-session-scratch/2026-05-06-cmotuew6i000apx98q567i3d6-adam.md`.
 
 ### Phase 5 Notes
 
 - The backend was already running on `localhost:3000`; a redundant `npm run dev:api` attempt hit `EADDRINUSE`.
 - The E2E web server was started with `npm run dev:mobile:e2e` for browser smoke and stopped afterward.
-- Full real-loop PR creation and actual Adam/Eve gold-session validation remain outstanding.
+- Full live auto-loop PR creation and actual Adam/Eve gold-session completion remain outstanding.
 
 ## Questions For Shantam
 

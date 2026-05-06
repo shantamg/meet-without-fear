@@ -1,0 +1,12 @@
+{
+  "dimensions": {
+    "emotional_reflection": 4.5,
+    "listening_mode": 4.5,
+    "no_premature_gate": 5.0
+  },
+  "moment_id": "stage-1-emotional-pivot",
+  "overall_score": 4.67,
+  "source": "alignment_loop_initial:autonomous-real-dry-run-20260506b",
+  "updated_at": "2026-05-06T09:05:24.977724Z",
+  "verdict": "eval_pass"
+}

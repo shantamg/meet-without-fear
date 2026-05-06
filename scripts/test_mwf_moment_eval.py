@@ -229,7 +229,8 @@ class TestImprover(unittest.TestCase):
             tmp_path = Path(tmp)
             run_dir = tmp_path / "run"
             run_dir.mkdir()
-            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"):
+            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"), \
+                 mock.patch.object(mme, "BASELINES_ROOT", tmp_path / "baselines"):
                 moment = mme.load_moment(MOMENT_ID)
                 score = mme.score_response(moment, "You both agreed to a shared agreement.")
                 version = mme.run_improver(
@@ -246,7 +247,8 @@ class TestImprover(unittest.TestCase):
             tmp_path = Path(tmp)
             run_dir = tmp_path / "run"
             run_dir.mkdir()
-            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"):
+            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"), \
+                 mock.patch.object(mme, "BASELINES_ROOT", tmp_path / "baselines"):
                 moment = mme.load_moment(REAL_MOMENT_ID)
                 score = mme.score_response(moment, "Thin reflection.", real=True, mock_judge=True)
                 version = mme.run_improver(run_dir, moment, score, allow_protected_branch_patch=True)
@@ -269,10 +271,12 @@ class TestImprover(unittest.TestCase):
 
     def test_cross_moment_regularization_rejects_score_regression(self) -> None:
         moment = mme.load_moment("stage-2-empathy-validation")
-        result = mme.evaluate_cross_moment_regularization(
-            moment,
-            {"stage-2-refinement-round": "Generic response that misses the required refinement details."},
-        )
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(mme, "BASELINES_ROOT", Path(tmp)):
+                result = mme.evaluate_cross_moment_regularization(
+                    moment,
+                    {"stage-2-refinement-round": "Generic response that misses the required refinement details."},
+                )
 
         self.assertFalse(result["pass"])
         failed = [item for item in result["results"] if item["moment"] == "stage-2-refinement-round"][0]
@@ -422,7 +426,8 @@ class TestImprover(unittest.TestCase):
             tmp_path = Path(tmp)
             run_dir = tmp_path / "run"
             run_dir.mkdir()
-            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"):
+            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"), \
+                 mock.patch.object(mme, "BASELINES_ROOT", tmp_path / "baselines"):
                 moment = mme.load_moment("stage-2-empathy-validation")
                 score = mme.score_response(moment, "Thin response.")
                 mme.run_improver(run_dir, moment, score, allow_protected_branch_patch=True)

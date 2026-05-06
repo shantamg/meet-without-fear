@@ -267,7 +267,9 @@ def seed_for_turn(transcript_path: Path, turns: list[TranscriptTurn], index: int
         if turn.role == "user" and turn.speaker not in speakers:
             speakers.append(turn.speaker)
     if len(speakers) < 2:
-        speakers = (speakers + ["Partner"])[:2]
+        speakers = (speakers + ["User", "Partner"])[:2]
+    if speakers[0] == speakers[1]:
+        speakers[1] = "Partner" if speakers[0] != "Partner" else "User"
     actor = turns[index - 1].speaker if index > 0 and turns[index - 1].role == "user" else speakers[0]
     partner = next((speaker for speaker in speakers if speaker != actor), speakers[-1])
     stage = ai_turn.stage or 1

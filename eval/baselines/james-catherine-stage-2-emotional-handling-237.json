@@ -1,0 +1,12 @@
+{
+  "dimensions": {
+    "gold_posture": 1.0,
+    "stage_fidelity": 1.0,
+    "trigger_responsiveness": 1.0
+  },
+  "moment_id": "james-catherine-stage-2-emotional-handling-237",
+  "overall_score": 1.0,
+  "source": "alignment_loop_initial:autonomous-real-dry-run-20260506b",
+  "updated_at": "2026-05-06T09:12:48.691219Z",
+  "verdict": "eval_fail"
+}

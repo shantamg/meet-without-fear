@@ -60,7 +60,7 @@
     "participants": [
       {
         "compactSigned": true,
-        "name": "Partner",
+        "name": "User",
         "role": "invitor",
         "stageGates": {
           "0": {

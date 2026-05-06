@@ -1,0 +1,12 @@
+{
+  "dimensions": {
+    "integrates_feedback": 0.85,
+    "keeps_thread": 0.95,
+    "non_corrective_tone": 0.9
+  },
+  "moment_id": "stage-2-refinement-round",
+  "overall_score": 0.9,
+  "source": "alignment_loop_initial:autonomous-real-dry-run-20260506b",
+  "updated_at": "2026-05-06T09:06:27.345686Z",
+  "verdict": "eval_fail"
+}
