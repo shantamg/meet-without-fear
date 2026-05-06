@@ -1,0 +1,12 @@
+{
+  "duration_seconds": 18.898,
+  "entrypoint": "scripts/mwf_moment_eval.py",
+  "git_branch": "feat/autonomous-alignment-20260506",
+  "git_sha": "5d844813e93ff9aa8186bf6de3b226c7ee0b57dd",
+  "iteration": 1,
+  "mode": "real",
+  "moment": "stage-2-trajectory-empathy-cycle",
+  "prompt_version": null,
+  "session_id": "cmotwja2u0007pxysstyeps8b",
+  "started_at": "2026-05-06T10:15:51.343718Z"
+}
