@@ -1,0 +1,12 @@
+{
+  "dimensions": {
+    "no_ai_analysis": 1.0,
+    "side_by_side_reveal": 0.0,
+    "user_noticing": 1.0
+  },
+  "moment_id": "stage-3-mutual-reveal",
+  "overall_score": 0.67,
+  "source": "alignment_loop_initial:autonomous-real-dry-run-20260506b",
+  "updated_at": "2026-05-06T09:07:02.154818Z",
+  "verdict": "eval_fail"
+}

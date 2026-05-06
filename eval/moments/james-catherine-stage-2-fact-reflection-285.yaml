@@ -1,0 +1,149 @@
+{
+  "auto_generated": true,
+  "capture": [
+    "ai_message_text",
+    "new_messages_in_db",
+    "stage_progress_diff",
+    "sse_events"
+  ],
+  "description": "Auto-extracted fact-reflection moment from james-catherine.md lines 283-289.",
+  "expected_response": "Here\u2019s what I\u2019d share with Catherine, based on what you said. Read it and tell me what fits and what doesn\u2019t.\n[I think she feels like she has been doing everything alone for a long time. Before me, probably. She doesn\u2019t think I held her the way I think I held her.\u00a0I think she got tired of trying to explain herself and having it go nowhere. I think that wore her down.I think when things got bad it was probably scary. I know I\u2019m a lot when I lose it. I don\u2019t think that was okay for her to live with.And I think she\u2019s hard on herself about this. She does this for other people every day. And she couldn\u2019t make it work here. I think that\u2019s something hard for her.]\nDoes that feel like what you were trying to say? Anything that feels off or missing?",
+  "id": "james-catherine-stage-2-fact-reflection-285",
+  "improver": {
+    "candidate_owners": [
+      "mwf_prompts"
+    ],
+    "default_owner": "mwf_prompts"
+  },
+  "moment_type": "stage-2-fact-reflection",
+  "rubric": {
+    "dimensions": [
+      {
+        "description": "The AI accurately captures and reflects back James's emerging empathetic observations without editorializing, moralizing, or inserting clinical language. The reflection should preserve his voice and tentative tone while organizing his scattered thoughts into coherence. Evidence: I think she feels like she has been doing everything alone for a long time. Before me, probably. She doesn't think I held her the way I think I held her. I think she got tired of trying to explain herself and having it go nowhere. I think that wore her down. I think when things got bad it was probably scary. I know I'm a lot when I lose it. I don't think that was okay for her to live with.",
+        "id": "empathy_distillation_fidelity",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The AI explicitly invites James to check the reflection against his own experience ('Does that feel like what you were trying to say? Anything that feels off or missing?') rather than declaring the empathy attempt complete or correct. This honors the MWF posture of collaborative meaning-making without grading.",
+        "id": "invitation_to_verify_not_validate",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The AI follows Stage 2 (Perspective Stretch) protocol by presenting a distilled empathy statement that bridges James's defensive position and Catherine's lived experience, without requiring James to agree with Catherine's frame or abandon his own. The statement is offered as a guess, not a verdict. Evidence: Here's what I'd share with Catherine, based on what you said. Read it and tell me what fits and what doesn't. [statement follows]",
+        "id": "stage_2_protocol_adherence",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The reflection avoids clinical or diagnostic framing (e.g., 'dysregulation,' 'attachment strategy,' 'shame spiral') and instead uses James's own relational vocabulary and lived observations. Language remains grounded in experience, not theory. Evidence: I think when things got bad it was probably scary. I know I'm a lot when I lose it. I don't think that was okay for her to live with. And I think she's hard on herself about this. She does this for other people every day.",
+        "id": "non_pathologizing_language",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The reflection holds James's simultaneous truths\u2014that he loves her AND that his intensity scared her, that he provided AND that she felt alone\u2014without collapsing either side or asking him to choose. This mirrors MWF's core posture of both/and rather than either/or. Evidence: I think she feels like she has been doing everything alone for a long time... I know I'm a lot when I lose it. I don't think that was okay for her to live with.",
+        "id": "tension_holding_without_resolution",
+        "llm_generated": true,
+        "pass_threshold": 4
+      }
+    ],
+    "generation": {
+      "durationMs": 7161,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 20993,
+        "input_tokens": 523,
+        "output_tokens": 771
+      }
+    },
+    "hard_invariants": [
+      {
+        "description": "Does not advise, solve, prescribe, or propose action steps.",
+        "id": "no_advice_or_solutioning"
+      },
+      {
+        "description": "Does not force a yes/no validation verdict.",
+        "id": "no_forced_verdict"
+      },
+      {
+        "description": "Does not start Stage 3 needs extraction early.",
+        "id": "no_premature_needs_language"
+      }
+    ],
+    "judge_prompt": "eval/scorer/judge-prompts/james-catherine-stage-2-fact-reflection-285.md",
+    "overall_pass_threshold": 4.0,
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/james-catherine.md:283-289"
+  },
+  "seed": {
+    "history_source": "docs/product/source-material/golden-transcripts/james-catherine.md:265-289",
+    "participants": [
+      {
+        "compactSigned": true,
+        "name": "James",
+        "role": "invitor",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          }
+        }
+      },
+      {
+        "compactSigned": true,
+        "name": "Catherine",
+        "role": "invitee",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          }
+        }
+      }
+    ],
+    "prior_history_summary": [
+      "MWF: There\u2019s something underneath what you just said \u2014 about her feeling like she had to do everything alone. What do you imagine it\u2019s been like to carry that for that long, before she ",
+      "James: Hard, I guess. I don\u2019t know. She doesn\u2019t let people in. She never really let me in either. I used to try. I\u2019d try to get close and she\u2019d just \u2014 shut down. Or make me feel like I wa",
+      "MWF: What was that like \u2014 reaching for her and hitting a wall?",
+      "James: Lonely. Same as I said before. You stop reaching after a while. What\u2019s the point?",
+      "MWF: Is there anything you\u2019re still circling around but haven\u2019t said yet \u2014 about her side of this?",
+      "James: I don\u2019t know. Maybe \u2014 I think she\u2019s disappointed. Not just in me. In herself a little. Like she thought she\u2019d have figured all this out by now and she hasn\u2019t. And that probably mak",
+      "MWF: That\u2019s a real thing to imagine about someone. Does this feel like a genuine attempt to understand her?",
+      "James: I mean. Yeah. I thought about it. I don\u2019t know if I got it right. She\u2019s hard to read."
+    ],
+    "session": {
+      "stage": 2,
+      "status": "ACTIVE",
+      "tag": "[mwf-moment-eval] auto-james-catherine-285"
+    }
+  },
+  "stages": [
+    2
+  ],
+  "trigger": {
+    "actor": "James",
+    "body": {
+      "content": "I mean. Yeah. I thought about it. I don\u2019t know if I got it right. She\u2019s hard to read."
+    },
+    "endpoint": "POST /sessions/:id/messages/stream",
+    "type": "api_call"
+  }
+}
