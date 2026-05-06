@@ -333,7 +333,14 @@ function computeShowFeelHeardPanel(inputs: ChatUIStateInputs): boolean {
  * Only shows during Stage 2 (Perspective Stretch).
  */
 function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
-  const { hasShareSuggestion, hasRespondedToShareOfferLocal, myStage, sessionStatus } = inputs;
+  const {
+    hasShareSuggestion,
+    hasRespondedToShareOfferLocal,
+    myStage,
+    sessionStatus,
+    empathyAlreadyConsented,
+    empathyDraft,
+  } = inputs;
 
   if (sessionStatus === SessionStatus.RESOLVED) return false;
 
@@ -344,7 +351,12 @@ function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
     return false;
   }
 
-  return hasShareSuggestion && !hasRespondedToShareOfferLocal;
+  // A subject may receive a share suggestion while they are still working on
+  // their own empathy attempt. Hold it until their own Stage 2 share is done
+  // so the suggestion does not interrupt perspective-taking.
+  const ownEmpathySubmitted = empathyAlreadyConsented || empathyDraft?.alreadyConsented === true;
+
+  return hasShareSuggestion && ownEmpathySubmitted && !hasRespondedToShareOfferLocal;
 }
 
 /**
@@ -577,7 +589,6 @@ function computeShouldHideInput(
     aboveInputPanel === 'topic-proposal' ||
     aboveInputPanel === 'invitation' ||
     aboveInputPanel === 'feel-heard' ||
-    aboveInputPanel === 'share-suggestion' ||
     aboveInputPanel === 'empathy-statement' ||
     aboveInputPanel === 'needs-reveal-validation'
   ) {

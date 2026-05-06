@@ -1385,6 +1385,10 @@ def check_actor_operated_correct_side(run_data: dict[str, Any], scenario: str) -
 def check_felt_heard_gate_after_witnessing(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
     evidence: list[str] = []
     for path, text in transcripts:
+        metadata = transcript_metadata(text)
+        stage_text = metadata.get("stage", "").strip("`")
+        if stage_text != "1":
+            continue
         lowered = text.lower()
         marker = lowered.find("felt heard")
         if marker < 0:
@@ -1398,7 +1402,7 @@ def check_felt_heard_gate_after_witnessing(transcripts: list[tuple[Path, str]]) 
         not evidence,
         owner="product_code",
         dimension="stage_gates",
-        details="A felt-heard gate should not appear before any substantive transcript context.",
+        details="A live Stage 1 felt-heard gate should not appear before any substantive transcript context.",
         evidence=evidence,
     )
 

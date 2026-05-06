@@ -189,17 +189,38 @@ describe('Above Input Panel Priority', () => {
     expect(result.aboveInputPanel).not.toBe('feel-heard');
   });
 
-  it('shows share-suggestion panel when Subject has suggestion', () => {
+  it('does not show share-suggestion panel before Subject has submitted their own empathy', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
       myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
       hasShareSuggestion: true,
       hasRespondedToShareOfferLocal: false,
+      empathyAlreadyConsented: false,
+      empathyDraft: { alreadyConsented: false },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showShareSuggestionPanel).toBe(false);
+    expect(result.aboveInputPanel).toBeNull();
+    expect(result.shouldHideInput).toBe(false);
+  });
+
+  it('shows share-suggestion panel when Subject has suggestion after submitting their own empathy', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      hasShareSuggestion: true,
+      shareOffer: { hasSuggestion: true },
+      hasRespondedToShareOfferLocal: false,
+      empathyAlreadyConsented: true,
+      empathyDraft: { alreadyConsented: true },
     });
 
     const result = computeChatUIState(inputs);
     expect(result.aboveInputPanel).toBe('share-suggestion');
+    expect(result.shouldHideInput).toBe(false);
   });
 
   it('does not show share-suggestion panel after Stage 2', () => {
@@ -288,18 +309,20 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(true);
   });
 
-  it('hides input when awaiting-context-share panel owns the next action', () => {
+  it('keeps input visible when awaiting-context-share panel is present', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
       myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
       shareOffer: { hasSuggestion: true },
       hasShareSuggestion: true,
+      empathyAlreadyConsented: true,
+      empathyDraft: { alreadyConsented: true },
     });
 
     const result = computeChatUIState(inputs);
     expect(result.aboveInputPanel).toBe('share-suggestion');
-    expect(result.shouldHideInput).toBe(true);
+    expect(result.shouldHideInput).toBe(false);
   });
 
   it('hides input while the empathy review panel owns the next action', () => {
