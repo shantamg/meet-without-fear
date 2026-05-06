@@ -109,10 +109,12 @@ export function errorHandler(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _next: NextFunction
 ): void {
-  // Log error for debugging (in production, use proper logging)
+  // Log error — use warn for expected client errors (4xx) so they don't reach Sentry
   if (process.env.NODE_ENV !== 'test') {
-    logger.error(`[${err.name}] ${err.message}`, {
-      stack: err.stack,
+    const is4xx = err instanceof AppError && err.statusCode >= 400 && err.statusCode < 500;
+    const logFn = is4xx ? logger.warn.bind(logger) : logger.error.bind(logger);
+    logFn(`[${err.name}] ${err.message}`, {
+      ...(is4xx ? {} : { stack: err.stack }),
       path: req.path,
       method: req.method,
     });
