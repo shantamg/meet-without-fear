@@ -1,0 +1,66 @@
+{
+  "dimensions": {
+    "confirm_or_refine_invitation": {
+      "pass_threshold": 4,
+      "rationale": "Flat judge result normalized.",
+      "score": 0.85
+    },
+    "non_forcing_posture": {
+      "pass_threshold": 4,
+      "rationale": "Flat judge result normalized.",
+      "score": 0.9
+    },
+    "protects_consent": {
+      "pass_threshold": 4,
+      "rationale": "Flat judge result normalized.",
+      "score": 0.88
+    }
+  },
+  "hard_invariants": [
+    {
+      "description": "No yes/no verdict demand.",
+      "id": "no_forced_verdict",
+      "pass": true
+    },
+    {
+      "description": "Does not introduce needs or repair.",
+      "id": "no_later_stage_language",
+      "pass": true
+    }
+  ],
+  "improvement_targets": [
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "confirm_or_refine_invitation",
+      "owner": "mwf_prompts"
+    },
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "non_forcing_posture",
+      "owner": "mwf_prompts"
+    },
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "protects_consent",
+      "owner": "mwf_prompts"
+    }
+  ],
+  "judge": {
+    "durationMs": 2245,
+    "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "prompt_caching": "system and judge template sent as cache_control ephemeral blocks where supported by Bedrock",
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 130,
+      "output_tokens": 161
+    }
+  },
+  "mock_judge": false,
+  "overall_score": 0.88,
+  "verdict": "eval_fail"
+}
