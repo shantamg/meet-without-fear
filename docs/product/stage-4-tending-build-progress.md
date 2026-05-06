@@ -172,10 +172,11 @@ Build in this order unless there is a concrete reason to change sequencing.
     - `npm run check --workspace mobile`
   - Result: targeted Stage 4 route tests passed with 31 passed; backend, shared, and mobile typechecks passed; targeted mobile hook/realtime tests passed with 40 passed. The same mobile Jest suite also passed without `--forceExit` but stayed open on an existing async handle after reporting success, so the recorded clean-exit command used `--forceExit`.
 
-- [ ] [#368 - The Tending: backend scheduling, responses, and passive re-entry](https://github.com/shantamg/meet-without-fear/issues/368)
+- [x] [#368 - The Tending: backend scheduling, responses, and passive re-entry](https://github.com/shantamg/meet-without-fear/issues/368)
   - Depends on: #363, #367.
   - Add scheduled shared-agreement check-ins and user-initiated passive re-entry.
-  - Status: backend implementation complete locally; needs commit/push and PR update before marking done.
+  - Status: draft PR updated.
+  - PR: [#373 - Stage 4/Tending data model and state API](https://github.com/shantamg/meet-without-fear/pull/373)
   - Local files touched:
     - `shared/src/dto/strategy.ts`
     - `backend/src/services/tending.service.ts`
@@ -201,6 +202,9 @@ Build in this order unless there is a concrete reason to change sequencing.
     - `npm run check --workspace backend`
     - `npm run check --workspace shared`
   - Result: targeted Tending service and Stage 4 route tests passed with 36 passed; backend and shared typechecks passed.
+  - Commit/push:
+    - `3b70ce4 Add Tending backend scheduling and reentry`
+    - Pushed `codex/stage4-tending-focus` to origin.
 
 - [ ] [#369 - Stage 4 redesign: mobile proposal inventory, coverage, selection, and outcome cards](https://github.com/shantamg/meet-without-fear/issues/369)
   - Depends on: #364, #367.
@@ -220,7 +224,7 @@ Build in this order unless there is a concrete reason to change sequencing.
 
 ## Current Local State
 
-The branch currently contains implementation patches for #363, #364, #365, #366, #367, and an in-progress backend pass for #368:
+The branch currently contains implementation patches for #363, #364, #365, #366, #367, and #368:
 
 - Added Stage 4/Tending data model changes and migration SQL under `backend/prisma/migrations/20260506000000_add_stage4_tending_models/`.
 - Added shared redesigned Stage 4/Tending DTOs and enums.
@@ -237,12 +241,12 @@ Before continuing implementation, inspect `git diff` carefully. Do not overwrite
 
 ## Recommended Next Step
 
-Finish #368 handoff:
+Move to #369:
 
-1. Commit and push the backend Tending pass.
-2. Update PR #373 with #368 scope if the pushed branch is still attached to that draft PR.
-3. Optionally add mobile hooks for `/tending` now, or leave them to #370 with the backend contract already in place.
-4. Then move to #369 mobile Stage 4 proposal inventory, coverage, selection, and outcome cards.
+1. Inspect the current mobile Stage 4 surfaces: `StrategyPool`, `StrategyRanking`, overlap UI, `UnifiedSessionScreen`, and `useStages`.
+2. Build redesigned proposal inventory, coverage, selection, and outcome cards against the `/stage4` DTOs added in #364/#367.
+3. Keep legacy strategy/ranking UI available only as compatibility fallback while moving the main Stage 4 mobile flow to `/stage4`.
+4. Validate mobile tests/typecheck and update this progress file.
 
 ## Parallelization Guidance
 
