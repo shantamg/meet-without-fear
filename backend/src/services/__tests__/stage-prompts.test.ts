@@ -194,6 +194,50 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('experiment');
     });
 
+    it('Stage 4 prompt supports collaborative proposal inventory without ranking pressure', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('proposal inventory');
+      expect(prompt).toContain('Stage 3 needs');
+      expect(prompt).toContain('shared proposal');
+      expect(prompt).toContain('individual commitment');
+      expect(prompt).toContain('Do not force ranking');
+      expect(prompt).toContain('Willingness from one person is not a shared agreement');
+    });
+
+    it('Stage 4 prompt covers declined AI ideas and removals', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('Ask before contributing AI ideas');
+      expect(prompt).toContain('If Test User declines AI ideas, accept that');
+      expect(prompt).toContain('Never re-suggest removed items');
+      expect(prompt).toContain('honor it immediately');
+      expect(prompt).toContain('instead of guessing which proposal they meant');
+    });
+
+    it('Stage 4 prompt treats individual-only and no-overlap closure as valid outcomes', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('no-shared-agreement as a valid outcome');
+      expect(prompt).toContain('Do not describe no-overlap or no-shared-agreement as failure');
+      expect(prompt).toContain('individual commitments can still be carried forward');
+      expect(prompt).toContain('Do not ask for scheduled shared check-in timing for individual-only commitments');
+    });
+
+    it('Stage 4 response protocol keeps ProposedStrategy as compatibility fallback only', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('compatibility fallback');
+      expect(prompt).toContain('user clearly volunteered, accepted, or committed');
+      expect(prompt).toContain('Do NOT list AI ideas the user has not accepted');
+      expect(prompt).toContain('one person');
+      expect(prompt).toContain('as if it were a shared agreement');
+    });
+
     it('returns topic-articulation prompt for stage 0 with isInvitationPhase', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };

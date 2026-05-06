@@ -265,9 +265,26 @@ Build in this order unless there is a concrete reason to change sequencing.
     - `npm run check --workspace mobile`
   - Result: targeted Tending panel and mobile hook tests passed with 42 passed; mobile typecheck passed.
 
-- [ ] [#371 - Stage 4 redesign: prompts for collaborative proposal development](https://github.com/shantamg/meet-without-fear/issues/371)
+- [x] [#371 - Stage 4 redesign: prompts for collaborative proposal development](https://github.com/shantamg/meet-without-fear/issues/371)
   - Depends on: #365, #366, #367.
   - Update Stage 4 prompting for conversational proposal development, removals, no-shared-agreement, and Tending timing.
+  - Status: draft PR updated.
+  - PR: [#373 - Stage 4/Tending data model and state API](https://github.com/shantamg/meet-without-fear/pull/373)
+  - Local files touched:
+    - `backend/src/services/stage-prompts.ts`
+    - `backend/src/services/__tests__/stage-prompts.test.ts`
+  - Implemented:
+    - Reframed Stage 4 prompting from an unlabeled strategy pool/ranking flow to a conversation-led proposal inventory.
+    - Added prompt guidance to orient from Stage 3 needs in the user's language, invite proposals conversationally, refine one missing detail at a time, and name open needs without failure language.
+    - Added explicit distinctions between shared proposals and individual commitments, including a rule that one user's willingness cannot create shared agreement pressure.
+    - Added prompt handling for declined AI ideas, optional AI suggestions grounded in named needs, immediate proposal removals/revisions, no-shared-agreement as a valid closure, and Tending timing only when a shared proposal is becoming mutual or the user asks for a check-in.
+    - Kept `StrategyProposed`/`ProposedStrategy` as compatibility fallback metadata, now constrained to user-endorsed concrete proposals and explicitly excluding unaccepted AI ideas, removed items, vague intentions, and one-sided willingness.
+    - Added prompt regression tests for declined AI ideas, proposal removal, individual-only commitment/no-overlap closure, ranking-pressure avoidance, and structured-capture compatibility.
+  - Validation run:
+    - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/stage-prompts.test.ts --runInBand`
+    - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/stage4-capture.service.test.ts --runInBand`
+    - `npm run check --workspace backend`
+  - Result: targeted Stage 4 prompt tests passed with 79 passed; targeted Stage 4 capture tests passed with 5 passed; backend typecheck passed.
 
 - [ ] [#372 - Stage 4 redesign: E2E fixtures and golden-flow evaluation coverage](https://github.com/shantamg/meet-without-fear/issues/372)
   - Depends on: #367, #368, #369, #370, #371.
@@ -275,7 +292,7 @@ Build in this order unless there is a concrete reason to change sequencing.
 
 ## Current Local State
 
-The branch currently contains implementation patches for #363, #364, #365, #366, #367, #368, #369, and #370:
+The branch currently contains implementation patches for #363, #364, #365, #366, #367, #368, #369, #370, and #371:
 
 - Added Stage 4/Tending data model changes and migration SQL under `backend/prisma/migrations/20260506000000_add_stage4_tending_models/`.
 - Added shared redesigned Stage 4/Tending DTOs and enums.
@@ -287,6 +304,7 @@ The branch currently contains implementation patches for #363, #364, #365, #366,
 - Added mobile hooks/query keys for the redesigned `/stage4` state and mutations so #369 can build cards against typed contracts.
 - Added redesigned mobile Stage 4 proposal inventory, coverage, willingness selection, shared-agreement outcome, and no-shared-agreement outcome cards.
 - Added mobile Tending check-in, response, passive re-entry, and deep-linked entry targeting surfaces for resolved sessions.
+- Updated Stage 4 prompts for conversation-led proposal inventory, declined AI ideas, proposal removals/revisions, individual-only commitments, no-shared-agreement closure, and Tending timing.
 - Kept legacy `/strategies` and `/agreements` compatibility endpoints alive.
 - Kept `ProposedStrategy:` micro-tag compatibility as a fallback into structured capture.
 
@@ -294,12 +312,12 @@ Before continuing implementation, inspect `git diff` carefully. Do not overwrite
 
 ## Recommended Next Step
 
-Move to #371:
+Move to #372:
 
-1. Inspect Stage 4 prompt generation and the structured capture integration: `backend/src/services/ai-orchestrator.ts`, `backend/src/services/stage-tools.ts`, and `backend/src/services/stage4-capture.service.ts`.
-2. Update Stage 4 prompting for conversational proposal development, removals, no-shared-agreement closure, and Tending timing without touching Stages 1-3 self-improvement branches.
-3. Keep `ProposedStrategy:` micro-tag compatibility as a fallback while moving the preferred contract to structured capture.
-4. Validate backend prompt/capture tests and typecheck, then update this progress file.
+1. Inspect existing E2E/golden-flow harnesses and fixtures: `e2e/`, `eval/`, `backend/src/fixtures/`, and the golden transcripts under `docs/product/source-material/golden-transcripts/`.
+2. Add deterministic coverage for redesigned Stage 4 state, proposal inventory, selection/outcome, no-shared-agreement closure, and Tending surfaces without depending on prompt nondeterminism.
+3. Extend golden-flow evaluation coverage only after fixture contracts are stable.
+4. Validate the targeted E2E/eval suite, backend/mobile checks for affected workspaces, then update this progress file.
 
 ## Parallelization Guidance
 
