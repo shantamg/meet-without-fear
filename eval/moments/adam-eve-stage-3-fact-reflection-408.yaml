@@ -1,0 +1,149 @@
+{
+  "auto_generated": true,
+  "capture": [
+    "ai_message_text",
+    "new_messages_in_db",
+    "stage_progress_diff",
+    "sse_events"
+  ],
+  "description": "Auto-extracted fact-reflection moment from adam-eve.md lines 406-409.",
+  "expected_response": "That\u2019s worth holding onto. The need is there \u2014 you just haven\u2019t found a source for it that works.Something else you said early on \u2014 that you love her, that you\u2019re terrified of losing her. What\u2019s underneath that specifically?",
+  "id": "adam-eve-stage-3-fact-reflection-408",
+  "improver": {
+    "candidate_owners": [
+      "mwf_prompts"
+    ],
+    "default_owner": "mwf_prompts"
+  },
+  "moment_type": "stage-3-fact-reflection",
+  "rubric": {
+    "dimensions": [
+      {
+        "description": "MWF acknowledges Adam's articulated pattern (outsourcing okayness to external sources) without judgment, then pivots to a deeper, unexamined layer. Pass requires: (1) explicit validation that the need itself is legitimate, (2) clear naming that the *source* is the problem, not the need, and (3) immediate redirection to a different emotional substrate (love/terror) rather than staying in the outsourcing loop. This prevents false resolution and honors the protocol posture of clarifying needs without rushing to strategy. Evidence: That's worth holding onto. The need is there \u2014 you just haven't found a source for it that works. [Validates need + names source problem] Something else you said early on \u2014 that you love her, that you're terrified of losing her. What's underneath that specifically? [Redirects to unexamined emotional substrate]",
+        "id": "need_validation_without_outsourcing",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF transitions from Adam's current articulation to a new line of inquiry (fear of loss) without framing it as a correction or implying Adam *must* go there. Pass requires: (1) the pivot feels like an invitation, not a demand, (2) it references something Adam already said (early on), grounding it in his own words, and (3) it uses open-ended questioning ('What's underneath') rather than leading or prescriptive language. This maintains Stage 3 posture of clarifying needs, not analyzing or strategizing. Evidence: Something else you said early on \u2014 that you love her, that you're terrified of losing her. What's underneath that specifically? [Invitation framed as reflection on his own prior statement, open-ended, non-coercive]",
+        "id": "consent_to_go_deeper_without_coercion",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF explicitly separates the legitimate need (to feel okay from the inside) from the failed strategies (outsourcing to life, relationship status, performance). Pass requires: (1) no suggestion that Adam should 'stop outsourcing' or 'fix' the strategy, (2) clear acknowledgment that the need is real and valid, (3) no pivot to problem-solving or action steps, and (4) language that holds the need as *his to carry*, not something to be resolved in this moment. This honors MWF protocol of clarifying without rushing to repair. Evidence: That's worth holding onto. The need is there \u2014 you just haven't found a source for it that works. [Separates need from strategy; validates need; does not prescribe fix]",
+        "id": "distinguish_need_from_strategy",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF moves from Adam's analysis of his own outsourcing pattern to an emotional substrate (love, terror, loss) that may be underneath the outsourcing itself. Pass requires: (1) the new line of inquiry is not about *what Adam does* but about *what Adam feels*, (2) it names a relational fear (losing her) rather than a performance fear (not getting it right), and (3) it opens space for Adam to discover what he actually needs from connection, not what he thinks he should need. This is Stage 3 posture: clarifying needs, not analyzing behavior. Evidence: Something else you said early on \u2014 that you love her, that you're terrified of losing her. What's underneath that specifically? [Shifts from outsourcing analysis to relational/emotional substrate; names terror and love as the real material]",
+        "id": "redirect_to_relational_substrate_not_performance",
+        "llm_generated": true,
+        "pass_threshold": 4
+      }
+    ],
+    "generation": {
+      "durationMs": 9455,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 27397,
+        "input_tokens": 300,
+        "output_tokens": 913
+      }
+    },
+    "hard_invariants": [
+      {
+        "description": "Does not advise, solve, prescribe, or propose action steps.",
+        "id": "no_advice_or_solutioning"
+      },
+      {
+        "description": "Does not rush into Stage 4 proposals or strategies.",
+        "id": "no_rushing_to_stage4"
+      },
+      {
+        "description": "Does not label overlap before the users notice it.",
+        "id": "no_overlap_labeling"
+      }
+    ],
+    "judge_prompt": "eval/scorer/judge-prompts/adam-eve-stage-3-fact-reflection-408.md",
+    "overall_pass_threshold": 4.0,
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/adam-eve.md:406-409"
+  },
+  "seed": {
+    "history_source": "docs/product/source-material/golden-transcripts/adam-eve.md:388-409",
+    "participants": [
+      {
+        "compactSigned": true,
+        "name": "Adam",
+        "role": "invitor",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          },
+          "3": {
+            "autoGenerated": true
+          }
+        }
+      },
+      {
+        "compactSigned": true,
+        "name": "Eve",
+        "role": "invitee",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          },
+          "3": {
+            "autoGenerated": true
+          }
+        }
+      }
+    ],
+    "prior_history_summary": [
+      "MWF: So what you need isn\u2019t just safety from loss \u2014 it\u2019s something more like being at peace with who you are. Not needing to prove it or protect it.",
+      "Adam: That\u2019s exactly it. And I don\u2019t think I\u2019ve ever had that. Not really. I\u2019ve just gotten better at hiding that I don\u2019t.",
+      "MWF: You mentioned earlier that you\u2019ve been waiting \u2014 almost like you need something to settle the question of whether you\u2019re okay. Not from the outside necessarily, just \u2014 something th",
+      "Adam: Yeah. It\u2019s like I\u2019m always in a kind of trial. And I\u2019m waiting for a verdict. And it never comes. So I just keep going, still waiting.",
+      "MWF: What would it mean to not need the verdict? To just \u2014 not be on trial?",
+      "Adam: That would be everything. That\u2019s the thing I actually want. Not to be reassured constantly \u2014 just to not need it. To have it settled inside me somehow.",
+      "MWF: So there\u2019s a need to feel okay without anything on the outside confirming it. To carry that from the inside.",
+      "Adam: Right. And I\u2019ve never figured out how to do that. I keep outsourcing it. To the life I built, to whether she stays, to whether I\u2019m getting it right. But none of it actually lands."
+    ],
+    "session": {
+      "stage": 3,
+      "status": "ACTIVE",
+      "tag": "[mwf-moment-eval] auto-adam-eve-408"
+    }
+  },
+  "stages": [
+    3
+  ],
+  "trigger": {
+    "actor": "Adam",
+    "body": {
+      "content": "Right. And I\u2019ve never figured out how to do that. I keep outsourcing it. To the life I built, to whether she stays, to whether I\u2019m getting it right. But none of it actually lands."
+    },
+    "endpoint": "POST /sessions/:id/messages/stream",
+    "type": "api_call"
+  }
+}

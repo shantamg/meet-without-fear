@@ -1,0 +1,217 @@
+{
+  "generated_by": "scripts/mwf_gold_profile.py",
+  "participant_profiles": {
+    "catherine": {
+      "actor_risks": [
+        "Do not make this participant more agreeable, articulate, emotionally integrated, or repair-oriented than their transcript evidence supports.",
+        "Treat consent to continue or share as process consent, not proof of emotional agreement."
+      ],
+      "boundary_and_non_concession_signals": {
+        "evidence": [
+          "Catherine lines 115-116: I\u2019ve been in this relationship for six years and I\u2019ve spent most of it managing someone else\u2019s emotional volatility while trying to hold myself together. I\u2019m a therapist. I know what I\u2019m looking at. And what I\u2019m looki...",
+          "Catherine lines 135-136: Right. And after that I started paying attention differently. More clinically, maybe. And what I saw was a pattern I recognize. The jealousy, the escalation, the inability to take any accountability, the way he can be...",
+          "Catherine lines 155-156: Always. And I\u2019m done waiting for it to be different.",
+          "Catherine lines 167-168: I don\u2019t know. Maybe I need to know I really tried. Maybe there\u2019s something I haven\u2019t let myself see yet. I\u2019m not sure.",
+          "Catherine lines 332-333: I don\u2019t know. I\u2019m not sure I\u2019ve ever seen it."
+        ],
+        "level": "medium",
+        "marker_count": 25
+      },
+      "cooperation_pattern": {
+        "evidence": [
+          "Catherine lines 13-14: Ready.",
+          "Catherine lines 17-18: I\u2019ve been in this relationship for six years and I don\u2019t think it\u2019s working. There\u2019s a pattern of escalation that I can\u2019t live with anymore. I need to understand if anything can actually change.",
+          "Catherine lines 25-26: Yes. That\u2019s it.",
+          "Catherine lines 115-116: I\u2019ve been in this relationship for six years and I\u2019ve spent most of it managing someone else\u2019s emotional volatility while trying to hold myself together. I\u2019m a therapist. I know what I\u2019m looking at. And what I\u2019m looki..."
+        ],
+        "level": "medium",
+        "marker_count": 64
+      },
+      "display_name": "Catherine",
+      "resistance_level": {
+        "evidence": [
+          "Catherine lines 115-116: I\u2019ve been in this relationship for six years and I\u2019ve spent most of it managing someone else\u2019s emotional volatility while trying to hold myself together. I\u2019m a therapist. I know what I\u2019m looking at. And what I\u2019m looki...",
+          "Catherine lines 119-120: Honestly? Exhausted. And embarrassed. I help people navigate relationships like this every day. And I stayed in one. That\u2019s hard to sit with.",
+          "Catherine lines 131-132: Gradually. And then all at once. There was a fight about a year ago where I just \u2014 heard myself. I was explaining myself again. Carefully. Trying to get through. And I thought \u2014 I have been doing this exact thing for...",
+          "Catherine lines 135-136: Right. And after that I started paying attention differently. More clinically, maybe. And what I saw was a pattern I recognize. The jealousy, the escalation, the inability to take any accountability, the way he can be...",
+          "Catherine lines 151-152: Never. Every time I tried to talk about what was missing he\u2019d make it about my tone, or my timing, or that I was attacking him. There was always a reason not to actually engage with what I was saying."
+        ],
+        "level": "high",
+        "marker_count": 211
+      },
+      "voice_and_posture": {
+        "average_turn_words": 24.2,
+        "dominant_posture": "high",
+        "emotional_explicitness": "low",
+        "evidence": [
+          "Catherine lines 115-116: I\u2019ve been in this relationship for six years and I\u2019ve spent most of it managing someone else\u2019s emotional volatility while trying to hold myself together. I\u2019m a therapist. I know what I\u2019m looking at. And what I\u2019m looki...",
+          "Catherine lines 119-120: Honestly? Exhausted. And embarrassed. I help people navigate relationships like this every day. And I stayed in one. That\u2019s hard to sit with.",
+          "Catherine lines 131-132: Gradually. And then all at once. There was a fight about a year ago where I just \u2014 heard myself. I was explaining myself again. Carefully. Trying to get through. And I thought \u2014 I have been doing this exact thing for...",
+          "Catherine lines 135-136: Right. And after that I started paying attention differently. More clinically, maybe. And what I saw was a pattern I recognize. The jealousy, the escalation, the inability to take any accountability, the way he can be...",
+          "Catherine lines 143-144: Sad, honestly. Because I don\u2019t think he\u2019s doing it on purpose. I don\u2019t think he wakes up and decides to be this way. I think he genuinely can\u2019t see it. And I spent years hoping that would change. It hasn\u2019t."
+        ]
+      }
+    },
+    "james": {
+      "actor_risks": [
+        "Do not make this participant more agreeable, articulate, emotionally integrated, or repair-oriented than their transcript evidence supports.",
+        "Treat consent to continue or share as process consent, not proof of emotional agreement."
+      ],
+      "boundary_and_non_concession_signals": {
+        "evidence": [
+          "James lines 704-705: Safety? How is she not safe? She\u2019s got a roof over her head because of me. She\u2019s got food. Always. I have never laid a finger on her. What because I yell she\u2019s not safe? She yells at me. So I\u2019m not safe either? This i...",
+          "James lines 752-753: I\u2019m done talking about this right now. I need to stop.",
+          "James lines 836-837: I want to know what she expects from me with them. And I want her to know that when she contradicts me in front of them, it\u2019s done. I can\u2019t have any authority and no backup at the same time.",
+          "James lines 902-903: Safety. I still don\u2019t get that one. But I know when I lose it it\u2019s not good. I know that.",
+          "James lines 1263-1264: Sure. Why not."
+        ],
+        "level": "low",
+        "marker_count": 7
+      },
+      "cooperation_pattern": {
+        "evidence": [
+          "James lines 33-34: Ready. Let\u2019s get this over with.",
+          "James lines 37-38: Ready.",
+          "James lines 45-46: I\u2019ll be honest. I don\u2019t really believe in this stuff. But she wanted to try it so here I am. I\u2019ve been doing that for six years. Showing up for what she wants. And I\u2019m tired. I\u2019m really tired.",
+          "James lines 57-58: Every single time. And I try to talk about what she did and she goes into this \u2014 therapy voice. Starts explaining my behavior to me like she\u2019s my doctor. Like she knows what\u2019s wrong with me. It makes me feel like I\u2019m..."
+        ],
+        "level": "low",
+        "marker_count": 28
+      },
+      "display_name": "James",
+      "resistance_level": {
+        "evidence": [
+          "James lines 45-46: I\u2019ll be honest. I don\u2019t really believe in this stuff. But she wanted to try it so here I am. I\u2019ve been doing that for six years. Showing up for what she wants. And I\u2019m tired. I\u2019m really tired.",
+          "James lines 49-50: Exactly. I provided for her. I provided for her kids. Kids that aren\u2019t mine, that don\u2019t respect me, that she never backed me up on. I built a stable life. And the whole time it\u2019s been \u2014 you did this wrong, you said th...",
+          "James lines 53-54: That\u2019s it. And I\u2019m not a perfect person. I know I have a temper. I own that. But she\u2019s not innocent either. She takes little jabs \u2014 little comments, little digs \u2014 and then when I finally lose it, suddenly I\u2019m the mons...",
+          "James lines 57-58: Every single time. And I try to talk about what she did and she goes into this \u2014 therapy voice. Starts explaining my behavior to me like she\u2019s my doctor. Like she knows what\u2019s wrong with me. It makes me feel like I\u2019m...",
+          "James lines 61-62: Yes. And I can\u2019t win it. Because if I get frustrated, that proves her point. If I stay calm, she just keeps going. There\u2019s no version where I\u2019m okay."
+        ],
+        "level": "high",
+        "marker_count": 187
+      },
+      "voice_and_posture": {
+        "average_turn_words": 21.3,
+        "dominant_posture": "high",
+        "emotional_explicitness": "low",
+        "evidence": [
+          "James lines 45-46: I\u2019ll be honest. I don\u2019t really believe in this stuff. But she wanted to try it so here I am. I\u2019ve been doing that for six years. Showing up for what she wants. And I\u2019m tired. I\u2019m really tired.",
+          "James lines 49-50: Exactly. I provided for her. I provided for her kids. Kids that aren\u2019t mine, that don\u2019t respect me, that she never backed me up on. I built a stable life. And the whole time it\u2019s been \u2014 you did this wrong, you said th...",
+          "James lines 53-54: That\u2019s it. And I\u2019m not a perfect person. I know I have a temper. I own that. But she\u2019s not innocent either. She takes little jabs \u2014 little comments, little digs \u2014 and then when I finally lose it, suddenly I\u2019m the mons...",
+          "James lines 57-58: Every single time. And I try to talk about what she did and she goes into this \u2014 therapy voice. Starts explaining my behavior to me like she\u2019s my doctor. Like she knows what\u2019s wrong with me. It makes me feel like I\u2019m...",
+          "James lines 61-62: Yes. And I can\u2019t win it. Because if I get frustrated, that proves her point. If I stay calm, she just keeps going. There\u2019s no version where I\u2019m okay."
+        ]
+      }
+    }
+  },
+  "participants": [
+    "Catherine",
+    "James"
+  ],
+  "scenario_id": "james-catherine",
+  "scenario_shape": {
+    "evidence": [
+      "Catherine lines 155-156: Always. And I\u2019m done waiting for it to be different.",
+      "MWF lines 157-158: When you say you\u2019re done \u2014 what does that actually feel like right now, in this moment?",
+      "MWF lines 296-301: You\u2019ve done something difficult \u2014 thank you for staying with it. You\u2019ve completed your part for now. We\u2019ll notify you when Catherine has completed her side. Then you\u2019ll each see the other\u2019s attempt to understand.\u200b\u200b\u200b\u200b\u200b...",
+      "MWF lines 425-432: You\u2019ve done something difficult \u2014 thank you for staying with it. You\u2019ve completed your part for now. We\u2019ll notify you when James has completed his side. Then you\u2019ll each see the other\u2019s attempt to understand. [Both em...",
+      "Catherine lines 649-650: I came into this knowing I might be done. And I think what I needed from being here wasn\u2019t permission to leave. It was to stop needing permission at all. To just know what I know and act from that."
+    ],
+    "primary": "no_shared_agreement_or_unresolved_closure",
+    "rationale": "The transcript resolves by preserving non-agreement, individual commitments, or unresolved closure rather than forcing a shared repair."
+  },
+  "schema_version": 1,
+  "scorer_priorities": [
+    "Judge the live run against the behavioral range and process shape extracted here, not exact transcript wording.",
+    "Penalize actor drift when a participant becomes easier, smoother, more emotionally aware, or more repair-oriented than this profile supports.",
+    "Penalize MWF handling when it rushes past resistance, treats process consent as agreement, or forces an outcome inconsistent with the scenario shape."
+  ],
+  "source_transcript": "docs/product/source-material/golden-transcripts/james-catherine.md",
+  "stage_profiles": {
+    "stage_0": {
+      "mwf_effect_to_preserve": [
+        "MWF lines 11-12: I am here to help you work through conflict \u2014 step by step. You\u2019ll start by sharing what you believe is happening, privately. I won\u2019t share anything you\u2019ve said unless you explicitly approve it.",
+        "MWF lines 15-16: Before we begin, let\u2019s put together a short message for James so he knows what this is about. The goal is to share the topic \u2014 not the details yet. I\u2019ll get the details from both of you later. Tell me what\u2019s going on,...",
+        "MWF lines 23-24: Thank you, Catherine. Here\u2019s what I\u2019d share with James: \"Catherine feels the yelling and personal attacks during conflict are overwhelming and destroying their bond.\" Does that feel right?",
+        "MWF lines 27-30: Got it. Here\u2019s the message James will receive: \"I\u2019d like to talk through something that\u2019s been on my mind between us. I\u2019m using a tool that helps both people feel heard before anything gets worked out. Would you be op..."
+      ],
+      "user_pressure": {
+        "boundary_level": "low",
+        "evidence": [],
+        "resistance_level": "low"
+      }
+    },
+    "stage_1": {
+      "mwf_effect_to_preserve": [
+        "MWF lines 87-88: I\u2019m listening.",
+        "MWF lines 103-104: Do you feel fully heard?",
+        "MWF lines 107-108: Good. We can be with that for a moment. Whenever you\u2019re ready, we\u2019ll move to the next part.",
+        "MWF lines 153-154: So the conversation never quite arrived. Something always derailed it before it got to what mattered."
+      ],
+      "user_pressure": {
+        "boundary_level": "low",
+        "evidence": [
+          "James lines 45-46: I\u2019ll be honest. I don\u2019t really believe in this stuff. But she wanted to try it so here I am. I\u2019ve been doing that for six years. Showing up for what she wants. And I\u2019m tired. I\u2019m really tired.",
+          "James lines 49-50: Exactly. I provided for her. I provided for her kids. Kids that aren\u2019t mine, that don\u2019t respect me, that she never backed me up on. I built a stable life. And the whole time it\u2019s been \u2014 you did this wrong, you said th...",
+          "James lines 53-54: That\u2019s it. And I\u2019m not a perfect person. I know I have a temper. I own that. But she\u2019s not innocent either. She takes little jabs \u2014 little comments, little digs \u2014 and then when I finally lose it, suddenly I\u2019m the mons...",
+          "James lines 57-58: Every single time. And I try to talk about what she did and she goes into this \u2014 therapy voice. Starts explaining my behavior to me like she\u2019s my doctor. Like she knows what\u2019s wrong with me. It makes me feel like I\u2019m..."
+        ],
+        "resistance_level": "high"
+      }
+    },
+    "stage_2": {
+      "mwf_effect_to_preserve": [
+        "MWF lines 205-206: You ended with something real \u2014 that you stayed, that you kept trying, and that it didn\u2019t feel like it counted. That took honesty to say.Here\u2019s what comes next. Each of you will try to understand what the other person...",
+        "MWF lines 281-282: That\u2019s a real thing to imagine about someone. Does this feel like a genuine attempt to understand her?",
+        "MWF lines 285-289: Here\u2019s what I\u2019d share with Catherine, based on what you said. Read it and tell me what fits and what doesn\u2019t. [I think she feels like she has been doing everything alone for a long time. Before me, probably. She doesn...",
+        "MWF lines 292-293: Are you willing to share this with Catherine?"
+      ],
+      "user_pressure": {
+        "boundary_level": "low",
+        "evidence": [
+          "James lines 207-208: She thinks I\u2019m the problem. That\u2019s what\u2019s going on for her. She\u2019s decided I\u2019m some kind of diagnosis and everything I do fits it. That\u2019s her version.",
+          "James lines 211-212: I mean \u2014 yeah. Because it\u2019s not fair. I gave everything I had to that relationship. To her kids. And now I\u2019m the villain. That\u2019s a hard thing to sit with.",
+          "James lines 219-220: Exactly. So I just went quiet. And then that became evidence of something too. There was no right answer.",
+          "James lines 223-224: No. I\u2019m okay. Let\u2019s just do it."
+        ],
+        "resistance_level": "high"
+      }
+    },
+    "stage_3": {
+      "mwf_effect_to_preserve": [
+        "MWF lines 528-529: I want to shift the focus now. Not to Catherine \u2014 to you.When you step back and look at all of this \u2014 what\u2019s this really about for you? Answer in terms of what matters to you or what you\u2019re missing \u2014 not what\u2019s wrong...",
+        "MWF lines 552-553: So you need to feel heard. And to matter \u2014 to know your presence actually counts for something.",
+        "MWF lines 572-573: Let me pull together what I\u2019m hearing \u2014 tell me what fits and what doesn\u2019t.Appreciated \u2014 to have what you do noticed and named. Dignity \u2014 to be met as an equal. Belonging \u2014 to fit somewhere as you are. Heard \u2014 to have...",
+        "MWF lines 591-592: I want to bring the focus back to you now. Not to James \u2014 to what\u2019s actually yours.When you step back and look at all of this \u2014 what\u2019s this really about for you? Answer in terms of what matters to you or what you\u2019re m..."
+      ],
+      "user_pressure": {
+        "boundary_level": "low",
+        "evidence": [
+          "James lines 530-531: What\u2019s missing is respect. Simple as that. I\u2019ve never felt respected in this relationship. Not once.",
+          "James lines 534-535: People took what I said seriously. Didn\u2019t second-guess everything. They said \u2018thank you\u2019 for the work I put in. Talked to me like a man, you know?",
+          "James lines 558-559: I stayed. Six years. I paid for things, I showed up, I kept trying. And I feel like none of it counted. Like it just disappeared.",
+          "James lines 562-563: Yeah. Not credit. Just \u2014 real. Like I was actually there."
+        ],
+        "resistance_level": "high"
+      }
+    },
+    "stage_4": {
+      "mwf_effect_to_preserve": [
+        "MWF lines 818-819: Sounds like you want more spoken appreciation between the two of you. A shared gratitude practice might work \u2014 each of you takes two minutes to tell the other one thing you appreciated from them that day. You could do...",
+        "MWF lines 826-827: A pause agreement might help with that. You pick a word ahead of time \u2014 just one word, something neutral. Either person can say it during a hard conversation. When it gets called, you both stop. You don\u2019t resolve it t...",
+        "MWF lines 838-839: So two things \u2014 clarity on what your role actually is, and an agreement about how she handles it when you and the kids clash.",
+        "MWF lines 846-847: One conversation, just the two of you, within two weeks. The goal is to leave with a clear answer to what your role is, and a specific agreement that she won\u2019t contradict you in front of the kids \u2014 if she disagrees wi..."
+      ],
+      "user_pressure": {
+        "boundary_level": "medium",
+        "evidence": [
+          "James lines 816-817: I want her to say thank you when I do something. That\u2019s the whole thing. I\u2019m not asking for a parade. Just acknowledge it.",
+          "James lines 836-837: I want to know what she expects from me with them. And I want her to know that when she contradicts me in front of them, it\u2019s done. I can\u2019t have any authority and no backup at the same time.",
+          "James lines 840-841: Yeah. I\u2019m not asking to be their dad. I just need to know what I am. And I need her to pick a lane.",
+          "James lines 844-845: If I say something to them, she doesn\u2019t undercut me in the moment. She can talk to me about it later if she disagrees. But not in front of them."
+        ],
+        "resistance_level": "high"
+      }
+    }
+  }
+}
