@@ -21,6 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MOMENTS_ROOT = REPO_ROOT / "eval/moments"
 RUNS_ROOT = REPO_ROOT / "eval/runs"
 PROMPT_VERSIONS_ROOT = REPO_ROOT / "eval/prompt-versions"
+BASELINES_ROOT = REPO_ROOT / "eval/baselines"
 MWF_STAGE_PROMPTS = REPO_ROOT / "backend/src/services/stage-prompts.ts"
 SUPPORTED_MOMENT = "stage-4-no-shared-agreement-closure"
 REAL_SUPPORTED_MOMENT = "stage-1-fact-reflection"
@@ -814,40 +815,118 @@ def run_improver(
     return version_path
 
 
+def baseline_path(moment_id: str) -> Path:
+    return BASELINES_ROOT / f"{moment_id}.json"
+
+
+def load_baseline_score(moment_id: str) -> dict[str, Any] | None:
+    path = baseline_path(moment_id)
+    if not path.exists():
+        return None
+    try:
+        baseline = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise MomentEvalError(f"Baseline file is not valid JSON: {path}") from exc
+    if "overall_score" not in baseline:
+        raise MomentEvalError(f"Baseline file missing overall_score: {path}")
+    return baseline
+
+
+def write_baseline_score(
+    moment: dict[str, Any],
+    score: dict[str, Any],
+    *,
+    source: str,
+    overwrite: bool = False,
+) -> Path:
+    path = baseline_path(moment["id"])
+    if path.exists() and not overwrite:
+        return path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "moment_id": moment["id"],
+        "overall_score": float(score.get("overall_score", 0)),
+        "verdict": score.get("verdict"),
+        "source": source,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+        "dimensions": {
+            dim_id: data.get("score")
+            for dim_id, data in score.get("dimensions", {}).items()
+            if isinstance(data, dict)
+        },
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def ensure_initial_baseline(
+    moment: dict[str, Any],
+    score: dict[str, Any],
+    *,
+    source: str = "first_real_mode_run",
+) -> Path | None:
+    if load_baseline_score(moment["id"]) is not None:
+        return None
+    return write_baseline_score(moment, score, source=source, overwrite=False)
+
+
+def update_merged_baseline(moment: dict[str, Any], score: dict[str, Any]) -> Path:
+    return write_baseline_score(moment, score, source="merged_revision", overwrite=True)
+
+
 def evaluate_cross_moment_regularization(
     moment: dict[str, Any],
     candidate_responses: dict[str, str] | None = None,
     *,
     real: bool = False,
     mock_judge: bool = True,
+    tolerance: float = 0.05,
 ) -> dict[str, Any]:
     """Evaluate a candidate prompt against every other moment in the same stage.
 
     The current implementation evaluates against the candidate response supplied
     by tests or, in normal proposal mode, the moment's default seeded response.
-    Phase 4 can replace this with prompt-version-aware backend reruns without
-    changing the gate contract.
+    The gate is delta-based: a candidate may keep another moment below its
+    eventual target, but it must not drop that moment more than tolerance below
+    its previous baseline.
     """
     candidate_responses = candidate_responses or {}
     results = []
     for other in load_same_stage_moments(moment):
         state = seed_state(other)
+        baseline = load_baseline_score(other["id"])
+        if baseline is None:
+            baseline_response = default_ai_response(state)
+            baseline_score = score_response(other, baseline_response, real=real, mock_judge=mock_judge)
+            if real:
+                write_baseline_score(other, baseline_score, source="first_real_mode_cross_moment_run", overwrite=False)
+            baseline = {
+                "overall_score": baseline_score["overall_score"],
+                "source": "computed_current_response",
+            }
         response = candidate_responses.get(other["id"], default_ai_response(state))
         scored = score_response(other, response, real=real, mock_judge=mock_judge)
-        threshold = float(other["rubric"]["overall_pass_threshold"])
+        baseline_score_value = float(baseline["overall_score"])
+        minimum_score = round(baseline_score_value - tolerance, 4)
         hard_failures = [item for item in scored["hard_invariants"] if not item["pass"]]
-        passed = scored["overall_score"] >= threshold and not hard_failures
+        passed = scored["overall_score"] >= minimum_score and not hard_failures
         reason = "passed"
         if hard_failures:
             reason = "hard invariant failed: " + ", ".join(item["id"] for item in hard_failures)
-        elif scored["overall_score"] < threshold:
-            reason = f"score {scored['overall_score']} below threshold {threshold}"
+        elif scored["overall_score"] < minimum_score:
+            reason = (
+                f"score {scored['overall_score']} dropped below baseline "
+                f"{baseline_score_value} - tolerance {tolerance}"
+            )
         results.append(
             {
                 "moment": other["id"],
                 "stages": other["stages"],
                 "score": scored["overall_score"],
-                "threshold": threshold,
+                "baseline": baseline_score_value,
+                "minimum_score": minimum_score,
+                "tolerance": tolerance,
+                "baseline_source": baseline.get("source"),
                 "hard_invariant_failures": [item["id"] for item in hard_failures],
                 "pass": passed,
                 "reason": reason,
@@ -856,6 +935,7 @@ def evaluate_cross_moment_regularization(
     return {
         "source_moment": moment["id"],
         "same_stage_moment_count": len(results),
+        "tolerance": tolerance,
         "pass": all(item["pass"] for item in results),
         "results": results,
     }
@@ -887,12 +967,14 @@ def render_improvement_plan(
         "",
         f"- Source moment: `{cross_moment['source_moment']}`",
         f"- Same-stage moments checked: {cross_moment['same_stage_moment_count']}",
+        f"- Baseline tolerance: {cross_moment.get('tolerance', 0.05)}",
         f"- Gate verdict: {'pass' if cross_moment['pass'] else 'reject'}",
     ]
     for item in cross_moment["results"]:
         lines.append(
             f"- `{item['moment']}`: {'pass' if item['pass'] else 'fail'} "
-            f"(score {item['score']} / threshold {item['threshold']}; {item['reason']})"
+            f"(score {item['score']} / baseline {item.get('baseline')} "
+            f"minimum {item.get('minimum_score')}; {item['reason']})"
         )
     lines.extend(
         [

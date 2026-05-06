@@ -402,6 +402,14 @@ def run_alignment_loop(args: argparse.Namespace) -> dict[str, Any]:
                 "run_dir": display_path(moment_run_dir),
                 "estimated_cost_cents": estimated_cost,
             }
+            if args.real:
+                baseline_path = mme.ensure_initial_baseline(
+                    moment,
+                    score,
+                    source=f"alignment_loop_initial:{timestamp}",
+                )
+                if baseline_path is not None:
+                    row["baseline_initialized"] = display_path(baseline_path)
             if float(score.get("overall_score", 0)) < threshold:
                 row["status"] = "below_threshold"
                 if args.dry_run:

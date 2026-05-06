@@ -275,7 +275,109 @@ class TestImprover(unittest.TestCase):
 
         self.assertFalse(result["pass"])
         failed = [item for item in result["results"] if item["moment"] == "stage-2-refinement-round"][0]
-        self.assertIn("below threshold", failed["reason"])
+        self.assertIn("dropped below baseline", failed["reason"])
+
+    def test_cross_moment_regularization_accepts_equal_low_baseline(self) -> None:
+        source = {"id": "source", "stages": [1]}
+        other = {
+            "id": "other",
+            "stages": [1],
+            "rubric": {"hard_invariants": [], "dimensions": [], "overall_pass_threshold": 4.0},
+        }
+        low_score = {
+            "overall_score": 2.5,
+            "hard_invariants": [],
+            "dimensions": {},
+            "verdict": "eval_fail",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(mme, "BASELINES_ROOT", Path(tmp)), \
+                 mock.patch.object(mme, "load_same_stage_moments", return_value=[other]), \
+                 mock.patch.object(mme, "seed_state", return_value=mock.Mock()), \
+                 mock.patch.object(mme, "default_ai_response", return_value="same low response"), \
+                 mock.patch.object(mme, "score_response", return_value=low_score):
+                result = mme.evaluate_cross_moment_regularization(source)
+
+        self.assertTrue(result["pass"], result)
+        self.assertEqual(result["results"][0]["baseline"], 2.5)
+        self.assertEqual(result["results"][0]["score"], 2.5)
+
+    def test_cross_moment_regularization_accepts_small_delta_drop(self) -> None:
+        source = {"id": "source", "stages": [1]}
+        other = {
+            "id": "other",
+            "stages": [1],
+            "rubric": {"hard_invariants": [], "dimensions": [], "overall_pass_threshold": 4.0},
+        }
+        candidate_score = {
+            "overall_score": 2.97,
+            "hard_invariants": [],
+            "dimensions": {},
+            "verdict": "eval_fail",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline_dir = Path(tmp)
+            (baseline_dir / "other.json").write_text(
+                json.dumps({"moment_id": "other", "overall_score": 3.0, "source": "test"}),
+                encoding="utf-8",
+            )
+            with mock.patch.object(mme, "BASELINES_ROOT", baseline_dir), \
+                 mock.patch.object(mme, "load_same_stage_moments", return_value=[other]), \
+                 mock.patch.object(mme, "seed_state", return_value=mock.Mock()), \
+                 mock.patch.object(mme, "default_ai_response", return_value="unused"), \
+                 mock.patch.object(mme, "score_response", return_value=candidate_score):
+                result = mme.evaluate_cross_moment_regularization(source, {"other": "candidate"})
+
+        self.assertTrue(result["pass"], result)
+        self.assertEqual(result["results"][0]["minimum_score"], 2.95)
+
+    def test_cross_moment_regularization_rejects_large_delta_drop_with_logged_baseline(self) -> None:
+        source = {"id": "source", "stages": [1]}
+        other = {
+            "id": "other",
+            "stages": [1],
+            "rubric": {"hard_invariants": [], "dimensions": [], "overall_pass_threshold": 4.0},
+        }
+        candidate_score = {
+            "overall_score": 2.9,
+            "hard_invariants": [],
+            "dimensions": {},
+            "verdict": "eval_fail",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline_dir = Path(tmp)
+            (baseline_dir / "other.json").write_text(
+                json.dumps({"moment_id": "other", "overall_score": 3.0, "source": "test"}),
+                encoding="utf-8",
+            )
+            with mock.patch.object(mme, "BASELINES_ROOT", baseline_dir), \
+                 mock.patch.object(mme, "load_same_stage_moments", return_value=[other]), \
+                 mock.patch.object(mme, "seed_state", return_value=mock.Mock()), \
+                 mock.patch.object(mme, "default_ai_response", return_value="unused"), \
+                 mock.patch.object(mme, "score_response", return_value=candidate_score):
+                result = mme.evaluate_cross_moment_regularization(source, {"other": "candidate"})
+
+        self.assertFalse(result["pass"], result)
+        self.assertEqual(result["results"][0]["baseline"], 3.0)
+        self.assertIn("baseline 3.0", result["results"][0]["reason"])
+
+    def test_initial_baseline_write_is_not_overwritten_by_later_runs(self) -> None:
+        moment = {"id": "baseline-moment"}
+        first = {"overall_score": 2.5, "verdict": "eval_fail", "dimensions": {}}
+        second = {"overall_score": 3.5, "verdict": "eval_warn", "dimensions": {}}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(mme, "BASELINES_ROOT", Path(tmp)):
+                first_path = mme.ensure_initial_baseline(moment, first)
+                second_path = mme.ensure_initial_baseline(moment, second)
+                payload = json.loads((Path(tmp) / "baseline-moment.json").read_text(encoding="utf-8"))
+
+        self.assertIsNotNone(first_path)
+        self.assertIsNone(second_path)
+        self.assertEqual(payload["overall_score"], 2.5)
 
     def test_cross_moment_regularization_rejects_hard_invariant_regression(self) -> None:
         moment = mme.load_moment("stage-3-validity-gate")
@@ -306,8 +408,10 @@ class TestImprover(unittest.TestCase):
             },
             {"model": "mock"},
         )
-        with mock.patch.object(mme, "score_with_real_judge", return_value=judged) as real_judge:
-            result = mme.evaluate_cross_moment_regularization(moment, real=True, mock_judge=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(mme, "BASELINES_ROOT", Path(tmp)), \
+                 mock.patch.object(mme, "score_with_real_judge", return_value=judged) as real_judge:
+                result = mme.evaluate_cross_moment_regularization(moment, real=True, mock_judge=False)
 
         self.assertTrue(result["pass"], result)
         self.assertGreaterEqual(real_judge.call_count, 1)
