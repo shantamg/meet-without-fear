@@ -434,6 +434,31 @@ Build in this order unless there is a concrete reason to change sequencing.
   - `npm run check --workspace backend`
   - Exit code: 0.
 
+### Final Integration Criteria
+
+- Recorded: 2026-05-05 23:18:26 PDT.
+- Criterion 11, fix commits pushed in expected order:
+  - Command: `git log --oneline origin/codex/stage4-tending-focus | head -12`
+  - Exit code: 0.
+  - Relevant order in origin log, newest first: `b0a4532 Fix 2 broaden Stage 4 removal capture`; `33aaf50 Fix 4 remove Stage 4 grading prompt voice`; `81233de Fix 3 guard no-agreement close on mobile`; `a33e96a Fix 1 keep passive tending reentry private`. Chronological landing order: Fix 1 -> Fix 3 -> Fix 4 -> Fix 2.
+- Criterion 12, aggregate checks:
+  - Command: `npm run check --workspace backend && npm run check --workspace mobile && npm run check --workspace shared`
+  - Exit code: 0.
+  - Result: backend, mobile, and shared typechecks passed.
+  - Command: `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts src/services/__tests__/stage4-capture.service.test.ts src/services/__tests__/stage-prompts.test.ts --runInBand`
+  - Exit code: 0.
+  - Result: 3 passed suites; 99 passed tests.
+  - Command: `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/Stage4RedesignPanel.test.tsx --runInBand --forceExit`
+  - Exit code: 0.
+  - Result: 1 passed suite; 8 passed tests.
+- Criterion 15, no regressions against pre-fix backend suite baseline:
+  - Command: `npm test --workspace backend --runInBand 2>&1 | tail -5`
+  - Exit code: 0 from `tail`; output remains the npm workspace failure wrapper because the backend suite exits nonzero before the pipe.
+  - Detail command: `npm test --workspace backend --runInBand > /tmp/mwf-criterion-15-after-fixes.log 2>&1`
+  - Exit code: 1.
+  - Result: 2 failed suites, 63 passed suites, 65 total; 11 failed tests, 2 skipped tests, 1167 passed tests, 1180 total.
+  - Baseline comparison: failure count unchanged from the pre-fix baseline (11 failed tests, 2 failed suites), with the same pre-existing `backend/src/__tests__/circuit-breaker.test.ts` missing-`DATABASE_URL` failure. No regression detected.
+
 ## Current Local State
 
 The branch currently contains implementation patches for #363, #364, #365, #366, #367, #368, #369, #370, #371, and in-progress #372:
