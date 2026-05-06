@@ -1,0 +1,12 @@
+{
+  "duration_seconds": 12.471,
+  "entrypoint": "scripts/mwf_moment_eval.py",
+  "git_branch": "main",
+  "git_sha": "69ea13af473dd9e7114b23d804ebca3fb4fd9d26",
+  "iteration": 1,
+  "mode": "real",
+  "moment": "stage-2-refinement-round",
+  "prompt_version": null,
+  "session_id": "cmoubknqz0007y5u6oa8pnrwl",
+  "started_at": "2026-05-06T17:16:50.316777Z"
+}

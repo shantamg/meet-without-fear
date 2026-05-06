@@ -1,0 +1,58 @@
+{
+  "actorEmail": "moment-stage-2-refinement-round-adam-1778087811113-o0a4hx@example.test",
+  "actorUserId": "cmoubknqt0000y5u6rz98zlg1",
+  "messages": [],
+  "partnerUserId": "cmoubknqt0001y5u6903fy9xn",
+  "rows": {
+    "Message": 0,
+    "Relationship": 1,
+    "RelationshipMember": 2,
+    "Session": 1,
+    "StageProgress": 6,
+    "User": 2,
+    "UserVessel": 2
+  },
+  "sessionId": "cmoubknqz0007y5u6oa8pnrwl",
+  "stageProgress": [
+    {
+      "gatesSatisfied": {},
+      "stage": 0,
+      "status": "COMPLETED",
+      "userId": "cmoubknqt0000y5u6rz98zlg1"
+    },
+    {
+      "gatesSatisfied": {},
+      "stage": 1,
+      "status": "COMPLETED",
+      "userId": "cmoubknqt0000y5u6rz98zlg1"
+    },
+    {
+      "gatesSatisfied": {
+        "revisionRequested": true
+      },
+      "stage": 2,
+      "status": "IN_PROGRESS",
+      "userId": "cmoubknqt0000y5u6rz98zlg1"
+    },
+    {
+      "gatesSatisfied": {},
+      "stage": 0,
+      "status": "COMPLETED",
+      "userId": "cmoubknqt0001y5u6903fy9xn"
+    },
+    {
+      "gatesSatisfied": {},
+      "stage": 1,
+      "status": "COMPLETED",
+      "userId": "cmoubknqt0001y5u6903fy9xn"
+    },
+    {
+      "gatesSatisfied": {
+        "feedbackShared": true
+      },
+      "stage": 2,
+      "status": "IN_PROGRESS",
+      "userId": "cmoubknqt0001y5u6903fy9xn"
+    }
+  ]
+}
