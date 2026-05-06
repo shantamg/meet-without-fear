@@ -1,0 +1,12 @@
+{
+  "duration_seconds": 13.72,
+  "entrypoint": "scripts/mwf_moment_eval.py",
+  "git_branch": "feat/autonomous-alignment-20260506",
+  "git_sha": "3d1d47405a052f9297a92b140588d46815a68275",
+  "iteration": 1,
+  "mode": "real",
+  "moment": "james-catherine-stage-2-consent-gate-292",
+  "prompt_version": null,
+  "session_id": "cmotygeeb0007px5wo04htaot",
+  "started_at": "2026-05-06T11:09:36.666751Z"
+}
