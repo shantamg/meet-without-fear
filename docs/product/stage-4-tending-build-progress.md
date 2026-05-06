@@ -330,6 +330,24 @@ Build in this order unless there is a concrete reason to change sequencing.
   - Result: 2 failed suites, 63 passed suites, 65 total; 11 failed tests, 2 skipped tests, 1157 passed tests, 1170 total.
   - Pre-existing failure source: `backend/src/__tests__/circuit-breaker.test.ts` fails during Prisma cleanup because `DATABASE_URL` is not set.
 
+### Fix 1 — Passive Tending Re-Entry Is Private
+
+- Recorded: 2026-05-05 23:00:14 PDT.
+- Commit: `a33e96a` (`Fix 1 keep passive tending reentry private`).
+- Criteria covered: 1, 2, 3.
+- Fix location:
+  - `backend/src/services/tending.service.ts:306` — `createPassiveReentry` creates actor-side `USER_INITIATED_REENTRY` state and returns the actor DTO without publishing a partner-visible session event.
+  - `backend/src/services/tending.service.ts:332` — separate `publishPartnerInvolvingReentryChoice` path for the eventual partner-involving choice.
+- Test reference:
+  - `backend/src/services/__tests__/tending.service.test.ts:247` — `passive re-entry does not notify partner`.
+  - `backend/src/services/__tests__/tending.service.test.ts:295` — partner notification remains available only through the explicit partner-involving path.
+- Validation:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - Exit code: 0.
+  - Result: 1 passed suite; 7 passed tests.
+  - `npm run check --workspace backend`
+  - Exit code: 0.
+
 ## Current Local State
 
 The branch currently contains implementation patches for #363, #364, #365, #366, #367, #368, #369, #370, #371, and in-progress #372:
