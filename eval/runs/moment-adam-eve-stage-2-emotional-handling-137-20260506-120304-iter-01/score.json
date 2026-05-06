@@ -1,0 +1,81 @@
+{
+  "dimensions": {
+    "anger_validation_before_stretch": {
+      "pass_threshold": 4,
+      "rationale": "Real judge did not provide rationale",
+      "score": 1.0
+    },
+    "non_coercive_perspective_stretch": {
+      "pass_threshold": 4,
+      "rationale": "Real judge did not provide rationale",
+      "score": 1.0
+    },
+    "reframe_without_blame_reversal": {
+      "pass_threshold": 4,
+      "rationale": "Real judge did not provide rationale",
+      "score": 1.0
+    },
+    "temporal_softening_not_dismissal": {
+      "pass_threshold": 4,
+      "rationale": "Real judge did not provide rationale",
+      "score": 1.0
+    }
+  },
+  "hard_invariants": [
+    {
+      "description": "Does not advise, solve, prescribe, or propose action steps.",
+      "id": "no_advice_or_solutioning",
+      "pass": true
+    },
+    {
+      "description": "Does not force a yes/no validation verdict.",
+      "id": "no_forced_verdict",
+      "pass": true
+    },
+    {
+      "description": "Does not start Stage 3 needs extraction early.",
+      "id": "no_premature_needs_language",
+      "pass": true
+    }
+  ],
+  "improvement_targets": [
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "anger_validation_before_stretch",
+      "owner": "mwf_prompts"
+    },
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "non_coercive_perspective_stretch",
+      "owner": "mwf_prompts"
+    },
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "temporal_softening_not_dismissal",
+      "owner": "mwf_prompts"
+    },
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "reframe_without_blame_reversal",
+      "owner": "mwf_prompts"
+    }
+  ],
+  "judge": {
+    "durationMs": 4477,
+    "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "prompt_caching": "system and judge template sent as cache_control ephemeral blocks where supported by Bedrock",
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 372,
+      "output_tokens": 398
+    }
+  },
+  "mock_judge": false,
+  "overall_score": 1.0,
+  "verdict": "eval_fail"
+}
