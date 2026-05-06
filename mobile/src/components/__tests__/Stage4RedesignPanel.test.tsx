@@ -89,6 +89,7 @@ const baseState: GetStage4StateResponse = {
     updatedAt: '2026-05-06T00:00:00.000Z',
   },
   mySelections: [],
+  partnerSelections: [],
   partnerSelectionStatus: 'NOT_STARTED',
   outcome: null,
   tendingPreview: null,
@@ -158,6 +159,53 @@ describe('Stage4RedesignPanel', () => {
     expect(defaultProps.onCloseStage4).toHaveBeenCalledWith(
       Stage4ClosureKind.SHARED_AGREEMENT,
       Stage4ClosureReason.MUTUAL_SELECTION
+    );
+  });
+
+  it('renders close-without-agreement button as disabled when partner selections are empty', () => {
+    const state: GetStage4StateResponse = {
+      ...baseState,
+      phase: Stage4Phase.OUTCOME_REVIEW,
+      partnerSelections: [],
+    };
+
+    render(<Stage4RedesignPanel {...defaultProps} state={state} />);
+
+    const closeButton = screen.getByText('Close with no shared agreement');
+    expect(closeButton).toBeDisabled();
+    expect(screen.getByText('Available once both partners have made selections.')).toBeTruthy();
+
+    fireEvent.press(closeButton);
+
+    expect(defaultProps.onCloseStage4).not.toHaveBeenCalled();
+  });
+
+  it('renders close-without-agreement button as enabled when partner selections exist', () => {
+    const state: GetStage4StateResponse = {
+      ...baseState,
+      phase: Stage4Phase.OUTCOME_REVIEW,
+      partnerSelectionStatus: 'SUBMITTED',
+      partnerSelections: [
+        {
+          proposalId: 'proposal-1',
+          decision: Stage4SelectionDecision.NOT_WILLING,
+          note: null,
+          selectedAt: '2026-05-06T00:00:00.000Z',
+          updatedAt: '2026-05-06T00:00:00.000Z',
+        },
+      ],
+    };
+
+    render(<Stage4RedesignPanel {...defaultProps} state={state} />);
+
+    const closeButton = screen.getByText('Close with no shared agreement');
+    expect(closeButton).not.toBeDisabled();
+
+    fireEvent.press(closeButton);
+
+    expect(defaultProps.onCloseStage4).toHaveBeenCalledWith(
+      Stage4ClosureKind.NO_SHARED_AGREEMENT,
+      Stage4ClosureReason.NO_OVERLAP
     );
   });
 

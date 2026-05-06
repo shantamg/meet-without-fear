@@ -206,11 +206,18 @@ export function Stage4RedesignPanel({
       proposal.myDecision === Stage4SelectionDecision.WILLING &&
       proposal.partnerDecisionVisible === Stage4SelectionDecision.WILLING
   );
+  const partnerSelections = state.partnerSelections ?? [];
   const canCloseShared = mutualShared.length > 0;
   const canCloseNoShared =
+    (state.phase === Stage4Phase.OUTCOME_REVIEW ||
+      state.phase === Stage4Phase.SELECTION ||
+      state.phase === Stage4Phase.COVERAGE_REVIEW) &&
+    partnerSelections.length > 0;
+  const showNoSharedClose =
     state.phase === Stage4Phase.OUTCOME_REVIEW ||
     state.phase === Stage4Phase.SELECTION ||
     state.phase === Stage4Phase.COVERAGE_REVIEW;
+  const noSharedCloseDisabled = !canCloseNoShared || isClosing;
 
   return (
     <View style={styles.container} testID="stage4-redesign-panel">
@@ -323,24 +330,32 @@ export function Stage4RedesignPanel({
             </Text>
           </TouchableOpacity>
 
-          {canCloseNoShared && (
+          {showNoSharedClose && (
             <TouchableOpacity
-              style={styles.secondaryCloseButton}
+              style={[styles.secondaryCloseButton, noSharedCloseDisabled && styles.disabledSecondaryButton]}
               onPress={() =>
                 onCloseStage4(
                   Stage4ClosureKind.NO_SHARED_AGREEMENT,
                   Stage4ClosureReason.NO_OVERLAP
                 )
               }
-              disabled={isClosing}
+              disabled={noSharedCloseDisabled}
               accessibilityRole="button"
-              accessibilityState={{ disabled: isClosing }}
+              accessibilityState={{ disabled: noSharedCloseDisabled }}
             >
-              <MinusCircle color={colors.textPrimary} size={17} />
-              <Text style={styles.secondaryCloseButtonText}>
+              <MinusCircle color={canCloseNoShared ? colors.textPrimary : colors.textMuted} size={17} />
+              <Text style={[
+                styles.secondaryCloseButtonText,
+                noSharedCloseDisabled && styles.disabledButtonText,
+              ]}>
                 Close with no shared agreement
               </Text>
             </TouchableOpacity>
+          )}
+          {showNoSharedClose && partnerSelections.length === 0 && (
+            <Text style={styles.actionHint}>
+              Available once both partners have made selections.
+            </Text>
           )}
         </View>
       )}
@@ -628,10 +643,20 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
   },
+  disabledSecondaryButton: {
+    borderColor: colors.border,
+    backgroundColor: colors.bgTertiary,
+  },
   secondaryCloseButtonText: {
     color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '700',
+  },
+  actionHint: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
   },
   closedNote: {
     flexDirection: 'row',

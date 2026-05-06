@@ -137,6 +137,7 @@ const redesignedStage4State = {
       updatedAt: '2026-05-06T00:00:00.000Z',
     },
   ],
+  partnerSelections: [],
   partnerSelectionStatus: 'NOT_STARTED' as const,
   outcome: null,
   tendingPreview: null,

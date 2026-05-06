@@ -399,6 +399,15 @@ export async function getStage4State(
       selectedAt: selection.selectedAt.toISOString(),
       updatedAt: selection.updatedAt.toISOString(),
     })),
+    partnerSelections: revealPartnerSelections
+      ? partnerSelections.map((selection): Stage4SelectionDTO => ({
+          proposalId: selection.proposalId,
+          decision: selection.decision,
+          note: selection.note,
+          selectedAt: selection.selectedAt.toISOString(),
+          updatedAt: selection.updatedAt.toISOString(),
+        }))
+      : [],
     partnerSelectionStatus: partnerSelections.length > 0 ? 'SUBMITTED' : 'NOT_STARTED',
     outcome: closure
       ? {

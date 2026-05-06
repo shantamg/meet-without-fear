@@ -323,6 +323,7 @@ export interface GetStage4StateResponse {
   inventory: ProposalInventoryDTO;
   coverageAudit: Stage4CoverageAuditDTO;
   mySelections: Stage4SelectionDTO[];
+  partnerSelections: Stage4SelectionDTO[];
   partnerSelectionStatus: 'NOT_STARTED' | 'SUBMITTED';
   outcome: Stage4OutcomeDTO | null;
   tendingPreview: TendingPreviewDTO | null;

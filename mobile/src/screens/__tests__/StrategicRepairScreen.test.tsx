@@ -178,6 +178,7 @@ const redesignedStage4State: GetStage4StateResponse = {
     updatedAt: '2026-05-06T00:00:00.000Z',
   },
   mySelections: [],
+  partnerSelections: [],
   partnerSelectionStatus: 'NOT_STARTED',
   outcome: null,
   tendingPreview: null,
