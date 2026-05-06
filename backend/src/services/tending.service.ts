@@ -326,13 +326,19 @@ export async function createPassiveReentry(args: {
     include: { responses: true },
   })) as TendingEntryWithResponses;
 
+  return toEntryDTO(entry, args.userId);
+}
+
+export async function publishPartnerInvolvingReentryChoice(args: {
+  sessionId: string;
+  userId: string;
+  tendingEntryId: string;
+}): Promise<void> {
   await publishSessionEvent(args.sessionId, 'notification.pending_action', {
-    kind: 'tending_reentry_created',
-    tendingEntryId: entry.id,
+    kind: 'tending_reentry_partner_action_requested',
+    tendingEntryId: args.tendingEntryId,
     createdBy: args.userId,
   }, args.userId);
-
-  return toEntryDTO(entry, args.userId);
 }
 
 export async function openDueTendingEntries(now = new Date()): Promise<{ opened: number; entryIds: string[] }> {

@@ -4,6 +4,7 @@ import {
   createPassiveReentry,
   listTendingEntries,
   openDueTendingEntries,
+  publishPartnerInvolvingReentryChoice,
   scheduleSharedAgreementTendingEntries,
   submitTendingResponse,
 } from '../tending.service';
@@ -241,6 +242,73 @@ describe('tending.service', () => {
       })
     );
     expect(entry.id).toBe('reentry-1');
+  });
+
+  it('passive re-entry does not notify partner', async () => {
+    (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+      id: sessionId,
+      status: 'RESOLVED',
+      relationship: { members: [{ userId }, { userId: partnerId }] },
+    });
+    (prisma.stage4Closure.findUnique as jest.Mock).mockResolvedValue({
+      kind: 'NO_SHARED_AGREEMENT',
+      summary: 'Closed with the gap named.',
+      individualProposalIds: [],
+    });
+    (prisma.sharedVessel.findUnique as jest.Mock).mockResolvedValue({
+      agreements: [],
+    });
+    (prisma.stage4NeedCoverage.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.tendingEntry.create as jest.Mock).mockResolvedValue({
+      id: 'reentry-1',
+      sessionId,
+      agreementId: null,
+      type: TendingEntryType.USER_INITIATED_REENTRY,
+      status: TendingEntryStatus.OPEN,
+      scheduledFor: null,
+      openedAt: new Date('2026-05-14T10:00:00.000Z'),
+      completedAt: null,
+      summary: 'Passive Tending re-entry context.',
+      createdAt: new Date('2026-05-14T10:00:00.000Z'),
+      updatedAt: new Date('2026-05-14T10:00:00.000Z'),
+      responses: [],
+    });
+
+    await createPassiveReentry({
+      sessionId,
+      userId,
+      intent: 'I need to think this through privately.',
+    });
+
+    expect(prisma.tendingEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          sessionId,
+          type: TendingEntryType.USER_INITIATED_REENTRY,
+          status: TendingEntryStatus.OPEN,
+        }),
+      })
+    );
+    expect(publishSessionEvent).not.toHaveBeenCalled();
+  });
+
+  it('publishes partner notification only through the partner-involving re-entry path', async () => {
+    await publishPartnerInvolvingReentryChoice({
+      sessionId,
+      userId,
+      tendingEntryId: 'reentry-1',
+    });
+
+    expect(publishSessionEvent).toHaveBeenCalledWith(
+      sessionId,
+      'notification.pending_action',
+      expect.objectContaining({
+        kind: 'tending_reentry_partner_action_requested',
+        tendingEntryId: 'reentry-1',
+        createdBy: userId,
+      }),
+      userId
+    );
   });
 
   it('opens due scheduled entries and publishes a pending action', async () => {
