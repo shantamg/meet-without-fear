@@ -416,6 +416,24 @@ Build in this order unless there is a concrete reason to change sequencing.
   - `npm run check --workspace backend`
   - Exit code: 0.
 
+### Fix 2 — Capture Remove-Pattern Matches Non-Imperative Phrasings
+
+- Recorded: 2026-05-05 23:16:29 PDT.
+- Commit: `b0a4532` (`Fix 2 broaden Stage 4 removal capture`).
+- Criteria covered: 4, 5.
+- Fix location:
+  - `backend/src/services/stage4-capture.service.ts:182` — broadened `hasRemoveIntent` to recognize non-imperative and pronoun-based removal language including "comes off", "taking it back", and "drop that".
+  - `backend/src/services/stage4-capture.service.ts:116`, `:540`, `:552` — destructive-operation confidence threshold remains `0.85`; low-confidence destructive matches are still skipped.
+- Test reference:
+  - `backend/src/services/__tests__/stage4-capture.service.test.ts:121` — table-driven test covers all five required phrasings: "That comes off the list", "Take that off", "Remove that one", "I'm taking it back", and "Let's drop that".
+  - Existing low-confidence destructive test remains at `backend/src/services/__tests__/stage4-capture.service.test.ts:158`.
+- Validation:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/stage4-capture.service.test.ts --runInBand`
+  - Exit code: 0.
+  - Result: 1 passed suite; 10 passed tests.
+  - `npm run check --workspace backend`
+  - Exit code: 0.
+
 ## Current Local State
 
 The branch currently contains implementation patches for #363, #364, #365, #366, #367, #368, #369, #370, #371, and in-progress #372:
