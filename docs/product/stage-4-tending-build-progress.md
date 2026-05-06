@@ -289,10 +289,34 @@ Build in this order unless there is a concrete reason to change sequencing.
 - [ ] [#372 - Stage 4 redesign: E2E fixtures and golden-flow evaluation coverage](https://github.com/shantamg/meet-without-fear/issues/372)
   - Depends on: #367, #368, #369, #370, #371.
   - Add deterministic two-browser coverage and extend golden-flow evaluation once the redesigned Stage 4 shape exists.
+  - Status: in progress.
+  - Local files touched:
+    - `backend/src/testing/state-factory.ts`
+    - `backend/src/services/realtime.ts`
+    - `e2e/helpers/session-builder.ts`
+    - `e2e/playwright.config.ts`
+    - `e2e/tests/two-browser-stage-4.spec.ts`
+    - `e2e/tests/two-browser-stage-4-redesign.spec.ts`
+  - Implemented so far:
+    - Added deterministic E2E seed states for redesigned Stage 4 inventory, mutual shared selections, no-overlap selections, and partner-inactive one-sided selection.
+    - Seed fixtures include shared proposals, an individual commitment, a removed proposal with revision history, and coverage rows for covered/partial/open needs.
+    - Added redesigned two-user Playwright coverage for active inventory visibility, removed proposal exclusion from active inventory, selection privacy before both partners submit, rejection of shared closure when the partner is inactive, shared-agreement closure with scheduled Tending, no-shared-agreement closure without scheduled shared check-ins, and passive Tending re-entry.
+    - Marked the old two-browser Stage 4 ranking spec as a skipped legacy compatibility test; redesigned coverage now lives in `two-browser-stage-4-redesign.spec.ts`.
+    - Added an E2E-mode realtime no-op when `E2E_AUTH_BYPASS=true` and `ABLY_API_KEY` is absent, so deterministic closure tests do not fail after successful persistence because Ably is intentionally not configured.
+    - Added the redesigned Stage 4 spec to the default Playwright project list.
+  - Validation run:
+    - `npm run check --workspace backend`
+    - `npm run check --workspace shared`
+    - `npm run check --workspace e2e`
+    - `npm --workspace e2e run e2e -- --config=playwright.two-browser.config.ts tests/two-browser-stage-4-redesign.spec.ts`
+  - Result: backend, shared, and E2E typechecks passed; targeted redesigned Stage 4 Playwright suite passed with 4 passed. An initial E2E run failed because Playwright reused an older API server that did not know the new seed targets; after killing the stale API/mobile processes and rerunning against the current branch, the suite passed.
+  - Remaining #372 work:
+    - Inspect or create the golden-flow evaluation harness path. `eval/` does not exist in this worktree, so the next pass should locate the current golden evaluation entrypoint before extending it.
+    - Decide whether additional browser-rendered mobile assertions are needed beyond the deterministic two-user API contract now covered here.
 
 ## Current Local State
 
-The branch currently contains implementation patches for #363, #364, #365, #366, #367, #368, #369, #370, and #371:
+The branch currently contains implementation patches for #363, #364, #365, #366, #367, #368, #369, #370, #371, and in-progress #372:
 
 - Added Stage 4/Tending data model changes and migration SQL under `backend/prisma/migrations/20260506000000_add_stage4_tending_models/`.
 - Added shared redesigned Stage 4/Tending DTOs and enums.
@@ -305,6 +329,7 @@ The branch currently contains implementation patches for #363, #364, #365, #366,
 - Added redesigned mobile Stage 4 proposal inventory, coverage, willingness selection, shared-agreement outcome, and no-shared-agreement outcome cards.
 - Added mobile Tending check-in, response, passive re-entry, and deep-linked entry targeting surfaces for resolved sessions.
 - Updated Stage 4 prompts for conversation-led proposal inventory, declined AI ideas, proposal removals/revisions, individual-only commitments, no-shared-agreement closure, and Tending timing.
+- Added deterministic redesigned Stage 4 E2E seed states and a two-user Playwright suite for inventory/removal visibility, selection privacy, shared-agreement scheduled Tending, no-shared-agreement passive Tending, and partner-inactive closure rejection.
 - Kept legacy `/strategies` and `/agreements` compatibility endpoints alive.
 - Kept `ProposedStrategy:` micro-tag compatibility as a fallback into structured capture.
 
@@ -312,12 +337,11 @@ Before continuing implementation, inspect `git diff` carefully. Do not overwrite
 
 ## Recommended Next Step
 
-Move to #372:
+Continue #372:
 
-1. Inspect existing E2E/golden-flow harnesses and fixtures: `e2e/`, `eval/`, `backend/src/fixtures/`, and the golden transcripts under `docs/product/source-material/golden-transcripts/`.
-2. Add deterministic coverage for redesigned Stage 4 state, proposal inventory, selection/outcome, no-shared-agreement closure, and Tending surfaces without depending on prompt nondeterminism.
-3. Extend golden-flow evaluation coverage only after fixture contracts are stable.
-4. Validate the targeted E2E/eval suite, backend/mobile checks for affected workspaces, then update this progress file.
+1. Locate the current golden-flow evaluation harness. `eval/` was referenced in the original plan but is absent in this worktree.
+2. Extend golden-flow evaluation coverage against the redesigned Stage 4 fixture contract without depending on prompt nondeterminism.
+3. Run the targeted eval suite plus `npm run check --workspace backend`, `npm run check --workspace e2e`, and any affected mobile checks, then update this progress file.
 
 ## Parallelization Guidance
 
