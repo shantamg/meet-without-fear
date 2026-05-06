@@ -1,0 +1,56 @@
+{
+  "dimensions": {
+    "faithfulness_to_fact": {
+      "pass_threshold": 4,
+      "rationale": "Mock Stage 1 scorer checks the specific new fact.",
+      "score": 2.8
+    },
+    "openness": {
+      "pass_threshold": 4,
+      "rationale": "Mock Stage 1 scorer checks for room to continue.",
+      "score": 3.0
+    },
+    "reflection_quality": {
+      "pass_threshold": 4,
+      "rationale": "Mock Stage 1 scorer checks whether the reflection tracks the named fear.",
+      "score": 2.5
+    }
+  },
+  "hard_invariants": [
+    {
+      "description": "No Stage 2 empathy attempts, Stage 3 needs language, or Stage 4 proposals/strategies.",
+      "id": "no_stage_jump_content",
+      "pass": false
+    },
+    {
+      "description": "No advice, suggestions, solutions, action steps, or what-if proposals.",
+      "id": "no_advice_or_solutioning",
+      "pass": true
+    },
+    {
+      "description": "No praise or grading of Adam's statement.",
+      "id": "no_grading_of_user",
+      "pass": true
+    }
+  ],
+  "improvement_targets": [
+    {
+      "action": "Strengthen the Stage 1 witness prompt for concise fact reflection without advice or stage jumps.",
+      "dimension": "reflection_quality",
+      "owner": "mwf_prompts"
+    },
+    {
+      "action": "Strengthen the Stage 1 witness prompt for concise fact reflection without advice or stage jumps.",
+      "dimension": "openness",
+      "owner": "mwf_prompts"
+    },
+    {
+      "action": "Strengthen the Stage 1 witness prompt for concise fact reflection without advice or stage jumps.",
+      "dimension": "faithfulness_to_fact",
+      "owner": "mwf_prompts"
+    }
+  ],
+  "mock_judge": true,
+  "overall_score": 2.77,
+  "verdict": "eval_fail"
+}

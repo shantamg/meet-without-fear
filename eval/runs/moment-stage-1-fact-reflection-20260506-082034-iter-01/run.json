@@ -1,0 +1,12 @@
+{
+  "duration_seconds": 0.001,
+  "entrypoint": "scripts/mwf_moment_eval.py",
+  "git_branch": "loop/test-run-20260506",
+  "git_sha": "9da4c4b295148813ed1bf0298e10e52c648d9df1",
+  "iteration": 1,
+  "mode": "mock",
+  "moment": "stage-1-fact-reflection",
+  "prompt_version": null,
+  "session_id": "moment_dab6ef8267",
+  "started_at": "2026-05-06T08:20:34.632366Z"
+}
