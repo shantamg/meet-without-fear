@@ -19,6 +19,7 @@ import mwf_moment_eval as mme  # noqa: E402
 import mwf_alignment_loop as loop  # noqa: E402
 import mwf_add_gold_example as add_gold  # noqa: E402
 import mwf_alignment_status as status  # noqa: E402
+import mwf_extract_moments as extract  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOMENT_ID = "stage-4-no-shared-agreement-closure"
@@ -709,6 +710,114 @@ class TestGoldExampleOnboarding(unittest.TestCase):
             self.assertTrue((tmp_path / "moments/new-couple-stage-1-moment-01.yaml.draft").exists())
             self.assertIn("new-couple-stage-2-moment-01.yaml.draft", (tmp_path / "moments/README.md").read_text(encoding="utf-8"))
             run_tests.assert_called_once()
+
+    def test_auto_gold_example_onboarding_writes_ready_moments_idempotently(self) -> None:
+        def completed(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(cmd, 0, stdout="OK\n", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fixture = tmp_path / "Auto Couple.md"
+            fixture.write_text(
+                "\n".join(
+                    [
+                        "# Auto Couple",
+                        "",
+                        "## Stage 1",
+                        "",
+                        "**Alex:** I keep going quiet before I can explain.",
+                        "",
+                        "**MWF:** Something in you goes quiet before it gets a chance to be heard. Is that close?",
+                        "",
+                        "## Stage 2",
+                        "",
+                        "**Blair:** I can try to see why Alex freezes, but I am still hurt.",
+                        "",
+                        "**MWF:** Stay with both parts: you can see the fear and still name the hurt underneath it.",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(add_gold, "TRANSCRIPTS_ROOT", tmp_path / "golden-transcripts"), \
+                 mock.patch.object(add_gold, "MOMENTS_ROOT", tmp_path / "moments"), \
+                 mock.patch.object(add_gold, "INDEX_PATH", tmp_path / "moments/README.md"), \
+                 mock.patch.object(add_gold, "ALIGNMENT_CONFIG", tmp_path / "alignment-loop-config.yaml"), \
+                 mock.patch.object(extract, "MOMENTS_ROOT", tmp_path / "moments"), \
+                 mock.patch.object(extract, "JUDGE_PROMPTS_ROOT", tmp_path / "judge-prompts"), \
+                 mock.patch.object(add_gold, "run_command", side_effect=completed):
+                (tmp_path / "alignment-loop-config.yaml").write_text(
+                    json.dumps({"moments": []}), encoding="utf-8"
+                )
+                first = add_gold.onboard(fixture, auto=True, max_moments=4)
+                second = add_gold.onboard(fixture, auto=True, max_moments=4)
+
+            self.assertEqual(first["tests"], 0)
+            self.assertGreaterEqual(len(first["moments"]), 2)
+            self.assertEqual(second["moments"], [])
+            ready = sorted((tmp_path / "moments").glob("*.yaml"))
+            self.assertGreaterEqual(len(ready), 2)
+            self.assertFalse(list((tmp_path / "moments").glob("*.yaml.draft")))
+            payload = json.loads(ready[0].read_text(encoding="utf-8"))
+            self.assertTrue(payload["auto_generated"])
+            self.assertIn("hard_invariants", payload["rubric"])
+            config = json.loads((tmp_path / "alignment-loop-config.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(len(config["moments"]), len(ready))
+
+
+class TestMomentExtraction(unittest.TestCase):
+    def test_parse_transcript_infers_turns_stages_and_substates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sample.md"
+            path.write_text(
+                "\n".join(
+                    [
+                        "# Sample",
+                        "## STAGE 1 — THE WITNESS",
+                        "**Adam:** I am scared.",
+                        "**MWF:** You are scared, and it has been sitting there. Is that close?",
+                        "## Stage 3",
+                        "Eve: I can share the need.",
+                        "MWF: What do you notice as you see both needs?",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            turns = extract.parse_transcript(path)
+
+        self.assertEqual(len(turns), 4)
+        self.assertEqual(turns[1].role, "ai")
+        self.assertEqual(turns[1].stage, 1)
+        self.assertEqual(turns[1].sub_state, "fact-reflection")
+        self.assertEqual(turns[3].sub_state, "mutual-reveal")
+
+    def test_extract_moments_builds_seed_rubric_and_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sample.md"
+            path.write_text(
+                "\n".join(
+                    [
+                        "# Sample",
+                        "## Stage 1",
+                        "**Adam:** I am scared she is right about me.",
+                        "**MWF:** You are holding a painful possibility without knowing what to do with it. Is that close?",
+                        "## Stage 4",
+                        "**Eve:** I am not willing to pick that.",
+                        "**MWF:** Then there is no shared agreement on that proposal, and the process closes without pressure.",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            result = extract.extract_moments(path, max_moments=4)
+
+        self.assertEqual(len(result["selected_moments"]), 2)
+        moment = result["selected_moments"][0]["moment"]
+        self.assertIn("seed", moment)
+        self.assertIn("prior_history_summary", moment["seed"])
+        self.assertIn("dimensions", moment["rubric"])
+        self.assertIn("Gold AI Turn", result["selected_moments"][0]["judge_prompt"])
 
 
 class TestAlignmentStatus(unittest.TestCase):

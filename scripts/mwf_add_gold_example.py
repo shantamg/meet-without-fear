@@ -13,11 +13,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import mwf_extract_moments as extractor  # noqa: E402
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TRANSCRIPTS_ROOT = REPO_ROOT / "docs/product/source-material/golden-transcripts"
 MOMENTS_ROOT = REPO_ROOT / "eval/moments"
 INDEX_PATH = MOMENTS_ROOT / "README.md"
+ALIGNMENT_CONFIG = REPO_ROOT / "eval/alignment-loop-config.yaml"
 
 
 class GoldExampleError(RuntimeError):
@@ -153,7 +157,19 @@ def regenerate_index() -> None:
     INDEX_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def onboard(path: Path, *, skip_tests: bool = False) -> dict[str, Any]:
+def update_alignment_config(moment_ids: list[str]) -> None:
+    if not moment_ids:
+        return
+    config = json.loads(ALIGNMENT_CONFIG.read_text(encoding="utf-8"))
+    moments = config.setdefault("moments", [])
+    existing = {item.get("id") for item in moments if isinstance(item, dict)}
+    for moment_id in sorted(moment_ids):
+        if moment_id not in existing:
+            moments.append({"id": moment_id, "threshold": 4.0})
+    ALIGNMENT_CONFIG.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def onboard(path: Path, *, skip_tests: bool = False, auto: bool = False, max_moments: int = 8) -> dict[str, Any]:
     source = path.resolve()
     text = validate_transcript(source)
     slug = slugify(source.stem)
@@ -161,11 +177,19 @@ def onboard(path: Path, *, skip_tests: bool = False) -> dict[str, Any]:
     TRANSCRIPTS_ROOT.mkdir(parents=True, exist_ok=True)
     if dest.exists() and dest.read_text(encoding="utf-8") != text:
         raise GoldExampleError(f"Refusing to overwrite existing transcript: {dest}")
-    shutil.copyfile(source, dest)
-    sections = find_stage_sections(text)
-    if not sections:
-        raise GoldExampleError("No scaffoldable MWF responses found under stage markers")
-    drafts = write_drafts(slug, dest, sections)
+    if source != dest.resolve():
+        shutil.copyfile(source, dest)
+    if auto:
+        extraction = extractor.extract_moments(dest, max_moments=max_moments)
+        written = extractor.write_extracted_moments(extraction, overwrite=False)
+        update_alignment_config([item["moment"]["id"] for item in extraction["selected_moments"]])
+        drafts: list[Path] = []
+    else:
+        sections = find_stage_sections(text)
+        if not sections:
+            raise GoldExampleError("No scaffoldable MWF responses found under stage markers")
+        drafts = write_drafts(slug, dest, sections)
+        written = []
     regenerate_index()
     test_result = None
     if not skip_tests:
@@ -175,6 +199,8 @@ def onboard(path: Path, *, skip_tests: bool = False) -> dict[str, Any]:
     return {
         "transcript": display_path(dest),
         "drafts": [display_path(path) for path in drafts],
+        "moments": [display_path(path) for path in written if path.suffix == ".yaml"],
+        "judge_prompts": [display_path(path) for path in written if path.suffix == ".md"],
         "index": display_path(INDEX_PATH),
         "tests": None if test_result is None else test_result.returncode,
     }
@@ -183,6 +209,8 @@ def onboard(path: Path, *, skip_tests: bool = False) -> dict[str, Any]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Add a new MWF gold transcript and scaffold draft moments.")
     parser.add_argument("transcript", type=Path)
+    parser.add_argument("--auto", action="store_true", help="Auto-extract ready moment yamls and judge prompts instead of .draft scaffolds")
+    parser.add_argument("--max-moments", type=int, default=8)
     parser.add_argument("--skip-tests", action="store_true", help="Only for unit tests; normal onboarding runs evaluator tests")
     return parser
 
@@ -190,7 +218,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        result = onboard(args.transcript, skip_tests=args.skip_tests)
+        result = onboard(args.transcript, skip_tests=args.skip_tests, auto=args.auto, max_moments=args.max_moments)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     except GoldExampleError as exc:

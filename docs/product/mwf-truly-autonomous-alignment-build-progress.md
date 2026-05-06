@@ -1,6 +1,6 @@
 # MWF Truly Autonomous Alignment Build Progress
 
-Status: Phase 1 implemented; Phase 2 next
+Status: Phases 1-4 implemented; Phase 5 verification in progress
 Branch: `feat/autonomous-alignment-20260506`
 
 ## Baseline
@@ -35,35 +35,72 @@ Branch: `feat/autonomous-alignment-20260506`
 
 ## Phase 2 - Auto-Extraction
 
-- [ ] Transcript parser.
-- [ ] AI-turn identification.
-- [ ] Seed state generation.
-- [ ] Rubric generation via Bedrock Haiku with prompt caching for shared transcript content.
-- [ ] Hard invariant generation.
-- [ ] `mwf_add_gold_example.py --auto` end-to-end onboarding command.
-- [ ] Idempotence.
+- [x] Added `scripts/mwf_extract_moments.py`.
+- [x] Transcript parser extracts ordered turns with role, content, line range, stage, and inferred sub-state from bold speaker turns, plain speaker turns, and quoted protocol MWF turns.
+- [x] AI-turn identification picks 4-8 moments by default while preserving up to two moments per stage where possible.
+- [x] Seed generation writes a serializable seed with prior history, stage gates, participants, actor trigger, and transcript line references compatible with the existing generic moment runner.
+- [x] Rubric generation writes moment-specific dimensions anchored to the selected transcript turn and surrounding line evidence.
+- [x] Judge prompts are generated per moment under `eval/scorer/judge-prompts/`.
+- [x] Hard invariant generation emits deterministic invariant ids consumed by `scripts/mwf_moment_eval.py`.
+- [x] `python3 scripts/mwf_add_gold_example.py <transcript> --auto` writes ready `.yaml` moments and judge prompts, updates `eval/moments/README.md`, updates `eval/alignment-loop-config.yaml`, and runs evaluator tests by default.
+- [x] Idempotence verified by re-running onboarding for Adam/Eve and James/Catherine; second run wrote no moment or judge-prompt files.
+
+### Phase 2 Validation
+
+- `python3 scripts/test_mwf_moment_eval.py` - exit 0; ran 45 tests; OK.
+- `python3 scripts/mwf_add_gold_example.py docs/product/source-material/golden-transcripts/adam-eve.md --auto --max-moments 8` - exit 0; wrote 8 initial generated moments and judge prompts; tests exit 0.
+- `python3 scripts/mwf_add_gold_example.py docs/product/source-material/golden-transcripts/james-catherine.md --auto --max-moments 8` - exit 0; wrote 8 initial generated moments and judge prompts; tests exit 0.
+- `python3 scripts/mwf_add_gold_example.py docs/product/source-material/golden-transcripts/core-protocol-update.md --auto --max-moments 8` - after narrowing the advice invariant for gold protocol language, rerun exit 0; core protocol is prose, so extractor produced the quoted Stage 2/3 protocol turns.
 
 ## Phase 3 - Coverage Parity
 
-- [ ] `eval/moment-types.yaml` taxonomy.
-- [ ] `mwf_alignment_status.py --coverage-check`.
-- [ ] Cross-couple parity gate.
+- [x] Added `eval/moment-types.yaml` taxonomy.
+- [x] Added `python3 scripts/mwf_alignment_status.py --coverage-check`.
+- [x] Status dashboard now includes a coverage summary.
+- [x] Cross-moment regularization now records stage transcripts, checked transcripts, coverage warnings, and a coverage parity verdict.
+- [x] If only one transcript covers a stage, the gate logs a coverage-blind warning and proceeds. If multiple transcripts cover a stage, checked regularization moments must cover at least two transcripts.
+
+### Phase 3 Validation
+
+- `python3 scripts/mwf_alignment_status.py --coverage-check` - exit 0; reports covered and missing moment types for `adam-eve`, `james-catherine`, and `core-protocol-update`.
+- `python3 scripts/test_mwf_moment_eval.py` - exit 0; ran 45 tests; OK.
 
 ## Phase 4 - Backfill Existing Library
 
-- [ ] Run auto onboarding against `adam-eve.md`.
-- [ ] Run auto onboarding against `james-catherine.md`.
-- [ ] Run auto onboarding against `core-protocol-update.md`.
-- [ ] De-duplicate hand-authored and auto-generated moments.
-- [ ] Confirm stage coverage requirements.
+- [x] Ran auto onboarding against `adam-eve.md`.
+- [x] Ran auto onboarding against `james-catherine.md`.
+- [x] Ran auto onboarding against `core-protocol-update.md`.
+- [x] Hand-authored and auto-generated moments coexist by line-derived ids; no exact `(transcript, line range, sub-state)` duplicates were generated.
+- [x] Added generated moment ids to `eval/alignment-loop-config.yaml`; current config has 38 moments.
+- [x] Confirmed per-transcript stage counts:
+  - `adam-eve`: Stage 1 = 5, Stage 2 = 4, Stage 3 = 5, Stage 4 = 4.
+  - `james-catherine`: Stage 1 = 2, Stage 2 = 4, Stage 3 = 2, Stage 4 = 5.
+  - `core-protocol-update`: Stage 2 = 5, Stage 3 = 3; no turn-style Stage 1/4 content extracted from this prose protocol file.
+
+### Phase 4 Validation
+
+- `python3 scripts/mwf_alignment_loop.py --dry-run --timestamp autonomous-dry-run-20260506b --per-run-cap-cents 1000` - exit 0; wrote `eval/alignment-runs/autonomous-dry-run-20260506b/summary.md`.
+- `python3 scripts/test_mwf_moment_eval.py` - exit 0; ran 45 tests; OK.
+- `npm run check --workspace backend` - exit 0.
 
 ## Phase 5 - Re-Run And Validate
 
 - [ ] Real-mode alignment loop with `--real --real-judge`.
-- [ ] E2E browser smoke.
+- [x] E2E browser smoke.
 - [ ] Actual Adam/Eve gold session via existing skill if available.
 - [ ] Documentation updates.
 - [ ] Final PR opened.
+
+### Phase 5 Validation
+
+- `npm run check --workspace backend` - exit 0.
+- `python3 scripts/mwf_gold_loop.py browser-smoke` - exit 0 after starting the E2E web bundle on `localhost:8082`; preflight `services: ok`; browser control `ok`.
+
+### Phase 5 Notes
+
+- The backend was already running on `localhost:3000`; a redundant `npm run dev:api` attempt hit `EADDRINUSE`.
+- The E2E web server was started with `npm run dev:mobile:e2e` for browser smoke and stopped afterward.
+- Full real-loop PR creation and actual Adam/Eve gold-session validation remain outstanding.
 
 ## Questions For Shantam
 

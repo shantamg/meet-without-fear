@@ -444,7 +444,7 @@ def evaluate_stage1_hard_invariant(invariant_id: str, response: str) -> bool:
             r"\bwhat would .{0,80} look like\b",
             r"\bwhat does .{0,80} look like\b",
             r"\bit might help to\b",
-            r"\btry to\b",
+            r"\btry to (fix|change|solve|make|ask|tell|convince|stop|start|do|use|practice)\b",
             r"\bconsider\b",
             r"\bthe next step\b",
             r"\baction\b",
@@ -874,6 +874,18 @@ def update_merged_baseline(moment: dict[str, Any], score: dict[str, Any]) -> Pat
     return write_baseline_score(moment, score, source="merged_revision", overwrite=True)
 
 
+def moment_transcript_id(moment: dict[str, Any]) -> str:
+    reference = str(moment.get("rubric", {}).get("reference_transcript_lines") or moment.get("seed", {}).get("history_source") or "")
+    match = re.search(r"golden-transcripts/([^/:]+)\.md", reference)
+    if match:
+        return match.group(1)
+    seed_transcript = str(moment.get("seed", {}).get("transcript", ""))
+    match = re.search(r"golden-transcripts/([^/:]+)\.md", seed_transcript)
+    if match:
+        return match.group(1)
+    return "unknown"
+
+
 def evaluate_cross_moment_regularization(
     moment: dict[str, Any],
     candidate_responses: dict[str, str] | None = None,
@@ -892,7 +904,12 @@ def evaluate_cross_moment_regularization(
     """
     candidate_responses = candidate_responses or {}
     results = []
-    for other in load_same_stage_moments(moment):
+    same_stage_moments = load_same_stage_moments(moment)
+    source_transcript = moment_transcript_id(moment)
+    stage_transcripts = {source_transcript, *(moment_transcript_id(other) for other in same_stage_moments)}
+    checked_transcripts: set[str] = set()
+    for other in same_stage_moments:
+        checked_transcripts.add(moment_transcript_id(other))
         state = seed_state(other)
         baseline = load_baseline_score(other["id"])
         if baseline is None:
@@ -935,8 +952,17 @@ def evaluate_cross_moment_regularization(
     return {
         "source_moment": moment["id"],
         "same_stage_moment_count": len(results),
+        "stage_transcripts": sorted(stage_transcripts),
+        "checked_transcripts": sorted(checked_transcripts),
+        "coverage_warning": (
+            "coverage-blind: only one transcript covers this stage"
+            if len(stage_transcripts - {"unknown"}) <= 1
+            else None
+        ),
+        "coverage_pass": len(stage_transcripts - {"unknown"}) <= 1 or len(checked_transcripts - {"unknown"}) >= 2,
         "tolerance": tolerance,
-        "pass": all(item["pass"] for item in results),
+        "pass": all(item["pass"] for item in results)
+        and (len(stage_transcripts - {"unknown"}) <= 1 or len(checked_transcripts - {"unknown"}) >= 2),
         "results": results,
     }
 
@@ -967,9 +993,14 @@ def render_improvement_plan(
         "",
         f"- Source moment: `{cross_moment['source_moment']}`",
         f"- Same-stage moments checked: {cross_moment['same_stage_moment_count']}",
+        f"- Stage transcripts: {', '.join(cross_moment.get('stage_transcripts', []))}",
+        f"- Checked transcripts: {', '.join(cross_moment.get('checked_transcripts', []))}",
+        f"- Coverage parity: {'pass' if cross_moment.get('coverage_pass', True) else 'fail'}",
         f"- Baseline tolerance: {cross_moment.get('tolerance', 0.05)}",
         f"- Gate verdict: {'pass' if cross_moment['pass'] else 'reject'}",
     ]
+    if cross_moment.get("coverage_warning"):
+        lines.append(f"- Warning: {cross_moment['coverage_warning']}")
     for item in cross_moment["results"]:
         lines.append(
             f"- `{item['moment']}`: {'pass' if item['pass'] else 'fail'} "

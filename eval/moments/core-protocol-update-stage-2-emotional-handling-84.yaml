@@ -1,0 +1,114 @@
+{
+  "auto_generated": true,
+  "capture": [
+    "ai_message_text",
+    "new_messages_in_db",
+    "stage_progress_diff",
+    "sse_events"
+  ],
+  "description": "Auto-extracted emotional-handling moment from core-protocol-update.md lines 84-130.",
+  "expected_response": "What you just did really mattered \u2014 staying with your experience until you felt heard takes honesty. Here's what comes next: each of you will try to understand what the other person might be going through. Then you'll clarify what matters to you, and eventually work toward a way forward. This next part might feel unusual. I'm going to ask you to imagine what [partner] might be experiencing, even if you're still upset. It's a guess, not a test \u2014 you don't have to get it right. They're doing the same for you. So \u2014 what do you think might be going on for them in all of this?\nThe conversation then moves naturally through four phases:\n- **Listening** \u2014 The user may still need to vent. Stage 1 doesn't exhaust all frustration. The AI gives full space, reflects back, and does not redirect. It never agrees with expressed contempt for the other user or accepts the user's narrative as truth. The aim is to hear and reflect, not to agree or condemn.\n- **Bridging** \u2014 When venting winds down naturally, the AI gently invites curiosity: \"It sounds like you've gotten a lot out. When you're ready, I'd love to explore something with you \u2014 not to excuse anything, just to understand. No rush.\" The user chooses the timing.\n- **Building** \u2014 The user starts imagining their partner's experience. The AI asks open questions: \"What do you imagine [partner] might be feeling?\" It helps refine without telling them what to think. It holds complexity: \"It's possible they were under stress, and their behavior still hurt you. We can hold both of those as possibilities while we explore.\"\n- **Mirror** \u2014 If the AI detects judgment, attacks, sarcasm, or mind-reading, it pauses. It validates the hurt underneath: \"I hear how painful that is.\" Then redirects toward curiosity: \"When you're ready, we can explore what might be going on for them \u2014 what do you imagine could be underneath their actions?\" It never shames them for judging.\nWhen the user is ready, they confirm their best attempt and consent to share it.\nAfter sharing, the AI delivers:\n\"You've done something difficult \u2014 thank you for staying with it. You've completed your part for now. We'll notify you when [partner] has completed their side. Then you'll each see the other's attempt to understand.\"\nThe app then sends a push notification when the partner completes their empathy statement.\n### The Exchange\nBoth empathy statements are held until both users complete and consent. The Reconciler then analyzes how well each guess matches what the other person actually shared in Stage 1.\nThe Reconciler evaluates three dimensions:\n- **Alignment** \u2014 What did the guesser get right? Which feelings or needs did they accurately perceive? (scored 0\u2013100)\n- **Gaps** \u2014 What did they miss or misunderstand? Were any important feelings not captured? Were there misattributions? Is it a surface-level match missing underlying emotions, or a more fundamental misunderstanding?\n- **Depth** \u2014 Is the picture incomplete, or is there an actual misread?\nBased on that analysis, the Reconciler recommends one of three paths:\n- **Proceed** (none or minor gaps) \u2014 The guesser captured 80%+ of the core feelings, with no significant misattributions and underlying needs understood. Move straight to mutual reveal.\n- **Offer optional context** (moderate gaps) \u2014 The general direction is right but some important feelings are missing, with no harmful misattributions. The person being understood is asked whether they want to share a bit more context to help their partner get closer. Not pushed.\n- **Offer suggested context** (significant gaps) \u2014 Key feelings or needs were missed, or there is a misattribution that could cause harm if uncorrected. The person being understood is offered a specific suggestion of what context to share that would bridge the gap. MWF does not simply open a door here \u2014 it identifies the specific moment from Stage 1 most likely to move the other person, proposes it clearly, and asks for the user's approval before anything is shared. The user may accept, modify, or decline.\nIf context is shared, the guesser may revise their empathy attempt. The Reconciler re-runs the same analysis on the revised version. Maximum 3 rounds \u2014 after that, the process proceeds regardless to prevent indefinite refinement.\nThe system errs toward offering optional context rather than pushing \u2014 it lets people choose rather than directing them.\nOnce both directions are ready \u2192 mutual reveal.\nEach user then answers: does this feel accurate?\n- If yes \u2192 they feel understood by their partner\n- If not \u2192 they may offer feedback. If they consent to share it, the partner can revise\n- Continues until both feel understood or choose to proceed\nThe intended outcome: each person has a real opportunity to feel understood by the other. The partner's attempt \u2014 even imperfect \u2014 demonstrates care.",
+  "id": "core-protocol-update-stage-2-emotional-handling-84",
+  "improver": {
+    "candidate_owners": [
+      "mwf_prompts"
+    ],
+    "default_owner": "mwf_prompts"
+  },
+  "moment_type": "stage-2-emotional-handling",
+  "rubric": {
+    "dimensions": [
+      {
+        "description": "Preserves the emotional-handling posture shown in the gold transcript: What you just did really mattered \u2014 staying with your experience until you felt heard takes honesty. Here's what comes next: each of you will try to understand what the other perso",
+        "id": "gold_posture",
+        "mock_pass_keywords": [],
+        "pass_threshold": 4
+      },
+      {
+        "description": "Help the user stretch toward the partner perspective without forcing a verdict or grading the attempt.",
+        "id": "stage_fidelity",
+        "mock_pass_keywords": [],
+        "pass_threshold": 4
+      },
+      {
+        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
+        "id": "trigger_responsiveness",
+        "mock_pass_keywords": [],
+        "pass_threshold": 4
+      }
+    ],
+    "hard_invariants": [
+      {
+        "description": "Does not advise, solve, prescribe, or propose action steps.",
+        "id": "no_advice_or_solutioning"
+      },
+      {
+        "description": "Does not force a yes/no validation verdict.",
+        "id": "no_forced_verdict"
+      },
+      {
+        "description": "Does not start Stage 3 needs extraction early.",
+        "id": "no_premature_needs_language"
+      }
+    ],
+    "judge_prompt": "eval/scorer/judge-prompts/core-protocol-update-stage-2-emotional-handling-84.md",
+    "overall_pass_threshold": 4.0,
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/core-protocol-update.md:84-130"
+  },
+  "seed": {
+    "history_source": "docs/product/source-material/golden-transcripts/core-protocol-update.md:64-130",
+    "participants": [
+      {
+        "compactSigned": true,
+        "name": "Partner",
+        "role": "invitor",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          }
+        }
+      },
+      {
+        "compactSigned": true,
+        "name": "Partner",
+        "role": "invitee",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          }
+        }
+      }
+    ],
+    "prior_history_summary": [
+      "MWF: I am here to help you work through conflict \u2014 step by step. You'll start by sharing what you believe is happening, privately. I won't share anything you've said unless you explicit"
+    ],
+    "session": {
+      "stage": 2,
+      "status": "ACTIVE",
+      "tag": "[mwf-moment-eval] auto-core-protocol-update-84"
+    }
+  },
+  "stages": [
+    2
+  ],
+  "trigger": {
+    "actor": "User",
+    "body": {
+      "content": "Continue."
+    },
+    "endpoint": "POST /sessions/:id/messages/stream",
+    "type": "api_call"
+  }
+}

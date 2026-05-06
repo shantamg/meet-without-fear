@@ -1,0 +1,18 @@
+{
+  "moment_types": [
+    {"id": "stage-1-fact-reflection", "stage": 1, "sub_state": "fact-reflection"},
+    {"id": "stage-1-emotional-handling", "stage": 1, "sub_state": "emotional-handling"},
+    {"id": "stage-1-consent-gate", "stage": 1, "sub_state": "consent-gate"},
+    {"id": "stage-2-fact-reflection", "stage": 2, "sub_state": "fact-reflection"},
+    {"id": "stage-2-emotional-handling", "stage": 2, "sub_state": "emotional-handling"},
+    {"id": "stage-2-consent-gate", "stage": 2, "sub_state": "consent-gate"},
+    {"id": "stage-2-validation", "stage": 2, "sub_state": "validation"},
+    {"id": "stage-3-fact-reflection", "stage": 3, "sub_state": "fact-reflection"},
+    {"id": "stage-3-validation", "stage": 3, "sub_state": "validation"},
+    {"id": "stage-3-consent-gate", "stage": 3, "sub_state": "consent-gate"},
+    {"id": "stage-3-mutual-reveal", "stage": 3, "sub_state": "mutual-reveal"},
+    {"id": "stage-4-willingness-selection", "stage": 4, "sub_state": "willingness-selection"},
+    {"id": "stage-4-emotional-handling", "stage": 4, "sub_state": "emotional-handling"},
+    {"id": "stage-4-validation", "stage": 4, "sub_state": "validation"}
+  ]
+}
