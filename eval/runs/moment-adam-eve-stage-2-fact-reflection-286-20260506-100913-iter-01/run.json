@@ -1,0 +1,12 @@
+{
+  "duration_seconds": 15.274,
+  "entrypoint": "scripts/mwf_moment_eval.py",
+  "git_branch": "feat/autonomous-alignment-20260506",
+  "git_sha": "7fe4831d521bb0f4760a9a12ac3798ab4f86336b",
+  "iteration": 1,
+  "mode": "real",
+  "moment": "adam-eve-stage-2-fact-reflection-286",
+  "prompt_version": null,
+  "session_id": "cmotwaqle0007px8y41apxucj",
+  "started_at": "2026-05-06T10:09:13.151888Z"
+}
