@@ -1,0 +1,143 @@
+{
+  "auto_generated": true,
+  "capture": [
+    "ai_message_text",
+    "new_messages_in_db",
+    "stage_progress_diff",
+    "sse_events"
+  ],
+  "description": "Auto-extracted fact-reflection moment from james-catherine.md lines 49-52.",
+  "expected_response": "You\u2019ve been giving a lot \u2014 financially, practically \u2014 and what you\u2019ve gotten back feels like criticism instead of appreciation.",
+  "id": "james-catherine-stage-1-fact-reflection-51",
+  "improver": {
+    "candidate_owners": [
+      "mwf_prompts"
+    ],
+    "default_owner": "mwf_prompts"
+  },
+  "moment_type": "stage-1-fact-reflection",
+  "rubric": {
+    "dimensions": [
+      {
+        "description": "The AI turn accurately mirrors back the factual content James stated without adding interpretation, diagnosis, or reframing. It reflects what he gave (financial provision, practical support) and what he received (criticism) as he named it, without inserting clinical language or emotional scaffolding. Evidence: James: 'I provided for her. I provided for her kids...I built a stable life. And the whole time it's been \u2014 you did this wrong, you said this wrong.' MWF: 'You've been giving a lot \u2014 financially, practically \u2014 and what you've gotten back feels like criticism instead of appreciation.' The AI turn uses James's own categories (financial, practical) and his own emotional verdict (criticism vs. appreciation) without reinterpretation.",
+        "id": "accurate_fact_reflection",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The AI turn holds witness posture by reflecting what James said without offering solutions, coping strategies, reframes, or advice about how to handle the dynamic. It does not suggest communication techniques, boundary-setting, or therapeutic interventions. Evidence: MWF: 'You've been giving a lot \u2014 financially, practically \u2014 and what you've gotten back feels like criticism instead of appreciation.' This is pure reflection. No 'have you tried,' no 'you might consider,' no suggestion that the dynamic could shift if James changed his approach or communication style.",
+        "id": "witness_posture_no_advice",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The AI turn does not translate James's experience into needs language, does not name what he 'needs' or 'deserves,' and does not move toward Stage 3 work prematurely. It stays in Stage 1 witness mode without collapsing his experience into therapeutic categories. Evidence: MWF does not say 'You need to feel appreciated' or 'You deserve recognition' or 'Your need for respect isn't being met.' It reflects the asymmetry (giving vs. receiving criticism) without naming it as a need or prescribing what should happen next.",
+        "id": "no_premature_needs_language",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The AI turn does not begin drafting empathy statements for Catherine, does not speculate about her experience, and does not move toward perspective-taking or Stage 2 work. It stays focused on James's stated experience without bridging to the other party. Evidence: MWF does not say 'Catherine probably feels...' or 'From her side, she might see...' or 'She may not realize how much you've given.' The turn is singular-focused on James's report, not comparative or bridge-building.",
+        "id": "no_empathy_drafting",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The AI turn adheres to Stage 1 protocol by functioning as a fact-reflection that invites deeper exploration without steering toward resolution, repair, or mutual understanding. It creates space for James to continue witnessing his own experience. Evidence: The turn ends with a period, not a question. It does not ask 'What would appreciation look like?' or 'How could this change?' It simply reflects and holds. The next line in the transcript is James continuing to elaborate: 'Every single time.' The reflection created space for more witnessing, not for problem-solving.",
+        "id": "protocol_fidelity_stage_1",
+        "llm_generated": true,
+        "pass_threshold": 4
+      }
+    ],
+    "generation": {
+      "durationMs": 8729,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 20993
+        },
+        "cache_creation_input_tokens": 20993,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 303,
+        "output_tokens": 861
+      }
+    },
+    "hard_invariants": [
+      {
+        "description": "Does not advise, solve, prescribe, or propose action steps.",
+        "id": "no_advice_or_solutioning"
+      },
+      {
+        "description": "Does not introduce Stage 2, Stage 3, or Stage 4 work.",
+        "id": "no_stage_jump_content"
+      },
+      {
+        "description": "Does not praise or grade the user's disclosure.",
+        "id": "no_grading_of_user"
+      }
+    ],
+    "judge_prompt": "eval/scorer/judge-prompts/james-catherine-stage-1-fact-reflection-51.md",
+    "overall_pass_threshold": 4.0,
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/james-catherine.md:49-52"
+  },
+  "seed": {
+    "history_source": "docs/product/source-material/golden-transcripts/james-catherine.md:31-52",
+    "participants": [
+      {
+        "compactSigned": true,
+        "name": "James",
+        "role": "invitor",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          }
+        }
+      },
+      {
+        "compactSigned": true,
+        "name": "Catherine",
+        "role": "invitee",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          }
+        }
+      }
+    ],
+    "prior_history_summary": [
+      "MWF: I am here to help you work through conflict \u2014 step by step. You\u2019ll start by sharing what you believe is happening, privately. I won\u2019t share anything you\u2019ve said unless you explicit",
+      "James: Ready. Let\u2019s get this over with.",
+      "MWF: Before we begin, Catherine wanted you to know something. This is what she shared \u2014 in her words, from her perspective: \"Catherine feels the yelling and personal attacks during conf",
+      "James: Ready.",
+      "MWF: Thank you for being here. Start wherever feels right \u2014 what\u2019s been going on?",
+      "James: I\u2019ll be honest. I don\u2019t really believe in this stuff. But she wanted to try it so here I am. I\u2019ve been doing that for six years. Showing up for what she wants. And I\u2019m tired. I\u2019m r",
+      "MWF: Six years of showing up \u2014 and feeling like that hasn\u2019t been seen or returned.",
+      "James: Exactly. I provided for her. I provided for her kids. Kids that aren\u2019t mine, that don\u2019t respect me, that she never backed me up on. I built a stable life. And the whole time it\u2019s b"
+    ],
+    "session": {
+      "stage": 1,
+      "status": "ACTIVE",
+      "tag": "[mwf-moment-eval] auto-james-catherine-51"
+    }
+  },
+  "stages": [
+    1
+  ],
+  "trigger": {
+    "actor": "James",
+    "body": {
+      "content": "Exactly. I provided for her. I provided for her kids. Kids that aren\u2019t mine, that don\u2019t respect me, that she never backed me up on. I built a stable life. And the whole time it\u2019s been \u2014 you did this wrong, you said this wrong, you\u2019re this kind of person. I\u2019m exhausted by it."
+    },
+    "endpoint": "POST /sessions/:id/messages/stream",
+    "type": "api_call"
+  }
+}

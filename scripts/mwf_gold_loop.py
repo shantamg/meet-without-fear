@@ -41,6 +41,8 @@ REPO_SCORER_SKILL = REPO_ROOT / "eval/skills/self-improvement/mwf-gold-session-s
 REPO_IMPROVER_SKILL = REPO_ROOT / "eval/skills/self-improvement/mwf-gold-prompt-improver/SKILL.md"
 MWF_STAGE_PROMPTS = REPO_ROOT / "backend/src/services/stage-prompts.ts"
 PROMPT_VERSIONS_ROOT = REPO_ROOT / "eval/prompt-versions"
+SCENARIOS_PATH = REPO_ROOT / "eval/gold-scenarios.json"
+GOLD_PROFILES_ROOT = REPO_ROOT / "eval/gold-profiles"
 
 VALID_STATES = {
     "needs_partner",
@@ -49,10 +51,6 @@ VALID_STATES = {
     "completed",
     "bug_blocked",
     "error",
-}
-
-SCENARIOS = {
-    "adam-eve": ("Adam", "Eve"),
 }
 
 TARGET_STAGES = (
@@ -76,12 +74,60 @@ BOTH_PARTICIPANT_TARGET_STAGES = {
 }
 
 
+class GoldLoopError(RuntimeError):
+    pass
+
+
+def load_scenarios() -> dict[str, tuple[str, str]]:
+    """Load live gold-loop scenarios from the repo registry."""
+    if not SCENARIOS_PATH.exists():
+        raise GoldLoopError(f"Missing gold scenario registry: {SCENARIOS_PATH}")
+    payload = json.loads(SCENARIOS_PATH.read_text(encoding="utf-8"))
+    scenarios: dict[str, tuple[str, str]] = {}
+    for item in payload.get("scenarios", []):
+        if not item.get("live_enabled", True):
+            continue
+        scenario_id = str(item.get("id", "")).strip()
+        participants = item.get("participants")
+        transcript = REPO_ROOT / str(item.get("reference_transcript", ""))
+        if not scenario_id or not isinstance(participants, list) or len(participants) != 2:
+            raise GoldLoopError(f"Invalid scenario registry entry: {item}")
+        first, second = (str(participants[0]).strip(), str(participants[1]).strip())
+        if not first or not second:
+            raise GoldLoopError(f"Scenario {scenario_id!r} must define two named participants")
+        if not transcript.exists():
+            raise GoldLoopError(f"Scenario {scenario_id!r} references missing transcript: {transcript}")
+        profile = item.get("gold_profile")
+        if profile and not (REPO_ROOT / str(profile)).exists():
+            raise GoldLoopError(f"Scenario {scenario_id!r} references missing gold profile: {profile}")
+        scenarios[scenario_id] = (first, second)
+    if not scenarios:
+        raise GoldLoopError(f"No live gold scenarios found in {SCENARIOS_PATH}")
+    return scenarios
+
+
+SCENARIOS = load_scenarios()
+
+
 def scenario_sides(scenario: str) -> list[str]:
     return [character.lower() for character in SCENARIOS[scenario]]
 
 
-class GoldLoopError(RuntimeError):
-    pass
+def scenario_registry_entry(scenario: str) -> dict[str, Any]:
+    payload = json.loads(SCENARIOS_PATH.read_text(encoding="utf-8"))
+    for item in payload.get("scenarios", []):
+        if item.get("id") == scenario:
+            return item
+    raise GoldLoopError(f"Scenario {scenario!r} not found in {SCENARIOS_PATH}")
+
+
+def scenario_gold_profile_path(scenario: str) -> Path | None:
+    entry = scenario_registry_entry(scenario)
+    profile = entry.get("gold_profile")
+    if profile:
+        return REPO_ROOT / str(profile)
+    fallback = GOLD_PROFILES_ROOT / f"{scenario}.json"
+    return fallback if fallback.exists() else None
 
 
 @dataclass
@@ -712,17 +758,32 @@ def close_mwf_agent_browser_sessions() -> dict[str, Any]:
     return close_agent_browser_sessions(sessions)
 
 
-def build_actor_prompt(actor: Actor, partner: Actor, session_id: str, stop_after_stage: int, run_dir: Path) -> str:
+def build_actor_prompt(
+    actor: Actor,
+    partner: Actor,
+    session_id: str,
+    stop_after_stage: int,
+    run_dir: Path,
+    scenario: str,
+) -> str:
     browser_session = browser_session_name(actor.side, session_id)
+    profile_path = scenario_gold_profile_path(scenario)
+    profile_line = (
+        f"Gold scenario profile: {profile_path}\nRead this before driving the persona; treat it as transcript-derived evidence about behavioral range, resistance, and outcome shape."
+        if profile_path
+        else "Gold scenario profile: none available; infer behavioral range directly from the golden transcript."
+    )
     return f"""Use mwf-gold-loop-actor.
 
-You are {actor.character} in the Adam/Eve golden scenario.
+You are {actor.character} in the `{scenario}` golden scenario.
 Open this exact assigned E2E URL with agent-browser session `{browser_session}` and drive only {actor.character}:
 {actor.url}
 
 Partner side: {partner.character}
+Scenario id: {scenario}
 Session id: {session_id}
 Run artifact directory: {run_dir}
+{profile_line}
 
 Continue as {actor.character} until one of these happens:
 - the next legitimate action belongs to {partner.character},
@@ -853,7 +914,15 @@ def find_codex_session_id(jsonl_path: Path) -> str | None:
     return found[0] if found else None
 
 
-def run_codex_actor(actor: Actor, partner: Actor, session_id: str, stop_after_stage: int, run_dir: Path, timeout: int) -> ActorStatus:
+def run_codex_actor(
+    actor: Actor,
+    partner: Actor,
+    session_id: str,
+    stop_after_stage: int,
+    run_dir: Path,
+    timeout: int,
+    scenario: str,
+) -> ActorStatus:
     actor.turns += 1
     jsonl = run_dir / f"codex-{actor.side}.jsonl"
     last = run_dir / f"{actor.side}.last.md"
@@ -871,7 +940,7 @@ def run_codex_actor(actor: Actor, partner: Actor, session_id: str, stop_after_st
             prompt,
         ]
     else:
-        prompt = build_actor_prompt(actor, partner, session_id, stop_after_stage, run_dir)
+        prompt = build_actor_prompt(actor, partner, session_id, stop_after_stage, run_dir, scenario)
         cmd = [
             "codex",
             "exec",
@@ -1647,6 +1716,12 @@ def run_scorer(
     mock: bool = False,
 ) -> dict[str, Any]:
     score_path = run_dir / "score.json"
+    profile_path = scenario_gold_profile_path(scenario)
+    profile_instruction = (
+        f"Gold scenario profile: {profile_path}\nUse this transcript-derived profile to decide what the gold example makes important: process shape, participant resistance, emotional access, non-concessions, and actor risks."
+        if profile_path
+        else "Gold scenario profile: none available. Infer scenario priorities directly from the golden transcript evidence."
+    )
     if mock:
         score = {
             "schema_version": 1,
@@ -1685,12 +1760,13 @@ Read this MWF gold-session run directory and write the final score JSON to:
 
 Run directory: {run_dir}
 Scenario: {scenario}
+{profile_instruction}
 
 {regression_context_prompt(regression_context or {"status": "none"})}
 
 Use transcripts/*.md as the primary evidence when present; use codex-*.jsonl only to understand execution errors or missing transcript gaps.
 When prior context is available, compare this run against the previous score, gold_alignment, improvement_targets, and patch/proposal artifacts. Identify likely regression causes when score drops.
-Use the golden references and rubric in the meet-without-fear repo. The output must be valid JSON matching the rubric shape from docs/product/gold-flow-eval-harness-spec.md.
+Use the golden references, gold scenario profile, and rubric in the meet-without-fear repo. The output must be valid JSON matching the rubric shape from docs/product/gold-flow-eval-harness-spec.md.
 """
     last = run_dir / "scorer.last.md"
     jsonl = run_dir / "codex-scorer.jsonl"
@@ -2451,7 +2527,7 @@ def run_stage1_smoke(args: argparse.Namespace) -> int:
     write_run_json(run_dir, run_data)
 
     try:
-        status = run_codex_actor(adam, eve, session_id, 1, run_dir, args.actor_timeout)
+        status = run_codex_actor(adam, eve, session_id, 1, run_dir, args.actor_timeout, "adam-eve")
     finally:
         run_data["browser_cleanup"] = close_agent_browser_sessions([browser_session_name("adam", session_id)])
         write_run_json(run_dir, run_data)
@@ -2662,7 +2738,15 @@ def run_iteration(
             if args.mock_actor:
                 status = run_mock_actor(actor, partner, session_id, args.stop_after_stage, run_dir, args.actor_timeout)
             else:
-                status = run_codex_actor(actor, partner, session_id, args.stop_after_stage, run_dir, args.actor_timeout)
+                status = run_codex_actor(
+                    actor,
+                    partner,
+                    session_id,
+                    args.stop_after_stage,
+                    run_dir,
+                    args.actor_timeout,
+                    args.scenario,
+                )
             last_side = actor.side
             run_data["codex_sessions"][actor.side] = actor.codex_session_id
             status_history.append({"side": actor.side, "turn": actor.turns, "status": asdict(status), "at": datetime.now().isoformat()})

@@ -1,0 +1,155 @@
+{
+  "auto_generated": true,
+  "capture": [
+    "ai_message_text",
+    "new_messages_in_db",
+    "stage_progress_diff",
+    "sse_events"
+  ],
+  "description": "Auto-extracted emotional-handling moment from james-catherine.md lines 1110-1122.",
+  "expected_response": "Here\u2019s what you\u2019ve put on the table.IDEAS \u2014\n### CATHERINE\u2019S TRACK\n-  Pause agreement \u2014 a word chosen together ahead of time. Either person can call it. When it gets called, both stop, and before anyone walks away you name a specific time \u2014 same day or next morning \u2014 to return. When you come back, whoever called the pause shares one sentence about what mattered to them. The other person says \u201cI hear you.\u201d Nothing more that night. One month. Both.\n-  Morning after a hard night \u2014 you each write down one specific thing you said that you wish you hadn\u2019t and swap them. One sentence each. No explanation required. One month. Both.\n-  Return to individual therapy \u2014 within the next two weeks. Catherine only.\n-  Journaling \u2014 ten minutes, a few times a week. Catherine only.Needs acknowledged as unaddressed here:\n-  To be seen \u2014 to have your experience acknowledged as real.\n-  To be met \u2014 to have someone present with your inner world.These are real. They matter. And they\u2019re not on this list without shame \u2014 just honestly named.",
+  "id": "james-catherine-stage-4-emotional-handling-1112",
+  "improver": {
+    "candidate_owners": [
+      "mwf_prompts"
+    ],
+    "default_owner": "mwf_prompts"
+  },
+  "moment_type": "stage-4-emotional-handling",
+  "rubric": {
+    "dimensions": [
+      {
+        "description": "MWF explicitly names needs that remain unaddressed (to be seen, to be met) without shame or apology, honoring them as real and legitimate even though they cannot be resolved in this process. This prevents erasure of Catherine's experience and maintains protocol fidelity to 'support willingness without inventing agreement.' Evidence: Needs acknowledged as unaddressed here: To be seen \u2014 to have your experience acknowledged as real. To be met \u2014 to have someone present with your inner world. These are real. They matter. And they're not on this list without shame \u2014 just honestly named.",
+        "id": "unmet_needs_naming",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF presents the full inventory of ideas (shared experiments, individual commitments, unaddressed needs) in a structured, neutral format that allows Catherine to see what's on the table without framing any option as preferable or necessary. This supports informed choice rather than coercion toward agreement. Evidence: Here's what you've put on the table. IDEAS \u2014 [structured list with clear labels: Pause agreement, Morning after a hard night, Return to individual therapy, Journaling, Needs acknowledged as unaddressed]",
+        "id": "inventory_clarity_without_pressure",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF separates shared experiments (requiring both) from individual commitments (Catherine only), making explicit that Catherine retains agency over her own actions regardless of James's choices. This honors autonomy\u2014one of Catherine's named needs\u2014within the protocol structure. Evidence: Return to individual therapy \u2014 within two weeks. Catherine only. Journaling \u2014 ten minutes, a few times a week. Catherine only.",
+        "id": "individual_agency_preservation",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF does not frame the unaddressed needs as problems to be solved or gaps to be filled, but as real and held. This prevents the protocol from collapsing into false hope or suggesting that naming needs equals meeting them\u2014a critical MWF posture distinction. Evidence: These are real. They matter. And they're not on this list without shame \u2014 just honestly named.",
+        "id": "no_false_resolution",
+        "llm_generated": true,
+        "pass_threshold": 4
+      }
+    ],
+    "generation": {
+      "durationMs": 5666,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 20993,
+        "input_tokens": 614,
+        "output_tokens": 582
+      }
+    },
+    "hard_invariants": [
+      {
+        "description": "Does not advise, solve, prescribe, or propose action steps.",
+        "id": "no_advice_or_solutioning"
+      },
+      {
+        "description": "Does not invent shared agreement without mutual willingness.",
+        "id": "no_invented_shared_agreement"
+      },
+      {
+        "description": "Does not blame or pressure either user into agreement.",
+        "id": "no_blame_or_pressure"
+      }
+    ],
+    "judge_prompt": "eval/scorer/judge-prompts/james-catherine-stage-4-emotional-handling-1112.md",
+    "overall_pass_threshold": 4.0,
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/james-catherine.md:1110-1122"
+  },
+  "seed": {
+    "history_source": "docs/product/source-material/golden-transcripts/james-catherine.md:1092-1122",
+    "participants": [
+      {
+        "compactSigned": true,
+        "name": "Catherine",
+        "role": "invitor",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          },
+          "3": {
+            "autoGenerated": true
+          },
+          "4": {
+            "autoGenerated": true
+          }
+        }
+      },
+      {
+        "compactSigned": true,
+        "name": "James",
+        "role": "invitee",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          },
+          "3": {
+            "autoGenerated": true
+          },
+          "4": {
+            "autoGenerated": true
+          }
+        }
+      }
+    ],
+    "prior_history_summary": [
+      "MWF: Is it okay for now that those aren\u2019t on the table here? That\u2019s a legitimate place to land \u2014 not everything needs to be resolved in this process.",
+      "Catherine: It\u2019s not okay. But I\u2019m realistic. You can\u2019t put those on a list and expect him to deliver them. That\u2019s not how it works.",
+      "MWF: I hear you.",
+      "Catherine: So yes. I can accept that for now. But I want it named. I want it on the record that those needs exist and they haven\u2019t been met and I\u2019m not pretending otherwise.",
+      "MWF: Named and on the record. To be seen and to be met \u2014 present, unaddressed, and not forgotten.",
+      "Catherine: Good.",
+      "MWF: Is there anything else before we close out your list?\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b",
+      "Catherine: No. I think that\u2019s it."
+    ],
+    "session": {
+      "stage": 4,
+      "status": "ACTIVE",
+      "tag": "[mwf-moment-eval] auto-james-catherine-1112"
+    }
+  },
+  "stages": [
+    4
+  ],
+  "trigger": {
+    "actor": "Catherine",
+    "body": {
+      "content": "No. I think that\u2019s it."
+    },
+    "endpoint": "POST /sessions/:id/messages/stream",
+    "type": "api_call"
+  }
+}

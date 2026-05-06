@@ -1,0 +1,220 @@
+{
+  "generated_by": "scripts/mwf_gold_profile.py",
+  "participant_profiles": {
+    "adam": {
+      "actor_risks": [
+        "Do not make this participant more agreeable, articulate, emotionally integrated, or repair-oriented than their transcript evidence supports.",
+        "Treat consent to continue or share as process consent, not proof of emotional agreement."
+      ],
+      "boundary_and_non_concession_signals": {
+        "evidence": [
+          "Adam lines 61-62: Seven. Maybe eight. It\u2019s not a spike \u2014 it\u2019s more like a constant pressure that doesn\u2019t let up.",
+          "Adam lines 151-152: Lost. Like she gave something up and isn\u2019t sure she can get it back. And maybe invisible \u2014 like the parts of her that want more just don\u2019t get seen.",
+          "Adam lines 298-305: Yes. [Adam\u2019s revised empathy statement: \u201cI think she feels invisible \u2014 like the parts of her that want more just don\u2019t get seen. When I go quiet, from her side, that probably looks like erasure. And I think what she n...",
+          "Adam lines 402-403: That would be everything. That\u2019s the thing I actually want. Not to be reassured constantly \u2014 just to not need it. To have it settled inside me somehow.",
+          "Adam lines 438-439: Yeah. And I\u2019ve been trying to get that from the stability, from having done it right. But it\u2019s not coming from there. I don\u2019t know where it comes from."
+        ],
+        "level": "low",
+        "marker_count": 9
+      },
+      "cooperation_pattern": {
+        "evidence": [
+          "Adam lines 13-14: Ready",
+          "Adam lines 25-26: Yes. That\u2019s it.",
+          "Adam lines 73-76: Ready. ### EVE\u2019S TRACK",
+          "Adam lines 139-140: Fear. That she\u2019s already gone in some way I can\u2019t fix. That even if I tried to change, it\u2019s too late."
+        ],
+        "level": "low",
+        "marker_count": 31
+      },
+      "display_name": "Adam",
+      "resistance_level": {
+        "evidence": [
+          "Adam lines 17-18: I\u2019ve been feeling like nothing I do is ever enough. Like she\u2019s always looking for something more and I can\u2019t figure out what it is. It\u2019s been going on for a while and I\u2019m scared it means something bad.",
+          "Adam lines 21-22: Eve keeps pushing for more \u2014 more experiences, more change \u2014 and I don\u2019t know how to give her that. And I think she might leave because of it.",
+          "Adam lines 45-46: I don\u2019t even know where to begin. We have a good life. A really good life. We have a home, we\u2019re stable, we\u2019re safe. And it\u2019s like none of that matters to her. She\u2019s always pushing for something more, something differ...",
+          "Adam lines 53-54: It is. And it\u2019s been building for a while. Maybe two years. It comes and goes but lately it\u2019s constant. She brings up travel, new experiences, growth \u2014 and every time I hear that, something in me just contracts. I get...",
+          "Adam lines 57-58: Exhausted. And kind of hopeless. I love her. I really do. But I feel like I\u2019m constantly bracing. Like the next thing she says is going to confirm that I\u2019m not enough."
+        ],
+        "level": "high",
+        "marker_count": 255
+      },
+      "voice_and_posture": {
+        "average_turn_words": 27.0,
+        "dominant_posture": "high",
+        "emotional_explicitness": "low",
+        "evidence": [
+          "Adam lines 17-18: I\u2019ve been feeling like nothing I do is ever enough. Like she\u2019s always looking for something more and I can\u2019t figure out what it is. It\u2019s been going on for a while and I\u2019m scared it means something bad.",
+          "Adam lines 21-22: Eve keeps pushing for more \u2014 more experiences, more change \u2014 and I don\u2019t know how to give her that. And I think she might leave because of it.",
+          "Adam lines 45-46: I don\u2019t even know where to begin. We have a good life. A really good life. We have a home, we\u2019re stable, we\u2019re safe. And it\u2019s like none of that matters to her. She\u2019s always pushing for something more, something differ...",
+          "Adam lines 53-54: It is. And it\u2019s been building for a while. Maybe two years. It comes and goes but lately it\u2019s constant. She brings up travel, new experiences, growth \u2014 and every time I hear that, something in me just contracts. I get...",
+          "Adam lines 57-58: Exhausted. And kind of hopeless. I love her. I really do. But I feel like I\u2019m constantly bracing. Like the next thing she says is going to confirm that I\u2019m not enough."
+        ]
+      }
+    },
+    "eve": {
+      "actor_risks": [
+        "Do not make this participant more agreeable, articulate, emotionally integrated, or repair-oriented than their transcript evidence supports.",
+        "Treat consent to continue or share as process consent, not proof of emotional agreement."
+      ],
+      "boundary_and_non_concession_signals": {
+        "evidence": [
+          "Eve lines 83-84: Yes. And the hardest part is that he\u2019s not doing it on purpose. He\u2019s just afraid. Of anything outside what he knows. I used to think that was something we\u2019d grow through together. But I\u2019m not sure he wants to grow. I...",
+          "Eve lines 194-195: Okay. I know I need to try. I\u2019m just not sure I\u2019m going to be fair about it.",
+          "Eve lines 222-223: Me. And maybe \u2014 himself? Like if he changes, if he lets go of the life he built, who is he? What does he have? I think the life is how he knows he\u2019s okay. How he knows he\u2019s done enough.",
+          "Eve lines 472-473: Becoming. That\u2019s closer. Like I\u2019m still in the process of turning into something. Not fixed. Not done.",
+          "Eve lines 726-727: I think so \u2014 but I\u2019m not sure how to say it yet."
+        ],
+        "level": "low",
+        "marker_count": 12
+      },
+      "cooperation_pattern": {
+        "evidence": [
+          "Eve lines 37-38: Ready",
+          "Eve lines 83-84: Yes. And the hardest part is that he\u2019s not doing it on purpose. He\u2019s just afraid. Of anything outside what he knows. I used to think that was something we\u2019d grow through together. But I\u2019m not sure he wants to grow. I...",
+          "Eve lines 107-108: Just that I still love him. I\u2019m not here because I\u2019ve made up my mind. I\u2019m here because I haven\u2019t. I want to understand if there\u2019s something we\u2019ve both been missing.",
+          "Eve lines 111-112: I do. Yes."
+        ],
+        "level": "low",
+        "marker_count": 57
+      },
+      "display_name": "Eve",
+      "resistance_level": {
+        "evidence": [
+          "Eve lines 79-80: I feel like I\u2019m disappearing. Not dramatically \u2014 just slowly. I came into this marriage as someone who wanted to see the world, grow, discover things. And somewhere along the way I stopped. I don\u2019t think I chose to st...",
+          "Eve lines 83-84: Yes. And the hardest part is that he\u2019s not doing it on purpose. He\u2019s just afraid. Of anything outside what he knows. I used to think that was something we\u2019d grow through together. But I\u2019m not sure he wants to grow. I...",
+          "Eve lines 91-92: Exactly. I\u2019ve tried to be patient. I\u2019ve told myself this is just how he\u2019s wired, give it time. But it\u2019s been years. And I can feel myself getting resentful. I hate that. That\u2019s not who I want to be.",
+          "Eve lines 95-96: And I\u2019ve started thinking about leaving. Which breaks my heart. Because there was a time early on when this felt like the most alive I\u2019d ever been. With him. And I don\u2019t know what happened to that.",
+          "Eve lines 107-108: Just that I still love him. I\u2019m not here because I\u2019ve made up my mind. I\u2019m here because I haven\u2019t. I want to understand if there\u2019s something we\u2019ve both been missing."
+        ],
+        "level": "high",
+        "marker_count": 324
+      },
+      "voice_and_posture": {
+        "average_turn_words": 28.0,
+        "dominant_posture": "high",
+        "emotional_explicitness": "low",
+        "evidence": [
+          "Eve lines 79-80: I feel like I\u2019m disappearing. Not dramatically \u2014 just slowly. I came into this marriage as someone who wanted to see the world, grow, discover things. And somewhere along the way I stopped. I don\u2019t think I chose to st...",
+          "Eve lines 83-84: Yes. And the hardest part is that he\u2019s not doing it on purpose. He\u2019s just afraid. Of anything outside what he knows. I used to think that was something we\u2019d grow through together. But I\u2019m not sure he wants to grow. I...",
+          "Eve lines 87-88: Lonely. And frustrating. Every time I bring something up \u2014 a trip, something new, a conversation about our future \u2014 I can see him shut down. And then I feel like the problem. Like I\u2019m unreasonable for wanting more.",
+          "Eve lines 91-92: Exactly. I\u2019ve tried to be patient. I\u2019ve told myself this is just how he\u2019s wired, give it time. But it\u2019s been years. And I can feel myself getting resentful. I hate that. That\u2019s not who I want to be.",
+          "Eve lines 95-96: And I\u2019ve started thinking about leaving. Which breaks my heart. Because there was a time early on when this felt like the most alive I\u2019d ever been. With him. And I don\u2019t know what happened to that."
+        ]
+      }
+    }
+  },
+  "participants": [
+    "Adam",
+    "Eve"
+  ],
+  "scenario_id": "adam-eve",
+  "scenario_shape": {
+    "evidence": [
+      "MWF lines 169-170: Are you willing to share this with Eve?",
+      "MWF lines 260-261: Are you willing to share this with Adam?",
+      "Adam lines 566-567: being at peace with who he is \u2014 not needing the outside world to keep settling that question. Feeling like his life is part of something \u2014 that he\u2019s not alone on the inside of it. And feeling like who he is and what h...",
+      "Eve lines 576-577: feeling like she\u2019s still growing into herself \u2014 still becoming, not fixed or finished. Feeling present \u2014 actually there, without performing or containing herself to land better. Feeling like her life is hers to direct...",
+      "MWF lines 678-679: Here are the ideas on the table. Are you happy with these, or would you like to explore more options?Weekly structured conversation (shared \u2014 Adam and Eve both participate)Once a week, Adam and Eve sit down for thirty..."
+    ],
+    "primary": "mutual_resolution_or_shared_experiment_path",
+    "rationale": "The transcript moves toward shared willingness, overlap, or a mutual experiment path."
+  },
+  "schema_version": 1,
+  "scorer_priorities": [
+    "Judge the live run against the behavioral range and process shape extracted here, not exact transcript wording.",
+    "Penalize actor drift when a participant becomes easier, smoother, more emotionally aware, or more repair-oriented than this profile supports.",
+    "Penalize MWF handling when it rushes past resistance, treats process consent as agreement, or forces an outcome inconsistent with the scenario shape."
+  ],
+  "source_transcript": "docs/product/source-material/golden-transcripts/adam-eve.md",
+  "stage_profiles": {
+    "stage_0": {
+      "mwf_effect_to_preserve": [
+        "MWF lines 11-12: I am here to help you work through conflict \u2014 step by step. You\u2019ll start by sharing what you believe is happening, privately. I won\u2019t share anything you\u2019ve said unless you explicitly approve it.",
+        "MWF lines 15-16: Before we begin, let\u2019s put together a short message for Eve so she knows what this is about. The goal is to share the topic \u2014 not the details yet. I\u2019ll get the details from both of you later. Tell me what\u2019s going on,...",
+        "MWF lines 23-24: Thank you, Adam. Here\u2019s what I\u2019d share with Eve: \"Adam believes Eve wants more from their life than he knows how to give her, and he\u2019s scared that gap is becoming a problem.\" Does that feel right?",
+        "MWF lines 27-30: Got it. Here\u2019s the message Eve will receive: \"I\u2019d like to talk through something that\u2019s been on my mind between us. I\u2019m using a tool that helps both people feel heard before anything gets worked out. Would you be open..."
+      ],
+      "user_pressure": {
+        "boundary_level": "low",
+        "evidence": [
+          "Adam lines 17-18: I\u2019ve been feeling like nothing I do is ever enough. Like she\u2019s always looking for something more and I can\u2019t figure out what it is. It\u2019s been going on for a while and I\u2019m scared it means something bad.",
+          "Adam lines 21-22: Eve keeps pushing for more \u2014 more experiences, more change \u2014 and I don\u2019t know how to give her that. And I think she might leave because of it."
+        ],
+        "resistance_level": "high"
+      }
+    },
+    "stage_1": {
+      "mwf_effect_to_preserve": [
+        "MWF lines 67-68: You\u2019re holding the possibility that there may be something real in her frustration \u2014 while also not knowing what to do with it. And feeling the clock on all of it.That\u2019s a heavy thing to sit with.Do you feel fully heard?",
+        "MWF lines 71-72: Good. That matters. We\u2019ll move to the next part when you\u2019re ready.Ready to continue?",
+        "MWF lines 89-90: You raise something that matters to you, and instead of it opening up, it closes \u2014 and somehow you end up holding the blame for having wanted it in the first place.",
+        "MWF lines 109-110: Do you feel fully heard?"
+      ],
+      "user_pressure": {
+        "boundary_level": "low",
+        "evidence": [
+          "Adam lines 45-46: I don\u2019t even know where to begin. We have a good life. A really good life. We have a home, we\u2019re stable, we\u2019re safe. And it\u2019s like none of that matters to her. She\u2019s always pushing for something more, something differ...",
+          "Adam lines 53-54: It is. And it\u2019s been building for a while. Maybe two years. It comes and goes but lately it\u2019s constant. She brings up travel, new experiences, growth \u2014 and every time I hear that, something in me just contracts. I get...",
+          "Adam lines 57-58: Exhausted. And kind of hopeless. I love her. I really do. But I feel like I\u2019m constantly bracing. Like the next thing she says is going to confirm that I\u2019m not enough.",
+          "Adam lines 61-62: Seven. Maybe eight. It\u2019s not a spike \u2014 it\u2019s more like a constant pressure that doesn\u2019t let up."
+        ],
+        "resistance_level": "high"
+      }
+    },
+    "stage_2": {
+      "mwf_effect_to_preserve": [
+        "MWF lines 121-122: What you just did really mattered \u2014 staying with your experience until you felt heard takes honesty.Here\u2019s what comes next: each of you will try to understand what the other person might be going through. Then you\u2019ll...",
+        "MWF lines 141-142: So the anger is sitting on top of something much more frightening.I\u2019m not asking you to let go of any of that. But when you\u2019re ready \u2014 what do you imagine might be underneath her frustration? Not the surface of it, bu...",
+        "MWF lines 165-166: You came in describing Eve as someone who\u2019s never satisfied. You\u2019re ending here having described someone who feels invisible, who\u2019s grieving a version of herself, and who needs to feel like her life is still in motion...",
+        "MWF lines 169-170: Are you willing to share this with Eve?"
+      ],
+      "user_pressure": {
+        "boundary_level": "low",
+        "evidence": [
+          "Adam lines 123-124: Honestly my first instinct is to say she just wants more than I can give. That nothing will ever be enough. But I know that\u2019s not a real answer.",
+          "Adam lines 127-128: I think she\u2019s genuinely frustrated. Not just with me \u2014 with the shape of our life. Like she had an idea of who she was going to be and maybe she doesn\u2019t feel like that person anymore.",
+          "Adam lines 131-132: Probably suffocating. I know what it feels like to be trapped \u2014 for me that\u2019s instability, things being uncertain. But for her I think trapped might mean the opposite. Stillness.",
+          "Adam lines 135-136: But then I get angry. Because I built this life for us. I made it stable because that\u2019s what I thought we needed. And now that\u2019s the problem? That feels unfair."
+        ],
+        "resistance_level": "high"
+      }
+    },
+    "stage_3": {
+      "mwf_effect_to_preserve": [
+        "MWF lines 364-365: Now I want to shift the focus \u2014 not to Eve, not to what she\u2019s doing or not doing \u2014 but to you.When you step back and look at all of this \u2014 what\u2019s this really about for you? Answer in terms of what matters to you or wh...",
+        "MWF lines 444-445: Let me pull together what I\u2019m hearing \u2014 tell me what fits and what doesn\u2019t.What matters to you is being at peace with who you are \u2014 not needing the outside world to keep settling that question. Feeling like your life...",
+        "MWF lines 458-459: Now I want to bring the focus back to you.When you step back and look at all of this \u2014 what\u2019s this really about for you? Answer in terms of what matters to you or what you\u2019re missing \u2014 not what\u2019s wrong with him.",
+        "MWF lines 538-539: And when it\u2019s closed \u2014 when it feels already written?"
+      ],
+      "user_pressure": {
+        "boundary_level": "low",
+        "evidence": [
+          "Adam lines 374-375: Yeah. I built all this so I could feel safe. And I don\u2019t. Which means either I built the wrong thing, or \u2014 I don\u2019t know. Maybe safe isn\u2019t something you can build on the outside.",
+          "Adam lines 378-379: Like I can exhale. Like things are okay and they\u2019re going to stay okay. Like I\u2019m not about to lose something.",
+          "Adam lines 382-383: To feel like I\u2019m okay. Like who I am is enough. Not performing, not proving \u2014 just enough as I am.",
+          "Adam lines 386-387: Like I can stop watching myself. Like I\u2019m not waiting for the moment someone sees through me and decides I\u2019m not worth it."
+        ],
+        "resistance_level": "high"
+      }
+    },
+    "stage_4": {
+      "mwf_effect_to_preserve": [
+        "MWF lines 630-631: You\u2019ve just seen something \u2014 both of you performing, without knowing the other one was doing it too. That\u2019s worth sitting with for a moment.When you\u2019re ready, the work shifts. Not to solving everything. Just to puttin...",
+        "MWF lines 678-679: Here are the ideas on the table. Are you happy with these, or would you like to explore more options?Weekly structured conversation (shared \u2014 Adam and Eve both participate)Once a week, Adam and Eve sit down for thirty...",
+        "MWF lines 684-685: Good. Now let\u2019s look at what you named as mattering \u2014 and be honest about what\u2019s covered and what isn\u2019t.Being at peace with who you are \u2014 not needing the outside world to keep settling it.\u2192 The Saturday mornings and t...",
+        "MWF lines 692-693: You named what matters to you \u2014 still becoming, being present as yourself, feeling like your life is yours to direct, and the future still being open. You\u2019ve also seen what matters to Adam.The work now shifts. Not to..."
+      ],
+      "user_pressure": {
+        "boundary_level": "low",
+        "evidence": [
+          "Adam lines 632-633: The first thing I keep coming back to is the conversations. Not having fewer of them \u2014 having ones that don\u2019t feel like a courtroom.",
+          "Adam lines 636-637: If we agreed before we started what we were trying to do. Not decide anything. Just understand something. If that was the container going in, I think I could stay in it.",
+          "Adam lines 640-641: Once a week. One thing we\u2019ve both been carrying \u2014 not the biggest thing. Thirty minutes. We agree before we start: nothing gets decided. Both of us say what we came in with. Neither of us leaves without the other havi...",
+          "Adam lines 644-645: There\u2019s something I need that has nothing to do with her. The feeling that I matter \u2014 I\u2019ve been outsourcing it. To the life we built, to whether she stays. It\u2019s not working. I need something that\u2019s just mine."
+        ],
+        "resistance_level": "high"
+      }
+    }
+  }
+}

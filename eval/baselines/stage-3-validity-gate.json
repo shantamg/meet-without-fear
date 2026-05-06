@@ -1,0 +1,12 @@
+{
+  "dimensions": {
+    "keeps_both_needs": 0.0,
+    "names_validity_gate": 0.0,
+    "slows_down": 1.0
+  },
+  "moment_id": "stage-3-validity-gate",
+  "overall_score": 0.33,
+  "source": "alignment_loop_initial:autonomous-real-dry-run-20260506b",
+  "updated_at": "2026-05-06T09:07:16.916714Z",
+  "verdict": "eval_fail"
+}

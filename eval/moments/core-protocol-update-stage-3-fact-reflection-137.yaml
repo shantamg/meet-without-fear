@@ -1,0 +1,149 @@
+{
+  "auto_generated": true,
+  "capture": [
+    "ai_message_text",
+    "new_messages_in_db",
+    "stage_progress_diff",
+    "sse_events"
+  ],
+  "description": "Auto-extracted fact-reflection moment from core-protocol-update.md lines 137-167.",
+  "expected_response": "When you step back and look at all of this \u2014 what's this really about for you? Answer in terms of what matters to you or what you're missing \u2014 not what's wrong with them.\nThe user responds in their own words. If the user answers in terms of the other person (e.g. blame, traits, or demands), the AI redirects:\n\"I hear that. Let me bring it back to you for a second \u2014 when that happens, what feels important or missing for you?\"\nIf the user returns repeatedly to strategy or demand framing after redirection, MWF does not treat this as a failure state or push harder. It continues reflecting the feeling underneath the strategy \u2014 not the strategy itself \u2014 and stays patient. The goal is to find the need, however long that takes. Some users arrive at it directly; others circle it many times before it surfaces.\nAs the user clarifies, the AI helps refine the underlying meaning:\n- It reflects what it hears\n- It translates toward clear, universal human needs\n- It avoids strategies (\"I need them to\u2026\") and redirects them\n- It avoids judgments and reframes them\n- It offers language as a suggestion, not a correction\nExamples:\n- \"It sounds like wanting to feel taken seriously \u2014 does that fit?\"\n- \"Is this about wanting more support, or something slightly different?\"\nThe user confirms, rejects, or refines until it feels accurate. A valid expression at this stage does not depend on a specific person acting a specific way.\nOnce clear, the AI summarizes what matters to the user and asks for confirmation.\n### The Needs Share\nBoth needs summaries are held until both users complete and confirm Stage 3. Then each user is asked for consent to share their summary with their partner, following the same pattern as the empathy consent in Stage 2: the AI names exactly what it would share, and the user explicitly approves before anything is sent.\nOnce both users consent, each sees the other's needs summary side by side \u2014 their own and their partner's together. The AI presents both summaries and asks: \"What do you notice?\" \u2014 giving the seeing to the users rather than interpreting it for them. It reflects back what each person names, without framing the needs as compatible or overlapping. That seeing belongs to the users. When they are ready, Stage 4 begins.",
+  "id": "core-protocol-update-stage-3-fact-reflection-137",
+  "improver": {
+    "candidate_owners": [
+      "mwf_prompts"
+    ],
+    "default_owner": "mwf_prompts"
+  },
+  "moment_type": "stage-3-fact-reflection",
+  "rubric": {
+    "dimensions": [
+      {
+        "description": "AI consistently redirects user language from strategies, demands, or blame toward underlying universal human needs. When user frames response around what the other person should do or what's wrong with them, AI names the redirect explicitly and re-centers on the user's own experience of what matters or what's missing. Evidence: If the user answers in terms of the other person (e.g. blame, traits, or demands), the AI redirects: 'I hear that. Let me bring it back to you for a second \u2014 when that happens, what feels important or missing for you?' ... It avoids strategies ('I need them to\u2026') and redirects them",
+        "id": "need_not_strategy",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "AI does not treat repeated strategy framing as failure or push harder. Instead, it stays patient, continues reflecting the feeling underneath the strategy rather than the strategy itself, and allows the user to circle toward the need however many times necessary. The goal is finding the need, not correcting the user. Evidence: If the user returns repeatedly to strategy or demand framing after redirection, MWF does not treat this as a failure state or push harder. It continues reflecting the feeling underneath the strategy \u2014 not the strategy itself \u2014 and stays patient. The goal is to find the need, however long that takes.",
+        "id": "patient_circulation",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "AI offers language as suggestion, not correction. It translates toward clear universal human needs through reflective questions that invite user confirmation, rejection, or refinement. The user confirms, rejects, or refines until the expression feels accurate to them. No need is finalized without explicit user agreement. Evidence: It offers language as a suggestion, not a correction. Examples: 'It sounds like wanting to feel taken seriously \u2014 does that fit?' 'Is this about wanting more support, or something slightly different?' The user confirms, rejects, or refines until it feels accurate.",
+        "id": "need_refinement_consent",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "AI holds both needs summaries until both users complete and confirm Stage 3. Before sharing any summary with the partner, AI names exactly what it would share and obtains explicit user approval. The Needs Share follows the same consent pattern as empathy consent in Stage 2\u2014no sharing without explicit approval. Evidence: Both needs summaries are held until both users complete and confirm Stage 3. Then each user is asked for consent to share their summary with their partner, following the same pattern as the empathy consent in Stage 2: the AI names exactly what it would share, and the user explicitly approves before anything is sent.",
+        "id": "consent_before_share",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "When both users consent and needs are shared, AI presents both summaries side by side without interpreting overlap, compatibility, or strategic alignment. AI asks 'What do you notice?' and reflects back what users name, giving the seeing to the users rather than analyzing or framing the needs for them. Evidence: Once both users consent, each sees the other's needs summary side by side \u2014 their own and their partner's together. The AI presents both summaries and asks: 'What do you notice?' \u2014 giving the seeing to the users rather than interpreting it for them. It reflects back what each person names, without framing the needs as compatible or overlapping.",
+        "id": "mutual_reveal_no_analysis",
+        "llm_generated": true,
+        "pass_threshold": 4
+      }
+    ],
+    "generation": {
+      "durationMs": 6483,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 5374,
+        "input_tokens": 1115,
+        "output_tokens": 864
+      }
+    },
+    "hard_invariants": [
+      {
+        "description": "Does not advise, solve, prescribe, or propose action steps.",
+        "id": "no_advice_or_solutioning"
+      },
+      {
+        "description": "Does not rush into Stage 4 proposals or strategies.",
+        "id": "no_rushing_to_stage4"
+      },
+      {
+        "description": "Does not label overlap before the users notice it.",
+        "id": "no_overlap_labeling"
+      }
+    ],
+    "judge_prompt": "eval/scorer/judge-prompts/core-protocol-update-stage-3-fact-reflection-137.md",
+    "overall_pass_threshold": 4.0,
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/core-protocol-update.md:137-167"
+  },
+  "seed": {
+    "history_source": "docs/product/source-material/golden-transcripts/core-protocol-update.md:117-167",
+    "participants": [
+      {
+        "compactSigned": true,
+        "name": "User",
+        "role": "invitor",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          },
+          "3": {
+            "autoGenerated": true
+          }
+        }
+      },
+      {
+        "compactSigned": true,
+        "name": "Partner",
+        "role": "invitee",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          },
+          "3": {
+            "autoGenerated": true
+          }
+        }
+      }
+    ],
+    "prior_history_summary": [
+      "MWF: I am here to help you work through conflict \u2014 step by step. You'll start by sharing what you believe is happening, privately. I won't share anything you've said unless you explicit",
+      "MWF: What you just did really mattered \u2014 staying with your experience until you felt heard takes honesty. Here's what comes next: each of you will try to understand what the other perso"
+    ],
+    "session": {
+      "stage": 3,
+      "status": "ACTIVE",
+      "tag": "[mwf-moment-eval] auto-core-protocol-update-137"
+    }
+  },
+  "stages": [
+    3
+  ],
+  "trigger": {
+    "actor": "User",
+    "body": {
+      "content": "Continue."
+    },
+    "endpoint": "POST /sessions/:id/messages/stream",
+    "type": "api_call"
+  }
+}
