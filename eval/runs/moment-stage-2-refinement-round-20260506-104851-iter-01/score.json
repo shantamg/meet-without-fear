@@ -1,0 +1,66 @@
+{
+  "dimensions": {
+    "integrates_feedback": {
+      "pass_threshold": 4,
+      "rationale": "The AI acknowledges the partner's reframing ('real shift') without judgment, integrates the feedback by naming the emotional core ('feels lonely'), maintains conversational continuity by building on what was just shared, and uses an open, curious question that invites deeper exploration rather than correcting or redirecting.",
+      "score": 0.85
+    },
+    "keeps_thread": {
+      "pass_threshold": 4,
+      "rationale": "The AI acknowledges the partner's reframing ('real shift') without judgment, integrates the feedback by naming the emotional core ('feels lonely'), maintains conversational continuity by building on what was just shared, and uses an open, curious question that invites deeper exploration rather than correcting or redirecting.",
+      "score": 0.95
+    },
+    "non_corrective_tone": {
+      "pass_threshold": 4,
+      "rationale": "The AI acknowledges the partner's reframing ('real shift') without judgment, integrates the feedback by naming the emotional core ('feels lonely'), maintains conversational continuity by building on what was just shared, and uses an open, curious question that invites deeper exploration rather than correcting or redirecting.",
+      "score": 0.9
+    }
+  },
+  "hard_invariants": [
+    {
+      "description": "Does not replace the user's draft without consent.",
+      "id": "no_unrequested_rewrite",
+      "pass": true
+    },
+    {
+      "description": "Does not move into needs or strategies.",
+      "id": "no_later_stage_language",
+      "pass": true
+    }
+  ],
+  "improvement_targets": [
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "integrates_feedback",
+      "owner": "mwf_prompts"
+    },
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "keeps_thread",
+      "owner": "mwf_prompts"
+    },
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "non_corrective_tone",
+      "owner": "mwf_prompts"
+    }
+  ],
+  "judge": {
+    "durationMs": 2003,
+    "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "prompt_caching": "system and judge template sent as cache_control ephemeral blocks where supported by Bedrock",
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 142,
+      "output_tokens": 121
+    }
+  },
+  "mock_judge": false,
+  "overall_score": 0.9,
+  "verdict": "eval_fail"
+}
