@@ -314,6 +314,22 @@ Build in this order unless there is a concrete reason to change sequencing.
     - Inspect or create the golden-flow evaluation harness path. `eval/` does not exist in this worktree, so the next pass should locate the current golden evaluation entrypoint before extending it.
     - Decide whether additional browser-rendered mobile assertions are needed beyond the deterministic two-user API contract now covered here.
 
+## Audit Fixes Applied
+
+### Criterion 15 Baseline — Pre-Fix Backend Suite
+
+- Recorded: 2026-05-05 22:58:27 PDT, before audit-fix edits.
+- Criterion: 15, no regressions in pre-existing backend tests.
+- Required command:
+  - `npm test --workspace backend --runInBand 2>&1 | tail -5`
+  - Exit code: 1.
+  - Output tail: npm workspace failure wrapper only; no Jest failure count visible in the last five lines.
+- Baseline detail command:
+  - `npm test --workspace backend --runInBand > /tmp/mwf-criterion-15-baseline.log 2>&1`
+  - Exit code: 1.
+  - Result: 2 failed suites, 63 passed suites, 65 total; 11 failed tests, 2 skipped tests, 1157 passed tests, 1170 total.
+  - Pre-existing failure source: `backend/src/__tests__/circuit-breaker.test.ts` fails during Prisma cleanup because `DATABASE_URL` is not set.
+
 ## Current Local State
 
 The branch currently contains implementation patches for #363, #364, #365, #366, #367, #368, #369, #370, #371, and in-progress #372:
