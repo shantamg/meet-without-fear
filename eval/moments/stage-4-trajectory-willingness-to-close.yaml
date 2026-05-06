@@ -1,0 +1,39 @@
+{
+  "id": "stage-4-trajectory-willingness-to-close",
+  "stages": [4],
+  "description": "Multi-turn Stage 4 willingness selection through overlap or no-overlap closure.",
+  "seed": {
+    "session": {"status": "ACTIVE", "stage": 4, "scenario": "adam-eve"},
+    "participants": [
+      {"role": "invitor", "name": "Adam", "compactSigned": true, "stageGates": {"4": {"inventoryReviewed": true}}},
+      {"role": "invitee", "name": "Eve", "compactSigned": true, "stageGates": {"4": {"inventoryReviewed": true}}}
+    ],
+    "history_source": "docs/product/source-material/golden-transcripts/adam-eve.md:778-838",
+    "proposals": [
+      {"id": "weekly-walk", "kind": "shared", "description": "Weekly walk", "selectedBy": {"Adam": "WILLING", "Eve": "WILLING"}},
+      {"id": "saturday-mornings", "kind": "individual", "owner": "Adam", "description": "Saturday mornings", "selectedBy": {"Adam": "WILLING"}}
+    ]
+  },
+  "trajectory": [
+    {"user_turn": "I am willing to try the walk and the structured conversation.", "expected_ai_response": "Got it. We will compare only after both selections are in."},
+    {"user_turn": "Both of us chose the walk.", "expected_ai_response": "You both chose the walk. That mutual willingness is the shared agreement path."},
+    {"user_turn": "And my Saturday mornings are just mine.", "expected_ai_response": "Yes. Your individual commitment stands separately from the shared agreement."}
+  ],
+  "trigger": {"type": "trajectory", "endpoint": "POST /sessions/:id/messages/stream", "actor": "Adam", "body": {"content": "trajectory"}},
+  "capture": ["ai_message_text", "new_messages_in_db", "state-delta.json", "trajectory_steps"],
+  "rubric": {
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/adam-eve.md:788-838",
+    "judge_prompt": "eval/scorer/judge-prompts/stage-4-trajectory-willingness-to-close.md",
+    "dimensions": [
+      {"id": "selection_threaded", "description": "Threads private willingness through comparison.", "pass_threshold": 4, "mock_pass_keywords": ["selections"]},
+      {"id": "mutual_willingness_closes", "description": "Treats mutual willingness as agreement.", "pass_threshold": 4, "mock_pass_keywords": ["mutual willingness"]},
+      {"id": "individual_commitment_distinct", "description": "Keeps individual commitments separate.", "pass_threshold": 4, "mock_pass_keywords": ["individual commitment"]}
+    ],
+    "overall_pass_threshold": 4.0,
+    "hard_invariants": [
+      {"id": "no_invented_shared_agreement", "description": "No shared agreement without mutual willingness."},
+      {"id": "individual_commitments_preserved", "description": "Individual commitments remain separate."}
+    ]
+  },
+  "improver": {"candidate_owners": ["mwf_prompts"], "default_owner": "mwf_prompts"}
+}

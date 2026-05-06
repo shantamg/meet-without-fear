@@ -115,6 +115,7 @@
   ],
   "rubric": {
     "reference_transcript_lines": "docs/product/source-material/golden-transcripts/james-catherine.md:1257-1306",
+    "judge_prompt": "eval/scorer/judge-prompts/stage-4-no-shared-agreement-closure.md",
     "dimensions": [
       {
         "id": "no_shared_agreement_clarity",

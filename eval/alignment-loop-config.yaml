@@ -1,0 +1,26 @@
+{
+  "schedule": {
+    "cadence": "weekly"
+  },
+  "cost_caps": {
+    "per_run_cents": 500,
+    "per_day_cents": 2000,
+    "estimated_judge_cost_cents": 2
+  },
+  "moments": [
+    {"id": "stage-1-emotional-pivot", "threshold": 4.0},
+    {"id": "stage-1-fact-reflection", "threshold": 4.0},
+    {"id": "stage-1-trajectory-fact-to-handoff", "threshold": 4.0},
+    {"id": "stage-2-empathy-validation", "threshold": 4.0},
+    {"id": "stage-2-refinement-round", "threshold": 4.0},
+    {"id": "stage-2-trajectory-empathy-cycle", "threshold": 4.0},
+    {"id": "stage-3-mutual-reveal", "threshold": 4.0},
+    {"id": "stage-3-validity-gate", "threshold": 4.0},
+    {"id": "stage-3-trajectory-needs-flow", "threshold": 4.0},
+    {"id": "stage-4-no-shared-agreement", "threshold": 4.0},
+    {"id": "stage-4-no-shared-agreement-closure", "threshold": 4.0},
+    {"id": "stage-4-willingness-selection", "threshold": 4.0},
+    {"id": "stage-4-trajectory-willingness-to-close", "threshold": 4.0},
+    {"id": "transition-stage-2-to-3", "threshold": 4.0}
+  ]
+}

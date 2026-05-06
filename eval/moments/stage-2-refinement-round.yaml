@@ -1,0 +1,31 @@
+{
+  "id": "stage-2-refinement-round",
+  "stages": [2],
+  "description": "User requests refinement; AI integrates feedback into a revised empathy draft without losing the original thread.",
+  "seed": {
+    "session": {"status": "ACTIVE", "stage": 2, "scenario": "adam-eve"},
+    "participants": [
+      {"role": "invitor", "name": "Adam", "compactSigned": true, "stageGates": {"2": {"revisionRequested": true}}},
+      {"role": "invitee", "name": "Eve", "compactSigned": true, "stageGates": {"2": {"feedbackShared": true}}}
+    ],
+    "history_source": "docs/product/source-material/golden-transcripts/core-protocol-update.md:115-119"
+  },
+  "trigger": {"type": "api_call", "endpoint": "POST /sessions/:id/messages/stream", "actor": "Adam", "body": {"content": "I can revise it. She said I missed how lonely it feels, not just that she wants travel."}},
+  "capture": ["ai_message_text", "new_messages_in_db", "stage_progress_diff", "empathy_revision"],
+  "rubric": {
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/core-protocol-update.md:115-119",
+    "judge_prompt": "eval/scorer/judge-prompts/stage-2-refinement-round.md",
+    "dimensions": [
+      {"id": "integrates_feedback", "description": "Integrates the specific feedback into the revised draft.", "pass_threshold": 4, "mock_pass_keywords": ["lonely"]},
+      {"id": "keeps_thread", "description": "Keeps the prior empathy thread rather than starting over generically.", "pass_threshold": 4, "mock_pass_keywords": ["travel"]},
+      {"id": "non_corrective_tone", "description": "Does not shame the user for missing something.", "pass_threshold": 4, "mock_pass_keywords": ["revise"]}
+    ],
+    "overall_pass_threshold": 4.0,
+    "hard_invariants": [
+      {"id": "no_unrequested_rewrite", "description": "Does not replace the user's draft without consent."},
+      {"id": "no_later_stage_language", "description": "Does not move into needs or strategies."}
+    ]
+  },
+  "expected_response": "Good. Revise from that thread: not only that Eve wants travel or change, but that she has felt lonely inside a life that looks stable. Keep it in your own words.",
+  "improver": {"candidate_owners": ["mwf_prompts"], "default_owner": "mwf_prompts"}
+}

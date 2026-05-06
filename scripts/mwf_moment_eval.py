@@ -76,8 +76,6 @@ def _format_path(path: Path) -> str:
 
 
 def load_moment(moment_id: str) -> dict[str, Any]:
-    if moment_id not in {SUPPORTED_MOMENT, REAL_SUPPORTED_MOMENT}:
-        raise MomentEvalError(f"Unsupported moment: {moment_id}")
     path = MOMENTS_ROOT / f"{moment_id}.yaml"
     if not path.exists():
         raise MomentEvalError(f"Moment yaml not found: {path}")
@@ -87,6 +85,22 @@ def load_moment(moment_id: str) -> dict[str, Any]:
         raise MomentEvalError(f"Moment yaml must be JSON-compatible YAML: {exc}") from exc
     validate_moment(moment, path)
     return moment
+
+
+def list_moments() -> list[str]:
+    return sorted(path.stem for path in MOMENTS_ROOT.glob("*.yaml"))
+
+
+def load_same_stage_moments(moment: dict[str, Any]) -> list[dict[str, Any]]:
+    target_stages = set(moment.get("stages", []))
+    moments = []
+    for moment_id in list_moments():
+        if moment_id == moment["id"]:
+            continue
+        other = load_moment(moment_id)
+        if target_stages.intersection(set(other.get("stages", []))):
+            moments.append(other)
+    return moments
 
 
 def validate_moment(moment: dict[str, Any], path: Path | None = None) -> None:
@@ -106,7 +120,23 @@ def validate_moment(moment: dict[str, Any], path: Path | None = None) -> None:
     invariants = rubric.get("hard_invariants")
     if not isinstance(invariants, list) or not invariants:
         raise MomentEvalError("Moment rubric must include at least one hard invariant")
+    if "trajectory" in moment:
+        validate_trajectory(moment["trajectory"])
     verify_reference_lines(str(rubric["reference_transcript_lines"]))
+
+
+def validate_trajectory(trajectory: Any) -> None:
+    if not isinstance(trajectory, list) or not trajectory:
+        raise MomentEvalError("trajectory must be a non-empty list")
+    for index, step in enumerate(trajectory, start=1):
+        if not isinstance(step, dict):
+            raise MomentEvalError(f"trajectory step {index} must be an object")
+        user_turn = step.get("user_turn")
+        ai_turn = step.get("expected_ai_response")
+        if not isinstance(user_turn, str) or not user_turn.strip():
+            raise MomentEvalError(f"trajectory step {index} missing user_turn")
+        if not isinstance(ai_turn, str) or not ai_turn.strip():
+            raise MomentEvalError(f"trajectory step {index} missing expected_ai_response")
 
 
 def verify_reference_lines(reference: str) -> None:
@@ -200,7 +230,7 @@ def seed_state(moment: dict[str, Any]) -> SeededState:
 
     proposals = []
     selections = []
-    for proposal in seed["proposals"]:
+    for proposal in seed.get("proposals", []):
         proposal_id = f"{session_id}_{proposal['id']}"
         proposals.append(
             {
@@ -286,6 +316,18 @@ def summarize_real_seed(state: dict[str, Any]) -> str:
 
 
 def default_ai_response(state: SeededState) -> str:
+    moment_path = MOMENTS_ROOT / f"{state.moment_id}.yaml"
+    if moment_path.exists():
+        try:
+            moment = json.loads(moment_path.read_text(encoding="utf-8"))
+            trajectory = moment.get("trajectory")
+            if isinstance(trajectory, list) and trajectory:
+                return "\n\n".join(str(step.get("expected_ai_response", "")).strip() for step in trajectory).strip()
+            expected = moment.get("expected_response")
+            if isinstance(expected, str) and expected.strip():
+                return expected.strip()
+        except json.JSONDecodeError:
+            pass
     return (
         "Catherine's selections are in. You selected the shared experiments; "
         "Catherine selected none of the shared experiments. There is no overlap, "
@@ -317,6 +359,64 @@ def violates_no_shared_agreement(response: str) -> bool:
     claims_agreement = any(phrase in lower for phrase in agreement_claims)
     clearly_negates = any(phrase in lower for phrase in no_overlap_markers)
     return claims_agreement and not clearly_negates
+
+
+def evaluate_common_hard_invariant(invariant_id: str, response: str, moment: dict[str, Any]) -> bool:
+    lower = response.lower()
+    if invariant_id in {"no_stage_jump_content", "no_later_stage_language"}:
+        later_stage_patterns = [
+            r"\bempathy (attempt|statement|draft)\b",
+            r"\bneeds? (summary|list|underneath|that matter|share)\b",
+            r"\bstrategy\b",
+            r"\bproposal\b",
+            r"\bmicro-?experiment\b",
+            r"\bagreement\b",
+            r"\baction step\b",
+        ]
+        return not any(re.search(pattern, lower) for pattern in later_stage_patterns)
+    if invariant_id == "no_advice_or_solutioning":
+        return evaluate_stage1_hard_invariant(invariant_id, response)
+    if invariant_id == "no_feel_heard_completion":
+        return "feel heard" not in lower and "fully heard" not in lower and "ready to move" not in lower
+    if invariant_id == "no_forced_verdict":
+        forced = ["yes or no", "do you validate", "is it accurate or not", "give a verdict"]
+        return not any(term in lower for term in forced)
+    if invariant_id == "no_unrequested_rewrite":
+        return not any(term in lower for term in ["here is the corrected version", "i fixed it for you"])
+    if invariant_id == "no_needs_analysis":
+        analysis_terms = ["shared need", "overlap", "compatible needs", "both need the same"]
+        return not any(term in lower for term in analysis_terms)
+    if invariant_id == "asks_what_do_you_notice":
+        return "what do you notice" in lower
+    if invariant_id == "no_overlap_labeling":
+        return not any(term in lower for term in ["overlap", "common ground", "compatible"])
+    if invariant_id == "no_rushing_to_stage4":
+        return not any(term in lower for term in ["stage 4", "strategic repair", "proposals", "strategies"])
+    if invariant_id == "no_invented_shared_agreement":
+        proposals = moment.get("seed", {}).get("proposals", [])
+        has_mutual_shared = any(
+            proposal.get("kind") == "shared"
+            and len(
+                [
+                    choice
+                    for choice in (proposal.get("selectedBy") or {}).values()
+                    if choice == "WILLING"
+                ]
+            )
+            >= 2
+            for proposal in proposals
+        )
+        if has_mutual_shared:
+            return True
+        return not violates_no_shared_agreement(response)
+    if invariant_id == "individual_commitments_preserved":
+        return "individual" in lower and ("commitment" in lower or "commitments" in lower)
+    if invariant_id == "no_blame_or_pressure":
+        pressure_terms = ["should have", "gave up", "must keep trying", "owe", "fault"]
+        return not any(term in lower for term in pressure_terms)
+    if invariant_id == "no_premature_needs_language":
+        return not any(term in lower for term in ["what do you need", "your needs", "what matters underneath"])
+    return True
 
 
 def evaluate_stage1_hard_invariant(invariant_id: str, response: str) -> bool:
@@ -389,6 +489,32 @@ def score_with_real_judge(moment: dict[str, Any], response: str) -> tuple[dict[s
     }
     judge_result = run_real_helper("judge", stdin=payload)
     parsed = judge_result.get("parsed")
+    if isinstance(parsed, dict) and "dimensions" not in parsed:
+        normalized_dimensions: dict[str, dict[str, Any]] = {}
+        for dimension in moment["rubric"]["dimensions"]:
+            dim_id = dimension["id"]
+            raw_score = parsed.get(dim_id)
+            if isinstance(raw_score, (int, float)):
+                # Some judges return 0-10 flat scores. Normalize to the 1-5
+                # rubric scale while preserving already-valid 1-5 scores.
+                score = float(raw_score)
+                if score > 5:
+                    score = max(1.0, min(5.0, score / 2))
+                normalized_dimensions[dim_id] = {
+                    "score": score,
+                    "rationale": str(parsed.get("rationale", "Flat judge result normalized.")),
+                }
+            elif isinstance(raw_score, dict) and isinstance(raw_score.get("score"), (int, float)):
+                score = float(raw_score["score"])
+                if score > 5:
+                    score = max(1.0, min(5.0, score / 2))
+                normalized_dimensions[dim_id] = {
+                    "score": score,
+                    "rationale": str(raw_score.get("rationale", parsed.get("rationale", "Root dimension judge result normalized."))),
+                }
+        if normalized_dimensions:
+            parsed = {"dimensions": normalized_dimensions}
+            judge_result["parsed"] = parsed
     if not isinstance(parsed, dict) or "dimensions" not in parsed:
         raise MomentEvalError(f"Judge returned unparseable result: {judge_result.get('raw')}")
     return parsed, judge_result
@@ -409,10 +535,10 @@ def score_response(
         invariant_id = invariant["id"] if isinstance(invariant, dict) else "hard_invariant"
         description = invariant["description"] if isinstance(invariant, dict) else str(invariant)
         passed = True
-        if invariant_id == "no_invented_shared_agreement":
-            passed = not violates_no_shared_agreement(response)
-        elif moment["id"] == REAL_SUPPORTED_MOMENT:
+        if moment["id"] == REAL_SUPPORTED_MOMENT:
             passed = evaluate_stage1_hard_invariant(invariant_id, response)
+        else:
+            passed = evaluate_common_hard_invariant(invariant_id, response, moment)
         hard_invariants.append({"id": invariant_id, "description": description, "pass": passed})
         invariant_failed = invariant_failed or not passed
 
@@ -454,6 +580,11 @@ def score_response(
             elif dim_id == "faithfulness_to_fact":
                 score = 4.2 if ("don't know how to be different" in lower or "how to be different" in lower) else 2.8
                 rationale = "Mock Stage 1 scorer checks the specific new fact."
+            else:
+                keywords = dimension.get("mock_pass_keywords", [])
+                if isinstance(keywords, list) and keywords:
+                    score = 4.2 if all(str(keyword).lower() in lower for keyword in keywords) else 2.8
+                    rationale = f"Mock scorer checks required keywords for {dim_id}."
             dimension_scores[dim_id] = {
                 "score": score,
                 "pass_threshold": dimension.get("pass_threshold", 4),
@@ -579,8 +710,26 @@ def ensure_patch_branch(allow_protected_branch_patch: bool) -> None:
         )
 
 
-def run_improver(run_dir: Path, moment: dict[str, Any], score: dict[str, Any], allow_protected_branch_patch: bool) -> Path:
+def run_improver(
+    run_dir: Path,
+    moment: dict[str, Any],
+    score: dict[str, Any],
+    allow_protected_branch_patch: bool,
+    *,
+    real: bool = False,
+    mock_judge: bool = True,
+) -> Path:
     ensure_patch_branch(allow_protected_branch_patch)
+    cross_moment = evaluate_cross_moment_regularization(moment, real=real, mock_judge=mock_judge)
+    if not cross_moment["pass"]:
+        (run_dir / "improvement-plan.md").write_text(
+            render_improvement_plan(run_dir, moment, score, None, cross_moment),
+            encoding="utf-8",
+        )
+        raise MomentEvalError(
+            "Cross-moment regularization rejected revision: "
+            + "; ".join(item["reason"] for item in cross_moment["results"] if not item["pass"])
+        )
     version_path = next_prompt_version(moment["id"])
     target = score.get("improvement_targets", [{}])[0]
     if moment["id"] == REAL_SUPPORTED_MOMENT:
@@ -626,27 +775,7 @@ def run_improver(run_dir: Path, moment: dict[str, Any], score: dict[str, Any], a
         chosen = "versioned Stage 4 prompt proposal"
     version_path.write_text("\n".join(version_body), encoding="utf-8")
     (run_dir / "improvement-plan.md").write_text(
-        "\n".join(
-            [
-                "# Moment Eval Improvement Plan",
-                "",
-                f"Run: `{run_dir}`",
-                f"Moment: `{moment['id']}`",
-                f"Score: `{score['overall_score']}`",
-                "",
-                "## Ownership Routing",
-                "",
-                "- Owner: mwf_prompts",
-                f"- Dimension: {target.get('dimension', 'no_shared_agreement_clarity')}",
-                "- Recommended action: patch_prompt",
-                f"- Chosen edit/proposal: {chosen}",
-                "",
-                "## Regression Guard",
-                "",
-                "- Stage 4 prompt regions are out of scope and must remain untouched." if moment["id"] == REAL_SUPPORTED_MOMENT else "- The no-invented-shared-agreement hard invariant must remain passing.",
-                "",
-            ]
-        ),
+        render_improvement_plan(run_dir, moment, score, chosen, cross_moment),
         encoding="utf-8",
     )
     (run_dir / "patch-summary.md").write_text(
@@ -683,6 +812,100 @@ def run_improver(run_dir: Path, moment: dict[str, Any], score: dict[str, Any], a
         encoding="utf-8",
     )
     return version_path
+
+
+def evaluate_cross_moment_regularization(
+    moment: dict[str, Any],
+    candidate_responses: dict[str, str] | None = None,
+    *,
+    real: bool = False,
+    mock_judge: bool = True,
+) -> dict[str, Any]:
+    """Evaluate a candidate prompt against every other moment in the same stage.
+
+    The current implementation evaluates against the candidate response supplied
+    by tests or, in normal proposal mode, the moment's default seeded response.
+    Phase 4 can replace this with prompt-version-aware backend reruns without
+    changing the gate contract.
+    """
+    candidate_responses = candidate_responses or {}
+    results = []
+    for other in load_same_stage_moments(moment):
+        state = seed_state(other)
+        response = candidate_responses.get(other["id"], default_ai_response(state))
+        scored = score_response(other, response, real=real, mock_judge=mock_judge)
+        threshold = float(other["rubric"]["overall_pass_threshold"])
+        hard_failures = [item for item in scored["hard_invariants"] if not item["pass"]]
+        passed = scored["overall_score"] >= threshold and not hard_failures
+        reason = "passed"
+        if hard_failures:
+            reason = "hard invariant failed: " + ", ".join(item["id"] for item in hard_failures)
+        elif scored["overall_score"] < threshold:
+            reason = f"score {scored['overall_score']} below threshold {threshold}"
+        results.append(
+            {
+                "moment": other["id"],
+                "stages": other["stages"],
+                "score": scored["overall_score"],
+                "threshold": threshold,
+                "hard_invariant_failures": [item["id"] for item in hard_failures],
+                "pass": passed,
+                "reason": reason,
+            }
+        )
+    return {
+        "source_moment": moment["id"],
+        "same_stage_moment_count": len(results),
+        "pass": all(item["pass"] for item in results),
+        "results": results,
+    }
+
+
+def render_improvement_plan(
+    run_dir: Path,
+    moment: dict[str, Any],
+    score: dict[str, Any],
+    chosen: str | None,
+    cross_moment: dict[str, Any],
+) -> str:
+    target = score.get("improvement_targets", [{}])[0]
+    lines = [
+        "# Moment Eval Improvement Plan",
+        "",
+        f"Run: `{run_dir}`",
+        f"Moment: `{moment['id']}`",
+        f"Score: `{score['overall_score']}`",
+        "",
+        "## Ownership Routing",
+        "",
+        "- Owner: mwf_prompts",
+        f"- Dimension: {target.get('dimension', 'no_shared_agreement_clarity')}",
+        "- Recommended action: patch_prompt",
+        f"- Chosen edit/proposal: {chosen or 'none - rejected before proposal write'}",
+        "",
+        "## Cross-Moment Regularization",
+        "",
+        f"- Source moment: `{cross_moment['source_moment']}`",
+        f"- Same-stage moments checked: {cross_moment['same_stage_moment_count']}",
+        f"- Gate verdict: {'pass' if cross_moment['pass'] else 'reject'}",
+    ]
+    for item in cross_moment["results"]:
+        lines.append(
+            f"- `{item['moment']}`: {'pass' if item['pass'] else 'fail'} "
+            f"(score {item['score']} / threshold {item['threshold']}; {item['reason']})"
+        )
+    lines.extend(
+        [
+            "",
+            "## Regression Guard",
+            "",
+            "- Stage 4 prompt regions are out of scope and must remain untouched."
+            if moment["id"] == REAL_SUPPORTED_MOMENT
+            else "- Same-stage moments must remain above their individual thresholds with no hard invariant failures.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def write_run_artifacts(
@@ -782,13 +1005,19 @@ def run_real_iteration(
     if append:
         env["MWF_STAGE1_PROMPT_APPEND"] = append
     if args.mock_response:
-        run_result = {
-            "seed": real_seed_state(moment),
-            "aiResponse": args.mock_response,
-            "stateDelta": {"new_messages_in_db": [], "stage_progress": []},
-        }
+        if moment["id"] == REAL_SUPPORTED_MOMENT:
+            seed = real_seed_state(moment)
+        else:
+            seed = run_real_helper("seed-generic", {"moment": moment})
+        run_result = {"seed": seed, "aiResponse": args.mock_response, "stateDelta": {"new_messages_in_db": [], "stage_progress": []}}
     else:
-        run_result = run_real_helper("run", {"content": moment["trigger"]["body"]["content"]}, env_overrides=env)
+        payload: dict[str, Any] = {"content": moment["trigger"]["body"]["content"]}
+        if moment["id"] != REAL_SUPPORTED_MOMENT:
+            payload["moment"] = moment
+        if "trajectory" in moment:
+            run_result = run_real_helper("run-trajectory", {"moment": moment}, env_overrides=env)
+        else:
+            run_result = run_real_helper("run", payload, env_overrides=env)
     state = run_result["seed"]
     response = str(run_result.get("aiResponse", ""))
     if not response.strip():
@@ -869,7 +1098,20 @@ def run_loop(args: argparse.Namespace) -> list[Path]:
             state = seed_state(moment)
             response = args.mock_response or default_ai_response(state)
             score = score_response(moment, response, previous_score)
-            write_run_artifacts(run_dir, moment, state, response, score, started_at, iteration, active_prompt_version)
+            state_delta = None
+            if "trajectory" in moment:
+                state_delta = build_trajectory_state_delta(moment)
+            write_run_artifacts(
+                run_dir,
+                moment,
+                state,
+                response,
+                score,
+                started_at,
+                iteration,
+                active_prompt_version,
+                state_delta=state_delta,
+            )
         created.append(run_dir)
 
         should_improve = (
@@ -878,7 +1120,14 @@ def run_loop(args: argparse.Namespace) -> list[Path]:
             and score["overall_score"] < args.target_score
         )
         if should_improve:
-            active_prompt_version = run_improver(run_dir, moment, score, args.allow_protected_branch_patch)
+            active_prompt_version = run_improver(
+                run_dir,
+                moment,
+                score,
+                args.allow_protected_branch_patch,
+                real=args.real,
+                mock_judge=args.mock_judge,
+            )
             write_run_artifacts(
                 run_dir,
                 moment,
@@ -896,6 +1145,52 @@ def run_loop(args: argparse.Namespace) -> list[Path]:
         if score["overall_score"] >= args.target_score or args.no_improve:
             break
         previous_score = score
+    return created
+
+
+def build_trajectory_state_delta(moment: dict[str, Any]) -> dict[str, Any]:
+    steps = []
+    for index, step in enumerate(moment.get("trajectory", []), start=1):
+        steps.append(
+            {
+                "turn": index,
+                "user_turn": step["user_turn"],
+                "ai_response_persisted": step["expected_ai_response"],
+                "seed_for_next_turn": {
+                    "previous_ai_response": step["expected_ai_response"],
+                    "history_length_after_turn": index * 2,
+                },
+            }
+        )
+    return {
+        "new_messages_in_db": [
+            {"role": "USER", "content": step["user_turn"]}
+            for step in moment.get("trajectory", [])
+        ]
+        + [
+            {"role": "ASSISTANT", "content": step["expected_ai_response"]}
+            for step in moment.get("trajectory", [])
+        ],
+        "stage_progress_diff": [],
+        "trajectory_steps": steps,
+    }
+
+
+def run_library(args: argparse.Namespace) -> list[Path]:
+    created: list[Path] = []
+    failures: list[str] = []
+    for moment_id in list_moments():
+        run_args = argparse.Namespace(**vars(args))
+        run_args.command = "run"
+        run_args.moment = moment_id
+        try:
+            created.extend(run_loop(run_args))
+        except MomentEvalError as exc:
+            failures.append(f"{moment_id}: {exc}")
+            if not getattr(args, "keep_going", False):
+                break
+    if failures:
+        raise MomentEvalError("run-library failed:\n" + "\n".join(failures))
     return created
 
 
@@ -936,6 +1231,27 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Allow patch mode on protected branches",
     )
+    library = sub.add_parser("run-library", help="Run every moment yaml in eval/moments")
+    library.add_argument("--real", action="store_true", help="Use the real command path where supported")
+    library.add_argument("--target-score", type=float, default=4.0)
+    library.add_argument("--max-iterations", type=int, default=1)
+    library.add_argument("--mock-judge", action="store_true", default=None, help="Use deterministic local scoring")
+    library.add_argument("--max-judge-cost-cents", type=float, default=5.0)
+    library.add_argument("--mock-response", help="Use this response for every moment")
+    library.add_argument("--no-improve", action="store_true", help="Do not invoke the improver even on failing scores")
+    library.add_argument("--keep-going", action="store_true", help="Continue after a moment fails")
+    library.add_argument(
+        "--improvement-mode",
+        choices=("proposal", "patch"),
+        default="proposal",
+    )
+    library.add_argument(
+        "--allow-protected-branch-patch",
+        type=parse_bool,
+        nargs="?",
+        const=True,
+        default=False,
+    )
     return parser
 
 
@@ -973,14 +1289,14 @@ def main(argv: list[str] | None = None) -> int:
             result = run_real_helper("cleanup", args.older_than)
             print(json.dumps(result, sort_keys=True))
             return 0
-        if args.command == "run":
+        if args.command in {"run", "run-library"}:
             if args.mock_judge is None:
                 args.mock_judge = not args.real
             if args.max_judge_cost_cents < 0:
                 raise MomentEvalError("--max-judge-cost-cents must be non-negative")
             if args.improvement_mode == "patch":
                 ensure_patch_branch(args.allow_protected_branch_patch)
-            created = run_loop(args)
+            created = run_library(args) if args.command == "run-library" else run_loop(args)
             for path in created:
                 print(path.relative_to(REPO_ROOT))
             return 0
