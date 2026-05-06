@@ -204,6 +204,20 @@ def create_alignment_pr(request: PrRequest, *, dry_run: bool = False) -> dict[st
         if create.returncode != 0:
             raise AlignmentLoopError(create.stderr.strip() or create.stdout.strip())
         url = create.stdout.strip().splitlines()[-1]
+        ensure_label = run_command(
+            [
+                "gh",
+                "label",
+                "create",
+                request.label,
+                "--description",
+                "Automated MWF alignment-loop prompt improvement",
+                "--color",
+                "5319e7",
+            ]
+        )
+        if ensure_label.returncode != 0 and "already exists" not in (ensure_label.stderr + ensure_label.stdout).lower():
+            raise AlignmentLoopError(ensure_label.stderr.strip() or ensure_label.stdout.strip())
         label = run_command(["gh", "pr", "edit", url, "--add-label", request.label])
         if label.returncode != 0:
             raise AlignmentLoopError(label.stderr.strip() or label.stdout.strip())

@@ -90,6 +90,7 @@ Branch: `feat/autonomous-alignment-20260506`
 - [x] E2E browser smoke.
 - [x] Actual Adam/Eve gold session via existing skill if available.
 - [ ] Documentation updates.
+- [x] Scoped live auto-loop PR creation verified.
 - [ ] Final PR opened.
 
 ### Phase 5 Validation
@@ -99,12 +100,13 @@ Branch: `feat/autonomous-alignment-20260506`
 - `python3 scripts/mwf_gold_loop.py browser-smoke` - exit 0 after starting the E2E web bundle on `localhost:8082`; preflight `services: ok`; browser control `ok`.
 - `python3 scripts/mwf_gold_loop.py run --scenario adam-eve --max-iterations 1 --max-actor-turns 2 --actor-timeout 180 --scorer-timeout 120 --mock-scorer --no-improve-on-final-fail --start-services --skip-transcripts` - exit 1; seeded session `cmotuew6i000apx98q567i3d6`, then the Adam `codex exec` actor timed out after 180 seconds before returning `MWF_GOLD_STATUS`. Scratch log: `docs/product/gold-session-scratch/2026-05-06-cmotuew6i000apx98q567i3d6-adam.md`.
 - Retry: `python3 scripts/mwf_gold_loop.py run --scenario adam-eve --max-iterations 1 --max-actor-turns 1 --actor-timeout 600 --scorer-timeout 120 --mock-scorer --no-improve-on-final-fail --start-services --skip-transcripts` - exit 0; one bounded Adam-side actor run reached Stage 2 and returned `needs_partner` blocked on Eve. Mock score `3.0`, target not reached because only Adam's side was driven. Scratch log: `docs/product/gold-session-scratch/2026-05-06-cmotukf3a001qpx98mymq0p7t-adam.md`.
+- `python3 scripts/mwf_alignment_loop.py --config <1-moment temp config> --timestamp autonomous-live-scoped-real-20260506 --real --real-judge --skip-outer-loop` - exit 0; created loop PR #379 (`https://github.com/shantamg/meet-without-fear/pull/379`) for `adam-eve-stage-2-consent-gate-169`. The PR opened successfully; initial label add failed because `loop:auto-improvement` did not exist. Created the label and applied it manually, then patched `create_alignment_pr()` to create the label automatically if missing.
 
 ### Phase 5 Notes
 
 - The backend was already running on `localhost:3000`; a redundant `npm run dev:api` attempt hit `EADDRINUSE`.
 - The E2E web server was started with `npm run dev:mobile:e2e` for browser smoke and stopped afterward.
-- Full live auto-loop PR creation remains outstanding. The bounded Adam-side gold run completed; a full two-sided Adam/Eve completion would require driving Eve in a second actor/session.
+- Full-batch live auto-loop was intentionally not run to avoid opening dozens of auto-PRs at once. Scoped live auto-loop PR creation is verified by #379. The bounded Adam-side gold run completed; a full two-sided Adam/Eve completion would require driving Eve in a second actor/session.
 
 ## Questions For Shantam
 
