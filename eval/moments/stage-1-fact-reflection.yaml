@@ -1,0 +1,96 @@
+{
+  "id": "stage-1-fact-reflection",
+  "stages": [1],
+  "description": "Adam is in Stage 1 after naming several concrete facts about Eve wanting more travel, growth, and change. The AI must reflect the newly named fact without grading, advice, empathy-attempt language, needs language, or strategy/proposal language.",
+  "seed": {
+    "session": {
+      "status": "ACTIVE",
+      "stage": 1,
+      "tag": "[mwf-moment-eval] stage-1-fact-reflection"
+    },
+    "participants": [
+      {
+        "role": "invitor",
+        "name": "Adam",
+        "compactSigned": true,
+        "stageGates": {
+          "0": { "compactSigned": true },
+          "1": { "feelHeardConfirmed": false }
+        }
+      },
+      {
+        "role": "invitee",
+        "name": "Eve",
+        "compactSigned": true,
+        "stageGates": {
+          "0": { "compactSigned": true },
+          "1": { "feelHeardConfirmed": false }
+        }
+      }
+    ],
+    "history_source": "docs/product/source-material/golden-transcripts/adam-eve.md:43-67",
+    "prior_history_summary": [
+      "Adam says they have a stable life and he feels none of it matters to Eve.",
+      "MWF reflects that Adam has built something solid and does not feel it is appreciated.",
+      "Adam says Eve raises travel, new experiences, and growth, and he contracts.",
+      "MWF reflects the loop of Eve raising something, Adam pulling back, and then carrying the weight.",
+      "Adam says he loves Eve but is bracing for confirmation that he is not enough."
+    ]
+  },
+  "trigger": {
+    "type": "api_call",
+    "endpoint": "POST /sessions/:id/messages/stream",
+    "actor": "Adam",
+    "body": {
+      "content": "The thing I haven't said out loud is that I am scared she might be right about me. That I have held us back and I don't know how to be different."
+    }
+  },
+  "capture": [
+    "ai_message_text",
+    "new_messages_in_db",
+    "stage_progress_diff",
+    "sse_events"
+  ],
+  "rubric": {
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/adam-eve.md:43-67",
+    "judge_prompt": "eval/scorer/judge-prompts/stage-1-fact-reflection.md",
+    "dimensions": [
+      {
+        "id": "reflection_quality",
+        "description": "Reflects the named fact and the emotional weight in Adam's own frame, without arguing or expanding beyond the evidence.",
+        "pass_threshold": 4
+      },
+      {
+        "id": "openness",
+        "description": "Leaves Adam room to continue and does not close the witness phase prematurely.",
+        "pass_threshold": 4
+      },
+      {
+        "id": "faithfulness_to_fact",
+        "description": "Faithfully tracks the new fact: Adam fears Eve may be right that he held them back and does not know how to change.",
+        "pass_threshold": 4
+      }
+    ],
+    "overall_pass_threshold": 4.0,
+    "hard_invariants": [
+      {
+        "id": "no_stage_jump_content",
+        "description": "No Stage 2 empathy attempts, Stage 3 needs language, or Stage 4 proposals/strategies."
+      },
+      {
+        "id": "no_advice_or_solutioning",
+        "description": "No advice, suggestions, solutions, action steps, or what-if proposals."
+      },
+      {
+        "id": "no_grading_of_user",
+        "description": "No praise or grading of Adam's statement."
+      }
+    ]
+  },
+  "improver": {
+    "candidate_owners": ["mwf_prompts"],
+    "default_owner": "mwf_prompts",
+    "allowed_stage_prompt_region": "buildStage1Prompt",
+    "forbidden_stage_prompt_region": "buildStage4Prompt"
+  }
+}
