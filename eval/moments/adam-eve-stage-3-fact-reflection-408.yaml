@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the fact-reflection posture shown in the gold transcript: That\u2019s worth holding onto. The need is there \u2014 you just haven\u2019t found a source for it that works.Something else you said early on \u2014 that you love her, that you\u2019re terrified of losi",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "MWF acknowledges Adam's articulated pattern (outsourcing okayness to external sources) without judgment, then pivots to a deeper, unexamined layer. Pass requires: (1) explicit validation that the need itself is legitimate, (2) clear naming that the *source* is the problem, not the need, and (3) immediate redirection to a different emotional substrate (love/terror) rather than staying in the outsourcing loop. This prevents false resolution and honors the protocol posture of clarifying needs without rushing to strategy. Evidence: That's worth holding onto. The need is there \u2014 you just haven't found a source for it that works. [Validates need + names source problem] Something else you said early on \u2014 that you love her, that you're terrified of losing her. What's underneath that specifically? [Redirects to unexamined emotional substrate]",
+        "id": "need_validation_without_outsourcing",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Clarify needs, consent, and mutual reveal without analyzing overlap or rushing strategy.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "MWF transitions from Adam's current articulation to a new line of inquiry (fear of loss) without framing it as a correction or implying Adam *must* go there. Pass requires: (1) the pivot feels like an invitation, not a demand, (2) it references something Adam already said (early on), grounding it in his own words, and (3) it uses open-ended questioning ('What's underneath') rather than leading or prescriptive language. This maintains Stage 3 posture of clarifying needs, not analyzing or strategizing. Evidence: Something else you said early on \u2014 that you love her, that you're terrified of losing her. What's underneath that specifically? [Invitation framed as reflection on his own prior statement, open-ended, non-coercive]",
+        "id": "consent_to_go_deeper_without_coercion",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "MWF explicitly separates the legitimate need (to feel okay from the inside) from the failed strategies (outsourcing to life, relationship status, performance). Pass requires: (1) no suggestion that Adam should 'stop outsourcing' or 'fix' the strategy, (2) clear acknowledgment that the need is real and valid, (3) no pivot to problem-solving or action steps, and (4) language that holds the need as *his to carry*, not something to be resolved in this moment. This honors MWF protocol of clarifying without rushing to repair. Evidence: That's worth holding onto. The need is there \u2014 you just haven't found a source for it that works. [Separates need from strategy; validates need; does not prescribe fix]",
+        "id": "distinguish_need_from_strategy",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF moves from Adam's analysis of his own outsourcing pattern to an emotional substrate (love, terror, loss) that may be underneath the outsourcing itself. Pass requires: (1) the new line of inquiry is not about *what Adam does* but about *what Adam feels*, (2) it names a relational fear (losing her) rather than a performance fear (not getting it right), and (3) it opens space for Adam to discover what he actually needs from connection, not what he thinks he should need. This is Stage 3 posture: clarifying needs, not analyzing behavior. Evidence: Something else you said early on \u2014 that you love her, that you're terrified of losing her. What's underneath that specifically? [Shifts from outsourcing analysis to relational/emotional substrate; names terror and love as the real material]",
+        "id": "redirect_to_relational_substrate_not_performance",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 9455,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 27397,
+        "input_tokens": 300,
+        "output_tokens": 913
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

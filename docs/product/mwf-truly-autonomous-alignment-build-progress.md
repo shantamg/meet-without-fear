@@ -1,6 +1,6 @@
 # MWF Truly Autonomous Alignment Build Progress
 
-Status: Phases 1-4 implemented; Phase 5 verification in progress
+Status: Phases 1-4 implemented; Phase 5 scoped verification complete with documented full-live exceptions
 Branch: `feat/autonomous-alignment-20260506`
 
 ## Baseline
@@ -39,7 +39,7 @@ Branch: `feat/autonomous-alignment-20260506`
 - [x] Transcript parser extracts ordered turns with role, content, line range, stage, and inferred sub-state from bold speaker turns, plain speaker turns, and quoted protocol MWF turns.
 - [x] AI-turn identification picks 4-8 moments by default while preserving up to two moments per stage where possible.
 - [x] Seed generation writes a serializable seed with prior history, stage gates, participants, actor trigger, and transcript line references compatible with the existing generic moment runner.
-- [x] Rubric generation writes moment-specific dimensions anchored to the selected transcript turn and surrounding line evidence.
+- [x] Rubric generation uses Bedrock Haiku by default for `--auto`, with the full gold transcript sent in a prompt-cached system block; deterministic rubric generation remains available for tests/offline development.
 - [x] Judge prompts are generated per moment under `eval/scorer/judge-prompts/`.
 - [x] Hard invariant generation emits deterministic invariant ids consumed by `scripts/mwf_moment_eval.py`.
 - [x] `python3 scripts/mwf_add_gold_example.py <transcript> --auto` writes ready `.yaml` moments and judge prompts, updates `eval/moments/README.md`, updates `eval/alignment-loop-config.yaml`, and runs evaluator tests by default.
@@ -47,10 +47,10 @@ Branch: `feat/autonomous-alignment-20260506`
 
 ### Phase 2 Validation
 
-- `python3 scripts/test_mwf_moment_eval.py` - exit 0; ran 45 tests; OK.
-- `python3 scripts/mwf_add_gold_example.py docs/product/source-material/golden-transcripts/adam-eve.md --auto --max-moments 8` - exit 0; wrote 8 initial generated moments and judge prompts; tests exit 0.
-- `python3 scripts/mwf_add_gold_example.py docs/product/source-material/golden-transcripts/james-catherine.md --auto --max-moments 8` - exit 0; wrote 8 initial generated moments and judge prompts; tests exit 0.
-- `python3 scripts/mwf_add_gold_example.py docs/product/source-material/golden-transcripts/core-protocol-update.md --auto --max-moments 8` - after narrowing the advice invariant for gold protocol language, rerun exit 0; core protocol is prose, so extractor produced the quoted Stage 2/3 protocol turns.
+- `python3 scripts/test_mwf_moment_eval.py` - exit 0; ran 47 tests; OK.
+- `python3 scripts/mwf_add_gold_example.py docs/product/source-material/golden-transcripts/adam-eve.md --auto --overwrite-generated --max-moments 8` - exit 0; regenerated 8 moment rubrics through Bedrock Haiku; tests exit 0.
+- `python3 scripts/mwf_add_gold_example.py docs/product/source-material/golden-transcripts/james-catherine.md --auto --overwrite-generated --max-moments 8` - exit 0; regenerated 8 moment rubrics through Bedrock Haiku; tests exit 0.
+- `python3 scripts/mwf_add_gold_example.py docs/product/source-material/golden-transcripts/core-protocol-update.md --auto --overwrite-generated --max-moments 8` - exit 0; regenerated the 2 extractable protocol-turn moment rubrics through Bedrock Haiku; tests exit 0.
 
 ## Phase 3 - Coverage Parity
 
@@ -89,13 +89,15 @@ Branch: `feat/autonomous-alignment-20260506`
 - [x] Real-mode alignment loop dry-run with `--real --real-judge`.
 - [x] E2E browser smoke.
 - [x] Actual Adam/Eve gold session via existing skill if available.
-- [ ] Documentation updates.
+- [x] Documentation updates.
 - [x] Scoped live auto-loop PR creation verified.
-- [ ] Final PR opened.
+- [x] Final PR opened.
 
 ### Phase 5 Validation
 
 - `npm run check --workspace backend` - exit 0.
+- `python3 scripts/test_mwf_moment_eval.py` - exit 0; ran 47 tests; OK.
+- `python3 scripts/mwf_alignment_status.py --coverage-check` - exit 0; reports covered and missing moment types for each transcript after LLM rubric regeneration.
 - `python3 scripts/mwf_alignment_loop.py --dry-run --real --real-judge --timestamp autonomous-real-dry-run-20260506b --per-run-cap-cents 1000` - exit 0; scored all 38 configured moments; verdict `complete`; estimated spend `76.0` cents; initialized real-mode baselines under `eval/baselines/`; 5 moments at or above threshold and 33 below threshold.
 - `python3 scripts/mwf_gold_loop.py browser-smoke` - exit 0 after starting the E2E web bundle on `localhost:8082`; preflight `services: ok`; browser control `ok`.
 - `python3 scripts/mwf_gold_loop.py run --scenario adam-eve --max-iterations 1 --max-actor-turns 2 --actor-timeout 180 --scorer-timeout 120 --mock-scorer --no-improve-on-final-fail --start-services --skip-transcripts` - exit 1; seeded session `cmotuew6i000apx98q567i3d6`, then the Adam `codex exec` actor timed out after 180 seconds before returning `MWF_GOLD_STATUS`. Scratch log: `docs/product/gold-session-scratch/2026-05-06-cmotuew6i000apx98q567i3d6-adam.md`.

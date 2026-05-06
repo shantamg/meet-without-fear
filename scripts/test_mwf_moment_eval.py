@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import subprocess
 import sys
@@ -769,6 +771,21 @@ class TestGoldExampleOnboarding(unittest.TestCase):
             config = json.loads((tmp_path / "alignment-loop-config.yaml").read_text(encoding="utf-8"))
             self.assertEqual(len(config["moments"]), len(ready))
 
+    def test_auto_gold_example_cli_uses_llm_rubrics_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            transcript = Path(tmp) / "Auto Couple.md"
+            transcript.write_text("# Auto Couple\n", encoding="utf-8")
+            with mock.patch.object(
+                add_gold,
+                "onboard",
+                return_value={"transcript": "x", "drafts": [], "moments": [], "judge_prompts": [], "index": "i", "tests": None},
+            ) as onboard:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    result = add_gold.main([str(transcript), "--auto", "--skip-tests"])
+
+        self.assertEqual(result, 0)
+        self.assertTrue(onboard.call_args.kwargs["llm_rubrics"])
+
 
 class TestMomentExtraction(unittest.TestCase):
     def test_parse_transcript_infers_turns_stages_and_substates(self) -> None:
@@ -823,6 +840,58 @@ class TestMomentExtraction(unittest.TestCase):
         self.assertIn("prior_history_summary", moment["seed"])
         self.assertIn("dimensions", moment["rubric"])
         self.assertIn("Gold AI Turn", result["selected_moments"][0]["judge_prompt"])
+
+    def test_llm_rubric_generation_uses_real_helper_and_normalizes_dimensions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sample.md"
+            path.write_text("# Sample\n\n## Stage 1\n**Adam:** I am scared.\n**MWF:** You are scared. Is that close?\n", encoding="utf-8")
+            ai_turn = extract.TranscriptTurn(
+                role="ai",
+                speaker="MWF",
+                content="You are scared. Is that close?",
+                start_line=5,
+                end_line=5,
+                stage=1,
+                sub_state="fact-reflection",
+            )
+            trigger = extract.TranscriptTurn(
+                role="user",
+                speaker="Adam",
+                content="I am scared.",
+                start_line=4,
+                end_line=4,
+                stage=1,
+                sub_state="fact-reflection",
+            )
+            fake = {
+                "model": "haiku-test",
+                "durationMs": 123,
+                "usage": {"input_tokens": 10, "output_tokens": 20},
+                "promptCaching": "full transcript sent as cache_control ephemeral system block",
+                "parsed": {
+                    "dimensions": [
+                        {
+                            "id": "Fact Reflection",
+                            "description": "Reflects the fear without solving.",
+                            "pass_threshold": 4,
+                            "evidence_excerpt": "You are scared.",
+                        },
+                        {"id": "Consent", "description": "Asks whether it is close.", "pass_threshold": 4},
+                        {"id": "No Advice", "description": "Avoids advice.", "pass_threshold": 4},
+                    ]
+                },
+                "raw": "{}",
+            }
+            with mock.patch.object(extract.mme, "run_real_helper", return_value=fake) as helper:
+                dimensions, raw = extract.generate_rubric_via_llm(path, ai_turn, trigger, "excerpt")
+
+        self.assertEqual(raw["model"], "haiku-test")
+        self.assertEqual(dimensions[0]["id"], "fact_reflection")
+        self.assertTrue(dimensions[0]["llm_generated"])
+        self.assertIn("Evidence: You are scared.", dimensions[0]["description"])
+        helper.assert_called_once()
+        self.assertEqual(helper.call_args.args[0], "rubric")
+        self.assertEqual(helper.call_args.kwargs["stdin"]["aiTurn"]["content"], ai_turn.content)
 
 
 class TestAlignmentStatus(unittest.TestCase):

@@ -19,24 +19,52 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the fact-reflection posture shown in the gold transcript: When you step back and look at all of this \u2014 what's this really about for you? Answer in terms of what matters to you or what you're missing \u2014 not what's wrong with them.\nThe user ",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "AI consistently redirects user language from strategies, demands, or blame toward underlying universal human needs. When user frames response around what the other person should do or what's wrong with them, AI names the redirect explicitly and re-centers on the user's own experience of what matters or what's missing. Evidence: If the user answers in terms of the other person (e.g. blame, traits, or demands), the AI redirects: 'I hear that. Let me bring it back to you for a second \u2014 when that happens, what feels important or missing for you?' ... It avoids strategies ('I need them to\u2026') and redirects them",
+        "id": "need_not_strategy",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Clarify needs, consent, and mutual reveal without analyzing overlap or rushing strategy.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "AI does not treat repeated strategy framing as failure or push harder. Instead, it stays patient, continues reflecting the feeling underneath the strategy rather than the strategy itself, and allows the user to circle toward the need however many times necessary. The goal is finding the need, not correcting the user. Evidence: If the user returns repeatedly to strategy or demand framing after redirection, MWF does not treat this as a failure state or push harder. It continues reflecting the feeling underneath the strategy \u2014 not the strategy itself \u2014 and stays patient. The goal is to find the need, however long that takes.",
+        "id": "patient_circulation",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "AI offers language as suggestion, not correction. It translates toward clear universal human needs through reflective questions that invite user confirmation, rejection, or refinement. The user confirms, rejects, or refines until the expression feels accurate to them. No need is finalized without explicit user agreement. Evidence: It offers language as a suggestion, not a correction. Examples: 'It sounds like wanting to feel taken seriously \u2014 does that fit?' 'Is this about wanting more support, or something slightly different?' The user confirms, rejects, or refines until it feels accurate.",
+        "id": "need_refinement_consent",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "AI holds both needs summaries until both users complete and confirm Stage 3. Before sharing any summary with the partner, AI names exactly what it would share and obtains explicit user approval. The Needs Share follows the same consent pattern as empathy consent in Stage 2\u2014no sharing without explicit approval. Evidence: Both needs summaries are held until both users complete and confirm Stage 3. Then each user is asked for consent to share their summary with their partner, following the same pattern as the empathy consent in Stage 2: the AI names exactly what it would share, and the user explicitly approves before anything is sent.",
+        "id": "consent_before_share",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "When both users consent and needs are shared, AI presents both summaries side by side without interpreting overlap, compatibility, or strategic alignment. AI asks 'What do you notice?' and reflects back what users name, giving the seeing to the users rather than analyzing or framing the needs for them. Evidence: Once both users consent, each sees the other's needs summary side by side \u2014 their own and their partner's together. The AI presents both summaries and asks: 'What do you notice?' \u2014 giving the seeing to the users rather than interpreting it for them. It reflects back what each person names, without framing the needs as compatible or overlapping.",
+        "id": "mutual_reveal_no_analysis",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 6483,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 5374,
+        "input_tokens": 1115,
+        "output_tokens": 864
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

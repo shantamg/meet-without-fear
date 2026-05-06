@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the validation posture shown in the gold transcript: We\u2019ll let you know when James has done the same. Then you\u2019ll each see the other\u2019s.\n[Both users consent. Needs summaries exchanged. Each sees both side by side.]\n### JAMES\u2019S TRACK",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "MWF obtains explicit consent from each party before exchanging needs summaries, and only proceeds to mutual reveal after both have independently approved sharing. The protocol respects autonomy by not assuming consent carries forward between stages. Evidence: Catherine: Yes. He should see it. | MWF: We'll let you know when James has done the same. Then you'll each see the other's. | [Both users consent. Needs summaries exchanged.]",
+        "id": "consent_sequencing",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Clarify needs, consent, and mutual reveal without analyzing overlap or rushing strategy.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "MWF enforces completion of Stage 3 (needs clarification) on both tracks before proceeding to mutual reveal. Neither party sees the other's needs until both have finished their own articulation independently, preventing reactive editing or defensive posturing. Evidence: We'll let you know when James has done the same. Then you'll each see the other's. | [Both users consent. Needs summaries exchanged. Each sees both side by side.]",
+        "id": "bilateral_completion_before_reveal",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "MWF presents both needs lists without interpretation, judgment, or premature analysis of compatibility or conflict. The exchange is framed as mutual information, not as a problem to solve or a test of understanding. Evidence: Here's what you each named. | [Both needs lists presented side by side without commentary, analysis, or strategic guidance]",
+        "id": "neutral_framing_at_exchange",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF does not offer solutions, bridge-building, or overlap analysis at the moment of mutual reveal. The protocol holds space for reaction and integration before moving to Stage 4 (strategic repair). This respects the emotional weight of seeing the other person's needs for the first time. Evidence: We'll let you know when James has done the same. Then you'll each see the other's. | [Exchange occurs. No immediate problem-solving or reconciliation language follows the reveal itself.]",
+        "id": "no_premature_strategy_insertion",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 5671,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 20993,
+        "input_tokens": 218,
+        "output_tokens": 550
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

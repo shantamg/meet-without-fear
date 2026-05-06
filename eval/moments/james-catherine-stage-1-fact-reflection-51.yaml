@@ -19,24 +19,52 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the fact-reflection posture shown in the gold transcript: You\u2019ve been giving a lot \u2014 financially, practically \u2014 and what you\u2019ve gotten back feels like criticism instead of appreciation.",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "The AI turn accurately mirrors back the factual content James stated without adding interpretation, diagnosis, or reframing. It reflects what he gave (financial provision, practical support) and what he received (criticism) as he named it, without inserting clinical language or emotional scaffolding. Evidence: James: 'I provided for her. I provided for her kids...I built a stable life. And the whole time it's been \u2014 you did this wrong, you said this wrong.' MWF: 'You've been giving a lot \u2014 financially, practically \u2014 and what you've gotten back feels like criticism instead of appreciation.' The AI turn uses James's own categories (financial, practical) and his own emotional verdict (criticism vs. appreciation) without reinterpretation.",
+        "id": "accurate_fact_reflection",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Witness the user accurately without advice, needs language, empathy drafting, or repair strategy.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "The AI turn holds witness posture by reflecting what James said without offering solutions, coping strategies, reframes, or advice about how to handle the dynamic. It does not suggest communication techniques, boundary-setting, or therapeutic interventions. Evidence: MWF: 'You've been giving a lot \u2014 financially, practically \u2014 and what you've gotten back feels like criticism instead of appreciation.' This is pure reflection. No 'have you tried,' no 'you might consider,' no suggestion that the dynamic could shift if James changed his approach or communication style.",
+        "id": "witness_posture_no_advice",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "The AI turn does not translate James's experience into needs language, does not name what he 'needs' or 'deserves,' and does not move toward Stage 3 work prematurely. It stays in Stage 1 witness mode without collapsing his experience into therapeutic categories. Evidence: MWF does not say 'You need to feel appreciated' or 'You deserve recognition' or 'Your need for respect isn't being met.' It reflects the asymmetry (giving vs. receiving criticism) without naming it as a need or prescribing what should happen next.",
+        "id": "no_premature_needs_language",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The AI turn does not begin drafting empathy statements for Catherine, does not speculate about her experience, and does not move toward perspective-taking or Stage 2 work. It stays focused on James's stated experience without bridging to the other party. Evidence: MWF does not say 'Catherine probably feels...' or 'From her side, she might see...' or 'She may not realize how much you've given.' The turn is singular-focused on James's report, not comparative or bridge-building.",
+        "id": "no_empathy_drafting",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The AI turn adheres to Stage 1 protocol by functioning as a fact-reflection that invites deeper exploration without steering toward resolution, repair, or mutual understanding. It creates space for James to continue witnessing his own experience. Evidence: The turn ends with a period, not a question. It does not ask 'What would appreciation look like?' or 'How could this change?' It simply reflects and holds. The next line in the transcript is James continuing to elaborate: 'Every single time.' The reflection created space for more witnessing, not for problem-solving.",
+        "id": "protocol_fidelity_stage_1",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 8729,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 20993
+        },
+        "cache_creation_input_tokens": 20993,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 303,
+        "output_tokens": 861
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

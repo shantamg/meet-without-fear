@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the validation posture shown in the gold transcript: We\u2019ll let you know when Catherine has done the same. Then you\u2019ll each see the other\u2019s.\n### CATHERINE\u2019S TRACK\n\u2014 THE NEEDS SHAREMWF: Before we move forward, I\u2019d like to share what yo",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "MWF obtains explicit consent from each party before sharing their needs summary with the other party. The AI does not assume agreement or proceed without verbal/written approval. Evidence: **MWF:** Are you willing to share this with Catherine? **James:** Yeah. Send it. **MWF:** We'll let you know when Catherine has done the same. Then you'll each see the other's.",
+        "id": "consent_before_share",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Clarify needs, consent, and mutual reveal without analyzing overlap or rushing strategy.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "MWF enforces a staged, parallel reveal process: both parties complete Stage 3 independently before either sees the other's needs list. This prevents reactive anchoring or premature negotiation. Evidence: **MWF:** We'll let you know when Catherine has done the same. Then you'll each see the other's. [Both users consent. Needs summaries exchanged. Each sees both side by side.]",
+        "id": "sequential_mutual_reveal",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "MWF does not interpret, judge, or analyze the gap between needs lists before both parties have seen them. The AI holds the summaries neutrally and waits for mutual reveal before any strategic work begins. Evidence: **MWF:** We'll let you know when Catherine has done the same. Then you'll each see the other's. [Both tracks advance to Stage 4 without commentary on alignment or conflict.]",
+        "id": "no_premature_analysis",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF frames the needs share as a neutral exchange of what matters to each person, not as a problem to solve or a test of compatibility. Language remains descriptive, not evaluative. Evidence: **MWF:** Before we move forward, I'd like to share what you named with James \u2014 and show you what he named in return. Here's what I'd share on your behalf: What matters to [needs list].",
+        "id": "clarity_of_needs_framing",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 5276,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 20993,
+        "input_tokens": 273,
+        "output_tokens": 533
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

@@ -169,7 +169,15 @@ def update_alignment_config(moment_ids: list[str]) -> None:
     ALIGNMENT_CONFIG.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def onboard(path: Path, *, skip_tests: bool = False, auto: bool = False, max_moments: int = 8) -> dict[str, Any]:
+def onboard(
+    path: Path,
+    *,
+    skip_tests: bool = False,
+    auto: bool = False,
+    max_moments: int = 8,
+    llm_rubrics: bool = False,
+    overwrite_generated: bool = False,
+) -> dict[str, Any]:
     source = path.resolve()
     text = validate_transcript(source)
     slug = slugify(source.stem)
@@ -180,8 +188,8 @@ def onboard(path: Path, *, skip_tests: bool = False, auto: bool = False, max_mom
     if source != dest.resolve():
         shutil.copyfile(source, dest)
     if auto:
-        extraction = extractor.extract_moments(dest, max_moments=max_moments)
-        written = extractor.write_extracted_moments(extraction, overwrite=False)
+        extraction = extractor.extract_moments(dest, max_moments=max_moments, use_llm_rubrics=llm_rubrics)
+        written = extractor.write_extracted_moments(extraction, overwrite=overwrite_generated)
         update_alignment_config([item["moment"]["id"] for item in extraction["selected_moments"]])
         drafts: list[Path] = []
     else:
@@ -211,6 +219,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("transcript", type=Path)
     parser.add_argument("--auto", action="store_true", help="Auto-extract ready moment yamls and judge prompts instead of .draft scaffolds")
     parser.add_argument("--max-moments", type=int, default=8)
+    parser.add_argument(
+        "--no-llm-rubrics",
+        action="store_true",
+        help="Use deterministic rubric generation for --auto instead of Bedrock Haiku",
+    )
+    parser.add_argument(
+        "--overwrite-generated",
+        action="store_true",
+        help="Allow --auto to replace existing generated moment yamls and judge prompts",
+    )
     parser.add_argument("--skip-tests", action="store_true", help="Only for unit tests; normal onboarding runs evaluator tests")
     return parser
 
@@ -218,7 +236,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        result = onboard(args.transcript, skip_tests=args.skip_tests, auto=args.auto, max_moments=args.max_moments)
+        result = onboard(
+            args.transcript,
+            skip_tests=args.skip_tests,
+            auto=args.auto,
+            max_moments=args.max_moments,
+            llm_rubrics=args.auto and not args.no_llm_rubrics,
+            overwrite_generated=args.overwrite_generated,
+        )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     except GoldExampleError as exc:

@@ -259,6 +259,65 @@ def deterministic_rubric(stage: int | None, sub_state: str, ai_turn: TranscriptT
     ]
 
 
+def normalize_llm_dimensions(result: dict[str, Any]) -> list[dict[str, Any]]:
+    parsed = result.get("parsed")
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("dimensions"), list):
+        raise ExtractMomentsError(f"Rubric generator returned unparseable JSON: {result.get('raw')}")
+    dimensions: list[dict[str, Any]] = []
+    for index, raw in enumerate(parsed["dimensions"], start=1):
+        if not isinstance(raw, dict):
+            continue
+        dim_id = slugify(str(raw.get("id") or f"dimension-{index}")).replace("-", "_")
+        description = str(raw.get("description") or "").strip()
+        evidence = str(raw.get("evidence_excerpt") or "").strip()
+        if not description:
+            continue
+        if evidence and evidence not in description:
+            description = f"{description} Evidence: {evidence}"
+        dimensions.append(
+            {
+                "id": dim_id,
+                "description": description,
+                "pass_threshold": int(raw.get("pass_threshold") or 4),
+                "llm_generated": True,
+            }
+        )
+    if len(dimensions) < 3:
+        raise ExtractMomentsError("Rubric generator returned fewer than 3 usable dimensions")
+    return dimensions[:5]
+
+
+def generate_rubric_via_llm(
+    transcript_path: Path,
+    ai_turn: TranscriptTurn,
+    trigger: TranscriptTurn | None,
+    transcript_excerpt: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    payload = {
+        "transcript": transcript_path.read_text(encoding="utf-8"),
+        "transcriptPath": display_path(transcript_path),
+        "aiTurn": {
+            "content": ai_turn.content,
+            "stage": ai_turn.stage,
+            "subState": ai_turn.sub_state,
+            "startLine": ai_turn.start_line,
+            "endLine": ai_turn.end_line,
+        },
+        "trigger": None
+        if trigger is None
+        else {
+            "content": trigger.content,
+            "speaker": trigger.speaker,
+            "startLine": trigger.start_line,
+            "endLine": trigger.end_line,
+        },
+        "protocolPosture": protocol_posture(ai_turn.stage),
+        "transcriptExcerpt": transcript_excerpt,
+    }
+    result = mme.run_real_helper("rubric", stdin=payload)
+    return normalize_llm_dimensions(result), result
+
+
 def seed_for_turn(transcript_path: Path, turns: list[TranscriptTurn], index: int) -> dict[str, Any]:
     ai_turn = turns[index]
     prior = turns[:index]
@@ -338,13 +397,31 @@ def extract_transcript_excerpt(path: Path, start: int, end: int) -> str:
     return "\n".join(lines[max(0, start - 1):end])
 
 
-def build_moment(transcript_path: Path, turns: list[TranscriptTurn], index: int) -> tuple[dict[str, Any], str]:
+def build_moment(
+    transcript_path: Path,
+    turns: list[TranscriptTurn],
+    index: int,
+    *,
+    use_llm_rubric: bool = False,
+) -> tuple[dict[str, Any], str]:
     ai_turn = turns[index]
     trigger = turns[index - 1] if index > 0 and turns[index - 1].role == "user" else None
     moment_id = moment_id_for(transcript_path, ai_turn)
     reference_start = trigger.start_line if trigger else ai_turn.start_line
     reference_end = ai_turn.end_line
     prompt_path = JUDGE_PROMPTS_ROOT / f"{moment_id}.md"
+    excerpt = extract_transcript_excerpt(transcript_path, reference_start, reference_end)
+    rubric_dimensions = deterministic_rubric(ai_turn.stage, ai_turn.sub_state, ai_turn)
+    rubric_generation: dict[str, Any] = {"mode": "deterministic"}
+    if use_llm_rubric:
+        rubric_dimensions, raw_rubric = generate_rubric_via_llm(transcript_path, ai_turn, trigger, excerpt)
+        rubric_generation = {
+            "mode": "bedrock_haiku",
+            "model": raw_rubric.get("model"),
+            "usage": raw_rubric.get("usage"),
+            "durationMs": raw_rubric.get("durationMs"),
+            "prompt_caching": raw_rubric.get("promptCaching"),
+        }
     moment = {
         "id": moment_id,
         "stages": [ai_turn.stage or 1],
@@ -362,23 +439,23 @@ def build_moment(transcript_path: Path, turns: list[TranscriptTurn], index: int)
         "rubric": {
             "reference_transcript_lines": f"{display_path(transcript_path)}:{reference_start}-{reference_end}",
             "judge_prompt": display_path(prompt_path),
-            "dimensions": deterministic_rubric(ai_turn.stage, ai_turn.sub_state, ai_turn),
+            "dimensions": rubric_dimensions,
+            "generation": rubric_generation,
             "overall_pass_threshold": 4.0,
             "hard_invariants": hard_invariants_for(ai_turn.stage, ai_turn.sub_state),
         },
         "expected_response": ai_turn.content,
         "improver": {"candidate_owners": ["mwf_prompts"], "default_owner": "mwf_prompts"},
     }
-    excerpt = extract_transcript_excerpt(transcript_path, reference_start, reference_end)
     return moment, judge_prompt(moment, trigger, ai_turn, excerpt)
 
 
-def extract_moments(transcript_path: Path, *, max_moments: int = 8) -> dict[str, Any]:
+def extract_moments(transcript_path: Path, *, max_moments: int = 8, use_llm_rubrics: bool = False) -> dict[str, Any]:
     turns = parse_transcript(transcript_path)
     selected = choose_moments(turns, max_moments=max_moments)
     moments = []
     for index in selected:
-        moment, prompt = build_moment(transcript_path, turns, index)
+        moment, prompt = build_moment(transcript_path, turns, index, use_llm_rubric=use_llm_rubrics)
         moments.append({"moment": moment, "judge_prompt": prompt})
     return {
         "transcript": display_path(transcript_path),
@@ -417,13 +494,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-moments", type=int, default=8)
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--llm-rubrics", action="store_true", help="Generate rubric dimensions with Bedrock Haiku")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        extraction = extract_moments(args.transcript, max_moments=args.max_moments)
+        extraction = extract_moments(args.transcript, max_moments=args.max_moments, use_llm_rubrics=args.llm_rubrics)
         if args.write:
             written = write_extracted_moments(extraction, overwrite=args.overwrite)
             print(json.dumps({"written": [display_path(path) for path in written]}, indent=2, sort_keys=True))

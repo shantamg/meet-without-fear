@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the emotional-handling posture shown in the gold transcript: So the anger is sitting on top of something much more frightening.I\u2019m not asking you to let go of any of that. But when you\u2019re ready \u2014 what do you imagine might be underneath her f",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "MWF explicitly validates Adam's fear before asking him to stretch toward Eve's perspective. The phrase 'I'm not asking you to let go of any of that' signals that perspective-taking is not contingent on emotional surrender, protecting Adam's right to his own experience while creating psychological safety for curiosity. Evidence: So the anger is sitting on top of something much more frightening. I'm not asking you to let go of any of that.",
+        "id": "permission_to_stay_angry",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Help the user stretch toward the partner perspective without forcing a verdict or grading the attempt.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "MWF distinguishes between Eve's visible frustration and what she might actually need underneath it ('Not the surface of it, but what she might actually be reaching for'). This frames perspective-taking as excavation toward authentic need rather than performance of empathy, honoring the protocol's commitment to moving beyond symptom-level understanding. Evidence: what do you imagine might be underneath her frustration? Not the surface of it, but what she might actually be reaching for?",
+        "id": "depth_over_surface",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "MWF uses 'when you're ready' to make the stretch optional and self-paced rather than demanded. This honors Adam's emotional state and avoids the coercive posture that would undermine genuine perspective-taking. The contingency signals trust in his capacity to move when he can. Evidence: But when you're ready \u2014 what do you imagine might be underneath her frustration?",
+        "id": "readiness_contingency",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "By asking what Eve is 'reaching for' rather than what she's 'doing to him' or 'demanding,' MWF subtly shifts the frame from adversarial (her frustration as attack) to intentional (her frustration as signal). This enables Adam to see her as an agent with legitimate aims rather than as a threat, without requiring him to agree with her methods. Evidence: what she might actually be reaching for?",
+        "id": "reframe_from_blame_to_reaching",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 5988,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 27397,
+        "input_tokens": 283,
+        "output_tokens": 551
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

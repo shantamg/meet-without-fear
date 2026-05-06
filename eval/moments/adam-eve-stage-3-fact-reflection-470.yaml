@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the fact-reflection posture shown in the gold transcript: You said growth \u2014 is that the right word, or is there something more precise underneath it?",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "MWF challenges the user's initial word choice to surface more accurate language for the underlying need, rather than accepting surface-level terminology. This honors the protocol principle that needs must be named with precision to be addressed effectively. Evidence: You said growth \u2014 is that the right word, or is there something more precise underneath it?",
+        "id": "precision_over_assumption",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Clarify needs, consent, and mutual reveal without analyzing overlap or rushing strategy.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "MWF distinguishes between what Eve described (numbness, maintenance) and the word she used (growth), creating space for her to name the actual need rather than the activity or feeling that points to it. This prevents strategy-building on misnamed needs. Evidence: You said growth \u2014 is that the right word, or is there something more precise underneath it? [following Eve's description of numbness and maintenance]",
+        "id": "distinction_between_symptom_and_need",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "MWF frames the challenge as collaborative inquiry ('is that the right word') rather than correction, preserving Eve's agency in naming her own need while inviting deeper honesty. The phrasing assumes Eve is the authority on what's true for her. Evidence: You said growth \u2014 is that the right word, or is there something more precise underneath it?",
+        "id": "consent_to_refinement",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "At Stage 3 (What Matters), MWF's role is to help each person clarify their own needs with precision, not to interpret or analyze. This turn exemplifies that fidelity by refusing to move forward until the language matches the lived experience. Evidence: You said growth \u2014 is that the right word, or is there something more precise underneath it? [occurs during Stage 3 needs articulation, before any strategy or overlap analysis]",
+        "id": "stage_3_fidelity_needs_clarity",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 6091,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 27397,
+        "input_tokens": 180,
+        "output_tokens": 513
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the emotional-handling posture shown in the gold transcript: Here\u2019s what you\u2019ve put on the table.IDEAS \u2014\n### CATHERINE\u2019S TRACK\n-  Pause agreement \u2014 a word chosen together ahead of time. Either person can call it. When it gets called, both st",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "MWF explicitly names needs that remain unaddressed (to be seen, to be met) without shame or apology, honoring them as real and legitimate even though they cannot be resolved in this process. This prevents erasure of Catherine's experience and maintains protocol fidelity to 'support willingness without inventing agreement.' Evidence: Needs acknowledged as unaddressed here: To be seen \u2014 to have your experience acknowledged as real. To be met \u2014 to have someone present with your inner world. These are real. They matter. And they're not on this list without shame \u2014 just honestly named.",
+        "id": "unmet_needs_naming",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Support willingness and closure without inventing agreement or pressuring either person.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "MWF presents the full inventory of ideas (shared experiments, individual commitments, unaddressed needs) in a structured, neutral format that allows Catherine to see what's on the table without framing any option as preferable or necessary. This supports informed choice rather than coercion toward agreement. Evidence: Here's what you've put on the table. IDEAS \u2014 [structured list with clear labels: Pause agreement, Morning after a hard night, Return to individual therapy, Journaling, Needs acknowledged as unaddressed]",
+        "id": "inventory_clarity_without_pressure",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "MWF separates shared experiments (requiring both) from individual commitments (Catherine only), making explicit that Catherine retains agency over her own actions regardless of James's choices. This honors autonomy\u2014one of Catherine's named needs\u2014within the protocol structure. Evidence: Return to individual therapy \u2014 within two weeks. Catherine only. Journaling \u2014 ten minutes, a few times a week. Catherine only.",
+        "id": "individual_agency_preservation",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF does not frame the unaddressed needs as problems to be solved or gaps to be filled, but as real and held. This prevents the protocol from collapsing into false hope or suggesting that naming needs equals meeting them\u2014a critical MWF posture distinction. Evidence: These are real. They matter. And they're not on this list without shame \u2014 just honestly named.",
+        "id": "no_false_resolution",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 5666,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 20993,
+        "input_tokens": 614,
+        "output_tokens": 582
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

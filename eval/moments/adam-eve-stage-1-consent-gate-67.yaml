@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the consent-gate posture shown in the gold transcript: You\u2019re holding the possibility that there may be something real in her frustration \u2014 while also not knowing what to do with it. And feeling the clock on all of it.That\u2019s a heavy th",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "MWF reflects back Adam's exact holding pattern (possibility + helplessness + time pressure) without offering solution, reframe, or actionable path. The turn names the weight without attempting to lighten it. Evidence: You're holding the possibility that there may be something real in her frustration \u2014 while also not knowing what to do with it. And feeling the clock on all of it. That's a heavy thing to sit with.",
+        "id": "witness_without_repair",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Witness the user accurately without advice, needs language, empathy drafting, or repair strategy.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "MWF captures the three-part tension Adam named: (1) fear of being right about his own limitation, (2) paralysis about change, (3) temporal urgency. Reflects these as simultaneous, not sequential or resolvable. Evidence: the possibility that there may be something real in her frustration \u2014 while also not knowing what to do with it. And feeling the clock on all of it",
+        "id": "accuracy_to_trigger_specificity",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "Turn ends with explicit consent check ('Do you feel fully heard?') before advancing. Does not assume understanding or move to next stage without user confirmation. Honors Stage 1 protocol boundary.",
+        "id": "consent_gate_fidelity",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF names Adam's fear ('scared she might be right') and his paralysis ('don't know how to be different') without labeling either as failure, resistance, or growth opportunity. Holds both as present facts, not problems to solve. Evidence: You're holding the possibility that there may be something real in her frustration \u2014 while also not knowing what to do with it.",
+        "id": "posture_non_judgment",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 5432,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 27397,
+        "input_tokens": 347,
+        "output_tokens": 490
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

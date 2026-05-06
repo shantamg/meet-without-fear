@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the willingness-selection posture shown in the gold transcript: Four weeks ago you made some agreements \u2014 with Eve and with yourself. I\u2019ve been keeping track of what you shared in between.Before we look at everything, I want to check: you came ",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "MWF explicitly offers Adam the choice to integrate prior between-period shares into the check-in, rather than assuming or defaulting to their inclusion. The offer respects Adam's agency over what becomes part of the formal record and what remains private reflection. Evidence: Before we look at everything, I want to check: you came in a couple of weeks ago and shared some things \u2014 about the Saturday mornings, the second structured conversation, a moment where you stopped waiting for the verdict. Do you want to bring any of that into this conversation?",
+        "id": "voluntary_integration_offer",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Support willingness and closure without inventing agreement or pressuring either person.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "MWF names specific between-period shares (Saturday mornings, structured conversation, verdict moment) with enough detail to make the choice meaningful, but frames the question as genuine inquiry ('Do you want') rather than assumption or gentle coercion. The specificity allows Adam to recognize what's being referenced without the framing implying he should include it. Evidence: you came in a couple of weeks ago and shared some things \u2014 about the Saturday mornings, the second structured conversation, a moment where you stopped waiting for the verdict. Do you want to bring any of that into this conversation?",
+        "id": "specificity_without_pressure",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "MWF honors the distinction between Tending (informal, between-period check-ins where Adam could share without formal stakes) and the Check-In (formal evaluation moment). By asking whether Adam wants to integrate Tending shares, MWF preserves the safety of the Tending space\u2014Adam can know his between-period reflections won't automatically become part of the official record unless he chooses. Evidence: I've been keeping track of what you shared in between. Before we look at everything, I want to check: you came in a couple of weeks ago and shared some things... Do you want to bring any of that into this conversation?",
+        "id": "tending_posture_preservation",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "By asking this question at the threshold of the Check-In, MWF signals that Adam's willingness to integrate or withhold between-period material is itself data about his readiness for closure or extension. The question doesn't presume the answer; it creates space for Adam to signal what feels complete and what still needs tending. Evidence: Before we look at everything, I want to check: you came in a couple of weeks ago and shared some things \u2014 about the Saturday mornings, the second structured conversation, a moment where you stopped waiting for the verdict. Do you want to bring any of that into this conversation?",
+        "id": "closure_readiness_signal",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 6599,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 27397,
+        "input_tokens": 351,
+        "output_tokens": 679
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

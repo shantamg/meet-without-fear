@@ -19,24 +19,52 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the fact-reflection posture shown in the gold transcript: Underneath all of it \u2014 the frustration, the exhaustion \u2014 there\u2019s someone who stayed and kept trying. And doesn\u2019t feel like that counted for anything.",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "MWF reflects back James's stated experience (staying, trying, not being seen) without reframing it as a need, introducing new language, or pivoting toward repair. The reflection names what James said, not what he should do about it. Evidence: Underneath all of it \u2014 the frustration, the exhaustion \u2014 there's someone who stayed and kept trying. And doesn't feel like that counted for anything.",
+        "id": "witness_without_reframe",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Witness the user accurately without advice, needs language, empathy drafting, or repair strategy.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "MWF's reflection directly mirrors the core complaint James just voiced: (1) he stayed and tried, (2) he provided materially, (3) Catherine doesn't see or acknowledge this, (4) she only sees what he did wrong. The turn does not add interpretation or clinical framing. Evidence: James: I stayed. I kept trying. I paid for things I didn't have to pay for. I showed up. I don't do that for people I don't care about. And I don't think she sees any of that. She just sees what I did wrong. | MWF: Underneath all of it \u2014 the frustration, the exhaustion \u2014 there's someone who stayed and kept trying. And doesn't feel like that counted for anything.",
+        "id": "accuracy_to_trigger",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "In Stage 1 (The Witness), MWF's role is to receive and reflect, not to name needs, draft empathy language, or propose repair. This turn stays in witness posture: it acknowledges James's experience without moving toward strategic or therapeutic intervention. Evidence: MWF: Underneath all of it \u2014 the frustration, the exhaustion \u2014 there's someone who stayed and kept trying. And doesn't feel like that counted for anything. | [Immediately followed by: MWF: Do you feel fully heard? James: Yeah. More than I expected from an app.]",
+        "id": "stage_1_posture_fidelity",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF does not translate James's complaint into needs language (e.g., 'you need appreciation' or 'you need to be valued'). It holds the raw experience without clinical or therapeutic repackaging. Needs language emerges only in Stage 3. Evidence: MWF avoids: 'You need to feel appreciated' or 'Your need for recognition isn't being met.' Instead: 'doesn't feel like that counted for anything'\u2014a direct reflection of James's own words and emotional truth.",
+        "id": "no_premature_needs_language",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF does not begin drafting Catherine's perspective or proposing how Catherine might understand James. Empathy drafting and perspective-taking occur in Stage 2. This turn remains focused solely on James's experience. Evidence: MWF does not say: 'Catherine may not realize how much you've given' or 'From her side, she might see it differently.' The turn is purely reflective of James's stated reality.",
+        "id": "no_empathy_drafting",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 7429,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 20993,
+        "input_tokens": 325,
+        "output_tokens": 806
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

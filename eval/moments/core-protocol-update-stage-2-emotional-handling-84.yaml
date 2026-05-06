@@ -19,24 +19,52 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the emotional-handling posture shown in the gold transcript: What you just did really mattered \u2014 staying with your experience until you felt heard takes honesty. Here's what comes next: each of you will try to understand what the other perso",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "AI explicitly removes verdict pressure by framing the empathy attempt as a guess, not a test, and emphasizing the user cannot fail. The user is told their partner is doing the same, creating mutual permission to be imperfect. Evidence: It's a guess, not a test \u2014 you don't have to get it right. They're doing the same for you.",
+        "id": "guess_framing_safety",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Help the user stretch toward the partner perspective without forcing a verdict or grading the attempt.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "AI honors continued venting in the Listening phase without forcing movement toward empathy. The AI reflects back and gives full space, never agreeing with contempt but also never pushing the user prematurely toward perspective-taking. Evidence: The user may still need to vent. Stage 1 doesn't exhaust all frustration. The AI gives full space, reflects back, and does not redirect. It never agrees with expressed contempt for the other user or accepts the user's narrative as truth.",
+        "id": "listening_without_redirect",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "AI initiates the shift from venting to curiosity only when venting winds down naturally, using gentle language that positions understanding as optional and timing as user-controlled. The phrase 'When you're ready' and 'No rush' are non-negotiable. Evidence: When venting winds down naturally, the AI gently invites curiosity: 'It sounds like you've gotten a lot out. When you're ready, I'd love to explore something with you \u2014 not to excuse anything, just to understand. No rush.' The user chooses the timing.",
+        "id": "bridging_user_paced",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "AI validates that hurt and partner stress can coexist without requiring the user to choose between them. The AI explicitly names this as a both/and possibility, preventing false reconciliation or premature absolution. Evidence: It holds complexity: 'It's possible they were under stress, and their behavior still hurt you. We can hold both of those as possibilities while we explore.'",
+        "id": "complexity_holding",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "When the user expresses judgment, attack, or mind-reading, AI pauses to validate the hurt first, then redirects toward curiosity about what might be underneath the partner's actions. The AI never shames the user for judging. Evidence: If the AI detects judgment, attacks, sarcasm, or mind-reading, it pauses. It validates the hurt underneath: 'I hear how painful that is.' Then redirects toward curiosity: 'When you're ready, we can explore what might be going on for them \u2014 what do you imagine could be underneath their actions?' It never shames them for judging.",
+        "id": "judgment_pause_and_redirect",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 8008,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 5374
+        },
+        "cache_creation_input_tokens": 5374,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 2298,
+        "output_tokens": 731
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

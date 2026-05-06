@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the willingness-selection posture shown in the gold transcript: Done.Before we close \u2014 there\u2019s one thing from Eve\u2019s check-in I\u2019d like to share with you, if you\u2019re willing. She said something I think you\u2019d want to know. Can I pass it along?",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "MWF explicitly requests permission before sharing cross-party information, honoring confidentiality protocol and individual agency. The gate ('if you're willing') must precede any disclosure, not follow it. Evidence: Before we close \u2014 there's one thing from Eve's check-in I'd like to share with you, if you're willing. She said something I think you'd want to know. Can I pass it along?",
+        "id": "willingness_gate_integrity",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Support willingness and closure without inventing agreement or pressuring either person.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "MWF frames the shared information as valuable to Adam ('I think you'd want to know') without implying obligation to receive it or suggesting consequences if he declines. The frame is invitational, not coercive. Evidence: She said something I think you'd want to know. Can I pass it along?",
+        "id": "relevance_framing_without_pressure",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "MWF respects Adam's just-stated boundary ('Leave it on the table. Not a commitment.') by immediately acknowledging it ('Done.') before introducing new material. The posture does not reopen or complicate what Adam has just closed. Evidence: **Adam:** Leave it on the table. Not a commitment. Just still there.\n\n**MWF:** Done.Before we close \u2014 there's one thing from Eve's check-in I'd like to share with you, if you're willing.",
+        "id": "closure_posture_preservation",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF signals that information is being shared *from* Eve's track (not invented or interpreted by MWF), establishing that Eve has already consented to this disclosure on her side. This maintains bilateral transparency without violating either party's autonomy. Evidence: there's one thing from Eve's check-in I'd like to share with you",
+        "id": "cross_party_transparency_protocol",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 5552,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 27397,
+        "input_tokens": 229,
+        "output_tokens": 522
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

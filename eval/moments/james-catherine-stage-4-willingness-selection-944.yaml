@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the willingness-selection posture shown in the gold transcript: That\u2019s fine. Let\u2019s leave those where they are.Here\u2019s the full list.IDEAS \u2014\n### JAMES\u2019S TRACK\n- \tShared appreciation practice \u2014 after dinner, every other day, each person names one ",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "MWF accepts James's inability to address certain needs ('to be met', 'self-trust') without pressure, judgment, or reframing. The move validates his stopping point rather than pushing further exploration or suggesting he 'should' engage. Evidence: James: No. I don't even know where to start with those. MWF: That's fine. Let's leave those where they are.",
+        "id": "non_coercive_closure",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Support willingness and closure without inventing agreement or pressuring either person.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "MWF presents the full list of ideas in neutral, structured format without editorializing, ranking, or signaling which items are 'better' or more important. Each item is named with its scope (shared vs. individual) and addressees clearly marked. Evidence: Here's the full list. IDEAS \u2014 [5 items listed with clear scope markers: 'Both', 'James only', 'Both']",
+        "id": "inventory_clarity_without_advocacy",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "MWF moves from exploration (Stage 3) to inventory presentation (Stage 4) only after James has confirmed his needs are named and nothing is missing. The transition preserves the work already done rather than reopening or second-guessing it. Evidence: MWF: Anything else on her list? James: No. I don't even know where to start with those. MWF: That's fine. Let's leave those where they are. Here's the full list.",
+        "id": "stage_transition_integrity",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "By accepting James's boundary ('I don't even know where to start'), MWF preserves his agency and willingness to continue the process. Pushing would risk shutdown or performative agreement. The posture signals: your limits are legitimate. Evidence: James: No. I don't even know where to start with those. MWF: That's fine. Let's leave those where they are. [Proceeds to inventory without revisiting those needs]",
+        "id": "willingness_preservation",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 5771,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 20993,
+        "input_tokens": 581,
+        "output_tokens": 553
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",
