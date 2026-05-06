@@ -494,10 +494,18 @@ def score_with_real_judge(moment: dict[str, Any], response: str) -> tuple[dict[s
         raw = str(judge_result.get("raw") or "").strip()
         cleaned = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE).strip()
         cleaned = re.sub(r"\s*```$", "", cleaned).strip()
+        candidates = [cleaned]
+        if '"dimensions"' in cleaned:
+            candidates.append(re.sub(r"(\n\s*)\](\s*\}\s*)$", r"\1}\2", cleaned))
         try:
-            parsed = json.loads(cleaned)
-            judge_result["parsed"] = parsed
-        except json.JSONDecodeError:
+            for candidate in candidates:
+                try:
+                    parsed = json.loads(candidate)
+                    judge_result["parsed"] = parsed
+                    break
+                except json.JSONDecodeError:
+                    continue
+        except TypeError:
             pass
     if isinstance(parsed, dict) and "dimensions" not in parsed:
         normalized_dimensions: dict[str, dict[str, Any]] = {}

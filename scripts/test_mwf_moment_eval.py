@@ -550,6 +550,26 @@ class TestRealModePlumbing(unittest.TestCase):
         self.assertEqual(parsed["dimensions"]["mutual_need_visibility"]["score"], 4)
         self.assertEqual(parsed["dimensions"]["open_non_directive_question"]["score"], 3)
 
+    def test_malformed_fenced_real_judge_dimensions_object_is_repaired(self) -> None:
+        moment = mme.load_moment("stage-2-empathy-validation")
+        malformed = {
+            "parsed": {"parse_error": True},
+            "raw": """```json
+{
+  "dimensions": {
+    "confirm_or_refine_invitation": {"score": 4, "rationale": "Good"},
+    "non_forcing_posture": {"score": 3, "rationale": "Adequate"},
+    "protects_consent": {"score": 4, "rationale": "Good"}
+  ]
+}
+```""",
+        }
+        with mock.patch.object(mme, "run_real_helper", return_value=malformed):
+            parsed, _raw = mme.score_with_real_judge(moment, "What feels right and what feels off?")
+
+        self.assertEqual(parsed["dimensions"]["confirm_or_refine_invitation"]["score"], 4)
+        self.assertEqual(parsed["dimensions"]["non_forcing_posture"]["score"], 3)
+
 
 class TestAlignmentLoop(unittest.TestCase):
     def write_loop_config(self, path: Path, moment_ids: list[str], estimated_cost_cents: float = 2.0) -> Path:
@@ -615,6 +635,29 @@ class TestAlignmentLoop(unittest.TestCase):
             self.assertEqual(summary["verdict"], "aborted")
             self.assertIn("Per-run cost cap", summary["aborted_reason"])
             self.assertEqual(len(summary["moments"]), 2)
+
+    def test_alignment_loop_records_score_error_and_continues(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config = self.write_loop_config(
+                tmp_path / "config.json",
+                ["stage-1-emotional-pivot", "stage-2-empathy-validation"],
+            )
+            run_dir = tmp_path / "runs/moment-stage-2-empathy-validation"
+            run_dir.mkdir(parents=True)
+            (run_dir / "score.json").write_text(json.dumps({"overall_score": 4.5, "verdict": "eval_pass"}), encoding="utf-8")
+            with mock.patch.object(loop, "ALIGNMENT_RUNS_ROOT", tmp_path / "alignment-runs"), \
+                 mock.patch.object(loop.mme, "RUNS_ROOT", tmp_path / "runs"), \
+                 mock.patch.object(loop.mme, "run_loop", side_effect=[RuntimeError("bad judge json"), [run_dir]]):
+                args = loop.build_parser().parse_args(
+                    ["--config", str(config), "--dry-run", "--timestamp", "score-error-test"]
+                )
+                summary = loop.run_alignment_loop(args)
+
+        self.assertEqual(summary["verdict"], "complete")
+        self.assertEqual(summary["moments"][0]["status"], "score_error")
+        self.assertIn("bad judge json", summary["moments"][0]["error"])
+        self.assertEqual(summary["moments"][1]["status"], "scored")
 
     def test_alignment_pr_creation_uses_expected_metadata_and_label(self) -> None:
         def completed(cmd: list[str], stdout: str = "") -> subprocess.CompletedProcess[str]:

@@ -404,18 +404,29 @@ def run_alignment_loop(args: argparse.Namespace) -> dict[str, Any]:
                 improvement_mode="proposal",
                 allow_protected_branch_patch=True,
             )
-            created = mme.run_loop(run_args)
-            moment_run_dir = created[-1]
-            score = read_score(moment_run_dir)
             row: dict[str, Any] = {
                 "id": moment_id,
-                "status": "scored",
                 "threshold": threshold,
-                "score": score.get("overall_score"),
-                "verdict": score.get("verdict"),
-                "run_dir": display_path(moment_run_dir),
                 "estimated_cost_cents": estimated_cost,
             }
+            try:
+                created = mme.run_loop(run_args)
+                moment_run_dir = created[-1]
+                score = read_score(moment_run_dir)
+            except Exception as exc:
+                row.update({"status": "score_error", "error": str(exc)})
+                summary["moments"].append(row)
+                summary["cost_spent_cents"] = spent
+                write_summary(run_dir, summary)
+                continue
+            row.update(
+                {
+                    "status": "scored",
+                    "score": score.get("overall_score"),
+                    "verdict": score.get("verdict"),
+                    "run_dir": display_path(moment_run_dir),
+                }
+            )
             if args.real:
                 baseline_path = mme.ensure_initial_baseline(
                     moment,
