@@ -4,7 +4,7 @@ sidebar_position: 1
 description: REST API endpoints for the Meet Without Fear backend. All endpoints use JSON request/response bodies.
 slug: /backend/api
 created: 2026-03-11
-updated: 2026-04-19
+updated: 2026-05-06
 status: living
 ---
 # API Specification
@@ -140,17 +140,39 @@ User-driven self-reflection on what truly matters; AI facilitates needs clarity,
 | `POST` | `/sessions/:id/needs/validate` | Validate the side-by-side needs reveal |
 
 ### [Stage 4: Strategic Repair](./stage-4.md)
-Collaborative strategy and agreement.
+Collaborative strategy proposal, willingness selection, and agreement documentation. Two flows coexist: the redesigned willingness-selection flow (primary) and the legacy ranking flow (vestigial).
+
+**Redesigned flow (primary):**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/sessions/:id/stage4` | Get consolidated Stage 4 state (proposals, coverage, selections, outcome) |
+| `POST` | `/sessions/:id/stage4/proposals/:proposalId/selection` | Submit single willingness decision |
+| `POST` | `/sessions/:id/stage4/selections` | Submit batch willingness decisions |
+| `POST` | `/sessions/:id/stage4/close` | Close Stage 4 and resolve session |
+| `GET` | `/sessions/:id/agreements` | Get agreements list |
+| `POST` | `/sessions/:id/agreements` | Create agreement manually |
+| `POST` | `/sessions/:id/agreements/:agreementId/confirm` | Confirm proposed agreement |
+
+**Legacy flow (vestigial — kept for backward compatibility):**
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/sessions/:id/strategies` | Get strategy pool (unlabeled) |
 | `POST` | `/sessions/:id/strategies` | Propose new strategy |
-| `POST` | `/sessions/:id/strategies/suggest` | Request AI suggestions |
+| `POST` | `/sessions/:id/strategies/suggest` | Request AI suggestions (placeholder) |
+| `POST` | `/sessions/:id/strategies/ready` | Mark ready to rank |
 | `POST` | `/sessions/:id/strategies/rank` | Submit private ranking |
 | `GET` | `/sessions/:id/strategies/overlap` | Get ranking overlap |
-| `POST` | `/sessions/:id/agreements` | Create agreement |
-| `POST` | `/sessions/:id/resolve` | Resolve session |
+
+### [Tending](./tending.md)
+Post-resolution check-in and re-entry. Surfaces after a session resolves to help partners follow through on Stage 4 agreements.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/sessions/:id/tending` | List tending entries (scheduled check-ins + re-entries) |
+| `POST` | `/sessions/:id/tending/reentry` | Initiate passive re-entry on a resolved session |
+| `POST` | `/sessions/:id/tending/:entryId/responses` | Submit response to an open tending entry |
 
 ### [Consent](./consent.md)
 Consensual Bridge mechanism.
