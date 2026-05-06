@@ -63,6 +63,16 @@ export const sessionSwitchHandler: IntentHandler = {
           empathyAttempts: {
             select: { sourceUserId: true, status: true },
           },
+          reconcilerResults: {
+            where: { supersededAt: null },
+            select: {
+              subjectId: true,
+              supersededAt: true,
+              shareOffer: {
+                select: { userId: true, status: true },
+              },
+            },
+          },
         },
       });
     }
@@ -93,6 +103,16 @@ export const sessionSwitchHandler: IntentHandler = {
           // Include empathy attempts to show correct Stage 2 status
           empathyAttempts: {
             select: { sourceUserId: true, status: true },
+          },
+          reconcilerResults: {
+            where: { supersededAt: null },
+            select: {
+              subjectId: true,
+              supersededAt: true,
+              shareOffer: {
+                select: { userId: true, status: true },
+              },
+            },
           },
         },
       });

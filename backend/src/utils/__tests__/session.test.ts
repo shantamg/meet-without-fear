@@ -318,6 +318,11 @@ describe('mapSessionToSummary - Stage 2 selfActionNeeded', () => {
 
   function makeSession(overrides: {
     empathyAttempts?: Array<{ sourceUserId: string | null; status?: string }>;
+    reconcilerResults?: Array<{
+      subjectId: string;
+      supersededAt?: Date | null;
+      shareOffer?: { userId: string; status: string } | null;
+    }>;
     myStage?: number;
     myStatus?: string;
   } = {}) {
@@ -350,6 +355,7 @@ describe('mapSessionToSummary - Stage 2 selfActionNeeded', () => {
         },
       ],
       empathyAttempts: overrides.empathyAttempts ?? [],
+      reconcilerResults: overrides.reconcilerResults ?? [],
       userVessels: [],
     };
   }
@@ -391,6 +397,40 @@ describe('mapSessionToSummary - Stage 2 selfActionNeeded', () => {
     });
     const result = mapSessionToSummary(session, USER_ID);
     expect(result.selfActionNeeded).toContain('continue_stage');
+  });
+
+  it('shows selfActionNeeded when current user has an offered share suggestion', () => {
+    const session = makeSession({
+      empathyAttempts: [
+        { sourceUserId: USER_ID, status: 'READY' },
+        { sourceUserId: PARTNER_ID, status: 'HELD' },
+      ],
+      reconcilerResults: [
+        {
+          subjectId: USER_ID,
+          shareOffer: { userId: USER_ID, status: 'OFFERED' },
+        },
+      ],
+    });
+    const result = mapSessionToSummary(session, USER_ID);
+    expect(result.selfActionNeeded).toContain('continue_stage');
+  });
+
+  it('does not show selfActionNeeded for a processed share suggestion', () => {
+    const session = makeSession({
+      empathyAttempts: [
+        { sourceUserId: USER_ID, status: 'READY' },
+        { sourceUserId: PARTNER_ID, status: 'HELD' },
+      ],
+      reconcilerResults: [
+        {
+          subjectId: USER_ID,
+          shareOffer: { userId: USER_ID, status: 'ACCEPTED' },
+        },
+      ],
+    });
+    const result = mapSessionToSummary(session, USER_ID);
+    expect(result.selfActionNeeded).not.toContain('continue_stage');
   });
 
   it('does NOT show selfActionNeeded when user empathy is READY and partner is still working', () => {

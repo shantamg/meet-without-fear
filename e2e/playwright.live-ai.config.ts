@@ -65,7 +65,7 @@ export default defineConfig({
       // compact bar) on slower hardware (CI, EC2). Production-mode is
       // deterministic — single bundle, single round-trip, then mounts.
       // Mirrors the single-user-journey fix in PR #192.
-      command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082 --no-dev',
+      command: 'cd ../mobile && BROWSER=none EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082 --no-dev',
       url: 'http://localhost:8082',
       reuseExistingServer: false,
       timeout: 300000,

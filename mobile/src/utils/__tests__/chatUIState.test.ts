@@ -288,7 +288,7 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(true);
   });
 
-  it('hides input when awaiting-context-share panel owns the next action', () => {
+  it('keeps input visible when a share suggestion is shown so users can keep discussing it', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -299,10 +299,10 @@ describe('Input Hiding (shouldHideInput)', () => {
 
     const result = computeChatUIState(inputs);
     expect(result.aboveInputPanel).toBe('share-suggestion');
-    expect(result.shouldHideInput).toBe(true);
+    expect(result.shouldHideInput).toBe(false);
   });
 
-  it('hides input while the empathy review panel owns the next action', () => {
+  it('keeps input visible while the empathy review panel is shown so users can keep refining', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -313,10 +313,10 @@ describe('Input Hiding (shouldHideInput)', () => {
 
     const result = computeChatUIState(inputs);
     expect(result.aboveInputPanel).toBe('empathy-statement');
-    expect(result.shouldHideInput).toBe(true);
+    expect(result.shouldHideInput).toBe(false);
   });
 
-  it('hides input while the feel-heard panel owns the next action', () => {
+  it('keeps input visible while the feel-heard panel is shown so users can keep talking', () => {
     const inputs = createInputs({
       myStage: Stage.WITNESS,
       compactMySigned: true,
@@ -327,7 +327,24 @@ describe('Input Hiding (shouldHideInput)', () => {
 
     const result = computeChatUIState(inputs);
     expect(result.aboveInputPanel).toBe('feel-heard');
-    expect(result.shouldHideInput).toBe(true);
+    expect(result.shouldHideInput).toBe(false);
+  });
+
+  it('keeps input visible while the topic proposal panel is shown so users can refine it', () => {
+    const inputs = createInputs({
+      myStage: Stage.WITNESS,
+      compactMySigned: true,
+      myProgress: { stage: Stage.WITNESS },
+      isInviter: true,
+      topicFrameProposed: 'How we talk when conflict escalates',
+      hasTopicConfirmed: false,
+      topicProposalDismissed: false,
+      isConfirmingTopicFrame: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.aboveInputPanel).toBe('topic-proposal');
+    expect(result.shouldHideInput).toBe(false);
   });
 
   it('hides input while empathy review is running', () => {

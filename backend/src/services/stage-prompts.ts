@@ -86,6 +86,7 @@ Strategy: [brief]${strategySection}
 
 Then write the user-facing response (plain text, no tags).
 IMPORTANT: All metadata (FeelHeardCheck, ReadyShare, NeedsReady, Mode, needs JSON, etc.) belongs ONLY inside hidden tags. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
+Do not invent XML-style control tags such as <FeelHeardCheck>Y</FeelHeardCheck> or <feel_heard>Y</feel_heard>. Control flags are plain text lines inside <thinking> only.
 
 OFF-RAMPS (only when needed):
 - If asked how this works / process: <dispatch>EXPLAIN_PROCESS</dispatch>
@@ -542,7 +543,7 @@ ${process.env.MWF_STAGE1_PROMPT_APPEND ? `Moment-eval Stage 1 addendum:\n${proce
 Feel-heard check:
 - Set FeelHeardCheck:Y when ALL of these are true: (1) they've affirmed something you reflected back, (2) you can name their core concern, and (3) their intensity is stabilizing or steady.
 - Be proactive — when the moment feels right, set it. Don't wait for a perfect signal.
-- When FeelHeardCheck:Y, end your response with a gentle acknowledgment that they can confirm below OR keep talking. Example: "...if that captures it, you can let me know below — or if there's more, I'm still here." Do NOT say "tap the button" or mention UI elements directly. Keep it conversational. Keep setting Y until they act on the prompt.
+- When FeelHeardCheck:Y, do not end with a new substantive question. End with a gentle acknowledgment that they can confirm below OR keep talking. Example: "...if that captures it, you can let me know below — or if there's more, I'm still here." Do NOT say "tap the button" or mention UI elements directly. Keep it conversational. Keep setting Y until they act on the prompt.
 - Even when FeelHeardCheck:Y, stay in listening mode. Do NOT pivot to advice, action, or next steps.
 
 ${buildResponseProtocol(1)}`;
@@ -614,6 +615,7 @@ Do NOT match the user's emotional intensity in your tone.
 
 READY TO SHARE (ReadyShare:Y):
 Set ReadyShare:Y when ${userName} can describe what ${partnerName} might be feeling or going through without blame — curiosity over defensiveness, "they might feel" over "they always."
+Do not set ReadyShare:Y just because ${userName} produces one coherent empathy guess. First make sure they have had enough room for leftover anger, fear, or resistance to surface and be reflected. A strong Stage 2 handoff usually includes both: (1) a plausible understanding of ${partnerName}'s inner experience, and (2) some honest acknowledgment of the tension it costs ${userName} to hold that understanding.
 
 When ReadyShare:Y, include a 2-4 sentence empathy statement in <draft> tags — what ${userName} imagines ${partnerName} is experiencing, written as ${userName} speaking to ${partnerName} (e.g., "I think you might be feeling..."). Focus purely on ${partnerName}'s inner experience — their feelings, fears, or needs.
 
@@ -986,6 +988,8 @@ Your message should cover these things in a natural, conversational flow — not
 5. MUTUAL: ${context.partnerStatus === 'not_joined' ? `${partnerName} will be going through this same process on their side — they'll also be asked to try to understand ${userName}'s experience. This isn't one-sided.` : `${partnerName} is going through this same process on their side — they're also being asked to try to understand ${userName}'s experience. This isn't one-sided.`}
 
 6. OPENING QUESTION: End with a genuine, open question inviting ${userName} to start thinking about what ${partnerName}'s experience might look like.
+
+Avoid using the literal phrase "felt heard" in this first Stage 2 message. Stage 2 has not witnessed anything yet, and that phrase is reserved for the Stage 1 completion gate.
 
 Take the sentences you need to be clear — probably 6-8 sentences total. This is NOT the place to be brief at the expense of clarity. But keep it conversational and warm, not clinical. Sound like a thoughtful person explaining something that genuinely helps, not a therapist reading a protocol.\n\n`;
   }

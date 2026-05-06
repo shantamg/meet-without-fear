@@ -110,6 +110,29 @@ That's a really thoughtful attempt to step into their shoes. Here's how I'd summ
       expect(parsed.response).toContain("thoughtful attempt");
     });
 
+    it('extracts a Stage 2 draft even when ReadyShare flag is missing', () => {
+      const simulatedResponse = `<thinking>
+Mode: Bridging
+Strategy: User asked to review the draft, but the readiness flag was omitted
+</thinking>
+
+Here's what I drafted based on what you shared:
+
+<draft>
+I think Adam may be feeling scared that changing your life means the stable life he built was never enough.
+</draft>
+
+Does this feel right?`;
+
+      const parsed = parseMicroTagResponse(simulatedResponse);
+
+      expect(parsed.offerReadyToShare).toBe(false);
+      expect(parsed.draft).toContain('stable life he built');
+      expect(parsed.response).toContain("Here's what I drafted");
+      expect(parsed.response).not.toContain('stable life he built');
+      expect(parsed.response).not.toContain('<draft>');
+    });
+
     it('handles Stage 2 without ReadyShare', () => {
       const simulatedResponse = `<thinking>
 Mode: Listening

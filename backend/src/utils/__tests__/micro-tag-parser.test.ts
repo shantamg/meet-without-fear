@@ -34,6 +34,30 @@ I hear you. That sounds really difficult.`;
       expect(result.offerFeelHeardCheck).toBe(true);
     });
 
+    it('strips malformed visible FeelHeardCheck tags and preserves the gate signal', () => {
+      const raw = `<thinking>Mode:Witness</thinking>
+<FeelHeardCheck>Y</FeelHeardCheck>
+
+That is the weight you are carrying.`;
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.offerFeelHeardCheck).toBe(true);
+      expect(result.response).toBe('That is the weight you are carrying.');
+      expect(result.response).not.toContain('FeelHeardCheck');
+    });
+
+    it('strips malformed visible snake_case feel-heard tags and preserves the gate signal', () => {
+      const raw = `<thinking>Mode:Witness</thinking>
+<feel_heard>Y</feel_heard>
+
+Yeah. That is a lot to carry alone.`;
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.offerFeelHeardCheck).toBe(true);
+      expect(result.response).toBe('Yeah. That is a lot to carry alone.');
+      expect(result.response).not.toContain('feel_heard');
+    });
+
     it('extracts FeelHeardCheck:N as false', () => {
       const raw = `<thinking>FeelHeardCheck:N</thinking>Response text`;
       const result = parseMicroTagResponse(raw);

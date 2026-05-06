@@ -13,6 +13,27 @@ export interface CleanVisibleAITextOptions {
   preserveBoundaryWhitespace?: boolean;
 }
 
+const CONTROL_FLAG_NAMES = [
+  'FeelHeardCheck',
+  'feel_heard',
+  'ReadyShare',
+  'ready_share',
+  'NeedsReady',
+  'needs_ready',
+  'StrategyProposed',
+  'strategy_proposed',
+];
+
+const CONTROL_FLAG_TAG_RE = new RegExp(
+  `<(?:${CONTROL_FLAG_NAMES.join('|')})\\b[^>]*>[\\s\\S]*?<\\/(?:${CONTROL_FLAG_NAMES.join('|')})>|<\\/?(?:${CONTROL_FLAG_NAMES.join('|')})\\b[^>]*>`,
+  'gi'
+);
+
+const CONTROL_FLAG_LINE_RE = new RegExp(
+  `^\\s*(?:${CONTROL_FLAG_NAMES.join('|')})\\s*:\\s*[^\\n]+$`,
+  'i'
+);
+
 export function cleanVisibleAIText(
   text: string,
   options: CleanVisibleAITextOptions = {}
@@ -31,6 +52,7 @@ export function cleanVisibleAIText(
   let cleaned = text
     .replace(/\\"/g, '"')
     .replace(/\r\n/g, '\n')
+    .replace(CONTROL_FLAG_TAG_RE, '')
     .trim();
 
   for (let i = 0; i < 4; i += 1) {
@@ -39,6 +61,9 @@ export function cleanVisibleAIText(
       .split('\n')
       .filter((line, index) => {
         const trimmed = line.trim();
+        if (CONTROL_FLAG_LINE_RE.test(trimmed)) {
+          return false;
+        }
         if (index === 0 && /^(?:---+|```(?:json|markdown)?|~~~)$/.test(trimmed)) {
           return false;
         }

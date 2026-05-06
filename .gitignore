@@ -136,3 +136,8 @@ e2e/test-results/test-results/
 test-results/
 backend/test-results/
 mobile/test-results/
+
+# MWF gold-loop generated run artifacts
+eval/runs/
+backend/scripts/transcripts/
+scripts/__pycache__/

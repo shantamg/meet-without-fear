@@ -42,6 +42,16 @@ export const sessionsListHandler: IntentHandler = {
         empathyAttempts: {
           select: { sourceUserId: true, status: true },
         },
+        reconcilerResults: {
+          where: { supersededAt: null },
+          select: {
+            subjectId: true,
+            supersededAt: true,
+            shareOffer: {
+              select: { userId: true, status: true },
+            },
+          },
+        },
         // Include user vessels for read state tracking
         userVessels: {
           where: { userId: context.userId },

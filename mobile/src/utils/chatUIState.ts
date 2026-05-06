@@ -574,11 +574,7 @@ function computeShouldHideInput(
   }
 
   if (
-    aboveInputPanel === 'topic-proposal' ||
     aboveInputPanel === 'invitation' ||
-    aboveInputPanel === 'feel-heard' ||
-    aboveInputPanel === 'share-suggestion' ||
-    aboveInputPanel === 'empathy-statement' ||
     aboveInputPanel === 'needs-reveal-validation'
   ) {
     return true;
@@ -598,7 +594,8 @@ function computeShouldHideInput(
     currentStage === Stage.PERSPECTIVE_STRETCH &&
     inputs.empathyDraft === undefined &&
     inputs.empathyStatus === undefined &&
-    !hasShareSuggestion
+    !hasShareSuggestion &&
+    aboveInputPanel !== 'empathy-statement'
   ) {
     return true;
   }

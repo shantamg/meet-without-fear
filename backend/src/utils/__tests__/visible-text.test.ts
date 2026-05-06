@@ -29,4 +29,28 @@ describe('cleanVisibleAIText', () => {
     expect(cleanVisibleAIText(' talk ', { preserveBoundaryWhitespace: true })).toBe(' talk ');
     expect(cleanVisibleAIText(' ', { preserveBoundaryWhitespace: true })).toBe(' ');
   });
+
+  it('removes leaked XML-style control flags from visible text', () => {
+    expect(cleanVisibleAIText('<FeelHeardCheck>Y</FeelHeardCheck>\n\nThat is the weight you are carrying.')).toBe(
+      'That is the weight you are carrying.'
+    );
+  });
+
+  it('removes leaked snake_case XML-style control flags from visible text', () => {
+    expect(cleanVisibleAIText('<feel_heard>Y</feel_heard> Yeah. That is a lot to carry alone.')).toBe(
+      'Yeah. That is a lot to carry alone.'
+    );
+  });
+
+  it('removes leaked plain control flag lines from visible text', () => {
+    expect(cleanVisibleAIText('ReadyShare: Y\n\nI put together a draft for you to review.')).toBe(
+      'I put together a draft for you to review.'
+    );
+  });
+
+  it('removes leaked snake_case plain control flag lines from visible text', () => {
+    expect(cleanVisibleAIText('ready_share: Y\n\nI put together a draft for you to review.')).toBe(
+      'I put together a draft for you to review.'
+    );
+  });
 });

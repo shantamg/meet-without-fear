@@ -6,7 +6,7 @@
   "scripts": {
     "start": "npm run set-local-ip && expo start",
     "start:clear": "npm run set-local-ip && expo start --clear",
-    "start:e2e": "EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 expo start --web --port 8082 --clear --no-dev",
+    "start:e2e": "BROWSER=none EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 expo start --web --port 8082 --clear --no-dev",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",

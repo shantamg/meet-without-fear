@@ -94,6 +94,16 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
         empathyAttempts: {
           select: { sourceUserId: true, status: true },
         },
+        reconcilerResults: {
+          where: { supersededAt: null },
+          select: {
+            subjectId: true,
+            supersededAt: true,
+            shareOffer: {
+              select: { userId: true, status: true },
+            },
+          },
+        },
         // Include user vessels for read state tracking
         userVessels: {
           where: { userId: user.id },
@@ -185,8 +195,21 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
             userEmpathy?.status === 'REFINING' || userEmpathy?.status === 'NEEDS_WORK';
           const userNeedsToValidate = partnerEmpathy?.status === 'REVEALED';
           const userNeedsToRespondToShare = partnerEmpathy?.status === 'AWAITING_SHARING';
+          const userHasPendingShareOffer = (session as {
+            reconcilerResults?: Array<{
+              subjectId: string;
+              supersededAt?: Date | null;
+              shareOffer?: { userId: string; status: string } | null;
+            }>;
+          }).reconcilerResults?.some(
+            (result) =>
+              result.subjectId === user.id &&
+              !result.supersededAt &&
+              result.shareOffer?.userId === user.id &&
+              (result.shareOffer.status === 'OFFERED' || result.shareOffer.status === 'PENDING')
+          ) ?? false;
 
-          if (userNeedsToRefine || userNeedsToValidate || userNeedsToRespondToShare) {
+          if (userNeedsToRefine || userNeedsToValidate || userNeedsToRespondToShare || userHasPendingShareOffer) {
             selfActionNeeded.push('complete_stage');
           } else if (!userEmpathy) {
             // User hasn't sent empathy yet — they still have work to do

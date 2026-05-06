@@ -126,6 +126,19 @@ function stripVisibleProposedStrategyLines(responseText: string): {
   };
 }
 
+const CONTROL_FLAG_ALIASES: Record<string, string[]> = {
+  FeelHeardCheck: ['FeelHeardCheck', 'feel_heard'],
+  ReadyShare: ['ReadyShare', 'ready_share'],
+};
+
+function hasControlFlag(text: string, flagName: string): boolean {
+  const names = CONTROL_FLAG_ALIASES[flagName] ?? [flagName];
+  const alternation = names.join('|');
+  const plainLine = new RegExp(`(?:${alternation}):\\s*Y`, 'i');
+  const xmlTag = new RegExp(`<(?:${alternation})\\b[^>]*>\\s*Y\\s*<\\/(?:${alternation})>`, 'i');
+  return plainLine.test(text) || xmlTag.test(text);
+}
+
 /**
  * Parse the micro-tag response format.
  * Extracts semantic blocks and flags from the raw AI response.
@@ -164,11 +177,13 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
   }
 
   const strippedVisibleStrategies = stripVisibleProposedStrategyLines(responseText);
-  responseText = strippedVisibleStrategies.responseText;
+  responseText = cleanVisibleAIText(strippedVisibleStrategies.responseText);
 
   // 3. Extract flags from thinking string (no JSON needed!)
-  const offerFeelHeardCheck = /FeelHeardCheck:\s*Y/i.test(thinking);
-  const offerReadyToShare = /ReadyShare:\s*Y/i.test(thinking);
+  const offerFeelHeardCheck = hasControlFlag(thinking, 'FeelHeardCheck') ||
+    hasControlFlag(rawResponse, 'FeelHeardCheck');
+  const offerReadyToShare = hasControlFlag(thinking, 'ReadyShare') ||
+    hasControlFlag(rawResponse, 'ReadyShare');
 
   // 4. Extract proposed strategies from thinking (Stage 4)
   const proposedStrategies: string[] = [];

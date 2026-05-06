@@ -97,6 +97,9 @@ function getFallbackInitialMessage(
 const STAGE2_ROADMAP_COPY =
   `Here's what comes next: there are a few more steps in this process. First, each of you tries to understand what the other person might be going through. Then you'll each explore what matters most to you, and eventually use that to get clearer about what is possible next, whether together or separately.`;
 
+const STAGE2_TRANSITION_ACK =
+  `What you just did really mattered — sharing what's been weighing on you and staying with it took real honesty.`;
+
 const PLANNER_LINE_PREFIXES = [
   'i should',
   'so both lists should',
@@ -548,9 +551,9 @@ export async function confirmFeelHeard(
         if (aiResponse) {
           // Parse the semantic tag response (micro-tag format)
           const parsed = parseMicroTagResponse(aiResponse);
-          transitionContent = cleanVisibleAIText(parsed.response) || `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
+          transitionContent = cleanVisibleAIText(parsed.response) || `${STAGE2_TRANSITION_ACK}\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
         } else {
-          transitionContent = `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
+          transitionContent = `${STAGE2_TRANSITION_ACK}\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
         }
 
         // Save the transition message to the database as Stage 2
@@ -2033,8 +2036,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       }
     }
 
-    // Save empathy draft (Stage 2 or Stage 2B)
-    if ((effectiveStage === 2 || effectiveStage === 21) && metadata.offerReadyToShare && metadata.proposedEmpathyStatement) {
+    // Save empathy draft (Stage 2 or Stage 2B). Persist any non-empty hidden
+    // draft, even if ReadyShare is absent, because visible chat strips <draft>.
+    if ((effectiveStage === 2 || effectiveStage === 21) && metadata.proposedEmpathyStatement?.trim()) {
+      const proposedEmpathyStatement = metadata.proposedEmpathyStatement.trim();
       await prisma.empathyDraft.upsert({
         where: {
           sessionId_userId: { sessionId, userId: user.id },
@@ -2042,12 +2047,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         create: {
           sessionId,
           userId: user.id,
-          content: metadata.proposedEmpathyStatement,
+          content: proposedEmpathyStatement,
           readyToShare: false,
           version: 1,
         },
         update: {
-          content: metadata.proposedEmpathyStatement,
+          content: proposedEmpathyStatement,
           version: { increment: 1 },
         },
       });

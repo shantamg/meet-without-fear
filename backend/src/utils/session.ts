@@ -46,6 +46,15 @@ type SessionWithIncludes = {
     sourceUserId: string | null;
     status?: string;
   }>;
+  // Optional: reconciler share offers for Stage 2 action display
+  reconcilerResults?: Array<{
+    subjectId: string;
+    supersededAt?: Date | null;
+    shareOffer?: {
+      userId: string;
+      status: string;
+    } | null;
+  }>;
   // Optional: user vessel for read state tracking
   userVessels?: Array<{
     userId: string;
@@ -398,6 +407,14 @@ export function mapSessionToSummary(
         completedAt: null,
       };
 
+  const userHasPendingShareOffer = session.reconcilerResults?.some(
+    (result) =>
+      result.subjectId === currentUserId &&
+      !result.supersededAt &&
+      result.shareOffer?.userId === currentUserId &&
+      (result.shareOffer.status === 'OFFERED' || result.shareOffer.status === 'PENDING')
+  ) ?? false;
+
   // Compute action needed based on gates (kept for backwards compatibility)
   const selfActionNeeded: string[] = [];
   const partnerActionNeeded: string[] = [];
@@ -428,7 +445,12 @@ export function mapSessionToSummary(
       const userNeedsToValidate = partnerEmpathy?.status === 'REVEALED';
       const userNeedsToRespondToShare = partnerEmpathy?.status === 'AWAITING_SHARING';
 
-      if (userNeedsToRefine || userNeedsToValidate || userNeedsToRespondToShare) {
+      if (
+        userNeedsToRefine ||
+        userNeedsToValidate ||
+        userNeedsToRespondToShare ||
+        userHasPendingShareOffer
+      ) {
         selfActionNeeded.push('continue_stage');
       }
       // If user hasn't sent empathy yet, they still have work to do

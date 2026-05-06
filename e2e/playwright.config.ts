@@ -26,7 +26,7 @@ const webServers = (fixtureId: string) => [
     // on slower hardware (CI, EC2), producing intermittent "blank page"
     // failures even after the dev server reports ready. Production-mode is
     // deterministic — single bundle, single network round-trip, then mounts.
-    command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082 --no-dev',
+    command: 'cd ../mobile && BROWSER=none EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082 --no-dev',
     url: 'http://localhost:8082',
     reuseExistingServer: false,
     timeout: 300000,

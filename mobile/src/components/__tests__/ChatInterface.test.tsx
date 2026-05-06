@@ -338,4 +338,18 @@ describe('TypingIndicator', () => {
 
     expect(screen.getByTestId('typing-indicator')).toBeTruthy();
   });
+
+  it('does not render when the latest user message failed', () => {
+    const messages = [
+      createMockMessage({
+        id: 'failed-user-message',
+        role: MessageRole.USER,
+        status: 'error',
+      }),
+    ];
+
+    render(<ChatInterface messages={messages} onSendMessage={jest.fn()} />);
+
+    expect(screen.queryByTestId('typing-indicator')).toBeNull();
+  });
 });

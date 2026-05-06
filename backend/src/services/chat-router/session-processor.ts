@@ -328,10 +328,10 @@ export async function processSessionMessage(
     }
   }
 
-  // Stage 2: If AI is offering ready-to-share, auto-save the empathy draft
-  // Save with readyToShare: false so user sees low-profile confirmation prompt first
-  // User must explicitly confirm to see the full preview card
-  if (currentStage === 2 && orchestratorResult.offerReadyToShare && orchestratorResult.proposedEmpathyStatement) {
+  // Stage 2: If AI emitted a hidden draft, persist it even when the ReadyShare
+  // flag is missing. The visible response strips <draft>, so dropping the draft
+  // would leave the user with a blank review prompt.
+  if (currentStage === 2 && orchestratorResult.proposedEmpathyStatement?.trim()) {
     try {
       await prisma.empathyDraft.upsert({
         where: {
@@ -343,12 +343,12 @@ export async function processSessionMessage(
         create: {
           sessionId,
           userId,
-          content: orchestratorResult.proposedEmpathyStatement,
+          content: orchestratorResult.proposedEmpathyStatement.trim(),
           readyToShare: false, // User must confirm before seeing full preview
           version: 1,
         },
         update: {
-          content: orchestratorResult.proposedEmpathyStatement,
+          content: orchestratorResult.proposedEmpathyStatement.trim(),
           // Don't change readyToShare if draft already exists - user may have confirmed
           version: { increment: 1 },
         },

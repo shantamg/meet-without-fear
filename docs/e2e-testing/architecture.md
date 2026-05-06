@@ -311,7 +311,7 @@ export default defineConfig({
     },
     {
       // --no-dev forces a production-mode bundle for deterministic rendering on slow hardware (EC2).
-      command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082 --no-dev',
+      command: 'cd ../mobile && BROWSER=none EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082 --no-dev',
       port: 8082,
       timeout: 300000, // 300s for cold production bundle compilation
     },

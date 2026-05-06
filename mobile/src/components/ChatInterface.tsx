@@ -257,7 +257,7 @@ export function ChatInterface({
     // Messages are sorted oldest-to-newest in the array (but displayed inverted)
     // So the last element in the array is the newest message
     const lastMessage = messages[messages.length - 1];
-    return lastMessage?.role === MessageRole.USER;
+    return lastMessage?.role === MessageRole.USER && lastMessage.status !== 'error';
   }, [messages]);
 
   // Combined loading state: explicit isLoading OR derived from last message
