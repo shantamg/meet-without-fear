@@ -1,0 +1,35 @@
+{
+  "id": "stage-4-willingness-selection",
+  "stages": [4],
+  "description": "Both partners mark willingness on shared proposals; AI captures selections and surfaces closure path without inventing agreement.",
+  "seed": {
+    "session": {"status": "ACTIVE", "stage": 4, "scenario": "adam-eve"},
+    "participants": [
+      {"role": "invitor", "name": "Adam", "compactSigned": true, "stageGates": {"4": {"inventoryReviewed": true}}},
+      {"role": "invitee", "name": "Eve", "compactSigned": true, "stageGates": {"4": {"inventoryReviewed": true}}}
+    ],
+    "history_source": "docs/product/source-material/golden-transcripts/adam-eve.md:778-810",
+    "proposals": [
+      {"id": "weekly-walk", "kind": "shared", "description": "Weekly walk", "selectedBy": {"Adam": "WILLING", "Eve": "WILLING"}},
+      {"id": "structured-conversation", "kind": "shared", "description": "Weekly structured conversation", "selectedBy": {"Adam": "WILLING", "Eve": "WILLING"}}
+    ]
+  },
+  "trigger": {"type": "api_call", "endpoint": "POST /sessions/:id/messages/stream", "actor": "Eve", "body": {"content": "I am willing to try the walk and the structured conversation."}},
+  "capture": ["ai_message_text", "new_messages_in_db", "stage_progress_diff", "strategy_selection_overlap"],
+  "rubric": {
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/adam-eve.md:788-816",
+    "judge_prompt": "eval/scorer/judge-prompts/stage-4-willingness-selection.md",
+    "dimensions": [
+      {"id": "captures_willingness", "description": "Captures the user's willingness selections.", "pass_threshold": 4, "mock_pass_keywords": ["willing"]},
+      {"id": "waits_for_overlap", "description": "Does not reveal or invent overlap before both tracks are ready.", "pass_threshold": 4, "mock_pass_keywords": ["see what"]},
+      {"id": "agreement_only_on_mutual", "description": "Treats mutual willingness as the only shared agreement path.", "pass_threshold": 4, "mock_pass_keywords": ["both"]}
+    ],
+    "overall_pass_threshold": 4.0,
+    "hard_invariants": [
+      {"id": "no_invented_shared_agreement", "description": "No agreement unless both selected the same shared item."},
+      {"id": "no_blame_or_pressure", "description": "No pressure about selections."}
+    ]
+  },
+  "expected_response": "Got it. You are willing to try the walk and the structured conversation. We will see what Adam chose and only the items you both chose become shared agreements.",
+  "improver": {"candidate_owners": ["mwf_prompts"], "default_owner": "mwf_prompts"}
+}

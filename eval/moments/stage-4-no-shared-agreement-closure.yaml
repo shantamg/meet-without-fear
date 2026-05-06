@@ -1,0 +1,148 @@
+{
+  "id": "stage-4-no-shared-agreement-closure",
+  "stages": [4],
+  "description": "James has selected all shared experiments and his individual league commitment. Catherine selected no shared experiments and kept only her individual commitments. The AI must close the shared process without inventing agreement, while preserving dignity and individual next steps.",
+  "seed": {
+    "session": {
+      "status": "ACTIVE",
+      "stage": 4,
+      "scenario": "james-catherine"
+    },
+    "participants": [
+      {
+        "role": "invitor",
+        "name": "Catherine",
+        "compactSigned": true,
+        "stageGates": {
+          "1": {"status": "COMPLETE"},
+          "2": {"status": "COMPLETE"},
+          "3": {"status": "COMPLETE"},
+          "4": {"readyToRank": true, "rankingSubmitted": true}
+        }
+      },
+      {
+        "role": "invitee",
+        "name": "James",
+        "compactSigned": true,
+        "stageGates": {
+          "1": {"status": "COMPLETE"},
+          "2": {"status": "COMPLETE"},
+          "3": {"status": "COMPLETE"},
+          "4": {"readyToRank": true, "rankingSubmitted": true}
+        }
+      }
+    ],
+    "proposals": [
+      {
+        "id": "pause-agreement",
+        "kind": "shared",
+        "description": "Pause agreement",
+        "selectedBy": {
+          "James": "WILLING",
+          "Catherine": "NOT_WILLING"
+        }
+      },
+      {
+        "id": "morning-after-hard-night",
+        "kind": "shared",
+        "description": "Morning after a hard night",
+        "selectedBy": {
+          "James": "WILLING",
+          "Catherine": "NOT_WILLING"
+        }
+      },
+      {
+        "id": "shared-appreciation-practice",
+        "kind": "shared",
+        "description": "Shared appreciation practice",
+        "selectedBy": {
+          "James": "WILLING",
+          "Catherine": "NOT_WILLING"
+        }
+      },
+      {
+        "id": "conversation-about-kids",
+        "kind": "shared",
+        "description": "Conversation about the kids",
+        "selectedBy": {
+          "James": "WILLING",
+          "Catherine": "NOT_WILLING"
+        }
+      },
+      {
+        "id": "look-up-recreational-league",
+        "kind": "individual",
+        "owner": "James",
+        "description": "Look up one recreational league this week",
+        "selectedBy": {
+          "James": "WILLING"
+        }
+      },
+      {
+        "id": "return-to-individual-therapy",
+        "kind": "individual",
+        "owner": "Catherine",
+        "description": "Return to individual therapy within two weeks",
+        "selectedBy": {
+          "Catherine": "WILLING"
+        }
+      },
+      {
+        "id": "journaling",
+        "kind": "individual",
+        "owner": "Catherine",
+        "description": "Journaling for ten minutes a few times a week",
+        "selectedBy": {
+          "Catherine": "WILLING"
+        }
+      }
+    ]
+  },
+  "trigger": {
+    "type": "api_call",
+    "endpoint": "POST /sessions/:id/messages",
+    "actor": "James",
+    "body": {
+      "role": "USER",
+      "content": "So that's it."
+    }
+  },
+  "capture": [
+    "ai_message_text",
+    "new_messages_in_db",
+    "stage_progress_diff",
+    "strategy_selection_overlap"
+  ],
+  "rubric": {
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/james-catherine.md:1257-1306",
+    "judge_prompt": "eval/scorer/judge-prompts/stage-4-no-shared-agreement-closure.md",
+    "dimensions": [
+      {
+        "id": "no_shared_agreement_clarity",
+        "description": "Names that there is no shared overlap and therefore no shared agreement without ambiguity or softening.",
+        "pass_threshold": 4
+      },
+      {
+        "id": "dignified_closure",
+        "description": "Closes the shared process with dignity, without blame, triumph, or pressure to keep negotiating.",
+        "pass_threshold": 4
+      },
+      {
+        "id": "individual_commitments_preserved",
+        "description": "Keeps each person's individual commitments distinct from any shared agreement.",
+        "pass_threshold": 3
+      }
+    ],
+    "overall_pass_threshold": 4.0,
+    "hard_invariants": [
+      {
+        "id": "no_invented_shared_agreement",
+        "description": "AI does not invent a shared agreement when partner has not selected WILLING on any shared proposal"
+      }
+    ]
+  },
+  "improver": {
+    "candidate_owners": ["mwf_prompts", "eval_harness"],
+    "default_owner": "mwf_prompts"
+  }
+}

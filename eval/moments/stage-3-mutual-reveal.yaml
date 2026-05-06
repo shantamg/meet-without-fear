@@ -1,0 +1,31 @@
+{
+  "id": "stage-3-mutual-reveal",
+  "stages": [3],
+  "description": "Both partners' needs are revealed side-by-side; AI asks what the user notices without analyzing or labeling overlap.",
+  "seed": {
+    "session": {"status": "ACTIVE", "stage": 3, "scenario": "adam-eve"},
+    "participants": [
+      {"role": "invitor", "name": "Adam", "compactSigned": true, "stageGates": {"3": {"needsConfirmed": true, "shareConsented": true}}},
+      {"role": "invitee", "name": "Eve", "compactSigned": true, "stageGates": {"3": {"needsConfirmed": true, "shareConsented": true}}}
+    ],
+    "history_source": "docs/product/source-material/golden-transcripts/adam-eve.md:584-614"
+  },
+  "trigger": {"type": "api_call", "endpoint": "POST /sessions/:id/messages/stream", "actor": "Adam", "body": {"content": "I can see both of our needs now."}},
+  "capture": ["ai_message_text", "new_messages_in_db", "stage_progress_diff", "needs_reveal"],
+  "rubric": {
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/adam-eve.md:584-602",
+    "judge_prompt": "eval/scorer/judge-prompts/stage-3-mutual-reveal.md",
+    "dimensions": [
+      {"id": "side_by_side_reveal", "description": "Presents both summaries neutrally.", "pass_threshold": 4, "mock_pass_keywords": ["both"]},
+      {"id": "user_noticing", "description": "Asks what the user notices.", "pass_threshold": 4, "mock_pass_keywords": ["what do you notice"]},
+      {"id": "no_ai_analysis", "description": "Does not label compatibility or common ground.", "pass_threshold": 4, "mock_pass_keywords": ["named"]}
+    ],
+    "overall_pass_threshold": 4.0,
+    "hard_invariants": [
+      {"id": "asks_what_do_you_notice", "description": "Must include the noticing prompt."},
+      {"id": "no_overlap_labeling", "description": "No overlap/common-ground labeling."}
+    ]
+  },
+  "expected_response": "Here is what both of you named, side by side. Adam named peace, connection, and meaning. Eve named growth, presence, agency, and an open future. What do you notice?",
+  "improver": {"candidate_owners": ["mwf_prompts"], "default_owner": "mwf_prompts"}
+}

@@ -61,6 +61,11 @@ HARD_CAP_MIN="${HARD_CAP_MIN:-45}"
 
 # ── Slack ───────────────────────────────────────────────────────────────────
 BOT_OPS_CHANNEL_ID="${BOT_OPS_CHANNEL_ID:-}"
+AGENTIC_DEVS_CHANNEL_ID="${AGENTIC_DEVS_CHANNEL_ID:-}"
+DAILY_SUMMARY_CHANNEL_ID="${DAILY_SUMMARY_CHANNEL_ID:-}"
+MOST_IMPORTANT_THING_CHANNEL_ID="${MOST_IMPORTANT_THING_CHANNEL_ID:-}"
+BUGS_AND_REQUESTS_CHANNEL_ID="${BUGS_AND_REQUESTS_CHANNEL_ID:-}"
+SLAM_BOT_CHANNEL_ID="${SLAM_BOT_CHANNEL_ID:-}"
 
 # ── Heartbeats ──────────────────────────────────────────────────────────────
 HEARTBEAT_DIR="${HEARTBEAT_DIR:-${BOT_STATE_DIR}/heartbeats}"

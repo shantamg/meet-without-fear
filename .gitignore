@@ -53,6 +53,7 @@ expo-env.d.ts
 
 # Testing
 coverage
+eval/alignment-runs/
 
 # Prisma
 backend/prisma/*.db
@@ -136,3 +137,8 @@ e2e/test-results/test-results/
 test-results/
 backend/test-results/
 mobile/test-results/
+
+# Moment evaluator local artifacts (run outputs, caches, real-mode transcripts)
+eval/runs/
+scripts/__pycache__/
+backend/scripts/transcripts/

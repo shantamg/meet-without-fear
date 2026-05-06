@@ -1,0 +1,490 @@
+import { useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import { CalendarClock, CheckCircle2, RotateCcw } from 'lucide-react-native';
+import {
+  AgreementDTO,
+  Stage4OutcomeDTO,
+  TendingEntryDTO,
+  TendingEntryStatus,
+  TendingEntryType,
+} from '@meet-without-fear/shared';
+import { colors } from '@/theme';
+
+type TendingStatusChoice = 'WORKED' | 'PARTLY' | 'DID_NOT_WORK' | 'DID_NOT_TRY' | 'OTHER';
+type TendingContinueChoice = 'CONTINUE' | 'ADJUST' | 'CLOSE' | 'NEW_PROCESS' | 'OTHER_TRACK';
+
+interface TendingPanelProps {
+  entries: TendingEntryDTO[];
+  agreements?: AgreementDTO[];
+  outcome?: Stage4OutcomeDTO | null;
+  initialEntryId?: string | null;
+  isCreatingReentry?: boolean;
+  isSubmittingResponse?: boolean;
+  onCreateReentry: (intent?: string) => void;
+  onSubmitResponse: (
+    entryId: string,
+    response: {
+      status: TendingStatusChoice;
+      reflection?: string;
+      continueChoice: TendingContinueChoice;
+    }
+  ) => void;
+}
+
+const responseLabels: Record<TendingStatusChoice, string> = {
+  WORKED: 'Worked',
+  PARTLY: 'Partly',
+  DID_NOT_WORK: 'Did not work',
+  DID_NOT_TRY: 'Did not try',
+  OTHER: 'Other',
+};
+
+const continueLabels: Record<TendingContinueChoice, string> = {
+  CONTINUE: 'Continue',
+  ADJUST: 'Adjust',
+  CLOSE: 'Close',
+  NEW_PROCESS: 'New process',
+  OTHER_TRACK: 'Other support',
+};
+
+function formatDate(value: string | null): string {
+  if (!value) return 'Available now';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function entryTitle(entry: TendingEntryDTO): string {
+  if (entry.type === TendingEntryType.USER_INITIATED_REENTRY) {
+    return 'Passive re-entry';
+  }
+  return 'Agreement check-in';
+}
+
+function entryStatusLabel(status: TendingEntryStatus): string {
+  switch (status) {
+    case TendingEntryStatus.SCHEDULED:
+      return 'Scheduled';
+    case TendingEntryStatus.OPEN:
+      return 'Open';
+    case TendingEntryStatus.PARTIAL:
+      return 'Waiting for partner';
+    case TendingEntryStatus.COMPLETED:
+      return 'Completed';
+    case TendingEntryStatus.EXPIRED:
+      return 'Expired';
+    case TendingEntryStatus.CANCELLED:
+      return 'Cancelled';
+    default:
+      return status;
+  }
+}
+
+function canRespond(entry: TendingEntryDTO): boolean {
+  return (
+    !entry.myResponse &&
+    (entry.status === TendingEntryStatus.OPEN || entry.status === TendingEntryStatus.PARTIAL)
+  );
+}
+
+export function TendingPanel({
+  entries,
+  agreements = [],
+  outcome,
+  initialEntryId,
+  isCreatingReentry = false,
+  isSubmittingResponse = false,
+  onCreateReentry,
+  onSubmitResponse,
+}: TendingPanelProps) {
+  const [intent, setIntent] = useState('');
+  const [reflection, setReflection] = useState('');
+  const [statusChoice, setStatusChoice] = useState<TendingStatusChoice>('PARTLY');
+  const [continueChoice, setContinueChoice] = useState<TendingContinueChoice>('ADJUST');
+
+  const selectedEntry = useMemo(() => {
+    const byId = initialEntryId
+      ? entries.find((entry) => entry.id === initialEntryId)
+      : undefined;
+    return (
+      byId ||
+      entries.find((entry) => canRespond(entry)) ||
+      entries.find((entry) => entry.status === TendingEntryStatus.SCHEDULED) ||
+      entries[0]
+    );
+  }, [entries, initialEntryId]);
+
+  const selectedAgreement = agreements.find(
+    (agreement) => agreement.id === selectedEntry?.agreementId
+  );
+  const scheduledSharedEntries = entries.filter(
+    (entry) => entry.type === TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN
+  );
+  const passiveEntries = entries.filter(
+    (entry) => entry.type === TendingEntryType.USER_INITIATED_REENTRY
+  );
+  const hasSharedAgreementCheckIn = scheduledSharedEntries.length > 0;
+
+  const handleSubmit = () => {
+    if (!selectedEntry || !canRespond(selectedEntry) || isSubmittingResponse) return;
+    onSubmitResponse(selectedEntry.id, {
+      status: statusChoice,
+      reflection: reflection.trim() || undefined,
+      continueChoice,
+    });
+  };
+
+  const handleCreateReentry = () => {
+    if (isCreatingReentry) return;
+    onCreateReentry(intent.trim() || undefined);
+    setIntent('');
+  };
+
+  return (
+    <View style={styles.container} testID="tending-panel">
+      <View style={styles.card}>
+        <View style={styles.titleRow}>
+          <View style={styles.titleIcon}>
+            <RotateCcw color={colors.accent} size={18} />
+          </View>
+          <View style={styles.titleCopy}>
+            <Text style={styles.title}>The Tending</Text>
+            <Text style={styles.subtitle}>
+              Return to what was agreed, what stayed open, or what you want to revisit.
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {selectedEntry && (
+        <View style={styles.card}>
+          <View style={styles.entryHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>{entryTitle(selectedEntry)}</Text>
+              <Text style={styles.entryMeta}>
+                {entryStatusLabel(selectedEntry.status)} · {formatDate(selectedEntry.scheduledFor || selectedEntry.openedAt)}
+              </Text>
+            </View>
+            {selectedEntry.myResponse && <CheckCircle2 color={colors.success} size={20} />}
+          </View>
+
+          {selectedAgreement && (
+            <View style={styles.contextBox}>
+              <Text style={styles.contextLabel}>Agreement</Text>
+              <Text style={styles.contextText}>{selectedAgreement.description}</Text>
+              {selectedAgreement.measureOfSuccess && (
+                <Text style={styles.contextMeta}>Success: {selectedAgreement.measureOfSuccess}</Text>
+              )}
+            </View>
+          )}
+
+          {selectedEntry.summary && (
+            <View style={styles.contextBox}>
+              <Text style={styles.contextLabel}>Context</Text>
+              <Text style={styles.contextText}>{selectedEntry.summary}</Text>
+            </View>
+          )}
+
+          {canRespond(selectedEntry) ? (
+            <View style={styles.responseArea}>
+              <Text style={styles.fieldLabel}>How did this go?</Text>
+              <View style={styles.choiceWrap}>
+                {(Object.keys(responseLabels) as TendingStatusChoice[]).map((choice) => {
+                  const selected = choice === statusChoice;
+                  return (
+                    <TouchableOpacity
+                      key={choice}
+                      style={[styles.choiceButton, selected && styles.choiceButtonSelected]}
+                      onPress={() => setStatusChoice(choice)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                    >
+                      <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>
+                        {responseLabels[choice]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.fieldLabel}>What should happen next?</Text>
+              <View style={styles.choiceWrap}>
+                {(Object.keys(continueLabels) as TendingContinueChoice[]).map((choice) => {
+                  const selected = choice === continueChoice;
+                  return (
+                    <TouchableOpacity
+                      key={choice}
+                      style={[styles.choiceButton, selected && styles.choiceButtonSelected]}
+                      onPress={() => setContinueChoice(choice)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                    >
+                      <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>
+                        {continueLabels[choice]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <TextInput
+                value={reflection}
+                onChangeText={setReflection}
+                placeholder="Add a short reflection"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                style={styles.textInput}
+                accessibilityLabel="Tending reflection"
+              />
+
+              <TouchableOpacity
+                style={[styles.primaryButton, isSubmittingResponse && styles.disabledButton]}
+                onPress={handleSubmit}
+                disabled={isSubmittingResponse}
+                accessibilityRole="button"
+                accessibilityLabel="Submit Tending review"
+                testID="submit-tending-response"
+              >
+                <Text style={styles.primaryButtonText}>
+                  {isSubmittingResponse ? 'Saving...' : 'Save review'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Text style={styles.mutedText}>
+              {selectedEntry.myResponse
+                ? 'Your review is saved.'
+                : 'This check-in is not open for review yet.'}
+            </Text>
+          )}
+        </View>
+      )}
+
+      <View style={styles.card}>
+        <View style={styles.entryHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Passive re-entry</Text>
+            <Text style={styles.entryMeta}>
+              {hasSharedAgreementCheckIn
+                ? `${scheduledSharedEntries.length} scheduled check-in${scheduledSharedEntries.length === 1 ? '' : 's'}`
+                : 'No scheduled shared check-in'}
+              {passiveEntries.length > 0 ? ` · ${passiveEntries.length} re-entry ${passiveEntries.length === 1 ? 'thread' : 'threads'}` : ''}
+            </Text>
+          </View>
+          <CalendarClock color={colors.textSecondary} size={20} />
+        </View>
+
+        {outcome?.individualCommitments.length ? (
+          <View style={styles.contextBox}>
+            <Text style={styles.contextLabel}>Individual commitments</Text>
+            {outcome.individualCommitments.map((commitment) => (
+              <Text key={commitment.id} style={styles.contextText}>
+                {commitment.description}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
+        {outcome?.openNeeds.length ? (
+          <View style={styles.contextBox}>
+            <Text style={styles.contextLabel}>Still open</Text>
+            {outcome.openNeeds.map((need, index) => (
+              <Text key={need.id || `${need.label}-${index}`} style={styles.contextText}>
+                {need.label}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
+        <TextInput
+          value={intent}
+          onChangeText={setIntent}
+          placeholder="What do you want to revisit?"
+          placeholderTextColor={colors.textMuted}
+          multiline
+          style={styles.textInput}
+          accessibilityLabel="Passive re-entry intent"
+        />
+        <TouchableOpacity
+          style={[styles.secondaryButton, isCreatingReentry && styles.disabledButton]}
+          onPress={handleCreateReentry}
+          disabled={isCreatingReentry}
+          accessibilityRole="button"
+          accessibilityLabel="Start passive Tending re-entry"
+          testID="create-tending-reentry"
+        >
+          <Text style={styles.secondaryButtonText}>
+            {isCreatingReentry ? 'Opening...' : 'Start re-entry'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    gap: 12,
+  },
+  card: {
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  titleIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.bgTertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleCopy: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  entryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  entryMeta: {
+    fontSize: 12,
+    color: colors.textMuted,
+    lineHeight: 17,
+  },
+  contextBox: {
+    backgroundColor: colors.bgPrimary,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  contextLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  contextText: {
+    fontSize: 14,
+    color: colors.textPrimary,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  contextMeta: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  responseArea: {
+    gap: 10,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  choiceWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  choiceButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: colors.bgPrimary,
+  },
+  choiceButtonSelected: {
+    borderColor: colors.accent,
+    backgroundColor: colors.bgTertiary,
+  },
+  choiceText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  choiceTextSelected: {
+    color: colors.accent,
+  },
+  textInput: {
+    minHeight: 78,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bgPrimary,
+    color: colors.textPrimary,
+    padding: 12,
+    fontSize: 14,
+    textAlignVertical: 'top',
+  },
+  primaryButton: {
+    borderRadius: 8,
+    backgroundColor: colors.accent,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    color: colors.textOnAccent,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  secondaryButtonText: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  mutedText: {
+    fontSize: 13,
+    color: colors.textMuted,
+    lineHeight: 18,
+  },
+});
+
+export default TendingPanel;

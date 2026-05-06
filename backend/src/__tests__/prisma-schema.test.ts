@@ -12,6 +12,13 @@ import {
   AgreementStatus,
   GlobalLibrarySource,
   StrategySource,
+  Stage4ClosureKind,
+  Stage4ClosureReason,
+  Stage4ProposalKind,
+  Stage4ProposalStatus,
+  Stage4SelectionDecision,
+  TendingEntryStatus,
+  TendingEntryType,
   ExerciseType,
 } from '@prisma/client';
 
@@ -72,6 +79,12 @@ describe('Prisma Schema', () => {
       expect(prisma.empathyValidation).toBeDefined();
       expect(prisma.strategyProposal).toBeDefined();
       expect(prisma.strategyRanking).toBeDefined();
+      expect(prisma.stage4ProposalSelection).toBeDefined();
+      expect(prisma.stage4ProposalRevision).toBeDefined();
+      expect(prisma.stage4NeedCoverage).toBeDefined();
+      expect(prisma.stage4Closure).toBeDefined();
+      expect(prisma.tendingEntry).toBeDefined();
+      expect(prisma.tendingResponse).toBeDefined();
       expect(prisma.emotionalExerciseCompletion).toBeDefined();
       expect(prisma.globalLibraryItem).toBeDefined();
     });
@@ -157,6 +170,32 @@ describe('Prisma Schema', () => {
       expect(StrategySource.CURATED).toBe('CURATED');
     });
 
+    it('exports Stage 4 and Tending enums with correct values', () => {
+      expect(Stage4ProposalKind.SHARED_PROPOSAL).toBe('SHARED_PROPOSAL');
+      expect(Stage4ProposalKind.INDIVIDUAL_COMMITMENT).toBe('INDIVIDUAL_COMMITMENT');
+      expect(Stage4ProposalStatus.ACTIVE).toBe('ACTIVE');
+      expect(Stage4ProposalStatus.REVISED).toBe('REVISED');
+      expect(Stage4ProposalStatus.REMOVED).toBe('REMOVED');
+      expect(Stage4ProposalStatus.CONVERTED_TO_AGREEMENT).toBe('CONVERTED_TO_AGREEMENT');
+      expect(Stage4SelectionDecision.WILLING).toBe('WILLING');
+      expect(Stage4SelectionDecision.NOT_WILLING).toBe('NOT_WILLING');
+      expect(Stage4SelectionDecision.NEEDS_DISCUSSION).toBe('NEEDS_DISCUSSION');
+      expect(Stage4ClosureKind.SHARED_AGREEMENT).toBe('SHARED_AGREEMENT');
+      expect(Stage4ClosureKind.NO_SHARED_AGREEMENT).toBe('NO_SHARED_AGREEMENT');
+      expect(Stage4ClosureReason.MUTUAL_SELECTION).toBe('MUTUAL_SELECTION');
+      expect(Stage4ClosureReason.NO_OVERLAP).toBe('NO_OVERLAP');
+      expect(Stage4ClosureReason.BOUNDARY_HONORED).toBe('BOUNDARY_HONORED');
+      expect(Stage4ClosureReason.USER_STOPPED).toBe('USER_STOPPED');
+      expect(TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN).toBe('SCHEDULED_SHARED_AGREEMENT_CHECKIN');
+      expect(TendingEntryType.USER_INITIATED_REENTRY).toBe('USER_INITIATED_REENTRY');
+      expect(TendingEntryStatus.SCHEDULED).toBe('SCHEDULED');
+      expect(TendingEntryStatus.OPEN).toBe('OPEN');
+      expect(TendingEntryStatus.PARTIAL).toBe('PARTIAL');
+      expect(TendingEntryStatus.COMPLETED).toBe('COMPLETED');
+      expect(TendingEntryStatus.EXPIRED).toBe('EXPIRED');
+      expect(TendingEntryStatus.CANCELLED).toBe('CANCELLED');
+    });
+
     it('exports ExerciseType enum with correct values', () => {
       expect(ExerciseType.BREATHING_EXERCISE).toBe('BREATHING_EXERCISE');
       expect(ExerciseType.BODY_SCAN).toBe('BODY_SCAN');
@@ -230,9 +269,54 @@ describe('Prisma Schema', () => {
         description: 'Weekly check-ins',
         needsAddressed: ['CONNECTION', 'RECOGNITION'],
         source: StrategySource.USER_SUBMITTED,
+        kind: Stage4ProposalKind.SHARED_PROPOSAL,
+        status: Stage4ProposalStatus.ACTIVE,
       };
       expect(proposalInput.source).toBe('USER_SUBMITTED');
       expect(proposalInput.needsAddressed).toHaveLength(2);
+      expect(proposalInput.kind).toBe('SHARED_PROPOSAL');
+    });
+
+    it('allows creating valid Stage 4 selection input', () => {
+      const selectionInput: Prisma.Stage4ProposalSelectionCreateInput = {
+        proposal: { connect: { id: 'proposal-id' } },
+        session: { connect: { id: 'session-id' } },
+        user: { connect: { id: 'user-id' } },
+        decision: Stage4SelectionDecision.WILLING,
+        note: 'I can try this for two weeks',
+      };
+      expect(selectionInput.decision).toBe('WILLING');
+    });
+
+    it('allows creating valid Stage 4 closure input without agreements', () => {
+      const closureInput: Prisma.Stage4ClosureCreateInput = {
+        session: { connect: { id: 'session-id' } },
+        kind: Stage4ClosureKind.NO_SHARED_AGREEMENT,
+        reason: Stage4ClosureReason.NO_OVERLAP,
+        summary: 'The session closed with open needs named and no shared obligation.',
+        sharedAgreementIds: [],
+        individualProposalIds: ['proposal-id'],
+        openNeedIds: ['need-id'],
+      };
+      expect(closureInput.kind).toBe('NO_SHARED_AGREEMENT');
+      expect(closureInput.sharedAgreementIds).toEqual([]);
+    });
+
+    it('allows creating valid Tending entry and response inputs', () => {
+      const entryInput: Prisma.TendingEntryCreateInput = {
+        session: { connect: { id: 'session-id' } },
+        type: TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
+        status: TendingEntryStatus.SCHEDULED,
+        scheduledFor: new Date('2026-05-20T17:00:00.000Z'),
+      };
+      const responseInput: Prisma.TendingResponseCreateInput = {
+        tendingEntry: { connect: { id: 'entry-id' } },
+        user: { connect: { id: 'user-id' } },
+        status: 'PARTLY',
+        continueChoice: 'ADJUST',
+      };
+      expect(entryInput.type).toBe('SCHEDULED_SHARED_AGREEMENT_CHECKIN');
+      expect(responseInput.continueChoice).toBe('ADJUST');
     });
 
     it('allows creating valid GlobalLibraryItem input', () => {

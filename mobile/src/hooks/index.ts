@@ -133,6 +133,13 @@ export {
   useMarkReadyToRank,
   useSubmitRankings,
   useStrategiesReveal,
+  useStage4State,
+  useSubmitStage4ProposalSelection,
+  useSubmitStage4Selections,
+  useCloseStage4,
+  useTendingEntries,
+  useSubmitTendingResponse,
+  useCreateTendingReentry,
   // Agreements
   useAgreements,
   useCreateAgreement,

@@ -1,0 +1,31 @@
+{
+  "id": "stage-1-emotional-pivot",
+  "stages": [1],
+  "description": "User pivots from naming facts to expressing fear and shame; AI must stay in Stage 1 witness mode and not complete FeelHeardCheck.",
+  "seed": {
+    "session": {"status": "ACTIVE", "stage": 1, "scenario": "adam-eve"},
+    "participants": [
+      {"role": "invitor", "name": "Adam", "compactSigned": true, "stageGates": {"1": {"feelHeardConfirmed": false}}},
+      {"role": "invitee", "name": "Eve", "compactSigned": true, "stageGates": {"1": {"feelHeardConfirmed": false}}}
+    ],
+    "history_source": "docs/product/source-material/golden-transcripts/adam-eve.md:43-67"
+  },
+  "trigger": {"type": "api_call", "endpoint": "POST /sessions/:id/messages/stream", "actor": "Adam", "body": {"content": "The facts are true, but underneath them I am scared she may be right about me."}},
+  "capture": ["ai_message_text", "new_messages_in_db", "stage_progress_diff"],
+  "rubric": {
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/adam-eve.md:63-67",
+    "judge_prompt": "eval/scorer/judge-prompts/stage-1-emotional-pivot.md",
+    "dimensions": [
+      {"id": "emotional_reflection", "description": "Reflects the fear and shame without argument.", "pass_threshold": 4, "mock_pass_keywords": ["scared"]},
+      {"id": "listening_mode", "description": "Stays with the user rather than moving to empathy, needs, or repair.", "pass_threshold": 4, "mock_pass_keywords": ["sit"]},
+      {"id": "no_premature_gate", "description": "Does not mark the user fully heard or rush the handoff.", "pass_threshold": 4, "mock_pass_keywords": ["with"]}
+    ],
+    "overall_pass_threshold": 4.0,
+    "hard_invariants": [
+      {"id": "no_later_stage_language", "description": "No Stage 2, 3, or 4 language."},
+      {"id": "no_feel_heard_completion", "description": "Does not ask the user to declare Stage 1 complete."}
+    ]
+  },
+  "expected_response": "That is the fear underneath the facts: part of you is scared she may be right about something painful. We can sit with that before moving anywhere.",
+  "improver": {"candidate_owners": ["mwf_prompts"], "default_owner": "mwf_prompts"}
+}

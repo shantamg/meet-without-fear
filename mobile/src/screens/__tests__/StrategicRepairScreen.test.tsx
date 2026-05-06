@@ -6,9 +6,18 @@
  */
 
 import React from 'react';
-import { screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { screen, fireEvent } from '@testing-library/react-native';
 import { render } from '../../utils/test-utils';
-import { StrategyPhase } from '@meet-without-fear/shared';
+import {
+  GetStage4StateResponse,
+  Stage4ClosureKind,
+  Stage4ClosureReason,
+  Stage4Phase,
+  Stage4ProposalKind,
+  Stage4ProposalStatus,
+  Stage4SelectionDecision,
+  StrategyPhase,
+} from '@meet-without-fear/shared';
 
 // Import after mocks
 import { StrategicRepairScreen } from '../StrategicRepairScreen';
@@ -104,6 +113,7 @@ let mockStrategyPhase = StrategyPhase.COLLECTING;
 let mockStrategiesData = mockStrategies;
 let mockRevealData: { overlap: typeof mockStrategies; phase: StrategyPhase } | null = null;
 let mockAgreementsData: { agreements: typeof mockAgreement[] } | null = null;
+let mockStage4State: GetStage4StateResponse | undefined = undefined;
 
 // Mock hook return values
 const mockRequestSuggestions = jest.fn();
@@ -113,6 +123,66 @@ const mockConfirmAgreement = jest.fn();
 const mockResolveSession = jest.fn();
 const mockProposeStrategy = jest.fn();
 const mockCreateAgreement = jest.fn();
+const mockSubmitStage4Selection = jest.fn();
+const mockCloseStage4 = jest.fn();
+
+const redesignedStage4State: GetStage4StateResponse = {
+  phase: Stage4Phase.SELECTION,
+  inventory: {
+    sharedProposals: [
+      {
+        id: 'proposal-1',
+        kind: Stage4ProposalKind.SHARED_PROPOSAL,
+        description: 'Pause and reflect impact before problem solving.',
+        needsAddressed: [
+          { id: 'need-1', label: 'Feeling heard', coverage: 'COVERED' },
+        ],
+        duration: 'Two weeks',
+        measureOfSuccess: null,
+        status: Stage4ProposalStatus.ACTIVE,
+        myDecision: undefined,
+      },
+    ],
+    individualCommitments: [],
+    unaddressedNeeds: [
+      {
+        id: 'need-2',
+        label: 'Trust after conflict',
+        source: 'BOTH',
+        note: 'No active proposal fully covers this yet.',
+      },
+    ],
+    removedProposalCount: 0,
+    updatedAt: '2026-05-06T00:00:00.000Z',
+  },
+  coverageAudit: {
+    covered: [
+      {
+        id: 'coverage-1',
+        label: 'Feeling heard',
+        source: 'BOTH',
+        coveringProposalIds: ['proposal-1'],
+        note: null,
+      },
+    ],
+    partial: [],
+    open: [
+      {
+        id: 'coverage-2',
+        label: 'Trust after conflict',
+        source: 'BOTH',
+        coveringProposalIds: [],
+        note: 'No active proposal fully covers this yet.',
+      },
+    ],
+    updatedAt: '2026-05-06T00:00:00.000Z',
+  },
+  mySelections: [],
+  partnerSelections: [],
+  partnerSelectionStatus: 'NOT_STARTED',
+  outcome: null,
+  tendingPreview: null,
+};
 
 jest.mock('../../hooks/useSessions', () => ({
   useSession: () => ({
@@ -165,6 +235,17 @@ jest.mock('../../hooks/useStages', () => ({
     mutate: mockCreateAgreement,
     isPending: false,
   }),
+  useStage4State: () => ({
+    data: mockStage4State,
+  }),
+  useSubmitStage4ProposalSelection: () => ({
+    mutate: mockSubmitStage4Selection,
+    isPending: false,
+  }),
+  useCloseStage4: () => ({
+    mutate: mockCloseStage4,
+    isPending: false,
+  }),
 }));
 
 // ============================================================================
@@ -179,6 +260,47 @@ describe('StrategicRepairScreen', () => {
     mockStrategiesData = mockStrategies;
     mockRevealData = null;
     mockAgreementsData = null;
+    mockStage4State = undefined;
+  });
+
+  describe('Redesigned Stage 4', () => {
+    beforeEach(() => {
+      mockStage4State = redesignedStage4State;
+      mockStrategyPhase = StrategyPhase.RANKING;
+    });
+
+    it('prefers redesigned Stage 4 cards over legacy ranking surfaces', () => {
+      render(<StrategicRepairScreen />);
+
+      expect(screen.getByTestId('stage4-redesign-panel')).toBeTruthy();
+      expect(screen.getByText('Proposal inventory')).toBeTruthy();
+      expect(screen.getByText('Pause and reflect impact before problem solving.')).toBeTruthy();
+      expect(screen.queryByText(/rank your top choices/i)).toBeNull();
+    });
+
+    it('submits redesigned proposal willingness from the standalone screen', () => {
+      render(<StrategicRepairScreen />);
+
+      fireEvent.press(screen.getAllByText('Willing')[0]);
+
+      expect(mockSubmitStage4Selection).toHaveBeenCalledWith({
+        sessionId: 'test-session-123',
+        proposalId: 'proposal-1',
+        decision: Stage4SelectionDecision.WILLING,
+      });
+    });
+
+    it('closes redesigned Stage 4 with no shared agreement as a valid outcome', () => {
+      render(<StrategicRepairScreen />);
+
+      fireEvent.press(screen.getByText('Close with no shared agreement'));
+
+      expect(mockCloseStage4).toHaveBeenCalledWith({
+        sessionId: 'test-session-123',
+        kind: Stage4ClosureKind.NO_SHARED_AGREEMENT,
+        reason: Stage4ClosureReason.NO_OVERLAP,
+      });
+    });
   });
 
   describe('Strategy Pool Phase', () => {

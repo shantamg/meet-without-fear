@@ -4,6 +4,7 @@
  * Routes for the Strategic Repair stage of the Meet Without Fear process.
  * - GET /sessions/:id/strategies - Get anonymous strategy pool
  * - POST /sessions/:id/strategies - Propose a strategy
+ * - GET /sessions/:id/stage4 - Get redesigned Stage 4 state
  * - POST /sessions/:id/strategies/rank - Submit ranking
  * - GET /sessions/:id/strategies/overlap - Get ranking overlap
  * - POST /sessions/:id/agreements - Create agreement
@@ -15,6 +16,10 @@ import { requireAuth, requireSessionAccess } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errors';
 import {
   getStrategies,
+  getStage4State,
+  submitStage4ProposalSelection,
+  submitStage4Selections,
+  closeStage4,
   proposeStrategy,
   submitRanking,
   getOverlap,
@@ -26,6 +31,38 @@ import {
 } from '../controllers/stage4';
 
 const router = Router();
+
+// Get redesigned Stage 4 state
+router.get(
+  '/sessions/:id/stage4',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(getStage4State)
+);
+
+// Submit one redesigned Stage 4 per-proposal willingness decision
+router.post(
+  '/sessions/:id/stage4/proposals/:proposalId/selection',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(submitStage4ProposalSelection)
+);
+
+// Submit redesigned Stage 4 per-proposal willingness decisions
+router.post(
+  '/sessions/:id/stage4/selections',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(submitStage4Selections)
+);
+
+// Close redesigned Stage 4 from willingness selections
+router.post(
+  '/sessions/:id/stage4/close',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(closeStage4)
+);
 
 // Get anonymous strategy pool
 router.get(

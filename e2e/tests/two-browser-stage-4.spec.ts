@@ -1,7 +1,11 @@
 /**
- * Two Browser Stage 4 Test
+ * Legacy Two Browser Stage 4 Ranking Test
  *
- * Tests that both users can complete Stage 4 (Strategic Repair) by:
+ * Tests the pre-redesign ranking flow. This remains documented for compatibility
+ * endpoints, but active redesigned Stage 4 coverage lives in
+ * two-browser-stage-4-redesign.spec.ts.
+ *
+ * Tests that both users can complete legacy Stage 4 (Strategic Repair) by:
  * - Navigating to session from NEED_MAPPING_COMPLETE state
  * - Proposing strategies to the anonymous pool via API
  * - Marking ready to rank
@@ -97,7 +101,7 @@ async function handleMoodCheck(page: Page, timeout = 5000): Promise<void> {
   }
 }
 
-test.describe('Stage 4: Two-Browser Strategic Repair', () => {
+test.describe.skip('Stage 4 legacy ranking flow', () => {
   let sessionId: string;
   let userAId: string;
   let userBId: string;
