@@ -8,6 +8,7 @@ Branch: `feat/gold-alignment-system-20260506`
 - Phase 1-3 checkpoint: `3dc23f6` (`Build gold alignment moment coverage`)
 - Phase 4 checkpoint: `40d3c1e` (`Build autonomous alignment loop`)
 - Phase 5 checkpoint: `9aa1d7d` (`Add outer loop onboarding and status dashboard`)
+- Final status idempotence fix: `a10a001` (`Make alignment status idempotent across commits`)
 
 ## Baseline
 
