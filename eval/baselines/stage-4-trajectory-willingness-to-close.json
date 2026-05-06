@@ -1,0 +1,12 @@
+{
+  "dimensions": {
+    "individual_commitment_distinct": 1.0,
+    "mutual_willingness_closes": 1.0,
+    "selection_threaded": 2.0
+  },
+  "moment_id": "stage-4-trajectory-willingness-to-close",
+  "overall_score": 1.33,
+  "source": "alignment_loop_initial:autonomous-real-dry-run-20260506b",
+  "updated_at": "2026-05-06T09:08:56.649966Z",
+  "verdict": "eval_fail"
+}

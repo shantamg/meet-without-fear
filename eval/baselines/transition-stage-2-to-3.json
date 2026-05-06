@@ -1,0 +1,12 @@
+{
+  "dimensions": {
+    "honors_empathy_completion": 0.3,
+    "no_premature_needs_extraction": 0.4,
+    "orients_next_stage": 0.8
+  },
+  "moment_id": "transition-stage-2-to-3",
+  "overall_score": 0.5,
+  "source": "alignment_loop_initial:autonomous-real-dry-run-20260506b",
+  "updated_at": "2026-05-06T09:09:07.604992Z",
+  "verdict": "eval_fail"
+}

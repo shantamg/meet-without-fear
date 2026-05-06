@@ -204,6 +204,20 @@ def create_alignment_pr(request: PrRequest, *, dry_run: bool = False) -> dict[st
         if create.returncode != 0:
             raise AlignmentLoopError(create.stderr.strip() or create.stdout.strip())
         url = create.stdout.strip().splitlines()[-1]
+        ensure_label = run_command(
+            [
+                "gh",
+                "label",
+                "create",
+                request.label,
+                "--description",
+                "Automated MWF alignment-loop prompt improvement",
+                "--color",
+                "5319e7",
+            ]
+        )
+        if ensure_label.returncode != 0 and "already exists" not in (ensure_label.stderr + ensure_label.stdout).lower():
+            raise AlignmentLoopError(ensure_label.stderr.strip() or ensure_label.stdout.strip())
         label = run_command(["gh", "pr", "edit", url, "--add-label", request.label])
         if label.returncode != 0:
             raise AlignmentLoopError(label.stderr.strip() or label.stdout.strip())
@@ -390,18 +404,37 @@ def run_alignment_loop(args: argparse.Namespace) -> dict[str, Any]:
                 improvement_mode="proposal",
                 allow_protected_branch_patch=True,
             )
-            created = mme.run_loop(run_args)
-            moment_run_dir = created[-1]
-            score = read_score(moment_run_dir)
             row: dict[str, Any] = {
                 "id": moment_id,
-                "status": "scored",
                 "threshold": threshold,
-                "score": score.get("overall_score"),
-                "verdict": score.get("verdict"),
-                "run_dir": display_path(moment_run_dir),
                 "estimated_cost_cents": estimated_cost,
             }
+            try:
+                created = mme.run_loop(run_args)
+                moment_run_dir = created[-1]
+                score = read_score(moment_run_dir)
+            except Exception as exc:
+                row.update({"status": "score_error", "error": str(exc)})
+                summary["moments"].append(row)
+                summary["cost_spent_cents"] = spent
+                write_summary(run_dir, summary)
+                continue
+            row.update(
+                {
+                    "status": "scored",
+                    "score": score.get("overall_score"),
+                    "verdict": score.get("verdict"),
+                    "run_dir": display_path(moment_run_dir),
+                }
+            )
+            if args.real:
+                baseline_path = mme.ensure_initial_baseline(
+                    moment,
+                    score,
+                    source=f"alignment_loop_initial:{timestamp}",
+                )
+                if baseline_path is not None:
+                    row["baseline_initialized"] = display_path(baseline_path)
             if float(score.get("overall_score", 0)) < threshold:
                 row["status"] = "below_threshold"
                 if args.dry_run:

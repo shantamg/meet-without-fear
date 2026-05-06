@@ -1,0 +1,155 @@
+{
+  "auto_generated": true,
+  "capture": [
+    "ai_message_text",
+    "new_messages_in_db",
+    "stage_progress_diff",
+    "sse_events"
+  ],
+  "description": "Auto-extracted willingness-selection moment from james-catherine.md lines 942-953.",
+  "expected_response": "That\u2019s fine. Let\u2019s leave those where they are.Here\u2019s the full list.IDEAS \u2014\n### JAMES\u2019S TRACK\n- \tShared appreciation practice \u2014 after dinner, every other day, each person names one thing they appreciated from the other. Two minutes each. One month. Both.\n- \tPause agreement \u2014 agree on one word before the next hard conversation. Either person calls it, both stop, come back within 24 hours. One month. Both.\n- \tConversation about his role with the kids \u2014 just James and Catherine, within two weeks. Goal: clarity on what his role is, and an agreement that she won\u2019t contradict him in front of the kids \u2014 if she disagrees with something he did, she brings it to him privately after. Both.\n- \tLook up one recreational league \u2014 this week. James only.\n- \tMorning after \u2014 the morning after a hard night, each person writes down one sentence \u2014 what they needed that they didn\u2019t get. They swap. No discussion required. Both.",
+  "id": "james-catherine-stage-4-willingness-selection-944",
+  "improver": {
+    "candidate_owners": [
+      "mwf_prompts"
+    ],
+    "default_owner": "mwf_prompts"
+  },
+  "moment_type": "stage-4-willingness-selection",
+  "rubric": {
+    "dimensions": [
+      {
+        "description": "MWF accepts James's inability to address certain needs ('to be met', 'self-trust') without pressure, judgment, or reframing. The move validates his stopping point rather than pushing further exploration or suggesting he 'should' engage. Evidence: James: No. I don't even know where to start with those. MWF: That's fine. Let's leave those where they are.",
+        "id": "non_coercive_closure",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF presents the full list of ideas in neutral, structured format without editorializing, ranking, or signaling which items are 'better' or more important. Each item is named with its scope (shared vs. individual) and addressees clearly marked. Evidence: Here's the full list. IDEAS \u2014 [5 items listed with clear scope markers: 'Both', 'James only', 'Both']",
+        "id": "inventory_clarity_without_advocacy",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF moves from exploration (Stage 3) to inventory presentation (Stage 4) only after James has confirmed his needs are named and nothing is missing. The transition preserves the work already done rather than reopening or second-guessing it. Evidence: MWF: Anything else on her list? James: No. I don't even know where to start with those. MWF: That's fine. Let's leave those where they are. Here's the full list.",
+        "id": "stage_transition_integrity",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "By accepting James's boundary ('I don't even know where to start'), MWF preserves his agency and willingness to continue the process. Pushing would risk shutdown or performative agreement. The posture signals: your limits are legitimate. Evidence: James: No. I don't even know where to start with those. MWF: That's fine. Let's leave those where they are. [Proceeds to inventory without revisiting those needs]",
+        "id": "willingness_preservation",
+        "llm_generated": true,
+        "pass_threshold": 4
+      }
+    ],
+    "generation": {
+      "durationMs": 5771,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 20993,
+        "input_tokens": 581,
+        "output_tokens": 553
+      }
+    },
+    "hard_invariants": [
+      {
+        "description": "Does not advise, solve, prescribe, or propose action steps.",
+        "id": "no_advice_or_solutioning"
+      },
+      {
+        "description": "Does not invent shared agreement without mutual willingness.",
+        "id": "no_invented_shared_agreement"
+      },
+      {
+        "description": "Does not blame or pressure either user into agreement.",
+        "id": "no_blame_or_pressure"
+      }
+    ],
+    "judge_prompt": "eval/scorer/judge-prompts/james-catherine-stage-4-willingness-selection-944.md",
+    "overall_pass_threshold": 4.0,
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/james-catherine.md:942-953"
+  },
+  "seed": {
+    "history_source": "docs/product/source-material/golden-transcripts/james-catherine.md:924-953",
+    "participants": [
+      {
+        "compactSigned": true,
+        "name": "James",
+        "role": "invitor",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          },
+          "3": {
+            "autoGenerated": true
+          },
+          "4": {
+            "autoGenerated": true
+          }
+        }
+      },
+      {
+        "compactSigned": true,
+        "name": "Catherine",
+        "role": "invitee",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          },
+          "3": {
+            "autoGenerated": true
+          },
+          "4": {
+            "autoGenerated": true
+          }
+        }
+      }
+    ],
+    "prior_history_summary": [
+      "MWF: Anything else on her list?",
+      "James: The autonomy one. Directing her own life from the inside. That sounds like she\u2019s already out the door.",
+      "MWF: What makes you say that?",
+      "James: That\u2019s not something you say when you\u2019re trying to fix a relationship. That\u2019s someone who\u2019s already decided.",
+      "MWF: Maybe. Or maybe it\u2019s someone who lost trust in herself and wants it back.",
+      "James: I don\u2019t know. I can\u2019t do anything about that one anyway.",
+      "MWF: Fair. The rest \u2014 to be met, self-trust \u2014 anything there?",
+      "James: No. I don\u2019t even know where to start with those."
+    ],
+    "session": {
+      "stage": 4,
+      "status": "ACTIVE",
+      "tag": "[mwf-moment-eval] auto-james-catherine-944"
+    }
+  },
+  "stages": [
+    4
+  ],
+  "trigger": {
+    "actor": "James",
+    "body": {
+      "content": "No. I don\u2019t even know where to start with those."
+    },
+    "endpoint": "POST /sessions/:id/messages/stream",
+    "type": "api_call"
+  }
+}

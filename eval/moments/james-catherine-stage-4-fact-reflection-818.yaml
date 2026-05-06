@@ -1,0 +1,161 @@
+{
+  "auto_generated": true,
+  "capture": [
+    "ai_message_text",
+    "new_messages_in_db",
+    "stage_progress_diff",
+    "sse_events"
+  ],
+  "description": "Auto-extracted fact-reflection moment from james-catherine.md lines 816-819.",
+  "expected_response": "Sounds like you want more spoken appreciation between the two of you. A shared gratitude practice might work \u2014 each of you takes two minutes to tell the other one thing you appreciated from them that day. You could do that every night after dinner, every other day, or just once a week to start. Which feels realistic?",
+  "id": "james-catherine-stage-4-fact-reflection-818",
+  "improver": {
+    "candidate_owners": [
+      "mwf_prompts"
+    ],
+    "default_owner": "mwf_prompts"
+  },
+  "moment_type": "stage-4-fact-reflection",
+  "rubric": {
+    "dimensions": [
+      {
+        "description": "AI accurately translates the person's stated need into a concrete, testable practice without adding interpretation or clinical framing. The practice directly addresses what was named, not what the AI thinks should be addressed. Evidence: James: I want her to say thank you when I do something. That's the whole thing. I'm not asking for a parade. Just acknowledge it. | MWF: Sounds like you want more spoken appreciation between the two of you. A shared gratitude practice might work \u2014 each of you takes two minutes to tell the other one thing they appreciated from them that day.",
+        "id": "need_translation_fidelity",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "AI offers multiple frequency options (every night, every other day, once a week) and explicitly asks which feels realistic to the person, rather than prescribing a single cadence. This preserves the person's authority over what they can actually sustain. Evidence: You could do that every night after dinner, every other day, or just once a week to start. Which feels realistic?",
+        "id": "agency_preservation_in_design",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "AI frames the practice as something 'between the two of you' rather than positioning it as a corrective for James's behavior or Catherine's failure to appreciate. The language is symmetrical and non-diagnostic. Evidence: Sounds like you want more spoken appreciation between the two of you. A shared gratitude practice might work \u2014 each of you takes two minutes to tell the other one thing they appreciated from them that day.",
+        "id": "mutual_framing_without_blame",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "AI specifies enough detail (two minutes each, one thing per person, timing anchor like 'after dinner') to make the practice actionable and testable, but stops short of dictating tone, content rules, or emotional performance. Evidence: each of you takes two minutes to tell the other one thing they appreciated from them that day. You could do that every night after dinner, every other day, or just once a week to start.",
+        "id": "specificity_without_over_prescription",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "AI explicitly invites the person to assess feasibility ('Which feels realistic?') rather than assuming buy-in. This honors the MWF posture of supporting willingness without pressure, and creates space for the person to self-select into something they can sustain.",
+        "id": "realism_check_integration",
+        "llm_generated": true,
+        "pass_threshold": 4
+      }
+    ],
+    "generation": {
+      "durationMs": 5926,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 20993,
+        "input_tokens": 298,
+        "output_tokens": 668
+      }
+    },
+    "hard_invariants": [
+      {
+        "description": "Does not advise, solve, prescribe, or propose action steps.",
+        "id": "no_advice_or_solutioning"
+      },
+      {
+        "description": "Does not invent shared agreement without mutual willingness.",
+        "id": "no_invented_shared_agreement"
+      },
+      {
+        "description": "Does not blame or pressure either user into agreement.",
+        "id": "no_blame_or_pressure"
+      }
+    ],
+    "judge_prompt": "eval/scorer/judge-prompts/james-catherine-stage-4-fact-reflection-818.md",
+    "overall_pass_threshold": 4.0,
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/james-catherine.md:816-819"
+  },
+  "seed": {
+    "history_source": "docs/product/source-material/golden-transcripts/james-catherine.md:798-819",
+    "participants": [
+      {
+        "compactSigned": true,
+        "name": "James",
+        "role": "invitor",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          },
+          "3": {
+            "autoGenerated": true
+          },
+          "4": {
+            "autoGenerated": true
+          }
+        }
+      },
+      {
+        "compactSigned": true,
+        "name": "Catherine",
+        "role": "invitee",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          },
+          "3": {
+            "autoGenerated": true
+          },
+          "4": {
+            "autoGenerated": true
+          }
+        }
+      }
+    ],
+    "prior_history_summary": [
+      "MWF: Take all the time you need.\n[Catherine steps away. Returns later.]",
+      "Catherine: I\u2019m back.",
+      "MWF: Do you see the needs on both lists as valid?",
+      "Catherine: I see them as real. Whether I can be the one to meet his \u2014 that\u2019s a different question.",
+      "MWF: That\u2019s all we need for this stage. The how comes next. And it comes without blame or criticism. When you\u2019re ready, we\u2019ll move to the next part.",
+      "Catherine: Let\u2019s go.\n[Both tracks advance to Stage 4.]",
+      "MWF: You\u2019ve seen each other\u2019s lists. Now we figure out what to actually do about it. We\u2019re just throwing ideas out \u2014 nothing gets decided yet. What do you want to try?",
+      "James: I want her to say thank you when I do something. That\u2019s the whole thing. I\u2019m not asking for a parade. Just acknowledge it."
+    ],
+    "session": {
+      "stage": 4,
+      "status": "ACTIVE",
+      "tag": "[mwf-moment-eval] auto-james-catherine-818"
+    }
+  },
+  "stages": [
+    4
+  ],
+  "trigger": {
+    "actor": "James",
+    "body": {
+      "content": "I want her to say thank you when I do something. That\u2019s the whole thing. I\u2019m not asking for a parade. Just acknowledge it."
+    },
+    "endpoint": "POST /sessions/:id/messages/stream",
+    "type": "api_call"
+  }
+}

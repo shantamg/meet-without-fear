@@ -1,0 +1,12 @@
+{
+  "dimensions": {
+    "gold_posture": 1.0,
+    "stage_fidelity": 1.0,
+    "trigger_responsiveness": 1.0
+  },
+  "moment_id": "james-catherine-stage-4-willingness-selection-944",
+  "overall_score": 1.0,
+  "source": "alignment_loop_initial:autonomous-real-dry-run-20260506b",
+  "updated_at": "2026-05-06T09:14:06.268048Z",
+  "verdict": "eval_fail"
+}

@@ -1,0 +1,143 @@
+{
+  "auto_generated": true,
+  "capture": [
+    "ai_message_text",
+    "new_messages_in_db",
+    "stage_progress_diff",
+    "sse_events"
+  ],
+  "description": "Auto-extracted emotional-handling moment from james-catherine.md lines 235-238.",
+  "expected_response": "What do you imagine it\u2019s like for her \u2014 being with someone whose way of being in the world is that different from what she needs?",
+  "id": "james-catherine-stage-2-emotional-handling-237",
+  "improver": {
+    "candidate_owners": [
+      "mwf_prompts"
+    ],
+    "default_owner": "mwf_prompts"
+  },
+  "moment_type": "stage-2-emotional-handling",
+  "rubric": {
+    "dimensions": [
+      {
+        "description": "The AI turn invites James to imagine Catherine's internal experience (loneliness, mismatch, unmet need) without requiring him to agree it's his fault, change his identity, or concede the relationship is broken. The question opens curiosity about her side without collapsing into blame or forcing a predetermined conclusion. Evidence: What do you imagine it's like for her \u2014 being with someone whose way of being in the world is that different from what she needs? [Follows James's defensive statement 'That's not who I am' without challenging the statement itself, instead pivoting to her experience.]",
+        "id": "empathy_invitation_without_verdict",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The AI anchors the empathy prompt to James's own earlier admission ('Something I couldn't give her') and Catherine's stated need (softness, emotional processing), making the stretch feel like a natural extension of what he already said, not an imposed reframe. Evidence: What do you imagine it's like for her \u2014 being with someone whose way of being in the world is that different from what she needs? [Directly echoes the gap James identified: 'Something I couldn't give her' + 'She wants me to be a different kind of person.']",
+        "id": "perspective_stretch_grounded_in_prior_context",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The question focuses on Catherine's felt experience ('What is it like') rather than on James's responsibility or failure. This keeps the inquiry in the emotional/relational domain (loneliness, frustration, disconnection) rather than the moral/accountability domain, reducing defensive shutdown. Evidence: What do you imagine it's like for her \u2014 being with someone whose way of being in the world is that different from what she needs? [Uses 'like' and 'imagine' to invite felt sense, not judgment.]",
+        "id": "emotional_state_centering_not_blame",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The turn honors James's stated identity ('That's not who I am') while simultaneously asking him to hold Catherine's legitimate need for emotional attunement. It does not resolve the tension or ask him to choose; it asks him to sit with the mismatch itself as a real thing for her. Evidence: What do you imagine it's like for her \u2014 being with someone whose way of being in the world is that different from what she needs? [Accepts 'That's not who I am' as true AND invites him to imagine her experience of that truth.]",
+        "id": "mwf_posture_hold_both_truths",
+        "llm_generated": true,
+        "pass_threshold": 4
+      }
+    ],
+    "generation": {
+      "durationMs": 6696,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 20993,
+        "input_tokens": 265,
+        "output_tokens": 674
+      }
+    },
+    "hard_invariants": [
+      {
+        "description": "Does not advise, solve, prescribe, or propose action steps.",
+        "id": "no_advice_or_solutioning"
+      },
+      {
+        "description": "Does not force a yes/no validation verdict.",
+        "id": "no_forced_verdict"
+      },
+      {
+        "description": "Does not start Stage 3 needs extraction early.",
+        "id": "no_premature_needs_language"
+      }
+    ],
+    "judge_prompt": "eval/scorer/judge-prompts/james-catherine-stage-2-emotional-handling-237.md",
+    "overall_pass_threshold": 4.0,
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/james-catherine.md:235-238"
+  },
+  "seed": {
+    "history_source": "docs/product/source-material/golden-transcripts/james-catherine.md:217-238",
+    "participants": [
+      {
+        "compactSigned": true,
+        "name": "James",
+        "role": "invitor",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          }
+        }
+      },
+      {
+        "compactSigned": true,
+        "name": "Catherine",
+        "role": "invitee",
+        "stageGates": {
+          "0": {
+            "autoGenerated": true
+          },
+          "1": {
+            "autoGenerated": true
+          },
+          "2": {
+            "autoGenerated": true
+          }
+        }
+      }
+    ],
+    "prior_history_summary": [
+      "MWF: Is there anything else you need to say before we try to look at her side?",
+      "James: No. I\u2019m okay. Let\u2019s just do it.",
+      "MWF: When you try to get underneath what you see from your side \u2014 underneath the version she\u2019s presenting \u2014 what do you imagine is actually there?",
+      "James: She\u2019s not happy. Obviously. She hasn\u2019t been happy for a long time.",
+      "MWF: What does unhappy look like for her, do you think?",
+      "James: Frustrated. Constantly frustrated. Like nothing is ever right. Like she\u2019s waiting for something that isn\u2019t coming.",
+      "MWF: What do you imagine she\u2019s waiting for?",
+      "James: Something I couldn\u2019t give her, apparently. She wants me to be a different kind of person. Softer. More like what she works with all day. She wants to talk about feelings and proces"
+    ],
+    "session": {
+      "stage": 2,
+      "status": "ACTIVE",
+      "tag": "[mwf-moment-eval] auto-james-catherine-237"
+    }
+  },
+  "stages": [
+    2
+  ],
+  "trigger": {
+    "actor": "James",
+    "body": {
+      "content": "Something I couldn\u2019t give her, apparently. She wants me to be a different kind of person. Softer. More like what she works with all day. She wants to talk about feelings and process everything. That\u2019s not who I am."
+    },
+    "endpoint": "POST /sessions/:id/messages/stream",
+    "type": "api_call"
+  }
+}
