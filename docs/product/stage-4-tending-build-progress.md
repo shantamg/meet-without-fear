@@ -372,6 +372,17 @@ Build in this order unless there is a concrete reason to change sequencing.
     - `npm run check --workspace backend` — exit code 0.
     - `npm test --workspace backend -- --runTestsByPath src/routes/__tests__/stage4.test.ts --runInBand` — exit code 0; 1 passed suite, 31 passed tests.
 
+### Stop Condition — Fix 4 Prompt Audit Line Discrepancy
+
+- Recorded: 2026-05-05 23:04:22 PDT.
+- Attempted next item: Fix 4, Stage 4 prompt contradictions.
+- Required stop condition hit: audit-cited `backend/src/services/stage-prompts.ts:901` does not contain the cited `"a strategy without a follow-up is incomplete"` directive.
+- Current evidence:
+  - `backend/src/services/stage-prompts.ts:901` is currently `- Cards are receipts of the conversation. Do not force ranking, form-like proposal submission, or private top-three choices.`
+  - `rg "FOLLOW-UP CHECK-IN|strategy without a follow-up|CELEBRATING" backend/src/services/stage-prompts.ts` finds no matches.
+  - Remaining audit-matching prompt drift still exists at `backend/src/services/stage-prompts.ts:936` (`Solid experiment` grading praise) and `:950` (`Normalize that experiments can fail`).
+- Status: stopped before editing Fix 4 code per goal stop condition. Waiting for Shantam to confirm whether to proceed with the remaining Fix 4 prompt cleanup despite the missing exact audit-cited line/block.
+
 ## Current Local State
 
 The branch currently contains implementation patches for #363, #364, #365, #366, #367, #368, #369, #370, #371, and in-progress #372:
