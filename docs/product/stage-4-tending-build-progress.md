@@ -209,6 +209,28 @@ Build in this order unless there is a concrete reason to change sequencing.
 - [ ] [#369 - Stage 4 redesign: mobile proposal inventory, coverage, selection, and outcome cards](https://github.com/shantamg/meet-without-fear/issues/369)
   - Depends on: #364, #367.
   - Replace/wrap `StrategyPool`, `StrategyRanking`, and overlap UI with redesigned cards.
+  - Status: in progress.
+  - Local files touched:
+    - `mobile/src/components/Stage4RedesignPanel.tsx`
+    - `mobile/src/components/__tests__/Stage4RedesignPanel.test.tsx`
+    - `mobile/src/components/index.ts`
+    - `mobile/src/screens/UnifiedSessionScreen.tsx`
+  - Implemented so far:
+    - Added a redesigned Stage 4 panel that renders proposal inventory, shared proposals, individual commitments, open needs, needs coverage audit, selection receipts, outcome cards, and no-shared-agreement closure as a valid terminal outcome.
+    - Added proposal-level willingness controls wired to `POST /sessions/:id/stage4/proposals/:proposalId/selection`.
+    - Preserves partner selection privacy by showing partner decisions only when `partnerDecisionVisible` is present; otherwise the receipt explains that partner choices stay private until submitted.
+    - Added shared-agreement and no-shared-agreement close actions wired to `POST /sessions/:id/stage4/close`.
+    - Wired `UnifiedSessionScreen` to prefer redesigned `/stage4` state when available, keeping legacy ranking/reveal full-screen surfaces as fallback only when `/stage4` state is unavailable.
+    - Keeps chat input available during redesigned Stage 4 inventory building, coverage review, selection, and outcome review phases.
+    - Branches resolved no-shared-agreement sessions to the redesigned outcome surface instead of the agreement-only completion screen.
+  - Validation run:
+    - `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/Stage4RedesignPanel.test.tsx --runInBand --forceExit`
+    - `npm run check --workspace mobile`
+  - Result: targeted redesigned Stage 4 panel tests passed with 6 passed; mobile typecheck passed.
+  - Remaining #369 work:
+    - Add or update integration tests around `UnifiedSessionScreen` so the redesigned panel replaces legacy Stage 4 surfaces when `/stage4` state is present.
+    - Run mobile-sized and desktop-sized screenshot validation for the redesigned cards and record results.
+    - Decide whether `StrategicRepairScreen` still needs the redesigned surface or is now legacy-only; if still reachable in production, wrap it with the same `/stage4` panel/fallback behavior.
 
 - [ ] [#370 - The Tending: mobile check-in and passive re-entry surface](https://github.com/shantamg/meet-without-fear/issues/370)
   - Depends on: #368, #369.

@@ -12,7 +12,20 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // useRouter removed - share navigation replaced by ActivityDrawer
-import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion, ConfirmAgreementResponse, MAX_AGREEMENTS, EmpathyStatus } from '@meet-without-fear/shared';
+import {
+  Stage,
+  MessageRole,
+  StrategyPhase,
+  SessionStatus,
+  MemorySuggestion,
+  ConfirmAgreementResponse,
+  MAX_AGREEMENTS,
+  EmpathyStatus,
+  Stage4ClosureKind,
+  Stage4ClosureReason,
+  Stage4Phase,
+  Stage4SelectionDecision,
+} from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem, ChatCustomCardItem } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
@@ -32,6 +45,7 @@ import { OverlapReveal } from '../components/OverlapReveal';
 import { WaitingRoom } from '../components/WaitingRoom';
 import { AgreementCard } from '../components/AgreementCard';
 import { SessionCompletionScreen } from '../components/SessionCompletionScreen';
+import { Stage4RedesignPanel } from '../components/Stage4RedesignPanel';
 // CuriosityCompactOverlay removed - now using inline approach
 import { CompactChatItem } from '../components/CompactChatItem';
 import { CompactAgreementBar } from '../components/CompactAgreementBar';
@@ -56,7 +70,12 @@ import { stageKeys, messageKeys, sessionKeys, notificationKeys } from '../hooks/
 import { useAIMessageHandler } from '../hooks/useMessages';
 import { useSharingStatus } from '../hooks/useSharingStatus';
 import { usePendingActions } from '../hooks/usePendingActions';
-import { useNeedsComparison } from '../hooks/useStages';
+import {
+  useCloseStage4,
+  useNeedsComparison,
+  useStage4State,
+  useSubmitStage4ProposalSelection,
+} from '../hooks/useStages';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
 import {
@@ -1100,6 +1119,63 @@ export function UnifiedSessionScreen({
   );
   const shouldUseRevealedNeeds =
     needsDrawerMode !== 'needs' && (needsComparisonData?.myNeeds?.length ?? 0) > 0;
+
+  const stage4Query = useStage4State(sessionId, {
+    enabled:
+      !accessDenied &&
+      (currentStage === Stage.STRATEGIC_REPAIR || session?.status === SessionStatus.RESOLVED),
+  });
+  const stage4State = stage4Query.data;
+  const hasRedesignedStage4 =
+    !!stage4State &&
+    (currentStage === Stage.STRATEGIC_REPAIR || session?.status === SessionStatus.RESOLVED);
+  const redesignedStage4AllowsInput =
+    currentStage === Stage.STRATEGIC_REPAIR &&
+    !!stage4State &&
+    [
+      Stage4Phase.INVENTORY_BUILDING,
+      Stage4Phase.COVERAGE_REVIEW,
+      Stage4Phase.SELECTION,
+      Stage4Phase.OUTCOME_REVIEW,
+    ].includes(stage4State.phase);
+
+  const submitStage4Selection = useSubmitStage4ProposalSelection({
+    onError: () => {
+      showError('Could not save that Stage 4 choice. Please try again.');
+    },
+  });
+  const closeStage4 = useCloseStage4({
+    onSuccess: (response) => {
+      if (response.outcome.kind === Stage4ClosureKind.SHARED_AGREEMENT) {
+        trackSessionResolved(sessionId, 'agreement');
+      } else {
+        trackSessionResolved(sessionId, 'no-shared-agreement');
+      }
+    },
+    onError: () => {
+      showError('Could not close Stage 4 yet. Please try again.');
+    },
+  });
+  const handleStage4Selection = useCallback(
+    (proposalId: string, decision: Stage4SelectionDecision) => {
+      submitStage4Selection.mutate({
+        sessionId,
+        proposalId,
+        decision,
+      });
+    },
+    [sessionId, submitStage4Selection]
+  );
+  const handleCloseRedesignedStage4 = useCallback(
+    (kind: Stage4ClosureKind, reason: Stage4ClosureReason) => {
+      closeStage4.mutate({
+        sessionId,
+        kind,
+        reason,
+      });
+    },
+    [closeStage4, sessionId]
+  );
 
   // Local latches to prevent panel flashing during server refetches.
   // Once user completes an action, the latch stays true even if server data temporarily reverts.
@@ -2675,6 +2751,43 @@ export function UnifiedSessionScreen({
   // Session Completion - Full Screen (when session is resolved)
   // -------------------------------------------------------------------------
   if (session?.status === SessionStatus.RESOLVED && !viewingResolvedHistory) {
+    if (
+      stage4State?.outcome?.kind === Stage4ClosureKind.NO_SHARED_AGREEMENT ||
+      stage4State?.phase === Stage4Phase.CLOSED_NO_SHARED_AGREEMENT
+    ) {
+      return (
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+          <SessionChatHeader
+            partnerName={partnerName}
+            partnerOnline={partnerOnline}
+            connectionStatus={connectionStatus}
+            briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+            onBackPress={onNavigateBack}
+            stageName="Closed"
+            testID="session-chat-header"
+          />
+          <View style={styles.content}>
+            <Stage4RedesignPanel
+              state={stage4State}
+              partnerName={partnerName}
+              isSelecting={submitStage4Selection.isPending}
+              isClosing={closeStage4.isPending}
+              onSelectProposal={handleStage4Selection}
+              onCloseStage4={handleCloseRedesignedStage4}
+            />
+            <TouchableOpacity
+              style={styles.viewHistoryButton}
+              onPress={() => setViewingResolvedHistory(true)}
+              accessibilityRole="button"
+              accessibilityLabel="View conversation history"
+            >
+              <Text style={styles.viewHistoryButtonText}>View conversation history</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
+
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <SessionChatHeader
@@ -2771,6 +2884,7 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   if (
     currentStage === Stage.STRATEGIC_REPAIR &&
+    !hasRedesignedStage4 &&
     strategyPhase === StrategyPhase.RANKING &&
     strategyData?.canRank === true
   ) {
@@ -2800,7 +2914,11 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // Strategy Revealing Phase - Full Screen Overlay
   // -------------------------------------------------------------------------
-  if (currentStage === Stage.STRATEGIC_REPAIR && strategyPhase === StrategyPhase.REVEALING) {
+  if (
+    currentStage === Stage.STRATEGIC_REPAIR &&
+    !hasRedesignedStage4 &&
+    strategyPhase === StrategyPhase.REVEALING
+  ) {
     const waitingForRankingReveal = !revealData ||
       (revealData as { waitingForPartner?: boolean; overlap?: unknown[] | null }).waitingForPartner === true ||
       (revealData as { overlap?: unknown[] | null }).overlap === null;
@@ -2943,9 +3061,19 @@ export function UnifiedSessionScreen({
               ? renderBelowInput
               : undefined
           }
-          renderBelowChat={(inlineCards.length > 0 || memorySuggestion) ? () => (
+          renderBelowChat={(inlineCards.length > 0 || memorySuggestion || hasRedesignedStage4) ? () => (
             <>
               {inlineCards.map((card) => renderInlineCard(card))}
+              {hasRedesignedStage4 && stage4State && (
+                <Stage4RedesignPanel
+                  state={stage4State}
+                  partnerName={partnerName}
+                  isSelecting={submitStage4Selection.isPending}
+                  isClosing={closeStage4.isPending}
+                  onSelectProposal={handleStage4Selection}
+                  onCloseStage4={handleCloseRedesignedStage4}
+                />
+              )}
               {memorySuggestion && (
                 <MemorySuggestionCard
                   suggestion={memorySuggestion}
@@ -2959,8 +3087,7 @@ export function UnifiedSessionScreen({
             </>
           ) : undefined}
           hideInput={
-            // Use derived hideInput logic from useChatUIState
-            derivedShouldHideInput
+            redesignedStage4AllowsInput ? false : derivedShouldHideInput
           }
           validationCards={validationCards}
           onValidateAccurate={handleValidationAccurate}
@@ -4088,6 +4215,21 @@ const useStyles = () =>
     strategyPreviewButtons: {
       flexDirection: 'row',
       gap: 12,
+    },
+    viewHistoryButton: {
+      marginHorizontal: 16,
+      marginTop: 4,
+      padding: 14,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      alignItems: 'center',
+      backgroundColor: t.colors.bgSecondary,
+    },
+    viewHistoryButtonText: {
+      color: t.colors.textPrimary,
+      fontSize: 14,
+      fontWeight: '700',
     },
 
     // Overlap & Agreement
