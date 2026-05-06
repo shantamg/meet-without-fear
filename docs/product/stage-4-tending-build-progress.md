@@ -348,6 +348,30 @@ Build in this order unless there is a concrete reason to change sequencing.
   - `npm run check --workspace backend`
   - Exit code: 0.
 
+### Fix 3 — Mobile Guard On Close-Without-Agreement
+
+- Recorded: 2026-05-05 23:03:36 PDT.
+- Commit: `81233de` (`Fix 3 guard no-agreement close on mobile`).
+- Criteria covered: 6, 7, 8.
+- Fix location:
+  - `mobile/src/components/Stage4RedesignPanel.tsx:209` — reads privacy-gated `partnerSelections`.
+  - `mobile/src/components/Stage4RedesignPanel.tsx:211` — requires `partnerSelections.length > 0` before enabling no-shared-agreement close.
+  - `mobile/src/components/Stage4RedesignPanel.tsx:333` — renders the close-without-agreement action disabled when the guard is not met, with explanatory copy at `:355`.
+  - `shared/src/dto/strategy.ts:323` and `backend/src/services/stage4-state.ts:399` — expose privacy-gated `partnerSelections` from the `/stage4` state contract.
+- Test reference:
+  - `mobile/src/components/__tests__/Stage4RedesignPanel.test.tsx:165` — close-without-agreement button is disabled when partner selections are empty.
+  - `mobile/src/components/__tests__/Stage4RedesignPanel.test.tsx:183` — close-without-agreement button is enabled when partner selections exist.
+- Validation:
+  - `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/Stage4RedesignPanel.test.tsx --runInBand --forceExit`
+  - Exit code: 0.
+  - Result: 1 passed suite; 8 passed tests.
+  - `npm run check --workspace mobile`
+  - Exit code: 0.
+  - Additional contract checks because this fix touched shared/backend DTO shape:
+    - `npm run check --workspace shared` — exit code 0.
+    - `npm run check --workspace backend` — exit code 0.
+    - `npm test --workspace backend -- --runTestsByPath src/routes/__tests__/stage4.test.ts --runInBand` — exit code 0; 1 passed suite, 31 passed tests.
+
 ## Current Local State
 
 The branch currently contains implementation patches for #363, #364, #365, #366, #367, #368, #369, #370, #371, and in-progress #372:
