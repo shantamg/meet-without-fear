@@ -1,6 +1,6 @@
 # MWF Gold Alignment System Build Progress
 
-Status: Phase 3 implemented; Phase 4 not started
+Status: Phase 4 implemented; Phase 5 not started
 Branch: `feat/gold-alignment-system-20260506`
 
 ## Baseline
@@ -117,7 +117,28 @@ Branch: `feat/gold-alignment-system-20260506`
 
 ## Phase 4 - Autonomous Loop + PR Creation
 
-- [ ] Not started.
+- [x] Added `scripts/mwf_alignment_loop.py`.
+- [x] Added `eval/alignment-loop-config.yaml` with all current moment ids, per-moment thresholds, schedule metadata, and default cost caps.
+- [x] Loop writes `eval/alignment-runs/<timestamp>/summary.json` and `summary.md`.
+- [x] Loop enforces per-run and per-day cost caps before each moment execution.
+- [x] Dry-run mode scores moments and records summaries without writing prompt revisions or opening PRs.
+- [x] Live mode runs the improver for below-threshold moments, then opens `loop/alignment-<moment-id>-<timestamp>` PRs with title, body, draft flag, and `loop:auto-improvement` label.
+- [x] PR creation refuses protected source branches and restores the original branch after opening a loop PR.
+- [x] Added `crontab.example` with weekly cadence, log-directory creation, and noninteractive `--real --real-judge` invocation.
+- [x] Ignored generated `eval/alignment-runs/` artifacts.
+
+### Phase 4 Validation
+
+- `python3 scripts/test_mwf_moment_eval.py` - exit 0; ran 35 tests; OK. New Phase 4 tests cover dry-run summary generation, tight cost-cap partial abort, and isolated PR creation metadata/label/branch/draft behavior with GitHub commands mocked.
+- `python3 scripts/mwf_alignment_loop.py --dry-run --timestamp phase4-dry-run-20260506-clean` - exit 0; produced `eval/alignment-runs/phase4-dry-run-20260506-clean/summary.md`; summary verdict `complete`; scored 14 configured moments; recorded `28.0` cents estimated spend; no PRs opened.
+- `python3 scripts/mwf_alignment_loop.py --dry-run --per-run-cap-cents 5 --timestamp phase4-cap-20260506-clean` - expected exit 2; produced partial summary at `eval/alignment-runs/phase4-cap-20260506-clean/summary.json`; summary verdict `aborted`; stopped before `stage-1-trajectory-fact-to-handoff` with diagnostic `6.00c > 5.00c`; recorded the first 2 moments and `4.0` cents estimated spend.
+- `python3 scripts/mwf_alignment_loop.py --help` - exit 0; confirms noninteractive cron flags are available, including `--real` and `--real-judge`.
+- `npm run check --workspace backend` - exit 0 after Phase 4 changes.
+
+### Phase 4 Notes
+
+- The current library has 14 configured moments, not 13, because it includes the original Stage 1 and Stage 4 baseline moments plus the newly added coverage and trajectory moments.
+- The checked-in cron command is a live real-backend/real-judge invocation. It is still noninteractive; missing credentials will fail as a command error rather than prompting for TTY input.
 
 ## Phase 5 - Outer Loop + Gold Onboarding + Dashboard
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -15,6 +16,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import mwf_moment_eval as mme  # noqa: E402
+import mwf_alignment_loop as loop  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOMENT_ID = "stage-4-no-shared-agreement-closure"
@@ -413,6 +415,110 @@ class TestRealModePlumbing(unittest.TestCase):
 
         self.assertEqual(parsed["dimensions"]["emotional_reflection"]["score"], 4.0)
         self.assertEqual(parsed["dimensions"]["no_premature_gate"]["score"], 5.0)
+
+
+class TestAlignmentLoop(unittest.TestCase):
+    def write_loop_config(self, path: Path, moment_ids: list[str], estimated_cost_cents: float = 2.0) -> Path:
+        path.write_text(
+            json.dumps(
+                {
+                    "cost_caps": {
+                        "per_run_cents": 500,
+                        "per_day_cents": 2000,
+                        "estimated_judge_cost_cents": estimated_cost_cents,
+                    },
+                    "moments": [{"id": moment_id, "threshold": 4.0} for moment_id in moment_ids],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return path
+
+    def test_alignment_loop_dry_run_writes_summary_without_prs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config = self.write_loop_config(
+                tmp_path / "config.json",
+                ["stage-1-emotional-pivot", "stage-2-empathy-validation"],
+            )
+            with mock.patch.object(loop, "ALIGNMENT_RUNS_ROOT", tmp_path / "alignment-runs"), \
+                 mock.patch.object(loop.mme, "RUNS_ROOT", tmp_path / "runs"):
+                args = loop.build_parser().parse_args(
+                    ["--config", str(config), "--dry-run", "--timestamp", "phase4-dry-run-test"]
+                )
+                summary = loop.run_alignment_loop(args)
+
+            self.assertEqual(summary["verdict"], "complete")
+            self.assertTrue(summary["dry_run"])
+            self.assertEqual(len(summary["moments"]), 2)
+            self.assertTrue((tmp_path / "alignment-runs/phase4-dry-run-test/summary.json").exists())
+            self.assertTrue(all("pr" not in item for item in summary["moments"]))
+
+    def test_alignment_loop_cost_cap_aborts_after_partial_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config = self.write_loop_config(
+                tmp_path / "config.json",
+                ["stage-1-emotional-pivot", "stage-2-empathy-validation", "stage-3-mutual-reveal"],
+            )
+            with mock.patch.object(loop, "ALIGNMENT_RUNS_ROOT", tmp_path / "alignment-runs"), \
+                 mock.patch.object(loop.mme, "RUNS_ROOT", tmp_path / "runs"):
+                args = loop.build_parser().parse_args(
+                    [
+                        "--config",
+                        str(config),
+                        "--dry-run",
+                        "--per-run-cap-cents",
+                        "5",
+                        "--timestamp",
+                        "phase4-cap-test",
+                    ]
+                )
+                with self.assertRaises(loop.AlignmentLoopError):
+                    loop.run_alignment_loop(args)
+
+            summary = json.loads((tmp_path / "alignment-runs/phase4-cap-test/summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["verdict"], "aborted")
+            self.assertIn("Per-run cost cap", summary["aborted_reason"])
+            self.assertEqual(len(summary["moments"]), 2)
+
+    def test_alignment_pr_creation_uses_expected_metadata_and_label(self) -> None:
+        def completed(cmd: list[str], stdout: str = "") -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+
+        commands: list[list[str]] = []
+
+        def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            commands.append(cmd)
+            if cmd[:3] == ["gh", "pr", "create"]:
+                return completed(cmd, "https://github.com/example/repo/pull/123\n")
+            return completed(cmd)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            request = loop.PrRequest(
+                moment_id="stage-2-empathy-validation",
+                stage_label="stage-2",
+                timestamp="20260506-120000",
+                delta=0.42,
+                body="## Candidate\n\nPrompt revision details.",
+                artifact_paths=[REPO_ROOT / "eval/alignment-loop-config.yaml"],
+                borderline=True,
+            )
+            with mock.patch.object(loop, "ALIGNMENT_RUNS_ROOT", Path(tmp)), \
+                 mock.patch.object(loop, "git_current_branch", return_value="feat/gold-alignment-system-20260506"), \
+                 mock.patch.object(loop, "run_command", side_effect=fake_run):
+                result = loop.create_alignment_pr(request)
+
+        self.assertEqual(result["url"], "https://github.com/example/repo/pull/123")
+        self.assertEqual(result["branch"], "loop/alignment-stage-2-empathy-validation-20260506-120000")
+        self.assertEqual(result["label"], "loop:auto-improvement")
+        self.assertTrue(result["draft"])
+        self.assertIn(["git", "switch", "-c", request.branch_name], commands)
+        self.assertIn(["git", "switch", "feat/gold-alignment-system-20260506"], commands)
+        pr_create = [cmd for cmd in commands if cmd[:3] == ["gh", "pr", "create"]][0]
+        self.assertIn(request.title, pr_create)
+        self.assertIn("--draft", pr_create)
+        self.assertIn(["gh", "pr", "edit", result["url"], "--add-label", "loop:auto-improvement"], commands)
 
 
 class TestCli(unittest.TestCase):

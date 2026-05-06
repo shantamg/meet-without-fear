@@ -1,0 +1,4 @@
+# Meet Without Fear autonomous gold-alignment loop.
+# Weekly, Sundays at 02:30 local time. Set MWF_REPO if the checkout moves.
+MWF_REPO=/Users/shantam/Software/meet-without-fear
+30 2 * * 0 cd "$MWF_REPO" && mkdir -p logs && /usr/bin/env python3 scripts/mwf_alignment_loop.py --config eval/alignment-loop-config.yaml --real --real-judge >> logs/mwf-alignment-loop.log 2>&1
