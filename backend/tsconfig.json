@@ -31,6 +31,7 @@
     "dist",
     "**/__tests__/**",
     "**/__mocks__/**",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "src/scripts/mwf-moment-real.ts"
   ]
 }
