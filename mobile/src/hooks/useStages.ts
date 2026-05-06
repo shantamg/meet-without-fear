@@ -55,6 +55,11 @@ import {
   SubmitStage4SelectionsResponse,
   CloseStage4Request,
   CloseStage4Response,
+  GetTendingEntriesResponse,
+  SubmitTendingResponseRequest,
+  SubmitTendingResponseResponse,
+  CreateTendingReentryRequest,
+  CreateTendingReentryResponse,
   AgreementDTO,
   CreateAgreementRequest,
   CreateAgreementResponse,
@@ -1929,6 +1934,7 @@ function refreshStage4Caches(queryClient: ReturnType<typeof useQueryClient>, ses
   queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
   queryClient.refetchQueries({ queryKey: stageKeys.strategiesReveal(sessionId) });
   queryClient.refetchQueries({ queryKey: stageKeys.agreements(sessionId) });
+  queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
   queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
   queryClient.refetchQueries({ queryKey: sessionKeys.state(sessionId) });
 }
@@ -2021,6 +2027,108 @@ export function useCloseStage4(
         agreements: data.outcome.agreements,
       });
       refreshStage4Caches(queryClient, sessionId);
+    },
+    ...options,
+  });
+}
+
+// ============================================================================
+// Tending
+// ============================================================================
+
+/**
+ * Get scheduled check-ins and passive re-entry entries for a session.
+ */
+export function useTendingEntries(
+  sessionId: string | undefined,
+  options?: Omit<
+    UseQueryOptions<GetTendingEntriesResponse, ApiClientError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: stageKeys.tending(sessionId || ''),
+    queryFn: async () => {
+      if (!sessionId) throw new Error('Session ID is required');
+      return get<GetTendingEntriesResponse>(`/sessions/${sessionId}/tending`);
+    },
+    enabled: !!sessionId,
+    staleTime: 0,
+    ...options,
+  });
+}
+
+/**
+ * Submit the current user's review for an open Tending entry.
+ */
+export function useSubmitTendingResponse(
+  options?: Omit<
+    UseMutationOptions<
+      SubmitTendingResponseResponse,
+      ApiClientError,
+      { sessionId: string; entryId: string } & SubmitTendingResponseRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, entryId, ...request }) => {
+      return post<SubmitTendingResponseResponse, SubmitTendingResponseRequest>(
+        `/sessions/${sessionId}/tending/${entryId}/responses`,
+        request
+      );
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData<GetTendingEntriesResponse>(
+        stageKeys.tending(sessionId),
+        (old) => {
+          const existing = old?.entries ?? [];
+          const withoutUpdated = existing.filter((entry) => entry.id !== data.entry.id);
+          return { entries: [data.entry, ...withoutUpdated] };
+        }
+      );
+      queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
+      queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Start a passive Tending re-entry from a resolved session.
+ */
+export function useCreateTendingReentry(
+  options?: Omit<
+    UseMutationOptions<
+      CreateTendingReentryResponse,
+      ApiClientError,
+      { sessionId: string } & CreateTendingReentryRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, ...request }) => {
+      return post<CreateTendingReentryResponse, CreateTendingReentryRequest>(
+        `/sessions/${sessionId}/tending/reentry`,
+        request
+      );
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData<GetTendingEntriesResponse>(
+        stageKeys.tending(sessionId),
+        (old) => {
+          const existing = old?.entries ?? [];
+          const withoutCreated = existing.filter((entry) => entry.id !== data.entry.id);
+          return { entries: [data.entry, ...withoutCreated] };
+        }
+      );
+      queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
+      queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
     },
     ...options,
   });

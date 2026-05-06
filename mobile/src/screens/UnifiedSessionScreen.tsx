@@ -46,6 +46,7 @@ import { WaitingRoom } from '../components/WaitingRoom';
 import { AgreementCard } from '../components/AgreementCard';
 import { SessionCompletionScreen } from '../components/SessionCompletionScreen';
 import { Stage4RedesignPanel } from '../components/Stage4RedesignPanel';
+import { TendingPanel } from '../components/TendingPanel';
 // CuriosityCompactOverlay removed - now using inline approach
 import { CompactChatItem } from '../components/CompactChatItem';
 import { CompactAgreementBar } from '../components/CompactAgreementBar';
@@ -72,9 +73,12 @@ import { useSharingStatus } from '../hooks/useSharingStatus';
 import { usePendingActions } from '../hooks/usePendingActions';
 import {
   useCloseStage4,
+  useCreateTendingReentry,
   useNeedsComparison,
   useStage4State,
   useSubmitStage4ProposalSelection,
+  useSubmitTendingResponse,
+  useTendingEntries,
 } from '../hooks/useStages';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
@@ -103,6 +107,7 @@ import {
 
 interface UnifiedSessionScreenProps {
   sessionId: string;
+  initialTendingEntryId?: string | null;
   onNavigateBack?: () => void;
   onStageComplete?: (stage: Stage) => void;
 }
@@ -346,6 +351,7 @@ function NeedsIdentifiedChatCard({
 
 export function UnifiedSessionScreen({
   sessionId,
+  initialTendingEntryId = null,
   onNavigateBack,
   onStageComplete,
 }: UnifiedSessionScreenProps) {
@@ -1156,6 +1162,19 @@ export function UnifiedSessionScreen({
       showError('Could not close Stage 4 yet. Please try again.');
     },
   });
+  const tendingEntriesQuery = useTendingEntries(sessionId, {
+    enabled: !accessDenied && session?.status === SessionStatus.RESOLVED,
+  });
+  const createTendingReentry = useCreateTendingReentry({
+    onError: () => {
+      showError('Could not open Tending re-entry. Please try again.');
+    },
+  });
+  const submitTendingResponse = useSubmitTendingResponse({
+    onError: () => {
+      showError('Could not save that Tending review. Please try again.');
+    },
+  });
   const handleStage4Selection = useCallback(
     (proposalId: string, decision: Stage4SelectionDecision) => {
       submitStage4Selection.mutate({
@@ -1175,6 +1194,29 @@ export function UnifiedSessionScreen({
       });
     },
     [closeStage4, sessionId]
+  );
+  const handleCreateTendingReentry = useCallback(
+    (intent?: string) => {
+      createTendingReentry.mutate({ sessionId, intent });
+    },
+    [createTendingReentry, sessionId]
+  );
+  const handleSubmitTendingResponse = useCallback(
+    (
+      entryId: string,
+      response: {
+        status: 'WORKED' | 'PARTLY' | 'DID_NOT_WORK' | 'DID_NOT_TRY' | 'OTHER';
+        reflection?: string;
+        continueChoice: 'CONTINUE' | 'ADJUST' | 'CLOSE' | 'NEW_PROCESS' | 'OTHER_TRACK';
+      }
+    ) => {
+      submitTendingResponse.mutate({
+        sessionId,
+        entryId,
+        ...response,
+      });
+    },
+    [sessionId, submitTendingResponse]
   );
 
   // Local latches to prevent panel flashing during server refetches.
@@ -2747,6 +2789,19 @@ export function UnifiedSessionScreen({
     );
   }
 
+  const tendingPanel = session?.status === SessionStatus.RESOLVED ? (
+    <TendingPanel
+      entries={tendingEntriesQuery.data?.entries ?? []}
+      agreements={stage4State?.outcome?.agreements ?? agreements}
+      outcome={stage4State?.outcome}
+      initialEntryId={initialTendingEntryId}
+      isCreatingReentry={createTendingReentry.isPending}
+      isSubmittingResponse={submitTendingResponse.isPending}
+      onCreateReentry={handleCreateTendingReentry}
+      onSubmitResponse={handleSubmitTendingResponse}
+    />
+  ) : null;
+
   // -------------------------------------------------------------------------
   // Session Completion - Full Screen (when session is resolved)
   // -------------------------------------------------------------------------
@@ -2775,6 +2830,7 @@ export function UnifiedSessionScreen({
               onSelectProposal={handleStage4Selection}
               onCloseStage4={handleCloseRedesignedStage4}
             />
+            {tendingPanel}
             <TouchableOpacity
               style={styles.viewHistoryButton}
               onPress={() => setViewingResolvedHistory(true)}
@@ -2808,6 +2864,7 @@ export function UnifiedSessionScreen({
             measureOfSuccess: a.measureOfSuccess,
             followUpDate: a.followUpDate,
           }))}
+          tendingPanel={tendingPanel}
           onViewHistory={() => setViewingResolvedHistory(true)}
           onReturnToSessions={() => onNavigateBack?.()}
         />

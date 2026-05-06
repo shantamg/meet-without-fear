@@ -237,9 +237,33 @@ Build in this order unless there is a concrete reason to change sequencing.
     - Playwright static card visual harness, desktop viewport `1280x1000`: screenshot `test-results/stage4-redesign/desktop.png`, rendered panel `820x1189`, no text overlaps detected.
   - Result: targeted redesigned Stage 4 panel tests passed with 6 passed; targeted `StrategicRepairScreen` + panel suite passed with 26 passed; mobile typecheck passed; screenshot validation passed on mobile-sized and desktop-sized viewports.
 
-- [ ] [#370 - The Tending: mobile check-in and passive re-entry surface](https://github.com/shantamg/meet-without-fear/issues/370)
+- [x] [#370 - The Tending: mobile check-in and passive re-entry surface](https://github.com/shantamg/meet-without-fear/issues/370)
   - Depends on: #368, #369.
   - Add scheduled check-in and passive re-entry mobile surfaces.
+  - Status: draft PR updated.
+  - PR: [#373 - Stage 4/Tending data model and state API](https://github.com/shantamg/meet-without-fear/pull/373)
+  - Local files touched:
+    - `mobile/app/(auth)/session/[id]/index.tsx`
+    - `mobile/src/components/TendingPanel.tsx`
+    - `mobile/src/components/__tests__/TendingPanel.test.tsx`
+    - `mobile/src/components/SessionCompletionScreen.tsx`
+    - `mobile/src/components/index.ts`
+    - `mobile/src/hooks/queryKeys.ts`
+    - `mobile/src/hooks/useStages.ts`
+    - `mobile/src/hooks/__tests__/useStages.test.ts`
+    - `mobile/src/hooks/index.ts`
+    - `mobile/src/screens/UnifiedSessionScreen.tsx`
+  - Implemented:
+    - Added mobile Tending query and mutation hooks for `GET /sessions/:id/tending`, `POST /sessions/:id/tending/:entryId/responses`, and `POST /sessions/:id/tending/reentry`.
+    - Added a Tending panel that selects an explicit deep-linked entry id when provided, otherwise prioritizes open/partial entries before scheduled/history entries.
+    - Added scheduled shared-agreement check-in review with agreement context, status choice, reflection, and continuation choice: continue, adjust, close, new process, or other support.
+    - Added passive re-entry from resolved session surfaces, including no-shared-agreement sessions with individual commitments and open needs context and no scheduled shared check-in CTA.
+    - Wired resolved shared-agreement completion and redesigned no-shared-agreement closure screens to show the Tending panel.
+    - Wired the session route query param `tendingEntryId` into `UnifiedSessionScreen` for notification/deep-link entry targeting.
+  - Validation run:
+    - `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/TendingPanel.test.tsx src/hooks/__tests__/useStages.test.ts --runInBand --forceExit`
+    - `npm run check --workspace mobile`
+  - Result: targeted Tending panel and mobile hook tests passed with 42 passed; mobile typecheck passed.
 
 - [ ] [#371 - Stage 4 redesign: prompts for collaborative proposal development](https://github.com/shantamg/meet-without-fear/issues/371)
   - Depends on: #365, #366, #367.
@@ -251,7 +275,7 @@ Build in this order unless there is a concrete reason to change sequencing.
 
 ## Current Local State
 
-The branch currently contains implementation patches for #363, #364, #365, #366, #367, and #368:
+The branch currently contains implementation patches for #363, #364, #365, #366, #367, #368, #369, and #370:
 
 - Added Stage 4/Tending data model changes and migration SQL under `backend/prisma/migrations/20260506000000_add_stage4_tending_models/`.
 - Added shared redesigned Stage 4/Tending DTOs and enums.
@@ -261,6 +285,8 @@ The branch currently contains implementation patches for #363, #364, #365, #366,
 - Added redesigned Stage 4 selection and closure mutation endpoints, including shared-agreement and no-shared-agreement closure.
 - Added backend Tending scheduling, list/response/reentry endpoints, and a due-entry opener script.
 - Added mobile hooks/query keys for the redesigned `/stage4` state and mutations so #369 can build cards against typed contracts.
+- Added redesigned mobile Stage 4 proposal inventory, coverage, willingness selection, shared-agreement outcome, and no-shared-agreement outcome cards.
+- Added mobile Tending check-in, response, passive re-entry, and deep-linked entry targeting surfaces for resolved sessions.
 - Kept legacy `/strategies` and `/agreements` compatibility endpoints alive.
 - Kept `ProposedStrategy:` micro-tag compatibility as a fallback into structured capture.
 
@@ -268,12 +294,12 @@ Before continuing implementation, inspect `git diff` carefully. Do not overwrite
 
 ## Recommended Next Step
 
-Move to #369:
+Move to #371:
 
-1. Inspect the current mobile Stage 4 surfaces: `StrategyPool`, `StrategyRanking`, overlap UI, `UnifiedSessionScreen`, and `useStages`.
-2. Build redesigned proposal inventory, coverage, selection, and outcome cards against the `/stage4` DTOs added in #364/#367.
-3. Keep legacy strategy/ranking UI available only as compatibility fallback while moving the main Stage 4 mobile flow to `/stage4`.
-4. Validate mobile tests/typecheck and update this progress file.
+1. Inspect Stage 4 prompt generation and the structured capture integration: `backend/src/services/ai-orchestrator.ts`, `backend/src/services/stage-tools.ts`, and `backend/src/services/stage4-capture.service.ts`.
+2. Update Stage 4 prompting for conversational proposal development, removals, no-shared-agreement closure, and Tending timing without touching Stages 1-3 self-improvement branches.
+3. Keep `ProposedStrategy:` micro-tag compatibility as a fallback while moving the preferred contract to structured capture.
+4. Validate backend prompt/capture tests and typecheck, then update this progress file.
 
 ## Parallelization Guidance
 

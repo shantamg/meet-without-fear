@@ -65,6 +65,7 @@ export { StrategyRanking } from './StrategyRanking';
 export { OverlapReveal } from './OverlapReveal';
 export { AgreementCard } from './AgreementCard';
 export { Stage4RedesignPanel } from './Stage4RedesignPanel';
+export { TendingPanel } from './TendingPanel';
 
 // Person/Relationship components
 export { PersonProfile } from './PersonProfile';

@@ -8,6 +8,7 @@
  * don't celebrate or inflate. The screen should feel like the last page of a chapter.
  */
 
+import { ReactNode } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors } from '@/theme';
 import { AgreementSummaryCard } from './AgreementSummaryCard';
@@ -27,6 +28,7 @@ interface AgreementSummary {
 interface SessionCompletionScreenProps {
   partnerName: string;
   agreements: AgreementSummary[];
+  tendingPanel?: ReactNode;
   onViewHistory: () => void;
   onReturnToSessions: () => void;
   testID?: string;
@@ -39,6 +41,7 @@ interface SessionCompletionScreenProps {
 export function SessionCompletionScreen({
   partnerName,
   agreements,
+  tendingPanel,
   onViewHistory,
   onReturnToSessions,
   testID = 'session-completion-screen',
@@ -84,6 +87,12 @@ export function SessionCompletionScreen({
         <Text style={styles.reminderNote}>
           A check-in date has been set. You can revisit this agreement anytime from your sessions list.
         </Text>
+      )}
+
+      {tendingPanel && (
+        <View style={styles.tendingSection}>
+          {tendingPanel}
+        </View>
       )}
 
       {/* Actions */}
@@ -171,6 +180,9 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 24,
     fontStyle: 'italic',
+  },
+  tendingSection: {
+    marginBottom: 24,
   },
 
   // Actions

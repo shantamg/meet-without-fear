@@ -71,6 +71,8 @@ export const stageKeys = {
     [...stageKeys.all, 'strategies', 'reveal', sessionId] as const,
   agreements: (sessionId: string) =>
     [...stageKeys.all, 'agreements', sessionId] as const,
+  tending: (sessionId: string) =>
+    [...stageKeys.all, 'tending', sessionId] as const,
 };
 
 // ============================================================================

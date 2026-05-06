@@ -32,6 +32,9 @@ import {
   useSubmitStage4ProposalSelection,
   useSubmitStage4Selections,
   useCloseStage4,
+  useTendingEntries,
+  useSubmitTendingResponse,
+  useCreateTendingReentry,
   useAgreements,
   useCreateAgreement,
   useConfirmAgreement,
@@ -51,6 +54,8 @@ import {
   Stage4ProposalKind,
   Stage4ProposalStatus,
   Stage4SelectionDecision,
+  TendingEntryStatus,
+  TendingEntryType,
 } from '@meet-without-fear/shared';
 
 // Import mocked functions
@@ -1019,6 +1024,114 @@ describe('useStages', () => {
         });
         expect(queryClient.getQueryData(stageKeys.stage4(sessionId))).toEqual(closedState);
         expect(queryClient.getQueryData(stageKeys.agreements(sessionId))).toEqual({ agreements: [] });
+      });
+    });
+
+    describe('Tending hooks', () => {
+      const tendingEntry = {
+        id: 'tending-1',
+        sessionId,
+        agreementId: 'agreement-1',
+        type: TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
+        status: TendingEntryStatus.OPEN,
+        scheduledFor: '2026-05-13T00:00:00.000Z',
+        openedAt: '2026-05-13T00:00:00.000Z',
+        completedAt: null,
+        summary: 'Check whether the shared experiment helped.',
+        createdAt: '2026-05-06T00:00:00.000Z',
+        updatedAt: '2026-05-13T00:00:00.000Z',
+        myResponse: null,
+        responseCount: 0,
+      };
+
+      it('fetches Tending entries', async () => {
+        mockGet.mockResolvedValueOnce({ entries: [tendingEntry] });
+
+        const { result } = renderHook(() => useTendingEntries(sessionId), {
+          wrapper: createWrapper(),
+        });
+
+        await waitFor(() => {
+          expect(result.current.isSuccess).toBe(true);
+        });
+
+        expect(mockGet).toHaveBeenCalledWith(`/sessions/${sessionId}/tending`);
+        expect(result.current.data?.entries[0].id).toBe('tending-1');
+      });
+
+      it('submits a Tending response and caches the updated entry', async () => {
+        const updatedEntry = {
+          ...tendingEntry,
+          status: TendingEntryStatus.PARTIAL,
+          myResponse: {
+            id: 'response-1',
+            tendingEntryId: tendingEntry.id,
+            userId: 'user-123',
+            status: 'PARTLY',
+            reflection: 'It helped once.',
+            continueChoice: 'ADJUST',
+            submittedAt: '2026-05-13T01:00:00.000Z',
+          },
+          responseCount: 1,
+        };
+        mockPost.mockResolvedValueOnce({ entry: updatedEntry });
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
+          React.createElement(QueryClientProvider, { client: queryClient }, children);
+
+        const { result } = renderHook(() => useSubmitTendingResponse(), { wrapper });
+
+        await act(async () => {
+          await result.current.mutateAsync({
+            sessionId,
+            entryId: tendingEntry.id,
+            status: 'PARTLY',
+            reflection: 'It helped once.',
+            continueChoice: 'ADJUST',
+          });
+        });
+
+        expect(mockPost).toHaveBeenCalledWith(
+          `/sessions/${sessionId}/tending/${tendingEntry.id}/responses`,
+          {
+            status: 'PARTLY',
+            reflection: 'It helped once.',
+            continueChoice: 'ADJUST',
+          }
+        );
+        expect(queryClient.getQueryData(stageKeys.tending(sessionId))).toEqual({
+          entries: [updatedEntry],
+        });
+      });
+
+      it('creates passive Tending re-entry', async () => {
+        const reentry = {
+          ...tendingEntry,
+          id: 'tending-reentry-1',
+          agreementId: null,
+          type: TendingEntryType.USER_INITIATED_REENTRY,
+          summary: 'Passive Tending re-entry context.',
+        };
+        mockPost.mockResolvedValueOnce({ entry: reentry });
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
+          React.createElement(QueryClientProvider, { client: queryClient }, children);
+
+        const { result } = renderHook(() => useCreateTendingReentry(), { wrapper });
+
+        await act(async () => {
+          await result.current.mutateAsync({
+            sessionId,
+            intent: 'I want to revisit what stayed open.',
+          });
+        });
+
+        expect(mockPost).toHaveBeenCalledWith(`/sessions/${sessionId}/tending/reentry`, {
+          intent: 'I want to revisit what stayed open.',
+        });
+        expect(queryClient.getQueryData(stageKeys.tending(sessionId))).toEqual({
+          entries: [reentry],
+        });
       });
     });
   });
