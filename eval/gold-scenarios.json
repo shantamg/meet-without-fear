@@ -1,0 +1,18 @@
+{
+  "scenarios": [
+    {
+      "gold_profile": "eval/gold-profiles/adam-eve.json",
+      "id": "adam-eve",
+      "live_enabled": true,
+      "participants": ["Adam", "Eve"],
+      "reference_transcript": "docs/product/source-material/golden-transcripts/adam-eve.md"
+    },
+    {
+      "gold_profile": "eval/gold-profiles/james-catherine.json",
+      "id": "james-catherine",
+      "live_enabled": true,
+      "participants": ["James", "Catherine"],
+      "reference_transcript": "docs/product/source-material/golden-transcripts/james-catherine.md"
+    }
+  ]
+}
