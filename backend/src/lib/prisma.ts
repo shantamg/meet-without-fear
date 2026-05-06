@@ -1,14 +1,20 @@
 import { PrismaClient } from '@prisma/client';
+import { withEncryption } from './prisma-encryption-middleware';
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+function createEncryptedClient() {
+  const base = new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   });
+  return withEncryption(base);
+}
+
+type EncryptedPrismaClient = ReturnType<typeof createEncryptedClient>;
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: EncryptedPrismaClient | undefined;
+};
+
+export const prisma = globalForPrisma.prisma ?? createEncryptedClient();
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;

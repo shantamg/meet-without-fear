@@ -2,18 +2,11 @@
  * Encryption Service — Higher-Level Field Encryption for Prisma Models
  *
  * Provides helpers to encrypt/decrypt specified string fields on any record.
- * This is a preparation layer; actual integration into Prisma middleware or
- * repository hooks will come in a future migration.
+ * Integration into Prisma is handled by prisma-encryption-middleware.ts
+ * via $extends — see lib/prisma-encryption-middleware.ts for the field map.
  *
- * ── Sensitive fields to encrypt (future integration) ──────────────────────
- *
- * | Model            | Field                | Rationale                              |
- * |------------------|----------------------|----------------------------------------|
- * | Message          | content              | User messages contain emotional venting |
- * | InnerWorkMessage | content              | Private self-reflection                |
- * | UserVessel       | conversationSummary  | Summarized emotional content           |
- * | EmpathyDraft     | content              | Empathy statements about partner       |
- * | EmpathyAttempt   | content              | Guessed empathy statements             |
+ * These helpers remain available for manual encryption outside Prisma
+ * (e.g. migration scripts, one-off operations).
  */
 
 import { encrypt, decrypt } from '../utils/field-encryption';
