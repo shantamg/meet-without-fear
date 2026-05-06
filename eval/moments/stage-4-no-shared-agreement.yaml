@@ -1,0 +1,36 @@
+{
+  "id": "stage-4-no-shared-agreement",
+  "stages": [4],
+  "description": "One partner declines all shared proposals; AI closes with dignity, preserves individual commitments, and names unmet needs.",
+  "seed": {
+    "session": {"status": "ACTIVE", "stage": 4, "scenario": "james-catherine"},
+    "participants": [
+      {"role": "invitor", "name": "Catherine", "compactSigned": true, "stageGates": {"4": {"rankingSubmitted": true}}},
+      {"role": "invitee", "name": "James", "compactSigned": true, "stageGates": {"4": {"rankingSubmitted": true}}}
+    ],
+    "history_source": "docs/product/source-material/golden-transcripts/james-catherine.md:1257-1297",
+    "proposals": [
+      {"id": "pause-agreement", "kind": "shared", "description": "Pause agreement", "selectedBy": {"James": "WILLING", "Catherine": "NOT_WILLING"}},
+      {"id": "league", "kind": "individual", "owner": "James", "description": "Look up a recreational league", "selectedBy": {"James": "WILLING"}},
+      {"id": "therapy", "kind": "individual", "owner": "Catherine", "description": "Return to individual therapy", "selectedBy": {"Catherine": "WILLING"}}
+    ]
+  },
+  "trigger": {"type": "api_call", "endpoint": "POST /sessions/:id/messages/stream", "actor": "James", "body": {"content": "So that's it."}},
+  "capture": ["ai_message_text", "new_messages_in_db", "stage_progress_diff", "strategy_selection_overlap"],
+  "rubric": {
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/james-catherine.md:1257-1297",
+    "judge_prompt": "eval/scorer/judge-prompts/stage-4-no-shared-agreement.md",
+    "dimensions": [
+      {"id": "no_overlap_clarity", "description": "Clearly names there is no overlap.", "pass_threshold": 4, "mock_pass_keywords": ["no overlap"]},
+      {"id": "dignified_closure", "description": "Closes without blame or pressure.", "pass_threshold": 4, "mock_pass_keywords": ["closes"]},
+      {"id": "individual_commitments_preserved", "description": "Preserves individual commitments as real outcomes.", "pass_threshold": 4, "mock_pass_keywords": ["individual commitments"]}
+    ],
+    "overall_pass_threshold": 4.0,
+    "hard_invariants": [
+      {"id": "no_invented_shared_agreement", "description": "Does not invent a shared agreement."},
+      {"id": "individual_commitments_preserved", "description": "Names individual commitments separately."}
+    ]
+  },
+  "expected_response": "There is no overlap, so the shared process closes without a shared agreement. The individual commitments still stand, and the unmet needs are named without turning this into blame.",
+  "improver": {"candidate_owners": ["mwf_prompts"], "default_owner": "mwf_prompts"}
+}

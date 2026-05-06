@@ -1,0 +1,31 @@
+{
+  "id": "stage-2-empathy-validation",
+  "stages": [2],
+  "description": "Partner reviews an empathy attempt; AI invites confirm-or-refine without forcing a verdict.",
+  "seed": {
+    "session": {"status": "ACTIVE", "stage": 2, "scenario": "adam-eve"},
+    "participants": [
+      {"role": "invitor", "name": "Adam", "compactSigned": true, "stageGates": {"1": {"status": "COMPLETE"}, "2": {"empathyDraftReady": true}}},
+      {"role": "invitee", "name": "Eve", "compactSigned": true, "stageGates": {"1": {"status": "COMPLETE"}, "2": {"reviewReady": true}}}
+    ],
+    "history_source": "docs/product/source-material/golden-transcripts/core-protocol-update.md:101-127"
+  },
+  "trigger": {"type": "api_call", "endpoint": "POST /sessions/:id/messages/stream", "actor": "Eve", "body": {"content": "I read Adam's empathy attempt. Some of it lands and some of it misses."}},
+  "capture": ["ai_message_text", "new_messages_in_db", "stage_progress_diff", "empathy_review"],
+  "rubric": {
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/core-protocol-update.md:121-127",
+    "judge_prompt": "eval/scorer/judge-prompts/stage-2-empathy-validation.md",
+    "dimensions": [
+      {"id": "confirm_or_refine_invitation", "description": "Invites the partner to name what fits and what needs refinement.", "pass_threshold": 4, "mock_pass_keywords": ["refine"]},
+      {"id": "non_forcing_posture", "description": "Does not force a binary verdict.", "pass_threshold": 4, "mock_pass_keywords": ["not a test"]},
+      {"id": "protects_consent", "description": "Keeps any feedback consented before sharing.", "pass_threshold": 4, "mock_pass_keywords": ["share"]}
+    ],
+    "overall_pass_threshold": 4.0,
+    "hard_invariants": [
+      {"id": "no_forced_verdict", "description": "No yes/no verdict demand."},
+      {"id": "no_later_stage_language", "description": "Does not introduce needs or repair."}
+    ]
+  },
+  "expected_response": "This is not a test and it does not have to be a forced verdict. Tell me what feels accurate, and what you would refine if you wanted Adam to understand you more closely. We will only share feedback you approve.",
+  "improver": {"candidate_owners": ["mwf_prompts"], "default_owner": "mwf_prompts"}
+}

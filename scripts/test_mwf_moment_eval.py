@@ -19,6 +19,22 @@ import mwf_moment_eval as mme  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOMENT_ID = "stage-4-no-shared-agreement-closure"
 REAL_MOMENT_ID = "stage-1-fact-reflection"
+PHASE1_MOMENT_IDS = [
+    "stage-1-emotional-pivot",
+    "stage-2-empathy-validation",
+    "stage-2-refinement-round",
+    "stage-3-mutual-reveal",
+    "stage-3-validity-gate",
+    "stage-4-willingness-selection",
+    "stage-4-no-shared-agreement",
+    "transition-stage-2-to-3",
+]
+TRAJECTORY_MOMENT_IDS = [
+    "stage-1-trajectory-fact-to-handoff",
+    "stage-2-trajectory-empathy-cycle",
+    "stage-3-trajectory-needs-flow",
+    "stage-4-trajectory-willingness-to-close",
+]
 
 
 class TestYamlParsing(unittest.TestCase):
@@ -48,6 +64,38 @@ class TestYamlParsing(unittest.TestCase):
                 {item["id"] for item in moment["rubric"]["hard_invariants"]}
             )
         )
+
+    def test_phase1_library_moments_are_authored_with_required_shape(self) -> None:
+        for moment_id in PHASE1_MOMENT_IDS:
+            with self.subTest(moment_id=moment_id):
+                moment = mme.load_moment(moment_id)
+                self.assertEqual(moment["id"], moment_id)
+                self.assertEqual(len(moment["rubric"]["dimensions"]), 3)
+                self.assertGreaterEqual(len(moment["rubric"]["hard_invariants"]), 2)
+                judge_prompt = REPO_ROOT / moment["rubric"]["judge_prompt"]
+                self.assertTrue(judge_prompt.exists(), f"{judge_prompt} missing")
+                self.assertIn("expected_response", moment)
+
+    def test_list_moments_includes_phase1_library(self) -> None:
+        moment_ids = set(mme.list_moments())
+        for moment_id in PHASE1_MOMENT_IDS:
+            self.assertIn(moment_id, moment_ids)
+
+    def test_trajectory_moment_schema_validation(self) -> None:
+        for moment_id in TRAJECTORY_MOMENT_IDS:
+            with self.subTest(moment_id=moment_id):
+                moment = mme.load_moment(moment_id)
+                self.assertIn("trajectory", moment)
+                self.assertGreaterEqual(len(moment["trajectory"]), 3)
+                self.assertEqual(len(moment["rubric"]["dimensions"]), 3)
+
+    def test_malformed_trajectory_rejected(self) -> None:
+        moment = mme.load_moment("stage-1-trajectory-fact-to-handoff")
+        malformed = dict(moment)
+        malformed["trajectory"] = [{"user_turn": "missing ai"}]
+
+        with self.assertRaises(mme.MomentEvalError):
+            mme.validate_moment(malformed)
 
 
 class TestSeederIdempotence(unittest.TestCase):
@@ -135,6 +183,40 @@ class TestScorer(unittest.TestCase):
             )
         )
 
+    def test_phase1_expected_responses_pass_mock_scoring(self) -> None:
+        for moment_id in PHASE1_MOMENT_IDS:
+            with self.subTest(moment_id=moment_id):
+                moment = mme.load_moment(moment_id)
+                state = mme.seed_state(moment)
+                score = mme.score_response(moment, mme.default_ai_response(state))
+                self.assertEqual(score["verdict"], "eval_pass", score)
+
+    def test_phase1_hard_invariants_have_negative_cases(self) -> None:
+        cases = {
+            "stage-1-emotional-pivot": "Great. You feel fully heard, so now write an empathy attempt and move to agreement.",
+            "stage-2-empathy-validation": "Give a verdict: yes or no, is it accurate or not? Then we can make proposals.",
+            "stage-2-refinement-round": "Here is the corrected version I fixed for you. Now name your needs.",
+            "stage-3-mutual-reveal": "You both have a shared need and common ground. The overlap is obvious.",
+            "stage-3-validity-gate": "The overlap is clear, so we can rush into Stage 4 proposals now.",
+            "stage-4-willingness-selection": "You should have picked more. You owe them a shared agreement.",
+            "stage-4-no-shared-agreement": "You both agreed to the pause agreement. Your shared agreement is in place.",
+            "transition-stage-2-to-3": "What do you need from Eve? You should try an action step next.",
+        }
+        for moment_id, bad_response in cases.items():
+            with self.subTest(moment_id=moment_id):
+                moment = mme.load_moment(moment_id)
+                score = mme.score_response(moment, bad_response)
+                self.assertEqual(score["verdict"], "eval_fail", score)
+                self.assertTrue(any(not item["pass"] for item in score["hard_invariants"]))
+
+    def test_trajectory_expected_responses_pass_mock_scoring(self) -> None:
+        for moment_id in TRAJECTORY_MOMENT_IDS:
+            with self.subTest(moment_id=moment_id):
+                moment = mme.load_moment(moment_id)
+                state = mme.seed_state(moment)
+                score = mme.score_response(moment, mme.default_ai_response(state))
+                self.assertEqual(score["verdict"], "eval_pass", score)
+
 
 class TestImprover(unittest.TestCase):
     def test_improver_invocation_and_version_tracking(self) -> None:
@@ -172,6 +254,73 @@ class TestImprover(unittest.TestCase):
             with self.assertRaises(mme.MomentEvalError) as ctx:
                 mme.ensure_patch_branch(False)
         self.assertIn("Refusing patch mode on protected branch 'main'", str(ctx.exception))
+
+    def test_cross_moment_regularization_keeps_non_regressing_revision(self) -> None:
+        moment = mme.load_moment("stage-2-empathy-validation")
+        result = mme.evaluate_cross_moment_regularization(moment)
+
+        self.assertTrue(result["pass"], result)
+        self.assertGreaterEqual(result["same_stage_moment_count"], 1)
+
+    def test_cross_moment_regularization_rejects_score_regression(self) -> None:
+        moment = mme.load_moment("stage-2-empathy-validation")
+        result = mme.evaluate_cross_moment_regularization(
+            moment,
+            {"stage-2-refinement-round": "Generic response that misses the required refinement details."},
+        )
+
+        self.assertFalse(result["pass"])
+        failed = [item for item in result["results"] if item["moment"] == "stage-2-refinement-round"][0]
+        self.assertIn("below threshold", failed["reason"])
+
+    def test_cross_moment_regularization_rejects_hard_invariant_regression(self) -> None:
+        moment = mme.load_moment("stage-3-validity-gate")
+        result = mme.evaluate_cross_moment_regularization(
+            moment,
+            {"stage-3-mutual-reveal": "You both have common ground and overlap, so skip noticing."},
+        )
+
+        self.assertFalse(result["pass"])
+        failed = [item for item in result["results"] if item["moment"] == "stage-3-mutual-reveal"][0]
+        self.assertIn("hard invariant failed", failed["reason"])
+
+    def test_cross_moment_regularization_uses_real_judge_when_requested(self) -> None:
+        moment = mme.load_moment("stage-2-empathy-validation")
+        judged = (
+            {
+                "dimensions": {
+                    "integrates_feedback": {"score": 4.5, "rationale": "ok"},
+                    "keeps_thread": {"score": 4.5, "rationale": "ok"},
+                    "non_corrective_tone": {"score": 4.5, "rationale": "ok"},
+                    "honors_empathy_completion": {"score": 4.5, "rationale": "ok"},
+                    "orients_next_stage": {"score": 4.5, "rationale": "ok"},
+                    "no_premature_needs_extraction": {"score": 4.5, "rationale": "ok"},
+                    "review_invited": {"score": 4.5, "rationale": "ok"},
+                    "feedback_integrated": {"score": 4.5, "rationale": "ok"},
+                    "validation_honored": {"score": 4.5, "rationale": "ok"},
+                }
+            },
+            {"model": "mock"},
+        )
+        with mock.patch.object(mme, "score_with_real_judge", return_value=judged) as real_judge:
+            result = mme.evaluate_cross_moment_regularization(moment, real=True, mock_judge=False)
+
+        self.assertTrue(result["pass"], result)
+        self.assertGreaterEqual(real_judge.call_count, 1)
+
+    def test_improvement_plan_logs_cross_moment_evaluation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            run_dir = tmp_path / "run"
+            run_dir.mkdir()
+            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"):
+                moment = mme.load_moment("stage-2-empathy-validation")
+                score = mme.score_response(moment, "Thin response.")
+                mme.run_improver(run_dir, moment, score, allow_protected_branch_patch=True)
+
+            plan = (run_dir / "improvement-plan.md").read_text(encoding="utf-8")
+            self.assertIn("## Cross-Moment Regularization", plan)
+            self.assertIn("stage-2-refinement-round", plan)
 
 
 class TestRealModePlumbing(unittest.TestCase):
@@ -213,6 +362,58 @@ class TestRealModePlumbing(unittest.TestCase):
             args.mock_judge = not args.real
         self.assertFalse(args.mock_judge)
 
+    def test_real_trajectory_uses_trajectory_helper_boundary(self) -> None:
+        moment = mme.load_moment("stage-1-trajectory-fact-to-handoff")
+        args = mme.build_parser().parse_args(
+            ["run", "--moment", moment["id"], "--real", "--mock-judge", "--max-iterations", "1"]
+        )
+        fake = {
+            "seed": {"sessionId": "cmomenttrajectory"},
+            "aiResponse": "Trajectory response with solid fear without deciding",
+            "stateDelta": {"trajectory_steps": [{"turn": 1}]},
+        }
+        with mock.patch.object(mme, "run_real_helper", return_value=fake) as helper:
+            state, response, state_delta, _score, _raw = mme.run_real_iteration(moment, args, None, None)
+
+        self.assertEqual(state["sessionId"], "cmomenttrajectory")
+        self.assertIn("Trajectory response", response)
+        self.assertIn("trajectory_steps", state_delta)
+        helper.assert_called_once()
+        self.assertEqual(helper.call_args.args[0], "run-trajectory")
+
+    def test_flat_real_judge_result_is_normalized(self) -> None:
+        moment = mme.load_moment("stage-2-empathy-validation")
+        flat = {
+            "parsed": {
+                "confirm_or_refine_invitation": 9,
+                "non_forcing_posture": 8,
+                "protects_consent": 7,
+                "rationale": "Flat result",
+            },
+            "raw": "{}",
+        }
+        with mock.patch.object(mme, "run_real_helper", return_value=flat):
+            parsed, _raw = mme.score_with_real_judge(moment, "What landed? What felt off?")
+
+        self.assertEqual(parsed["dimensions"]["confirm_or_refine_invitation"]["score"], 4.5)
+        self.assertEqual(parsed["dimensions"]["non_forcing_posture"]["score"], 4.0)
+
+    def test_root_dimension_real_judge_result_is_normalized(self) -> None:
+        moment = mme.load_moment("stage-1-emotional-pivot")
+        root_dimensions = {
+            "parsed": {
+                "emotional_reflection": {"score": 8, "rationale": "Good"},
+                "listening_mode": {"score": 9, "rationale": "Good"},
+                "no_premature_gate": {"score": 10, "rationale": "Good"},
+            },
+            "raw": "{}",
+        }
+        with mock.patch.object(mme, "run_real_helper", return_value=root_dimensions):
+            parsed, _raw = mme.score_with_real_judge(moment, "What is she saying about you?")
+
+        self.assertEqual(parsed["dimensions"]["emotional_reflection"]["score"], 4.0)
+        self.assertEqual(parsed["dimensions"]["no_premature_gate"]["score"], 5.0)
+
 
 class TestCli(unittest.TestCase):
     def test_cli_help_mentions_required_flags(self) -> None:
@@ -228,6 +429,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         for needle in [
             "run",
+            "run-library",
             "--moment",
             "--target-score",
             "--max-iterations",
@@ -235,6 +437,46 @@ class TestCli(unittest.TestCase):
             "--allow-protected-branch-patch",
         ]:
             self.assertIn(needle, result.stdout)
+
+    def test_run_library_creates_one_run_per_moment_with_mock_judge(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            with mock.patch.object(mme, "RUNS_ROOT", tmp_path):
+                args = mme.build_parser().parse_args(["run-library", "--max-iterations", "1", "--no-improve"])
+                if args.mock_judge is None:
+                    args.mock_judge = not args.real
+                created = mme.run_library(args)
+                self.assertGreaterEqual(len(created), len(PHASE1_MOMENT_IDS))
+                created_ids = {
+                    __import__("json").loads((path / "run.json").read_text(encoding="utf-8"))["moment"]
+                    for path in created
+                }
+        for moment_id in PHASE1_MOMENT_IDS:
+            self.assertIn(moment_id, created_ids)
+
+    def test_trajectory_runner_persists_intermediate_ai_responses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            with mock.patch.object(mme, "RUNS_ROOT", tmp_path):
+                args = mme.build_parser().parse_args(
+                    [
+                        "run",
+                        "--moment",
+                        "stage-3-trajectory-needs-flow",
+                        "--max-iterations",
+                        "1",
+                        "--no-improve",
+                    ]
+                )
+                if args.mock_judge is None:
+                    args.mock_judge = not args.real
+                created = mme.run_loop(args)
+                delta = __import__("json").loads((created[0] / "state-delta.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(len(delta["trajectory_steps"]), 4)
+        for step in delta["trajectory_steps"]:
+            self.assertIn("ai_response_persisted", step)
+            self.assertIn("seed_for_next_turn", step)
 
 
 if __name__ == "__main__":

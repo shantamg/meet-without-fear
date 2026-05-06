@@ -26,6 +26,36 @@ type SeedResult = {
   stageProgress: Array<{ userId: string; stage: number; status: string; gatesSatisfied: unknown }>;
 };
 
+type MomentParticipant = {
+  role: string;
+  name: string;
+  compactSigned?: boolean;
+  stageGates?: Record<string, unknown>;
+};
+
+type MomentProposal = {
+  id: string;
+  kind: string;
+  owner?: string;
+  description: string;
+  selectedBy?: Record<string, string>;
+};
+
+type MomentPayload = {
+  id: string;
+  stages: number[];
+  seed: {
+    session?: Record<string, unknown>;
+    participants: MomentParticipant[];
+    prior_history_summary?: string[];
+    proposals?: MomentProposal[];
+  };
+  trigger?: {
+    actor?: string;
+    body?: { content?: string };
+  };
+};
+
 function requireEnv(names: string[]): void {
   const missing = names.filter((name) => !process.env[name]);
   if (missing.length > 0) {
@@ -243,6 +273,178 @@ async function seedStage1FactReflection(): Promise<SeedResult> {
   return result;
 }
 
+async function seedGenericMoment(moment: MomentPayload): Promise<SeedResult> {
+  requireEnv(['DATABASE_URL']);
+  const currentStage = Math.max(...moment.stages.filter((stage) => stage <= 4));
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const participants = moment.seed.participants.slice(0, 2);
+  if (participants.length < 2) {
+    throw new Error(`Moment ${moment.id} must include at least two participants`);
+  }
+  const actorName = moment.trigger?.actor || participants[0].name;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const users = await Promise.all(
+      participants.map((participant, index) =>
+        tx.user.create({
+          data: {
+            email: `moment-${moment.id}-${participant.name.toLowerCase()}-${suffix}@example.test`,
+            clerkId: `e2e_moment-${moment.id}-${index}-${suffix}`,
+            name: participant.name,
+            firstName: participant.name,
+          },
+        })
+      )
+    );
+    const userByName = new Map(participants.map((participant, index) => [participant.name, users[index]]));
+    const actor = userByName.get(actorName) || users[0];
+    const partner = users.find((user) => user.id !== actor.id) || users[1];
+
+    const relationship = await tx.relationship.create({
+      data: {
+        members: {
+          create: participants.map((participant, index) => ({
+            userId: users[index].id,
+            role: participant.role,
+            nickname: participants.find((_, otherIndex) => otherIndex !== index)?.name || 'Partner',
+          })),
+        },
+      },
+    });
+
+    const session = await tx.session.create({
+      data: {
+        relationshipId: relationship.id,
+        status: 'ACTIVE',
+        topicFrame: `${TEST_TOPIC_PREFIX} ${moment.id}`,
+      },
+    });
+
+    const vessels = await Promise.all(
+      users.map((user, index) =>
+        tx.userVessel.create({
+          data: {
+            userId: user.id,
+            sessionId: session.id,
+            notableFacts: [
+              {
+                category: 'Moment',
+                fact: `${participants[index].name} is seeded for ${moment.id} at Stage ${currentStage}.`,
+              },
+            ],
+          },
+        })
+      )
+    );
+    await Promise.all(
+      vessels.map((vessel) =>
+        tx.emotionalReading.create({
+          data: {
+            vesselId: vessel.id,
+            intensity: 5,
+            stage: currentStage,
+            context: `Seeded baseline for ${moment.id}.`,
+          },
+        })
+      )
+    );
+
+    const progressRows = participants.flatMap((participant, index) => {
+      const gates = participant.stageGates || {};
+      const rows = [];
+      for (let stage = 0; stage <= currentStage; stage += 1) {
+        rows.push({
+          sessionId: session.id,
+          userId: users[index].id,
+          stage,
+          status: stage < currentStage ? 'COMPLETED' as const : 'IN_PROGRESS' as const,
+          completedAt: stage < currentStage ? new Date() : null,
+          gatesSatisfied: (gates[String(stage)] as object | undefined) || {},
+        });
+      }
+      return rows;
+    });
+    await tx.stageProgress.createMany({ data: progressRows });
+
+    const history = [];
+    const summaries = moment.seed.prior_history_summary || [];
+    for (const summary of summaries) {
+      history.push(
+        await tx.message.create({
+          data: {
+            sessionId: session.id,
+            senderId: actor.id,
+            role: 'USER',
+            stage: currentStage,
+            content: summary,
+          },
+        })
+      );
+    }
+
+    for (const proposal of moment.seed.proposals || []) {
+      const owner = proposal.owner ? userByName.get(proposal.owner) : undefined;
+      const created = await tx.strategyProposal.create({
+        data: {
+          sessionId: session.id,
+          createdByUserId: owner?.id || actor.id,
+          description: proposal.description,
+          kind: proposal.kind === 'individual' ? 'INDIVIDUAL_COMMITMENT' : 'SHARED_PROPOSAL',
+          needsAddressed: [],
+          source: 'CURATED',
+        },
+      });
+      for (const [userName, choice] of Object.entries(proposal.selectedBy || {})) {
+        const selectedUser = userByName.get(userName);
+        if (!selectedUser) continue;
+        await tx.stage4ProposalSelection.create({
+          data: {
+            proposalId: created.id,
+            sessionId: session.id,
+            userId: selectedUser.id,
+            decision: choice === 'NOT_WILLING' ? 'NOT_WILLING' : choice === 'NEEDS_DISCUSSION' ? 'NEEDS_DISCUSSION' : 'WILLING',
+          },
+        });
+      }
+    }
+
+    const stageProgress = await tx.stageProgress.findMany({
+      where: { sessionId: session.id },
+      orderBy: [{ userId: 'asc' }, { stage: 'asc' }],
+    });
+
+    return {
+      sessionId: session.id,
+      actorUserId: actor.id,
+      partnerUserId: partner.id,
+      actorEmail: actor.email,
+      rows: {
+        Session: 1,
+        Relationship: 1,
+        RelationshipMember: users.length,
+        User: users.length,
+        UserVessel: vessels.length,
+        StageProgress: stageProgress.length,
+        Message: history.length,
+      },
+      messages: history.map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        stage: message.stage,
+      })),
+      stageProgress: stageProgress.map((progress) => ({
+        userId: progress.userId,
+        stage: progress.stage,
+        status: progress.status,
+        gatesSatisfied: progress.gatesSatisfied,
+      })),
+    };
+  });
+
+  return result;
+}
+
 function parseSse(raw: string): Array<{ event: string; data: unknown }> {
   return raw
     .split(/\n\n+/)
@@ -336,6 +538,42 @@ async function invokeStage1(seed: SeedResult, content: string): Promise<Record<s
   };
 }
 
+async function invokeSeed(seed: SeedResult, content: string): Promise<Record<string, unknown>> {
+  return invokeStage1(seed, content);
+}
+
+async function invokeTrajectory(moment: MomentPayload): Promise<Record<string, unknown>> {
+  const seed = await seedGenericMoment(moment);
+  const steps = [];
+  const responses = [];
+  for (const [index, step] of (moment as MomentPayload & { trajectory?: Array<{ user_turn: string }> }).trajectory?.entries() || []) {
+    const run = await invokeSeed(seed, step.user_turn);
+    const aiResponse = String(run.aiResponse || '');
+    responses.push(aiResponse);
+    steps.push({
+      turn: index + 1,
+      user_turn: step.user_turn,
+      ai_response_persisted: aiResponse,
+      seed_for_next_turn: {
+        previous_ai_response: aiResponse,
+        history_length_after_turn: (index + 1) * 2,
+      },
+      stateDelta: run.stateDelta,
+    });
+  }
+  return {
+    seed,
+    aiResponse: responses.join('\n\n'),
+    stateDelta: {
+      trajectory_steps: steps,
+      new_messages_in_db: steps.flatMap((step) => (step.stateDelta as { new_messages_in_db?: unknown[] }).new_messages_in_db || []),
+      stage_progress: steps.at(-1)?.stateDelta
+        ? (steps.at(-1)?.stateDelta as { stage_progress?: unknown[] }).stage_progress || []
+        : [],
+    },
+  };
+}
+
 async function cleanup(olderThanMs: number): Promise<Record<string, number>> {
   requireEnv(['DATABASE_URL']);
   const cutoff = new Date(Date.now() - olderThanMs);
@@ -417,15 +655,27 @@ async function main(): Promise<void> {
       console.log(JSON.stringify(seed));
       return;
     }
+    if (command === 'seed-generic') {
+      const payload = JSON.parse(payloadText || '{}') as { moment?: MomentPayload };
+      if (!payload.moment) throw new Error('seed-generic requires a moment payload');
+      console.log(JSON.stringify(await seedGenericMoment(payload.moment)));
+      return;
+    }
     if (command === 'run') {
-      const payload = JSON.parse(payloadText || '{}') as { content?: string };
-      const seed = await seedStage1FactReflection();
-      const run = await invokeStage1(
+      const payload = JSON.parse(payloadText || '{}') as { content?: string; moment?: MomentPayload };
+      const seed = payload.moment ? await seedGenericMoment(payload.moment) : await seedStage1FactReflection();
+      const run = await invokeSeed(
         seed,
         payload.content ||
           "The thing I haven't said out loud is that I am scared she might be right about me. That I have held us back and I don't know how to be different.",
       );
       console.log(JSON.stringify({ seed, ...run }));
+      return;
+    }
+    if (command === 'run-trajectory') {
+      const payload = JSON.parse(payloadText || '{}') as { moment?: MomentPayload };
+      if (!payload.moment) throw new Error('run-trajectory requires a moment payload');
+      console.log(JSON.stringify(await invokeTrajectory(payload.moment)));
       return;
     }
     if (command === 'cleanup') {

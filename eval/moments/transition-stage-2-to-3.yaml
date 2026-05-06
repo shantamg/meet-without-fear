@@ -1,0 +1,31 @@
+{
+  "id": "transition-stage-2-to-3",
+  "stages": [2, 3],
+  "description": "Empathy validated; AI introduces Stage 3 without prematurely pivoting into needs language before the user is oriented.",
+  "seed": {
+    "session": {"status": "ACTIVE", "stage": 2, "scenario": "adam-eve"},
+    "participants": [
+      {"role": "invitor", "name": "Adam", "compactSigned": true, "stageGates": {"2": {"feltUnderstood": true}}},
+      {"role": "invitee", "name": "Eve", "compactSigned": true, "stageGates": {"2": {"feltUnderstood": true}}}
+    ],
+    "history_source": "docs/product/source-material/golden-transcripts/core-protocol-update.md:121-137"
+  },
+  "trigger": {"type": "api_call", "endpoint": "POST /sessions/:id/messages/stream", "actor": "Adam", "body": {"content": "I feel like she understood me enough to keep going."}},
+  "capture": ["ai_message_text", "new_messages_in_db", "stage_progress_diff", "stage_transition"],
+  "rubric": {
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/core-protocol-update.md:121-137",
+    "judge_prompt": "eval/scorer/judge-prompts/transition-stage-2-to-3.md",
+    "dimensions": [
+      {"id": "honors_empathy_completion", "description": "Acknowledges the empathy stage completion.", "pass_threshold": 4, "mock_pass_keywords": ["understood"]},
+      {"id": "orients_next_stage", "description": "Introduces Stage 3 as a shift toward the user's own experience.", "pass_threshold": 4, "mock_pass_keywords": ["what matters"]},
+      {"id": "no_premature_needs_extraction", "description": "Does not demand a needs list immediately.", "pass_threshold": 4, "mock_pass_keywords": ["when you are ready"]}
+    ],
+    "overall_pass_threshold": 4.0,
+    "hard_invariants": [
+      {"id": "no_premature_needs_language", "description": "Does not start by interrogating needs."},
+      {"id": "no_advice_or_solutioning", "description": "No advice or repair steps."}
+    ]
+  },
+  "expected_response": "You have both done enough to feel understood and keep going. When you are ready, the next part turns gently back toward you: what matters to you in all of this.",
+  "improver": {"candidate_owners": ["mwf_prompts"], "default_owner": "mwf_prompts"}
+}

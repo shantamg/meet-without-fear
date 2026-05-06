@@ -1,0 +1,35 @@
+{
+  "id": "stage-1-trajectory-fact-to-handoff",
+  "stages": [1],
+  "description": "Multi-turn Stage 1 path from facts through emotional pivot without prematurely setting FeelHeardCheck:Y.",
+  "seed": {
+    "session": {"status": "ACTIVE", "stage": 1, "scenario": "adam-eve"},
+    "participants": [
+      {"role": "invitor", "name": "Adam", "compactSigned": true, "stageGates": {"1": {"feelHeardConfirmed": false}}},
+      {"role": "invitee", "name": "Eve", "compactSigned": true, "stageGates": {"1": {"feelHeardConfirmed": false}}}
+    ],
+    "history_source": "docs/product/source-material/golden-transcripts/adam-eve.md:43-67"
+  },
+  "trajectory": [
+    {"user_turn": "We have a stable life and somehow it feels like none of it matters to her.", "expected_ai_response": "You built something that feels solid, and you are not experiencing it as seen."},
+    {"user_turn": "She brings up travel and growth and I shut down.", "expected_ai_response": "There is a loop there: she reaches for something, you pull back, and then you carry the weight of that too."},
+    {"user_turn": "Underneath it, I am scared she may be right about me.", "expected_ai_response": "That is the fear underneath it. We can stay with that without deciding anything yet."}
+  ],
+  "trigger": {"type": "trajectory", "endpoint": "POST /sessions/:id/messages/stream", "actor": "Adam", "body": {"content": "trajectory"}},
+  "capture": ["ai_message_text", "new_messages_in_db", "state-delta.json", "trajectory_steps"],
+  "rubric": {
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/adam-eve.md:43-67",
+    "judge_prompt": "eval/scorer/judge-prompts/stage-1-trajectory-fact-to-handoff.md",
+    "dimensions": [
+      {"id": "fact_reflection_sequence", "description": "Reflects each fact before interpreting.", "pass_threshold": 4, "mock_pass_keywords": ["solid"]},
+      {"id": "emotional_pivot_handled", "description": "Handles the emotional pivot by staying in witness mode.", "pass_threshold": 4, "mock_pass_keywords": ["fear"]},
+      {"id": "no_premature_handoff", "description": "Does not mark Stage 1 complete.", "pass_threshold": 4, "mock_pass_keywords": ["without deciding"]}
+    ],
+    "overall_pass_threshold": 4.0,
+    "hard_invariants": [
+      {"id": "no_later_stage_language", "description": "No Stage 2-4 language."},
+      {"id": "no_feel_heard_completion", "description": "No FeelHeardCheck completion."}
+    ]
+  },
+  "improver": {"candidate_owners": ["mwf_prompts"], "default_owner": "mwf_prompts"}
+}
