@@ -2,6 +2,11 @@
   "scenarios": [
     {
       "gold_profile": "eval/gold-profiles/adam-eve.json",
+      "gate": {
+        "max_iterations": 1,
+        "stop_after_stage": 2,
+        "target_score": 4.0
+      },
       "id": "adam-eve",
       "live_enabled": true,
       "participants": ["Adam", "Eve"],
@@ -9,6 +14,11 @@
     },
     {
       "gold_profile": "eval/gold-profiles/james-catherine.json",
+      "gate": {
+        "max_iterations": 1,
+        "stop_after_stage": 2,
+        "target_score": 4.0
+      },
       "id": "james-catherine",
       "live_enabled": true,
       "participants": ["James", "Catherine"],

@@ -21,7 +21,7 @@ Use this file to route the current task. Work through stages in order for a full
 3. Plan the highest-priority real blocker first.
 4. Implement only changes justified by artifacts.
 5. Verify focused behavior before rerunning full bounded loops.
-6. Rerun Adam/Eve and James/Catherine with `MOCK_LLM=false`, unless a human-decision blocker is recorded.
+6. Rerun every live-enabled scenario in `eval/gold-scenarios.json` with `MOCK_LLM=false`, unless a human-decision blocker is recorded.
 7. Judge against `COMPLETION_CRITERIA.md`.
 8. Write a cycle report and promote only durable records.
 9. Propose eval-machine improvements separately from product fixes.
@@ -41,6 +41,7 @@ This ICM tree defines decision policy and audit contracts. It does not replace t
 - User goal or cycle objective.
 - Current repository state.
 - Existing stage outputs, if resuming.
+- Required live-enabled scenario set from `eval/gold-scenarios.json`.
 - Canonical artifacts and working-memory artifacts named by the relevant stage.
 
 ## Process
