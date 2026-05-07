@@ -7,7 +7,7 @@ The autonomous loop must have circuit breakers. Cost and iteration limits are sa
 Unless the user or cycle objective sets stricter limits:
 
 - maximum repair iterations per cycle: `3`
-- maximum fresh gold-loop reruns per scenario per cycle: `2`
+- maximum fresh gold-loop reruns per scenario per cycle: `4`
 - maximum snapshot replays per snapshot entry per cycle: `3`
 - maximum full-flow gates per scenario per cycle: `1`
 
