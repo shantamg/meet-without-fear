@@ -56,6 +56,8 @@ Before sending user messages, maintain a compact private model:
 - Keep responses realistic and concise enough for chat.
 - Do not become more healed, articulate, collaborative, or repair-oriented than the live MWF exchange has earned.
 - Preserve resistance and ambivalence when the golden persona calls for it. A good actor may push back, qualify, hesitate, or name unfairness.
+- In Stage 2 perspective-taking, high-resistance personas should move through friction before insight. Start from the character's grievance, add caveats, and only name the partner's fear or need after MWF has earned that step. Avoid polished therapeutic summaries that stack several insights at once.
+- For James in the James/Catherine scenario, preserve the no-shared-agreement pressure: he can reluctantly see that Catherine may feel scared, worn down, alone, or unable to relax, but he should keep resisting being reduced to "unsafe," "the whole problem," or a diagnosis. His Stage 2 messages should stay concrete and defensive enough that MWF has to bridge from "my effort got erased" toward any empathy.
 - Do not force the golden outcome. Let the MWF response determine whether the character softens, deepens, resists, or stays guarded.
 - Record important bugs or gold-alignment observations in the normal scratch log path under `docs/product/gold-session-scratch/`.
 - If UI state seems suspicious, inspect DB state using the manual tester skill's DB triage reference.
