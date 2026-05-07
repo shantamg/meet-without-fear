@@ -251,6 +251,24 @@ Visible response.`;
       expect(result.response).not.toContain('<needs>');
     });
 
+    it('strips legacy needs_ready payloads from visible response text', () => {
+      const raw = `<thinking>Mode: WITNESS</thinking>
+<needs_ready>
+{
+  "core_needs": ["To know whether change is possible"],
+  "boundary": "Reacting to volatility is not the same as causing it"
+}
+</needs_ready>
+Okay. You're clear on what you need.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.response).toBe("Okay. You're clear on what you need.");
+      expect(result.response).not.toContain('<needs_ready>');
+      expect(result.response).not.toContain('core_needs');
+      expect(result.proposedNeeds).toEqual([]);
+    });
+
     it('handles whitespace variations in flag extraction', () => {
       const raw = `<thinking>FeelHeardCheck: Y</thinking>Response`;
       const result = parseMicroTagResponse(raw);
@@ -304,7 +322,22 @@ That gives you a concrete experiment and a time to revisit it.`;
       const raw = `<thinking>Just some analysis</thinking>Response`;
       const result = parseMicroTagResponse(raw);
       expect(result.offerFeelHeardCheck).toBe(false);
+      expect(result.feelHeardConfirmed).toBe(false);
       expect(result.offerReadyToShare).toBe(false);
+    });
+
+    it('extracts FeelHeardConfirmed:Y as true', () => {
+      const raw = `<thinking>
+Mode: WITNESS
+FeelHeardCheck:Y
+FeelHeardConfirmed:Y
+</thinking>
+Let's move into the next part.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.offerFeelHeardCheck).toBe(true);
+      expect(result.feelHeardConfirmed).toBe(true);
     });
 
     it('trims whitespace from draft content', () => {

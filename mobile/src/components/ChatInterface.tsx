@@ -471,6 +471,17 @@ export function ChatInterface({
     if (message.role === MessageRole.USER) return false;
     if (message.id.startsWith('optimistic-')) return false;
 
+    // If the user has already replied after this assistant/system message,
+    // the message must be visible immediately. It is no longer a live pending
+    // animation candidate, and hiding it leaves blank transcript gaps.
+    for (let i = index - 1; i >= 0; i--) {
+      const laterItem = listItems[i];
+      if (isIndicator(laterItem) || isValidationCard(laterItem) || isCustomEmptyState(laterItem) || isCustomCard(laterItem)) continue;
+      if ((laterItem as ChatMessage).role === MessageRole.USER) {
+        return false;
+      }
+    }
+
     // If there is no server read boundary yet, fall back to the original
     // mount snapshot so loaded history does not animate on first render.
     if (lastSeenItemIndex < 0 && lastViewedAtTime === null && mountSnapshotIdsRef.current.has(message.id)) {
@@ -478,7 +489,7 @@ export function ChatInterface({
     }
 
     return true;
-  }, [isAtOrBeforeSeenBoundary, lastSeenItemIndex, lastViewedAtTime]);
+  }, [isAtOrBeforeSeenBoundary, lastSeenItemIndex, lastViewedAtTime, listItems]);
 
   // Auto-speech: speak new AI messages when enabled
   useEffect(() => {
@@ -546,6 +557,15 @@ export function ChatInterface({
   // a later typewriter pass. This prevents refetches/status changes after
   // button-only actions from replaying older visible messages one by one.
   useEffect(() => {
+    if (animatingItemId !== null) {
+      const animatingIndex = listItems.findIndex((item) => item.id === animatingItemId);
+      const animatingItem = animatingIndex >= 0 ? listItems[animatingIndex] : null;
+      if (!animatingItem || !shouldAnimateItem(animatingItem, animatingIndex)) {
+        markItemAnimationSeen(animatingItemId);
+        setAnimatingItemId(null);
+      }
+    }
+
     listItems.forEach((item, index) => {
       if (isIndicator(item) || isValidationCard(item) || isCustomEmptyState(item)) return;
       if (item.id === nextAnimatableMessageId || item.id === animatingItemId) return;

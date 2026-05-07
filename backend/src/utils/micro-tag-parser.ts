@@ -5,6 +5,7 @@
  * - <thinking>...</thinking> - Hidden analysis with flags
  * - <draft>...</draft> - Optional draft content (invitation/empathy)
  * - <needs>...</needs> - Optional structured Stage 3 needs JSON
+ * - <needs_ready>...</needs_ready> - Legacy/errant hidden needs payload, stripped if emitted
  * - <dispatch>...</dispatch> - Optional off-ramp signal
  * - Everything else is the user-facing response
  */
@@ -28,6 +29,8 @@ export interface ParsedMicroTagResponse {
   dispatchTag: string | null;
   /** Extracted from thinking: FeelHeardCheck:Y */
   offerFeelHeardCheck: boolean;
+  /** Extracted from thinking: FeelHeardConfirmed:Y */
+  feelHeardConfirmed: boolean;
   /** Extracted from thinking: ReadyShare:Y */
   offerReadyToShare: boolean;
   /** Extracted from thinking: ProposedStrategy lines (Stage 4) */
@@ -164,6 +167,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
     .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
     .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
+    .replace(/<needs[_-]?ready>[\s\S]*?<\/needs[_-]?ready>/gi, '')
     .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '')
     .trim();
   responseText = stripKnownControlTags(responseText).trim();
@@ -185,6 +189,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
 
   // 3. Extract flags from thinking string (no JSON needed!)
   const offerFeelHeardCheck = feelHeardControlTag ?? /FeelHeardCheck:\s*Y/i.test(thinking);
+  const feelHeardConfirmed = /FeelHeardConfirmed:\s*Y/i.test(thinking);
   const offerReadyToShare = readyShareControlTag ?? /ReadyShare:\s*Y/i.test(thinking);
 
   // 4. Extract proposed strategies from thinking (Stage 4)
@@ -223,6 +228,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
         topicFrame: empathy,
         dispatchTag: null,
         offerFeelHeardCheck,
+        feelHeardConfirmed,
         offerReadyToShare,
         proposedStrategies,
         proposedNeeds,
@@ -239,6 +245,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     topicFrame: draft,
     dispatchTag,
     offerFeelHeardCheck,
+    feelHeardConfirmed,
     offerReadyToShare,
     proposedStrategies,
     proposedNeeds,

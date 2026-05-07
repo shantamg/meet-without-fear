@@ -514,8 +514,26 @@ describe('Stage Prompts Service', () => {
 
       expect(prompt).toContain('HIGH-CONFLICT / LONG-RUNNING CASES');
       expect(prompt).toContain('Do not offer the felt-heard gate after only naming the pattern');
+      expect(prompt).toContain('high-resistance/non-resolution case');
+      expect(prompt).toContain('do not set FeelHeardCheck:Y before at least five substantive user turns');
+      expect(prompt).toContain('does not count as the user\'s answer to that check');
       expect(prompt).toContain('what they have already tried');
+      expect(prompt).toContain('care underneath resentment');
+      expect(prompt).toContain('maybe I need to know I really tried');
+      expect(prompt).toContain('make one final open-floor move');
       expect(prompt).toContain('understanding the other person is not the same as excusing impact');
+    });
+
+    it('Stage 1 prompt separates felt-heard gating from partner-share readiness', () => {
+      const context = createContext({ turnCount: 7, emotionalIntensity: 6 });
+      const prompt = fullPrompt(buildStagePrompt(1, context));
+
+      expect(prompt).toContain('FELT-HEARD GATE BOUNDARY');
+      expect(prompt).toContain('Stage 1 is only about whether this user feels heard by you');
+      expect(prompt).toContain('Do not ask whether they want their partner to hear something');
+      expect(prompt).toContain('Do not ask what they hope would happen if they said it to their partner');
+      expect(prompt).toContain('treat that as fresh material to witness');
+      expect(prompt).toContain('Never convert that check into partner-share readiness');
     });
 
     it('uses regular Stage 2 prompt when not transitioning', () => {
@@ -539,6 +557,17 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('unfairness, anger, fear, resentment');
       expect(prompt).toContain('Does that feel like your real attempt');
       expect(prompt).toContain('ReadyShare guard: TOO EARLY');
+    });
+
+    it('Stage 2 prompt prevents empathy drafts from adding unearned reassurance', () => {
+      const context = createContext({ turnCount: 6, emotionalIntensity: 6 });
+      const prompt = fullPrompt(buildStagePrompt(2, context));
+
+      expect(prompt).toContain("Preserve Test User's caveats and non-concessions");
+      expect(prompt).toContain('Do not add direct reassurance');
+      expect(prompt).toContain('you are enough');
+      expect(prompt).toContain('they are not trying to reassure Partner');
+      expect(prompt).toContain('must not settle unresolved fit');
     });
 
     it('Stage 2 refinement mode can update an existing draft without the early draft guard', () => {
@@ -745,7 +774,9 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('<thinking>');
       // The flag instruction is in format "FeelHeardCheck: [Y if ready..., N otherwise]"
       expect(prompt).toContain('FeelHeardCheck:');
+      expect(prompt).toContain('FeelHeardConfirmed:');
       expect(prompt).toMatch(/FeelHeardCheck.*Y.*N/s);
+      expect(prompt).toMatch(/FeelHeardConfirmed.*Y.*N/s);
       expect(prompt).toContain('Do NOT invite more freeform chat unless the input remains visible');
     });
 
@@ -776,6 +807,16 @@ describe('Stage Prompts Service', () => {
 
       expect(prompt).toContain('<dispatch>');
       expect(prompt).toContain('EXPLAIN_PROCESS');
+    });
+
+    it('protocol keeps control flags as thinking lines, not ad hoc XML tags', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(3, context));
+
+      expect(prompt).toContain('The only XML-style tags you may use are exactly <thinking>, <draft>, <needs>, and <dispatch>.');
+      expect(prompt).toContain('Flags such as FeelHeardCheck, FeelHeardConfirmed, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>');
+      expect(prompt).toContain('never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>');
+      expect(prompt).toContain('The <needs> tag is only for the structured Stage 3 needs JSON shown above');
     });
 
     it('does NOT include old tool call instructions', () => {
@@ -1068,6 +1109,23 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Does NOT greet them by name');
       expect(prompt).toContain('Does NOT say "thanks for accepting"');
       expect(prompt).not.toContain('Hey Jason, thanks for accepting');
+    });
+  });
+
+  describe('buildStagePrompt — Stage 1 witness cadence', () => {
+    it('keeps the first high-resistance final open-floor check separate from the felt-heard gate', () => {
+      const blocks = buildStagePrompt(1, createContext({ turnCount: 5 }));
+
+      expect(blocks.staticBlock).toContain('make one final open-floor move with FeelHeardCheck:N');
+      expect(blocks.staticBlock).toContain('do not set FeelHeardCheck:Y in the same response as the first final open-floor check');
+      expect(blocks.staticBlock).toContain('Never end a response with an open question while setting FeelHeardCheck:Y');
+      expect(blocks.staticBlock).toContain('Keep FeelHeardCheck:N until the user has had a chance to answer it and you have reflected that answer');
+    });
+
+    it('keeps the dynamic feel-heard guard active before turn 5', () => {
+      const blocks = buildStagePrompt(1, createContext({ turnCount: 4 }));
+
+      expect(blocks.dynamicBlock).toContain('Feel-heard guard: Too early for most Stage 1 cases (turn < 5)');
     });
   });
 });
