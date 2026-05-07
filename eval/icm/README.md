@@ -8,6 +8,8 @@ To run the autonomous self-improvement loop, start with `RUN_SELF_IMPROVEMENT_LO
 
 Start with `CONTEXT.md` when manually inspecting or resuming a repair-test-rerun cycle.
 
+MWF gold skills are repo-backed under `eval/skills/`. To make Codex use those versions at runtime, run `scripts/install_mwf_gold_skills.sh`. See `references/skills-index.md`.
+
 ## Canonical Inputs
 
 - `docs/product/source-material/golden-transcripts/`
@@ -16,6 +18,7 @@ Start with `CONTEXT.md` when manually inspecting or resuming a repair-test-rerun
 - `eval/moments/`
 - `eval/baselines/`
 - `eval/scorer/`
+- `eval/skills/`
 
 ## Usually Local Only
 

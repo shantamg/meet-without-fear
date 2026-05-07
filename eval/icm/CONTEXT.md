@@ -32,7 +32,7 @@ Use this file to route the current task. Work through stages in order for a full
 - Moment evaluator: `scripts/mwf_moment_eval.py`.
 - Moment tests: `scripts/test_mwf_moment_eval.py`.
 - Transcript extractor: `backend/scripts/extract-session-transcripts.ts`.
-- Specialist skills: `mwf-gold-loop-actor`, `mwf-gold-session-scorer`, `mwf-gold-session-reporter`, `mwf-gold-session-tester`, and `mwf-gold-prompt-improver`.
+- Specialist skills: `mwf-gold-loop-actor`, `mwf-gold-session-scorer`, `mwf-gold-session-reporter`, `mwf-gold-session-tester`, and `mwf-gold-prompt-improver`. Repo sources and runtime setup are indexed in `references/skills-index.md`.
 
 This ICM tree defines decision policy and audit contracts. It does not replace the mechanical harnesses or specialist skills.
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "MWF Gold Loop Actor"
+  short_description: "Drive one MWF gold-loop side from Codex CLI."
+  default_prompt: "Use MWF Gold Loop Actor to drive one assigned MWF participant side and end with status JSON."

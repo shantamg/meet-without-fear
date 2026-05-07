@@ -1,0 +1,4 @@
+interface:
+  display_name: "MWF Gold Session Scorer"
+  short_description: "Score MWF gold-session runs against golden references."
+  default_prompt: "Use the MWF Gold Session Scorer skill to read a gold-session run directory, compare artifacts against the golden references and rubric, and emit score.json."
