@@ -64,6 +64,8 @@
     { "code": "scripts/ec2-bot/**",                      "label": "scripts/ec2-bot",               "docs": ["docs/infrastructure/index.md"] },
     { "code": "bot-workspaces/**",                       "label": "bot-workspaces",                "docs": ["docs/infrastructure/index.md"] },
     { "code": ".github/workflows/**",                    "label": ".github/workflows",             "docs": ["docs/infrastructure/index.md"] },
-    { "code": "tools/test-dashboard/**",                 "label": "tools/test-dashboard",           "docs": ["docs/e2e-testing/architecture.md", "docs/infrastructure/index.md"] }
+    { "code": "tools/test-dashboard/**",                 "label": "tools/test-dashboard",           "docs": ["docs/e2e-testing/architecture.md", "docs/infrastructure/index.md"] },
+    { "code": "eval/**",                                  "label": "eval",                           "docs": ["docs/e2e-testing/gold-loop-icm.md"] },
+    { "code": "scripts/mwf_*.py",                         "label": "scripts/mwf_*.py",               "docs": ["docs/e2e-testing/gold-loop-icm.md"] }
   ]
 }

@@ -2,6 +2,8 @@
 title: "Stage 2: Perspective Stretch"
 sidebar_position: 5
 description: Build genuine empathy by helping each user understand the other persons perspective, needs, and experience.
+updated: 2026-05-07
+status: living
 ---
 # Stage 2: Perspective Stretch
 
@@ -117,6 +119,18 @@ If a user is stuck, the AI may offer a hint about the partner's perspective.
 - Hints inform AI questions - partner content is never quoted directly
 
 See [Hint System](../mechanisms/hint-system.md) for the full design.
+
+### Share Suggestions (Reconciler-Driven)
+
+Separately from hints, the reconciler may surface a share suggestion — a prompt for the user to share their empathy attempt with their partner in order to close an identified empathy gap.
+
+**Key gate:** The share suggestion panel is intentionally held until the user has consented to share their own empathy attempt (`alreadyConsented === true`). This prevents the suggestion from appearing before the user has completed their own perspective-taking work, which would risk interrupting that process.
+
+**Flow:**
+1. User builds and consents to share their empathy attempt
+2. Reconciler detects an empathy gap for the partner
+3. Share suggestion panel appears in the chat UI
+4. User can accept (share) or decline the suggestion
 
 ## Mirror Intervention
 

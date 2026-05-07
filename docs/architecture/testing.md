@@ -3,7 +3,7 @@ title: Testing Patterns
 sidebar_position: 9
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-04-28
+updated: 2026-05-07
 status: living
 ---
 # Testing Patterns
@@ -619,6 +619,7 @@ npm run e2e
 
 **CI Pipeline:**
 - GitHub Actions workflows in `.github/workflows/` run `npm run check` and `npm run test` on each PR
+- A separate `python-eval` CI job runs when eval files change (`scripts/mwf_*.py`, `eval/gold-scenarios.json`, `eval/icm/**`, `eval/moments/**`, etc.): runs `py_compile` syntax checks across all gold-loop scripts and executes `scripts/test_mwf_moment_eval.py`
 - E2E tests run on merge to main (slower, separate job)
 - Live AI tests optional (manual trigger)
 
