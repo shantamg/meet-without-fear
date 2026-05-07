@@ -15,10 +15,12 @@ MWF gold skills are repo-backed under `eval/skills/`. To make Codex use those ve
 - `docs/product/source-material/golden-transcripts/`
 - `eval/gold-profiles/`
 - `eval/gold-scenarios.json`
+- `eval/gold-snapshot-registry.json`
 - `eval/moments/`
 - `eval/baselines/`
 - `eval/scorer/`
 - `eval/skills/`
+- `eval/prompt-versions/`
 
 ## Usually Local Only
 
