@@ -5,8 +5,7 @@
  * Replaces the previous checkbox + "Sign and Begin" flow with a single tap to proceed.
  */
 
-import { View, Text, TouchableOpacity } from 'react-native';
-import { createStyles } from '../theme/styled';
+import { GuidedActionPanel } from './GuidedActionPanel';
 
 // ============================================================================
 // Types
@@ -36,59 +35,24 @@ export function CompactAgreementBar({
   buttonLabel,
   testID,
 }: CompactAgreementBarProps) {
-  const styles = useStyles();
-
   const label = buttonLabel ?? (isFirstSession ? 'Ready' : "Let's go");
 
   return (
-    <View style={styles.container} testID={testID || 'compact-agreement-bar'}>
-      <TouchableOpacity
-        style={[styles.readyButton, isPending && styles.readyButtonDisabled]}
-        onPress={onSign}
-        disabled={isPending}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: isPending }}
-        testID="compact-sign-button"
-      >
-        <Text style={styles.readyButtonText}>
-          {isPending ? '...' : label}
-        </Text>
-      </TouchableOpacity>
-    </View>
+    <GuidedActionPanel
+      tone="topic"
+      eyebrow="Curiosity compact"
+      title="Ready to begin?"
+      subtitle={isFirstSession ? 'Start with the compact, then name the conversation topic.' : undefined}
+      primaryAction={{
+        label,
+        onPress: onSign,
+        disabled: isPending,
+        loading: isPending,
+        testID: 'compact-sign-button',
+      }}
+      testID={testID || 'compact-agreement-bar'}
+    />
   );
 }
-
-// ============================================================================
-// Styles
-// ============================================================================
-
-const useStyles = () =>
-  createStyles((t) => ({
-    container: {
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.md,
-      backgroundColor: t.colors.bgSecondary,
-      borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-      alignItems: 'center',
-    },
-    readyButton: {
-      backgroundColor: 'rgb(59, 130, 246)',
-      paddingVertical: t.spacing.sm,
-      paddingHorizontal: t.spacing.xl,
-      borderRadius: t.radius.lg,
-      alignItems: 'center',
-      justifyContent: 'center',
-      minWidth: 120,
-    },
-    readyButtonDisabled: {
-      backgroundColor: t.colors.textMuted,
-    },
-    readyButtonText: {
-      color: 'white',
-      fontSize: t.typography.fontSize.md,
-      fontWeight: '600',
-    },
-  }));
 
 export default CompactAgreementBar;

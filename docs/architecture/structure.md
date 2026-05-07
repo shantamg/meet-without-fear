@@ -3,7 +3,7 @@ title: Codebase Structure
 sidebar_position: 8
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-05-07
 status: living
 ---
 # Codebase Structure
@@ -145,7 +145,8 @@ project-root/
 - Contains: 90 component files organized by feature
 - Key components:
   - `ChatInterface.tsx` - Main chat UI (29KB; messages, input, streaming)
-  - `ChatBubble.tsx` - Single message bubble (20KB, handles AI streaming animation)
+  - `ChatBubble.tsx` - Single message bubble (20KB, handles AI streaming animation with queue-based hiding: bubbles return `null` until their animation turn to prevent premature rendering)
+  - `GuidedActionPanel.tsx` - Unified action surface component (added #446); replaces six separate inline panels with a single `tone`-driven pattern (tones: `topic`, `review`, `share`, `success`, `needs`)
   - `EmotionalBarometer.tsx` - Emotion slider UI
   - Stage 2 components are integrated into UnifiedSessionScreen.tsx and its sub-components in `components/sharing/`, `components/SessionDrawer/`, `AccuracyFeedbackDrawer.tsx`, `ViewEmpathyStatementDrawer.tsx`, and reusable guided chat modals like `GuidedDraftChatModal.tsx`
   - `NeedCard.tsx`, `StrategyCard.tsx` - Stage 3-4 components

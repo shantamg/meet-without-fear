@@ -3,7 +3,7 @@ title: Infrastructure
 sidebar_position: 1
 description: Slam bot (EC2), Render hosting, Vercel deploys, GitHub automation.
 created: 2026-03-11
-updated: 2026-04-28
+updated: 2026-05-07
 status: living
 ---
 
@@ -123,7 +123,7 @@ See [deployment](../deployment/index.md) for release procedures and env var refe
 ## GitHub workflows
 
 - `.github/workflows/docs-impact.yml` — PR-time check that code changes and their mapped docs are updated together. Mapping rules in `docs/code-to-docs-mapping.json`.
-- `.github/workflows/ci.yml` — PR-time CI: spins up a Postgres 15 service container, installs deps (`npm ci`), generates the Prisma client, runs `npm run check`, migrates the test DB, and runs `npm run test`. Skipped for docs-only changes via `dorny/paths-filter`. A `ci-success` gate job is the single required status check for branch protection.
+- `.github/workflows/ci.yml` — PR-time CI: spins up a Postgres 15 service container, installs deps (`npm ci`), generates the Prisma client, runs `npm run check`, migrates the test DB, and runs `npm run test`. Also runs a `python-eval` job (syntax checks + `test_mwf_moment_eval.py`) when eval files change (`scripts/mwf_*.py`, `eval/gold-scenarios.json`, `eval/icm/**`, `eval/moments/**`, etc.). Skipped for docs-only changes via `dorny/paths-filter`. A `ci-success` gate job (requiring both `ci` and `python-eval`) is the single required status check for branch protection.
 - `.github/workflows/render-deploy.yml` — Push-to-`main` backend deploy: filters to pushes that touch `backend/`, `shared/`, the lockfile, `render.yaml`, or the workflow itself, then POSTs the Render deploy hook (stored in repo secret `RENDER_DEPLOY_HOOK`). Render's built-in auto-deploy must be **off** — this workflow is the sole deploy trigger.
 - `.github/workflows/vercel-deploy-app.yml` — Push-to-`main` Expo Web deploy: filters to pushes touching `mobile/**` or `shared/**`, builds the Expo Web bundle, and deploys to `app.meetwithoutfear.com` via Vercel (`mwf-app` project). Also supports `workflow_dispatch`.
 - `.github/workflows/vercel-deploy-website.yml` — Push-to-`main` marketing site deploy: filters to pushes touching `website/**`, deploys to Vercel.

@@ -14,3 +14,4 @@ export type Theme = typeof theme;
 
 // Re-export individual modules
 export { colors, spacing, typography, radius };
+export { APP_MAX_WIDTH, appWidthStyle, modalPageStyle } from './layout';
