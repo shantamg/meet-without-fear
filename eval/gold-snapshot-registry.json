@@ -1,3 +1,32 @@
 {
-  "snapshots": []
+  "snapshots": [
+    {
+      "id": "james-catherine-stage2-pass-pre-stage3-cmovme43",
+      "scenario": "james-catherine",
+      "snapshot": "backend/snapshots/snapshot-james-catherine-stage2-pass-pre-stage3-cmovme43--2026-05-07T15-49-26.sql",
+      "snapshot_session_id": "cmovme4350008pxu6bqgo4hfj",
+      "starts_at_stage": 2,
+      "starts_for": ["James", "Catherine"],
+      "purpose": "Resume the passing James/Catherine Stage 2 state near the transition to Stage 3 for focused Stage 3/4 repair loops.",
+      "expected_state": [
+        "Session cmovme4350008pxu6bqgo4hfj is active",
+        "Both participants have completed Stage 1",
+        "Both participants are in Stage 2 with passing Stage 1/2 transcript evidence",
+        "Catherine is in REFINING and James is AWAITING_SHARING, so one remaining context-share step may be needed before Stage 3"
+      ],
+      "target_behaviors": [
+        "Continue from late Stage 2 without replaying Stage 0 and Stage 1",
+        "Verify Stage 3 Need Mapping and Stage 4 Strategic Repair behavior after the remaining Stage 2 context-share step"
+      ],
+      "required_invariants": [
+        "hard invariants pass",
+        "privacy and transcript directionality remain intact after restore"
+      ],
+      "last_verified": {
+        "run_dir": "eval/runs/20260507-080727-james-catherine-iter-01",
+        "verified_at": "2026-05-07",
+        "result": "source run passed Stage 2 with score 4.0; snapshot restore not yet replay-verified"
+      }
+    }
+  ]
 }
