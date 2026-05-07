@@ -10,6 +10,8 @@
 ## Artifacts
 
 - Required scenarios from `eval/gold-scenarios.json`:
+- Required gates:
+- Snapshot registry entries from `eval/gold-snapshot-registry.json`:
 - Run dirs by scenario:
 - Loop summaries:
 - Scores:
@@ -19,8 +21,8 @@
 
 ## Failures
 
-| Failure | Owner | Severity | Evidence | Prompt Quality Evaluable |
-|---|---|---|---|---|
+| Failure | Owner | Severity | Evidence | Prompt Quality Evaluable | Rerun Mode |
+|---|---|---|---|---|---|
 
 ## Fixes
 
@@ -30,6 +32,10 @@
 
 ## Eval-Machine Changes
 
+## Snapshot Registry Changes
+
+## Prompt Version Changes
+
 ## Verification
 
 | Command | Result | Coverage |
@@ -37,7 +43,12 @@
 
 ## Reruns
 
-| Scenario | Command | Run Dir | Score | Invariants | Result |
+| Scenario | Gate | Mode | Command | Run Dir | Score | Invariants | Result |
+|---|---|---|---|---|---|---|---|
+
+## Snapshot Replay
+
+| Snapshot Entry | Snapshot | Restored Session | Target Behavior | What It Proves | What It Does Not Prove |
 |---|---|---|---|---|---|
 
 ## Cleanup

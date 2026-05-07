@@ -3,10 +3,29 @@
     {
       "gold_profile": "eval/gold-profiles/adam-eve.json",
       "gate": {
+        "mode": "fresh_gold_loop",
         "max_iterations": 1,
         "stop_after_stage": 2,
         "target_score": 4.0
       },
+      "gates": [
+        {
+          "id": "bounded-stage-2",
+          "mode": "fresh_gold_loop",
+          "required_for_clean_pass": true,
+          "max_iterations": 1,
+          "stop_after_stage": 2,
+          "target_score": 4.0
+        },
+        {
+          "id": "full-flow-stage-4",
+          "mode": "full_flow_gate",
+          "required_for_clean_pass": false,
+          "max_iterations": 1,
+          "stop_after_stage": 4,
+          "target_score": 4.0
+        }
+      ],
       "id": "adam-eve",
       "live_enabled": true,
       "participants": ["Adam", "Eve"],
@@ -15,10 +34,29 @@
     {
       "gold_profile": "eval/gold-profiles/james-catherine.json",
       "gate": {
+        "mode": "fresh_gold_loop",
         "max_iterations": 1,
         "stop_after_stage": 2,
         "target_score": 4.0
       },
+      "gates": [
+        {
+          "id": "bounded-stage-2",
+          "mode": "fresh_gold_loop",
+          "required_for_clean_pass": true,
+          "max_iterations": 1,
+          "stop_after_stage": 2,
+          "target_score": 4.0
+        },
+        {
+          "id": "full-flow-stage-4",
+          "mode": "full_flow_gate",
+          "required_for_clean_pass": false,
+          "max_iterations": 1,
+          "stop_after_stage": 4,
+          "target_score": 4.0
+        }
+      ],
       "id": "james-catherine",
       "live_enabled": true,
       "participants": ["James", "Catherine"],

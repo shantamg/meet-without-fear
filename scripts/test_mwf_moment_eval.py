@@ -99,6 +99,52 @@ class TestYamlParsing(unittest.TestCase):
             REPO_ROOT / "eval/gold-profiles/james-catherine.json",
         )
 
+    def test_gold_scenario_gates_are_valid(self) -> None:
+        payload = json.loads((REPO_ROOT / "eval/gold-scenarios.json").read_text())
+        allowed_modes = {"fresh_gold_loop", "snapshot_replay", "seed_target_stage", "full_flow_gate"}
+        scenario_ids = {item["id"] for item in payload["scenarios"]}
+
+        for scenario in payload["scenarios"]:
+            with self.subTest(scenario=scenario["id"]):
+                self.assertTrue(scenario["participants"])
+                self.assertTrue((REPO_ROOT / scenario["gold_profile"]).exists())
+                self.assertTrue((REPO_ROOT / scenario["reference_transcript"]).exists())
+                self.assertIn(scenario["id"], scenario_ids)
+
+                gates = scenario.get("gates") or [scenario.get("gate", {})]
+                self.assertTrue(gates)
+                for gate in gates:
+                    mode = gate.get("mode", "fresh_gold_loop")
+                    self.assertIn(mode, allowed_modes)
+                    self.assertGreater(float(gate.get("target_score", 4.0)), 0)
+                    self.assertGreater(int(gate.get("max_iterations", 1)), 0)
+                    if mode in {"fresh_gold_loop", "full_flow_gate", "snapshot_replay"}:
+                        self.assertGreaterEqual(int(gate.get("stop_after_stage", 2)), 1)
+                    if mode == "snapshot_replay":
+                        self.assertTrue(gate.get("snapshot_ref"))
+                    if mode == "seed_target_stage":
+                        self.assertTrue(gate.get("seed_target_stage"))
+
+    def test_gold_snapshot_registry_shape(self) -> None:
+        payload = json.loads((REPO_ROOT / "eval/gold-snapshot-registry.json").read_text())
+        scenario_ids = {item["id"] for item in json.loads((REPO_ROOT / "eval/gold-scenarios.json").read_text())["scenarios"]}
+        seen_ids: set[str] = set()
+
+        self.assertIsInstance(payload.get("snapshots"), list)
+        for entry in payload["snapshots"]:
+            with self.subTest(snapshot=entry.get("id")):
+                self.assertIsInstance(entry.get("id"), str)
+                self.assertNotIn(entry["id"], seen_ids)
+                seen_ids.add(entry["id"])
+                self.assertIn(entry.get("scenario"), scenario_ids)
+                self.assertIsInstance(entry.get("snapshot"), str)
+                self.assertGreaterEqual(int(entry.get("starts_at_stage", 1)), 1)
+                self.assertIsInstance(entry.get("starts_for"), list)
+                self.assertTrue(entry.get("purpose"))
+                self.assertIsInstance(entry.get("expected_state"), list)
+                self.assertIsInstance(entry.get("target_behaviors"), list)
+                self.assertIsInstance(entry.get("required_invariants"), list)
+
     def test_gold_loop_uses_profile_initiator_separate_from_registry_order(self) -> None:
         james_catherine = gold_loop.infer_role_shape_from_profile("james-catherine")
         self.assertEqual(james_catherine["initiator"], "Catherine")

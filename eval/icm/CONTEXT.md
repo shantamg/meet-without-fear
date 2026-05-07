@@ -42,6 +42,7 @@ This ICM tree defines decision policy and audit contracts. It does not replace t
 - Current repository state.
 - Existing stage outputs, if resuming.
 - Required live-enabled scenario set from `eval/gold-scenarios.json`.
+- Optional snapshot replay entries from `eval/gold-snapshot-registry.json`.
 - Canonical artifacts and working-memory artifacts named by the relevant stage.
 
 ## Process

@@ -45,6 +45,10 @@ Then read only the relevant prompt sources:
 - MWF backend prompt source: `backend/src/services/stage-prompts.ts`
 - Stage-specific controller/prompt files only if the score identifies a concrete issue there
 - Golden references under `docs/product/source-material/golden-transcripts/`
+- ICM rerun mode policies when choosing the next verification path:
+  - `eval/icm/references/stage-coverage-policy.md`
+  - `eval/icm/references/snapshot-replay-policy.md`
+  - `eval/icm/references/prompt-versioning-policy.md`
 
 ## Outputs
 
@@ -53,7 +57,7 @@ Write the improvement plan to the exact path requested by the caller, normally `
 Also create versioned proposal files when there is enough evidence for a concrete change:
 
 - Tester prompt proposals: `eval/prompt-versions/tester/<scenario>/vNN.md`
-- MWF prompt proposals: `eval/prompt-versions/mwf/<scenario>/vNN.md`
+- MWF prompt proposals: `eval/prompt-versions/mwf/stage-N/<scenario-or-topic>-vNN.md`
 
 Choose `NN` as the next integer after existing versions. If no concrete prompt change is justified, do not create a version file; say why in `improvement-plan.md`.
 
@@ -63,6 +67,7 @@ If the caller says `Improvement mode: patch`, also write `<run-dir>/patch-summar
 - bug or score dimension addressed
 - tests run
 - expected next-run score movement
+- recommended rerun mode: `moment_eval`, `seed_target_stage`, `snapshot_replay`, `fresh_gold_loop`, or `full_flow_gate`
 
 ## Routing Rules
 
@@ -121,6 +126,10 @@ List each target as:
 
 ## Product/Eval Harness Proposal
 
+## Recommended Rerun Mode
+
+State the minimum truthful verification mode, command shape, and whether a broader fresh or full-flow gate is still needed.
+
 ## Gold Alignment Notes
 
 Summarize per-side/stage evidence:
@@ -142,6 +151,6 @@ Summarize per-side/stage evidence:
 - If score regressed, compare against the previous versioned prompt and identify the most likely regression cause before proposing new changes.
 - Prefer narrow prompt proposals tied to score evidence over broad rewrites.
 - Do not edit runtime skill copies directly during an automated loop. Edit repo-owned `eval/skills/...` files or write a versioned proposal instead.
-- In proposal mode, do not edit production MWF prompt files directly. Write a versioned proposal under `eval/prompt-versions/mwf/<scenario>/`.
+- In proposal mode, do not edit production MWF prompt files directly. Write a versioned proposal under the matching `eval/prompt-versions/mwf/stage-N/` directory.
 - In patch mode, production edits are allowed only when the score evidence points to a concrete fix. Keep the patch small, add or update focused tests, and do not rewrite unrelated prompts or flows.
-- Include acceptance criteria for the next run: which dimension should improve, which dimension must not regress, and what evidence would prove it.
+- Include acceptance criteria for the next run: which dimension should improve, which dimension must not regress, what evidence would prove it, and whether snapshot replay is sufficient or a fresh/full-flow gate is still required.

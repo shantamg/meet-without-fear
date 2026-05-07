@@ -8,6 +8,7 @@
 - transcripts
 - scratch logs
 - `FAILURE_TAXONOMY.md`
+- `references/stage-coverage-policy.md`
 
 ## Process
 
@@ -15,10 +16,12 @@ Classify each failure to exactly one primary owner. Determine severity, evidence
 
 Use `not_evaluable_for_prompt_quality` only for invalid or incomplete artifacts, not for weak product or prompt behavior.
 
+For each failure, identify the minimum truthful rerun mode needed to verify a fix: `moment_eval`, `seed_target_stage`, `snapshot_replay`, `fresh_gold_loop`, or `full_flow_gate`.
+
 ## Outputs
 
 - `output/failure-routing.md`
 
 ## Audit
 
-Every failure must have owner, severity, evidence path, prompt-quality evaluability, and a short rationale. Missing evidence must route to `eval_harness`, `scorer`, or `human_decision` as appropriate.
+Every failure must have owner, severity, evidence path, prompt-quality evaluability, rerun mode, and a short rationale. Missing evidence must route to `eval_harness`, `scorer`, or `human_decision` as appropriate.

@@ -12,10 +12,14 @@ Run focused tests that cover changed behavior before full bounded reruns. Includ
 
 Use `scripts/mwf_moment_eval.py` and `scripts/test_mwf_moment_eval.py` when the repair plan calls for moment-level or evaluator checks.
 
+Use `scripts/mwf_gold_loop.py run --seed-target-stage` for deterministic focused app-state verification when the repair plan calls for seeded-stage coverage.
+
+Use `scripts/mwf_gold_loop.py run --from-snapshot` for focused later-stage verification when the repair plan cites a snapshot registry entry or known snapshot id/name/path.
+
 ## Outputs
 
 - `output/test-results.md`
 
 ## Audit
 
-Test results must include commands, exit status, and why the tests cover the changed behavior. Passing unrelated tests is not enough.
+Test results must include commands, exit status, and why the tests cover the changed behavior. Passing unrelated tests is not enough. Snapshot or seeded-stage checks must state what they prove and what they do not prove.
