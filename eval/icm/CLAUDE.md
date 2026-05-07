@@ -13,6 +13,7 @@ Read `eval/icm/CONTEXT.md` first. It routes work through intake, triage, repair 
 - `COMPLETION_CRITERIA.md`: clean-pass requirements.
 - `FAILURE_TAXONOMY.md`: primary owner categories for failures.
 - `references/`: policies and canonical command references.
+- `references/skills-index.md`: repo-backed MWF gold skill source and runtime symlink setup.
 - `stages/`: stage contracts with `Inputs`, `Process`, `Outputs`, and `Audit`.
 - `self-improvement/`: backlog and proposal area for eval-machine improvements.
 - `regressions/`: promoted regression records only.
@@ -20,7 +21,7 @@ Read `eval/icm/CONTEXT.md` first. It routes work through intake, triage, repair 
 
 ## Durable Rules
 
-- Use the existing MWF skills as specialist modules; route to them instead of copying their instructions.
+- Use the repo-backed MWF skills in `eval/skills/` as specialist modules. Runtime skill paths should symlink to these repo sources; see `references/skills-index.md`.
 - Use existing Python and TypeScript harnesses for mechanical execution, especially `scripts/mwf_gold_loop.py`.
 - Put working outputs in the current stage `output/` directory or in `cycles/<cycle-id>/`.
 - Never modify completion criteria, scoring rubrics, hard invariants, or actor difficulty to make a failing run pass.
