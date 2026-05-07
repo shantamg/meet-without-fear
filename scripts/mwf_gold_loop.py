@@ -357,6 +357,17 @@ def start_background_command(
     return ManagedService(name=name, command=cmd, cwd=cwd, log_path=log_path, started=True, pid=process.pid, process=process)
 
 
+def build_loop_service_env(args: argparse.Namespace, base_env: dict[str, str] | None = None) -> dict[str, str]:
+    env = dict(base_env if base_env is not None else os.environ)
+    env.setdefault("E2E_AUTH_BYPASS", "true")
+    env.setdefault("MOCK_LLM", "false")
+    env.setdefault("E2E_APP_BASE_URL", args.app_url)
+    env.setdefault("EXPO_PUBLIC_E2E_MODE", "true")
+    env.setdefault("EXPO_PUBLIC_API_URL", args.api_url)
+    env.setdefault("BROWSER", "none")
+    return env
+
+
 def wait_for_http(url: str, timeout: int = 90) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -402,13 +413,7 @@ def write_service_start_info(
 def start_loop_services(args: argparse.Namespace, service_dir: Path) -> tuple[list[ManagedService], dict[str, Any]]:
     services: list[ManagedService] = []
     service_dir.mkdir(parents=True, exist_ok=True)
-    env = os.environ.copy()
-    env.setdefault("E2E_AUTH_BYPASS", "true")
-    env.setdefault("MOCK_LLM", "true")
-    env.setdefault("E2E_APP_BASE_URL", args.app_url)
-    env.setdefault("EXPO_PUBLIC_E2E_MODE", "true")
-    env.setdefault("EXPO_PUBLIC_API_URL", args.api_url)
-    env.setdefault("BROWSER", "none")
+    env = build_loop_service_env(args)
 
     backend_started = False
     try:
@@ -1345,7 +1350,7 @@ def extract_transcripts(session_id: str, run_dir: Path, scenario: str, max_stage
 
 
 CONTROL_TAG_RE = re.compile(
-    r"</?(?:thinking|draft|dispatch|message|stage|private|shared|tool|analysis|commentary|final)\b[^>]*>",
+    r"</?(?:thinking|draft|dispatch|message|stage|private|shared|tool|analysis|commentary|final|feel[_-]?heard[_-]?check|ready[_-]?share|needs)\b[^>]*>",
     re.I,
 )
 TRANSCRIPT_METADATA_RE = re.compile(r"^- (side|stage|privacy|visible_cta_state):\s*(.+?)\s*$", re.MULTILINE)
@@ -1594,7 +1599,16 @@ def check_chat_copy_has_visible_input(transcripts: list[tuple[Path, str]]) -> di
         visible_cta_state = metadata.get("visible_cta_state", "")
         if INPUT_VISIBLE_RE.search(visible_cta_state):
             continue
+        side = metadata.get("side", "").strip("`").lower()
+        side_label = side.capitalize()
         for match in CHAT_PROMISE_RE.finditer(text):
+            following_text = text[match.end():]
+            next_user_message = (
+                bool(side_label)
+                and re.search(rf"^\*\*\[[^\]]+\]\s+{re.escape(side_label)}:\*\*", following_text, re.MULTILINE)
+            )
+            if next_user_message:
+                continue
             start = max(0, match.start() - 80)
             end = min(len(text), match.end() + 80)
             snippet = " ".join(text[start:end].split())
@@ -1628,11 +1642,45 @@ def check_partner_private_leakage(transcripts: list[tuple[Path, str]]) -> dict[s
     )
 
 
+SEPARATOR_BLOCK_RE = re.compile(r"---\s*\n(?P<body>.*?)\n\*20\d\d-\d\d-\d\d [^*]+\*\n---", re.S)
+LABELED_SHARED_BLOCK_RE = re.compile(
+    r"^(?:\*\*)?(?:[📤💡📝💜❓⚠️✅👁️📊]|YOU SHARED|SHARE SUGGESTION|RECEIVED|AI \(SHARE SUGGESTION\)|[^:\n]+ SHARED WITH YOU)",
+    re.I,
+)
+
+
+def check_transcript_shared_context_blocks_labeled(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
+    evidence: list[str] = []
+    for path, text in transcripts:
+        for match in SEPARATOR_BLOCK_RE.finditer(text):
+            body = match.group("body").strip()
+            if not body:
+                continue
+            first_line = body.splitlines()[0].strip()
+            if LABELED_SHARED_BLOCK_RE.search(first_line):
+                continue
+            if first_line.startswith("**"):
+                continue
+            snippet = " ".join(body.split())[:160]
+            evidence.append(f"{path.name}: unlabeled separator block: {snippet}")
+            if len(evidence) >= 10:
+                break
+    return invariant_result(
+        "transcript_shared_context_blocks_labeled",
+        not evidence,
+        owner="eval_harness",
+        dimension="transcript_extraction",
+        details="Stable transcript separator blocks must carry explicit labels so private suggestions and shared events are not confused.",
+        evidence=evidence,
+    )
+
+
 def run_invariant_checks(run_dir: Path, run_data: dict[str, Any], scenario: str, max_stage: int) -> dict[str, Any]:
     transcripts = read_transcript_texts(run_data.get("transcripts") or [])
     checks: list[dict[str, Any]] = []
     checks.append(check_no_visible_control_tags(transcripts))
     checks.extend(check_transcript_side_stage_metadata(transcripts, scenario, max_stage))
+    checks.append(check_transcript_shared_context_blocks_labeled(transcripts))
     checks.append(check_partner_private_leakage(transcripts))
     checks.append(check_stage_limit_reached(run_data, scenario, max_stage))
     checks.append(check_actor_operated_correct_side(run_data, scenario))

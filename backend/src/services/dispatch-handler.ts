@@ -216,7 +216,7 @@ WHAT TO EXPLAIN (in your own words, naturally — not as a bulleted list):
 
 2. This step is where each person tries to understand what the other might be going through. Both ${user} and ${partner} do this for each other.
 
-3. Why it works: Research on conflict resolution consistently shows that the single strongest predictor of working things out is each person genuinely trying to see the other's perspective. It doesn't matter if the guess is accurate — the act of honestly trying is what matters.
+3. Why it matters: This step helps each person check whether they can name something real about the other's inner experience without excusing, agreeing, or deciding what happens next. It doesn't matter if the guess is accurate — the act of honestly trying creates clearer understanding.
 
 4. It's a guess, not a test. Nobody expects ${user} to read ${partner}'s mind. Getting it "wrong" is completely fine. What matters is that ${partner} will see ${user} made the effort.
 
@@ -267,7 +267,7 @@ async function handleEmpathyPurposeExplanation(context: DispatchContext): Promis
  */
 function getFallbackEmpathyPurposeResponse(context: DispatchContext): string {
   const partner = context.partnerName || 'your partner';
-  return `Good question. ${partner} is actually going through this same process on their side — you're both independently trying to understand each other. Research shows that genuinely trying to see the other person's perspective is one of the biggest things that helps people work things out. It's not a test — it's about the effort. You'll each write a short statement that gets shared, so ${partner} can see you tried to understand them, and you'll see the same from them.
+  return `Good question. ${partner} is actually going through this same process on their side — you're both independently trying to understand each other. This is not a test, and it is not about excusing, agreeing, or deciding what happens next. You'll each write a short statement that gets shared, so ${partner} can see you tried to understand them, and you'll see the same from them.
 
 What do you think might be going on for ${partner} in all this?`;
 }

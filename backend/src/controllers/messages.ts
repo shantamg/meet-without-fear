@@ -97,6 +97,42 @@ function getFallbackInitialMessage(
 const STAGE2_ROADMAP_COPY =
   `Here's what comes next: there are a few more steps in this process. First, each of you tries to understand what the other person might be going through. Then you'll each explore what matters most to you, and eventually use that to get clearer about what is possible next, whether together or separately.`;
 
+function buildStage2TransitionFallback(
+  partnerName: string | undefined,
+  partnerStatus: 'not_joined' | 'in_progress' | 'completed'
+): string {
+  const partner = partnerName || 'your partner';
+  const mutualPhrase = partnerStatus === 'not_joined'
+    ? `${partnerName || 'Your partner'} will be doing this same thing for you on their side.`
+    : `${partnerName || 'Your partner'} is doing this same thing for you on their side.`;
+
+  return `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partner} might be experiencing, even though you might still be upset with them. I know that's a strange ask. This is not about excusing, agreeing, or deciding what happens next. It's a protected attempt to see whether you can name something real about ${partner}'s inner experience while keeping your own truth intact. You don't have to get it right — it's a guess, not a test. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partner} in all of this?`;
+}
+
+function scrubStage2RepairFraming(content: string): string {
+  const researchToRepairRegex = new RegExp(
+    [
+      "there is a lot of research|there's a lot of research|research shows",
+      'genuinely tr(?:y|ies)ing to see',
+      'work things out',
+    ].join('[^.]*'),
+    'gi'
+  );
+  const moveForwardTogetherRegex = new RegExp(
+    ['once you both feel', 'move forward together'].join('[^.]*'),
+    'gi'
+  );
+
+  return content
+    .replace(
+      researchToRepairRegex,
+      "This is not about excusing, agreeing, or deciding what happens next"
+    )
+    .replace(moveForwardTogetherRegex,
+      "If something feels off, you can say what is missing before the process continues."
+    );
+}
+
 const PLANNER_LINE_PREFIXES = [
   'i should',
   'so both lists should',
@@ -540,18 +576,15 @@ export async function confirmFeelHeard(
           callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
         });
 
-        const mutualPhrase = partnerStatus === 'not_joined'
-          ? `${partnerName || 'Your partner'} will be doing this same thing for you on their side.`
-          : `${partnerName || 'Your partner'} is doing this same thing for you on their side.`;
-
         let transitionContent: string;
         if (aiResponse) {
           // Parse the semantic tag response (micro-tag format)
           const parsed = parseMicroTagResponse(aiResponse);
-          transitionContent = cleanVisibleAIText(parsed.response) || `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
+          transitionContent = cleanVisibleAIText(parsed.response) || buildStage2TransitionFallback(partnerName, partnerStatus);
         } else {
-          transitionContent = `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
+          transitionContent = buildStage2TransitionFallback(partnerName, partnerStatus);
         }
+        transitionContent = scrubStage2RepairFraming(transitionContent);
 
         // Save the transition message to the database as Stage 2
         // This is the first message in the perspective-taking phase

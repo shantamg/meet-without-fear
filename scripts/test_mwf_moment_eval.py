@@ -140,6 +140,157 @@ class TestYamlParsing(unittest.TestCase):
         self.assertEqual(result["status"], "fail")
         self.assertIn("profile initiator", result["evidence"][0])
 
+    def test_visible_control_tag_invariant_catches_feel_heard_xml_tag(self) -> None:
+        transcripts = [
+            (
+                Path("catherine-stage1.md"),
+                "- side: `catherine`\n- stage: `1`\n\n**[2026-05-06 15:00:00] AI:**\n<feel_heard_check>Y</feel_heard_check>\n\n",
+            )
+        ]
+
+        result = gold_loop.check_no_visible_control_tags(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("<feel_heard_check>", result["evidence"][0])
+
+    def test_visible_control_tag_invariant_catches_ready_share_xml_tag(self) -> None:
+        transcripts = [
+            (
+                Path("james-stage2.md"),
+                "- side: `james`\n- stage: `2`\n\n**[2026-05-06 15:00:00] AI:**\n<ready-share>Y</ready-share>\n\n",
+            )
+        ]
+
+        result = gold_loop.check_no_visible_control_tags(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("<ready-share>", result["evidence"][0])
+
+    def test_chat_copy_visible_input_invariant_accepts_following_user_turn(self) -> None:
+        transcripts = [
+            (
+                Path("adam-stage1.md"),
+                "\n".join(
+                    [
+                        "# Adam Stage 1 Transcript",
+                        "",
+                        "- side: `adam`",
+                        "- stage: `1`",
+                        "- visible_cta_state: see milestone/system lines when captured",
+                        "",
+                        "**[2026-05-06 15:00:00] AI:**",
+                        "In the meantime, let's keep going so you're not just sitting here.",
+                        "",
+                        "**[2026-05-06 15:00:10] Adam:**",
+                        "It starts gently sometimes, but I hear urgency in it.",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_chat_copy_has_visible_input(transcripts)
+
+        self.assertEqual(result["status"], "pass")
+
+    def test_chat_copy_visible_input_invariant_fails_without_metadata_or_user_turn(self) -> None:
+        transcripts = [
+            (
+                Path("adam-stage1.md"),
+                "\n".join(
+                    [
+                        "# Adam Stage 1 Transcript",
+                        "",
+                        "- side: `adam`",
+                        "- stage: `1`",
+                        "- visible_cta_state: see milestone/system lines when captured",
+                        "",
+                        "**[2026-05-06 15:00:00] AI:**",
+                        "In the meantime, let's keep going so you're not just sitting here.",
+                        "",
+                        "### STAGE 1 COMPLETED",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_chat_copy_has_visible_input(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("adam-stage1.md", result["evidence"][0])
+
+    def test_shared_context_blocks_must_be_labeled_in_stable_transcripts(self) -> None:
+        transcripts = [
+            (
+                Path("adam-stage2.md"),
+                "\n".join(
+                    [
+                        "# Adam Stage 2 Transcript",
+                        "",
+                        "- side: `adam`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "The resentment is already here, and I hate that I carry it.",
+                        "*2026-05-07 00:31:15*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_transcript_shared_context_blocks_labeled(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("unlabeled separator block", result["evidence"][0])
+
+    def test_shared_context_blocks_accept_explicit_partner_label(self) -> None:
+        transcripts = [
+            (
+                Path("adam-stage2.md"),
+                "\n".join(
+                    [
+                        "# Adam Stage 2 Transcript",
+                        "",
+                        "- side: `adam`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "**📤 Eve SHARED WITH YOU:**",
+                        "The resentment is already here, and I hate that I carry it.",
+                        "*2026-05-07 00:31:15*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_transcript_shared_context_blocks_labeled(transcripts)
+
+        self.assertEqual(result["status"], "pass")
+
+    def test_gold_loop_service_env_defaults_to_real_llm(self) -> None:
+        args = gold_loop.build_parser().parse_args(
+            ["run", "--api-url", "http://localhost:3000", "--app-url", "http://localhost:8082"]
+        )
+
+        env = gold_loop.build_loop_service_env(args, base_env={})
+
+        self.assertEqual(env["MOCK_LLM"], "false")
+        self.assertEqual(env["E2E_AUTH_BYPASS"], "true")
+
+    def test_gold_loop_service_env_preserves_explicit_mock_llm_override(self) -> None:
+        args = gold_loop.build_parser().parse_args(
+            ["run", "--api-url", "http://localhost:3000", "--app-url", "http://localhost:8082"]
+        )
+
+        env = gold_loop.build_loop_service_env(args, base_env={"MOCK_LLM": "true"})
+
+        self.assertEqual(env["MOCK_LLM"], "true")
+
     def test_gold_profile_generator_emits_role_shape(self) -> None:
         profile = gold_profile.build_profile(
             REPO_ROOT / "docs/product/source-material/golden-transcripts/james-catherine.md",

@@ -106,6 +106,10 @@ export async function generatePostShareContinuation(
   });
   const currentStage = stageProgress?.stage ?? 2; // Default to 2 if not found
 
+  if (currentStage === 2) {
+    return `Thank you for sharing that with ${partnerName}. They'll have the chance to sit with it and refine their understanding. For now, you don't need to do anything more on their behalf.`;
+  }
+
   // Get recent conversation history for context
   const recentMessages = await prisma.message.findMany({
     where: {
@@ -236,7 +240,7 @@ export function getFallbackContinuation(stage: number, partnerName: string): str
       continuation = `Is there anything else about how this situation has affected you that feels important to express?`;
       break;
     case 2:
-      continuation = `Let's continue exploring ${partnerName}'s perspective. What do you imagine might be going on for ${partnerName} in all of this?`;
+      continuation = `For now, you don't need to do anything more on their behalf.`;
       break;
     case 3:
       continuation = `Let's continue identifying what you truly need here. What feels most important to you?`;
