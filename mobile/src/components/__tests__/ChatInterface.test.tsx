@@ -10,6 +10,7 @@ import { Text } from 'react-native';
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { render } from '../../utils/test-utils';
 import { ChatInterface } from '../ChatInterface';
+import { ChatBubble } from '../ChatBubble';
 import { MessageDTO, MessageRole, Stage } from '@meet-without-fear/shared';
 
 // ============================================================================
@@ -339,6 +340,60 @@ describe('ChatBubble', () => {
 
     const bubble = screen.getByTestId('chat-bubble-1');
     expect(bubble).toBeTruthy();
+  });
+
+  it('hides queued live AI messages until their typewriter turn', () => {
+    render(
+      <ChatBubble
+        message={{
+          id: 'queued-ai',
+          role: MessageRole.AI,
+          content: 'Queued AI response',
+          timestamp: new Date().toISOString(),
+          skipTypewriter: false,
+        }}
+        enableTypewriter
+      />
+    );
+
+    expect(screen.getByTestId('chat-bubble-queued-ai')).toBeTruthy();
+    expect(screen.queryByText('Queued AI response')).toBeNull();
+    expect(screen.queryByTestId('typewriter-text')).toBeNull();
+  });
+
+  it('hides queued live system messages until their fade-in turn', () => {
+    render(
+      <ChatBubble
+        message={{
+          id: 'queued-system',
+          role: MessageRole.SYSTEM,
+          content: 'Queued system transition',
+          timestamp: new Date().toISOString(),
+          skipTypewriter: false,
+        }}
+        enableTypewriter
+      />
+    );
+
+    expect(screen.getByTestId('chat-bubble-queued-system')).toBeTruthy();
+    expect(screen.queryByText('Queued system transition')).toBeNull();
+  });
+
+  it('renders history messages immediately without animation', () => {
+    render(
+      <ChatBubble
+        message={{
+          id: 'history-ai',
+          role: MessageRole.AI,
+          content: 'Loaded history response',
+          timestamp: new Date().toISOString(),
+          skipTypewriter: true,
+        }}
+        enableTypewriter
+      />
+    );
+
+    expect(screen.getByText('Loaded history response')).toBeTruthy();
   });
 
   it('displays message content correctly', () => {
