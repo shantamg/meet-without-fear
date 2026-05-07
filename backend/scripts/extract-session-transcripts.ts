@@ -414,6 +414,9 @@ function formatTranscriptMarkdown(
 
       case 'shared_context':
         md += `---\n`;
+        if (event.role) {
+          md += `**${event.role}:**\n`;
+        }
         md += `${event.content}\n`;
         md += `*${time}*\n`;
         md += `---\n\n`;

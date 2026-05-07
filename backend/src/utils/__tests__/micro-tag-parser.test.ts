@@ -34,6 +34,31 @@ I hear you. That sounds really difficult.`;
       expect(result.offerFeelHeardCheck).toBe(true);
     });
 
+    it('extracts and strips visible XML feel-heard control tags', () => {
+      const raw = `<feel_heard_check>Y</feel_heard_check>
+
+That sounds exhausting to keep carrying.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.offerFeelHeardCheck).toBe(true);
+      expect(result.response).toBe('That sounds exhausting to keep carrying.');
+      expect(result.response).not.toContain('feel_heard_check');
+    });
+
+    it('extracts and strips dashed XML ready-share control tags', () => {
+      const raw = `<ready-share>Y</ready-share>
+<draft>I think you might feel alone here.</draft>
+I've prepared a draft for you to review.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.offerReadyToShare).toBe(true);
+      expect(result.draft).toBe('I think you might feel alone here.');
+      expect(result.response).toBe("I've prepared a draft for you to review.");
+      expect(result.response).not.toContain('ready-share');
+    });
+
     it('extracts FeelHeardCheck:N as false', () => {
       const raw = `<thinking>FeelHeardCheck:N</thinking>Response text`;
       const result = parseMicroTagResponse(raw);

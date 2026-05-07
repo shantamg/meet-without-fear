@@ -364,11 +364,12 @@ describe('Reconciler Service', () => {
       expect(result).toContain('how this situation has affected you');
     });
 
-    it('returns stage 2 fallback referencing partner perspective', () => {
+    it('returns stage 2 fallback without restarting perspective exploration', () => {
       const result = getFallbackContinuation(2, 'Jordan');
 
       expect(result).toContain('Thank you for sharing that with Jordan');
-      expect(result).toContain("Jordan's perspective");
+      expect(result).toContain("don't need to do anything more on their behalf");
+      expect(result).not.toContain("Jordan's perspective");
     });
 
     it('returns stage 3 fallback about needs', () => {
