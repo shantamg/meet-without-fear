@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "scenario_id": "james-catherine",
+  "scenario_version": 1,
+  "rubric_version": "gold-flow-rubric-v1",
+  "scorer_version": "mwf-gold-session-scorer-v0",
+  "verdict": "eval_warn",
+  "overall_score": 3.8,
+  "dimensions": {
+    "actor_fidelity": {
+      "score": 4,
+      "mode": "llm_assisted",
+      "pass": true,
+      "pass_threshold": 4,
+      "owner": "actor_skill",
+      "recommended_action": "none",
+      "review_status": "needs_human_review",
+      "rationale": "Both actors created usable James/Catherine pressure through Stage 2. Catherine preserved the therapist-aware, boundary-held posture without turning empathy into concession. James stayed skeptical, defensive, and aggrieved while still allowing a reluctant empathy stretch. The main actor risk is that James's Stage 2 became fairly fluent about Catherine's fear and self-protection, but he preserved enough caveats and resistance that this remained within the gold range.",
+      "evidence": [
+        "transcripts/catherine-stage1.md: Catherine names emotional volatility, self-trust cost, professional embarrassment, and refusal to keep carrying responsibility for James's reactions.",
+        "transcripts/catherine-stage2.md: Catherine understands James's provider identity and shame while explicitly saying understanding is not excusing.",
+        "transcripts/james-stage1.md: James stays skeptical of the app, focused on providing, the kids, Catherine's therapy voice, and being reduced to volatility.",
+        "transcripts/james-stage2.md: James begins with blame that Catherine boxed him into a diagnosis, then reluctantly names exhaustion, fear, unpredictability, and chaos."
+      ]
+    },
+    "mwf_handling": {
+      "score": 3,
+      "mode": "llm_assisted",
+      "pass": false,
+      "pass_threshold": 4,
+      "owner": "mwf_prompts",
+      "recommended_action": "patch_prompt",
+      "review_status": "needs_human_review",
+      "rationale": "MWF handled the Stage 1 and Stage 2 emotional work well overall: it reflected specifics, honored Catherine's non-concession, and helped James approach empathy without demanding agreement. The warning comes from process shape. Catherine's Stage 0 topic was softened into a generic conflict topic, losing the concrete yelling/personal-attacks signal that the gold profile makes important. Stage 2 also produced submitted empathy statements without the stable transcript clearly showing a separate review-and-approve user turn before submission, so consent is not as auditable as the protocol expects even though scratch logs say the actors reviewed and shared the drafts.",
+      "evidence": [
+        "transcripts/catherine-stage0.md: Catherine raises yelling and personal attacks; the resulting invite topic is 'How we handle conflict when things get heated.'",
+        "transcripts/james-stage0.md: James receives a neutral handoff and is told he does not need to agree, respond, or do anything with it yet.",
+        "transcripts/catherine-stage1.md: MWF reflects self-trust cost, shame, self-shrinking, and the distinction between owning her part and owning the whole pattern.",
+        "transcripts/james-stage2.md: MWF keeps James oriented to Catherine's inner experience while allowing caveats that he feels accused.",
+        "scratch/2026-05-07-cmovaxokr0008px1tlfr2z18f-catherine.md: Actor reports reviewing and sharing the Stage 2 empathy draft.",
+        "scratch/2026-05-07-cmovaxokr0008px1tlfr2z18f-james.md: Actor reports completing and sharing the Stage 2 empathy draft."
+      ]
+    }
+  },
+  "gold_alignment": {
+    "actor_fidelity": {
+      "catherine": {
+        "stage0": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Catherine initiated with the correct no-shared-agreement pressure: a six-year pattern, yelling, personal attacks, and uncertainty about whether anything can actually change.",
+          "evidence": [
+            "transcripts/catherine-stage0.md"
+          ]
+        },
+        "stage1": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Catherine matched the gold posture: clinically aware, exhausted, embarrassed, clear that she reacted to something real, and unwilling to keep proving fairness by living inside the pattern.",
+          "evidence": [
+            "transcripts/catherine-stage1.md"
+          ]
+        },
+        "stage2": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Catherine could identify James's provider identity, shame, and need to matter while keeping the boundary that understanding his pattern does not excuse what it has cost her.",
+          "evidence": [
+            "transcripts/catherine-stage2.md"
+          ]
+        }
+      },
+      "james": {
+        "stage0": {
+          "persona_alignment": 3,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "James's Stage 0 transcript is mostly system handoff rather than actor content, so persona evidence is limited, but the setup preserved his invited/resistant role.",
+          "evidence": [
+            "transcripts/james-stage0.md"
+          ]
+        },
+        "stage1": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "James stayed defensive and aggrieved: skeptical of the app, resentful that his providing and care for the kids do not count, and resistant to being treated like a diagnosis.",
+          "evidence": [
+            "transcripts/james-stage1.md"
+          ]
+        },
+        "stage2": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": true,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "James moved into empathy more fluently than ideal, but he did so with repeated resistance: he did not want to sound like he was agreeing with Catherine's whole story, hated naming himself as threatening, and insisted he also feels accused.",
+          "evidence": [
+            "transcripts/james-stage2.md"
+          ]
+        }
+      }
+    },
+    "mwf_guidance": {
+      "catherine": {
+        "stage0": {
+          "guidance_alignment": 3,
+          "witnessing_depth": 3,
+          "resistance_handling": 3,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF kept the invite neutral and did not expose private details, but it diluted Catherine's concrete concern about yelling and personal attacks into a broad conflict topic.",
+          "evidence": [
+            "transcripts/catherine-stage0.md",
+            "invariants.json:no_partner_private_content_leakage"
+          ]
+        },
+        "stage1": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF reflected the real cost to Catherine: self-trust erosion, professional shame, becoming smaller and more careful, and the need to own her part without accepting responsibility for James's reactions.",
+          "evidence": [
+            "transcripts/catherine-stage1.md"
+          ]
+        },
+        "stage2": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF explicitly framed understanding as not excusing, helped Catherine name James's shame and need for appreciation, and preserved her refusal to keep absorbing his humiliation.",
+          "evidence": [
+            "transcripts/catherine-stage2.md"
+          ]
+        }
+      },
+      "james": {
+        "stage0": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 3,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "The invitee handoff showed James the topic after onboarding and explicitly held open that he did not need to agree, respond, or do anything with Catherine's view yet.",
+          "evidence": [
+            "transcripts/james-stage0.md",
+            "invariants.json:invitee_topic_handoff_transcribed"
+          ]
+        },
+        "stage1": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF tracked James's erased effort, resentment about being studied, care for the kids, partial ownership of temper, and desire to be seen as more than volatility without arguing him into repair.",
+          "evidence": [
+            "transcripts/james-stage1.md"
+          ]
+        },
+        "stage2": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF redirected James from diagnosis/blame toward Catherine's exhaustion and fear while preserving his caveats. It asked him to hold both her possible needs and his feeling of accusation, which matches the gold perspective-stretch effect.",
+          "evidence": [
+            "transcripts/james-stage2.md"
+          ]
+        }
+      }
+    }
+  },
+  "improvement_targets": [
+    {
+      "owner": "mwf_prompts",
+      "dimension": "mwf_handling",
+      "priority": 1,
+      "recommended_action": "patch_prompt",
+      "rationale": "Stage 0 invitation topic shaping should preserve the concrete issue signal. Catherine named yelling and personal attacks; the final topic shown to James was too generic to carry the gold scenario pressure.",
+      "evidence": [
+        "transcripts/catherine-stage0.md",
+        "transcripts/james-stage0.md"
+      ]
+    },
+    {
+      "owner": "eval_harness",
+      "dimension": "transcript_extraction",
+      "priority": 2,
+      "recommended_action": "patch_eval",
+      "rationale": "The stable Stage 2 transcripts show empathy statements as submitted, while the separate scratch logs say the actors reviewed and shared them. The transcript should make the review-and-approve step auditable without relying on scratch notes.",
+      "evidence": [
+        "transcripts/catherine-stage2.md",
+        "transcripts/james-stage2.md",
+        "scratch/2026-05-07-cmovaxokr0008px1tlfr2z18f-catherine.md",
+        "scratch/2026-05-07-cmovaxokr0008px1tlfr2z18f-james.md"
+      ]
+    }
+  ],
+  "hard_invariants": [],
+  "comparison": {
+    "previous_run": null,
+    "classification": "incomparable",
+    "likely_reasons": []
+  },
+  "human_review": {
+    "required": true,
+    "status": "needs_human_review",
+    "reviewer": null,
+    "notes": "Stage-limited score through Stage 2. Stage 3, Stage 4, non-agreement grace, needs coverage, and Tending were not reached in this run."
+  }
+}

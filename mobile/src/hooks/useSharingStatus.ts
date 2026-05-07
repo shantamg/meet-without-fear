@@ -7,6 +7,7 @@
 
 import { useMemo } from 'react';
 import { useEmpathyStatus, useShareOffer, usePartnerEmpathy } from './useStages';
+import { hasSubmittedOwnEmpathy } from '../utils/shareOfferEligibility';
 import {
   EmpathyExchangeStatusResponse,
   GetShareSuggestionResponse,
@@ -105,7 +106,10 @@ export function useSharingStatus(
     enabled: baseEnabled && (options.enableEmpathyStatus ?? true),
   });
   const shareOfferQuery = useShareOffer(sessionId, {
-    enabled: baseEnabled && (options.enableShareOffer ?? true),
+    enabled:
+      baseEnabled &&
+      (options.enableShareOffer ?? true) &&
+      hasSubmittedOwnEmpathy({ ownEmpathyAttempt: empathyStatusQuery.data?.myAttempt }),
   });
   const partnerEmpathyQuery = usePartnerEmpathy(sessionId, {
     enabled: baseEnabled && (options.enablePartnerEmpathy ?? true),
