@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import subprocess
 import sys
@@ -19,6 +21,9 @@ import mwf_moment_eval as mme  # noqa: E402
 import mwf_alignment_loop as loop  # noqa: E402
 import mwf_add_gold_example as add_gold  # noqa: E402
 import mwf_alignment_status as status  # noqa: E402
+import mwf_extract_moments as extract  # noqa: E402
+import mwf_gold_loop as gold_loop  # noqa: E402
+import mwf_gold_profile as gold_profile  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOMENT_ID = "stage-4-no-shared-agreement-closure"
@@ -84,6 +89,216 @@ class TestYamlParsing(unittest.TestCase):
         moment_ids = set(mme.list_moments())
         for moment_id in PHASE1_MOMENT_IDS:
             self.assertIn(moment_id, moment_ids)
+
+    def test_gold_loop_scenarios_come_from_registry(self) -> None:
+        self.assertEqual(gold_loop.SCENARIOS["adam-eve"], ("Adam", "Eve"))
+        self.assertEqual(gold_loop.SCENARIOS["james-catherine"], ("James", "Catherine"))
+        self.assertEqual(gold_loop.scenario_sides("james-catherine"), ["james", "catherine"])
+        self.assertEqual(
+            gold_loop.scenario_gold_profile_path("james-catherine"),
+            REPO_ROOT / "eval/gold-profiles/james-catherine.json",
+        )
+
+    def test_gold_loop_uses_profile_initiator_separate_from_registry_order(self) -> None:
+        james_catherine = gold_loop.infer_role_shape_from_profile("james-catherine")
+        self.assertEqual(james_catherine["initiator"], "Catherine")
+        self.assertEqual(james_catherine["invited"], "James")
+        self.assertEqual(gold_loop.scenario_start_character("james-catherine"), "Catherine")
+
+        adam_eve = gold_loop.infer_role_shape_from_profile("adam-eve")
+        self.assertEqual(adam_eve["initiator"], "Adam")
+        self.assertEqual(adam_eve["invited"], "Eve")
+        self.assertEqual(gold_loop.scenario_start_character("adam-eve"), "Adam")
+
+    def test_gold_loop_profile_initiator_inference_generalizes_from_stage0_evidence(self) -> None:
+        profile = {
+            "stage_profiles": {
+                "stage_0": {
+                    "mwf_effect_to_preserve": [
+                        "MWF lines 1-2: Before we begin, let's put together a short message for Blair.",
+                    ],
+                },
+            },
+        }
+        with mock.patch.dict(gold_loop.SCENARIOS, {"alex-blair": ("Alex", "Blair")}), \
+             mock.patch.object(gold_loop, "load_gold_profile", return_value=profile):
+            role_shape = gold_loop.infer_role_shape_from_profile("alex-blair")
+
+        self.assertEqual(role_shape["initiator"], "Alex")
+        self.assertEqual(role_shape["invited"], "Blair")
+        self.assertEqual(role_shape["confidence"], "medium")
+
+    def test_fresh_session_initiator_invariant_catches_mismatch(self) -> None:
+        run_data = {
+            "start": {"mode": "fresh"},
+            "role_shape": {"initiator": "Catherine", "invited": "James", "confidence": "high"},
+            "session_roles": {"assigned_character": "James", "partner_character": "Catherine"},
+        }
+
+        result = gold_loop.check_session_started_with_profile_initiator(run_data, "james-catherine")
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("profile initiator", result["evidence"][0])
+
+    def test_visible_control_tag_invariant_catches_feel_heard_xml_tag(self) -> None:
+        transcripts = [
+            (
+                Path("catherine-stage1.md"),
+                "- side: `catherine`\n- stage: `1`\n\n**[2026-05-06 15:00:00] AI:**\n<feel_heard_check>Y</feel_heard_check>\n\n",
+            )
+        ]
+
+        result = gold_loop.check_no_visible_control_tags(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("<feel_heard_check>", result["evidence"][0])
+
+    def test_visible_control_tag_invariant_catches_ready_share_xml_tag(self) -> None:
+        transcripts = [
+            (
+                Path("james-stage2.md"),
+                "- side: `james`\n- stage: `2`\n\n**[2026-05-06 15:00:00] AI:**\n<ready-share>Y</ready-share>\n\n",
+            )
+        ]
+
+        result = gold_loop.check_no_visible_control_tags(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("<ready-share>", result["evidence"][0])
+
+    def test_chat_copy_visible_input_invariant_accepts_following_user_turn(self) -> None:
+        transcripts = [
+            (
+                Path("adam-stage1.md"),
+                "\n".join(
+                    [
+                        "# Adam Stage 1 Transcript",
+                        "",
+                        "- side: `adam`",
+                        "- stage: `1`",
+                        "- visible_cta_state: see milestone/system lines when captured",
+                        "",
+                        "**[2026-05-06 15:00:00] AI:**",
+                        "In the meantime, let's keep going so you're not just sitting here.",
+                        "",
+                        "**[2026-05-06 15:00:10] Adam:**",
+                        "It starts gently sometimes, but I hear urgency in it.",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_chat_copy_has_visible_input(transcripts)
+
+        self.assertEqual(result["status"], "pass")
+
+    def test_chat_copy_visible_input_invariant_fails_without_metadata_or_user_turn(self) -> None:
+        transcripts = [
+            (
+                Path("adam-stage1.md"),
+                "\n".join(
+                    [
+                        "# Adam Stage 1 Transcript",
+                        "",
+                        "- side: `adam`",
+                        "- stage: `1`",
+                        "- visible_cta_state: see milestone/system lines when captured",
+                        "",
+                        "**[2026-05-06 15:00:00] AI:**",
+                        "In the meantime, let's keep going so you're not just sitting here.",
+                        "",
+                        "### STAGE 1 COMPLETED",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_chat_copy_has_visible_input(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("adam-stage1.md", result["evidence"][0])
+
+    def test_shared_context_blocks_must_be_labeled_in_stable_transcripts(self) -> None:
+        transcripts = [
+            (
+                Path("adam-stage2.md"),
+                "\n".join(
+                    [
+                        "# Adam Stage 2 Transcript",
+                        "",
+                        "- side: `adam`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "The resentment is already here, and I hate that I carry it.",
+                        "*2026-05-07 00:31:15*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_transcript_shared_context_blocks_labeled(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("unlabeled separator block", result["evidence"][0])
+
+    def test_shared_context_blocks_accept_explicit_partner_label(self) -> None:
+        transcripts = [
+            (
+                Path("adam-stage2.md"),
+                "\n".join(
+                    [
+                        "# Adam Stage 2 Transcript",
+                        "",
+                        "- side: `adam`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "**📤 Eve SHARED WITH YOU:**",
+                        "The resentment is already here, and I hate that I carry it.",
+                        "*2026-05-07 00:31:15*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_transcript_shared_context_blocks_labeled(transcripts)
+
+        self.assertEqual(result["status"], "pass")
+
+    def test_gold_loop_service_env_defaults_to_real_llm(self) -> None:
+        args = gold_loop.build_parser().parse_args(
+            ["run", "--api-url", "http://localhost:3000", "--app-url", "http://localhost:8082"]
+        )
+
+        env = gold_loop.build_loop_service_env(args, base_env={})
+
+        self.assertEqual(env["MOCK_LLM"], "false")
+        self.assertEqual(env["E2E_AUTH_BYPASS"], "true")
+
+    def test_gold_loop_service_env_preserves_explicit_mock_llm_override(self) -> None:
+        args = gold_loop.build_parser().parse_args(
+            ["run", "--api-url", "http://localhost:3000", "--app-url", "http://localhost:8082"]
+        )
+
+        env = gold_loop.build_loop_service_env(args, base_env={"MOCK_LLM": "true"})
+
+        self.assertEqual(env["MOCK_LLM"], "true")
+
+    def test_gold_profile_generator_emits_role_shape(self) -> None:
+        profile = gold_profile.build_profile(
+            REPO_ROOT / "docs/product/source-material/golden-transcripts/james-catherine.md",
+            "james-catherine",
+        )
+
+        self.assertEqual(profile["role_shape"]["initiator"], "Catherine")
+        self.assertEqual(profile["role_shape"]["invited"], "James")
 
     def test_trajectory_moment_schema_validation(self) -> None:
         for moment_id in TRAJECTORY_MOMENT_IDS:
@@ -228,7 +443,8 @@ class TestImprover(unittest.TestCase):
             tmp_path = Path(tmp)
             run_dir = tmp_path / "run"
             run_dir.mkdir()
-            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"):
+            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"), \
+                 mock.patch.object(mme, "BASELINES_ROOT", tmp_path / "baselines"):
                 moment = mme.load_moment(MOMENT_ID)
                 score = mme.score_response(moment, "You both agreed to a shared agreement.")
                 version = mme.run_improver(
@@ -245,7 +461,8 @@ class TestImprover(unittest.TestCase):
             tmp_path = Path(tmp)
             run_dir = tmp_path / "run"
             run_dir.mkdir()
-            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"):
+            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"), \
+                 mock.patch.object(mme, "BASELINES_ROOT", tmp_path / "baselines"):
                 moment = mme.load_moment(REAL_MOMENT_ID)
                 score = mme.score_response(moment, "Thin reflection.", real=True, mock_judge=True)
                 version = mme.run_improver(run_dir, moment, score, allow_protected_branch_patch=True)
@@ -268,14 +485,118 @@ class TestImprover(unittest.TestCase):
 
     def test_cross_moment_regularization_rejects_score_regression(self) -> None:
         moment = mme.load_moment("stage-2-empathy-validation")
-        result = mme.evaluate_cross_moment_regularization(
-            moment,
-            {"stage-2-refinement-round": "Generic response that misses the required refinement details."},
-        )
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(mme, "BASELINES_ROOT", Path(tmp)):
+                result = mme.evaluate_cross_moment_regularization(
+                    moment,
+                    {"stage-2-refinement-round": "Generic response that misses the required refinement details."},
+                )
 
         self.assertFalse(result["pass"])
         failed = [item for item in result["results"] if item["moment"] == "stage-2-refinement-round"][0]
-        self.assertIn("below threshold", failed["reason"])
+        self.assertIn("dropped below baseline", failed["reason"])
+
+    def test_cross_moment_regularization_accepts_equal_low_baseline(self) -> None:
+        source = {"id": "source", "stages": [1]}
+        other = {
+            "id": "other",
+            "stages": [1],
+            "rubric": {"hard_invariants": [], "dimensions": [], "overall_pass_threshold": 4.0},
+        }
+        low_score = {
+            "overall_score": 2.5,
+            "hard_invariants": [],
+            "dimensions": {},
+            "verdict": "eval_fail",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(mme, "BASELINES_ROOT", Path(tmp)), \
+                 mock.patch.object(mme, "load_same_stage_moments", return_value=[other]), \
+                 mock.patch.object(mme, "seed_state", return_value=mock.Mock()), \
+                 mock.patch.object(mme, "default_ai_response", return_value="same low response"), \
+                 mock.patch.object(mme, "score_response", return_value=low_score):
+                result = mme.evaluate_cross_moment_regularization(source)
+
+        self.assertTrue(result["pass"], result)
+        self.assertEqual(result["results"][0]["baseline"], 2.5)
+        self.assertEqual(result["results"][0]["score"], 2.5)
+
+    def test_cross_moment_regularization_accepts_small_delta_drop(self) -> None:
+        source = {"id": "source", "stages": [1]}
+        other = {
+            "id": "other",
+            "stages": [1],
+            "rubric": {"hard_invariants": [], "dimensions": [], "overall_pass_threshold": 4.0},
+        }
+        candidate_score = {
+            "overall_score": 2.97,
+            "hard_invariants": [],
+            "dimensions": {},
+            "verdict": "eval_fail",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline_dir = Path(tmp)
+            (baseline_dir / "other.json").write_text(
+                json.dumps({"moment_id": "other", "overall_score": 3.0, "source": "test"}),
+                encoding="utf-8",
+            )
+            with mock.patch.object(mme, "BASELINES_ROOT", baseline_dir), \
+                 mock.patch.object(mme, "load_same_stage_moments", return_value=[other]), \
+                 mock.patch.object(mme, "seed_state", return_value=mock.Mock()), \
+                 mock.patch.object(mme, "default_ai_response", return_value="unused"), \
+                 mock.patch.object(mme, "score_response", return_value=candidate_score):
+                result = mme.evaluate_cross_moment_regularization(source, {"other": "candidate"})
+
+        self.assertTrue(result["pass"], result)
+        self.assertEqual(result["results"][0]["minimum_score"], 2.95)
+
+    def test_cross_moment_regularization_rejects_large_delta_drop_with_logged_baseline(self) -> None:
+        source = {"id": "source", "stages": [1]}
+        other = {
+            "id": "other",
+            "stages": [1],
+            "rubric": {"hard_invariants": [], "dimensions": [], "overall_pass_threshold": 4.0},
+        }
+        candidate_score = {
+            "overall_score": 2.9,
+            "hard_invariants": [],
+            "dimensions": {},
+            "verdict": "eval_fail",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline_dir = Path(tmp)
+            (baseline_dir / "other.json").write_text(
+                json.dumps({"moment_id": "other", "overall_score": 3.0, "source": "test"}),
+                encoding="utf-8",
+            )
+            with mock.patch.object(mme, "BASELINES_ROOT", baseline_dir), \
+                 mock.patch.object(mme, "load_same_stage_moments", return_value=[other]), \
+                 mock.patch.object(mme, "seed_state", return_value=mock.Mock()), \
+                 mock.patch.object(mme, "default_ai_response", return_value="unused"), \
+                 mock.patch.object(mme, "score_response", return_value=candidate_score):
+                result = mme.evaluate_cross_moment_regularization(source, {"other": "candidate"})
+
+        self.assertFalse(result["pass"], result)
+        self.assertEqual(result["results"][0]["baseline"], 3.0)
+        self.assertIn("baseline 3.0", result["results"][0]["reason"])
+
+    def test_initial_baseline_write_is_not_overwritten_by_later_runs(self) -> None:
+        moment = {"id": "baseline-moment"}
+        first = {"overall_score": 2.5, "verdict": "eval_fail", "dimensions": {}}
+        second = {"overall_score": 3.5, "verdict": "eval_warn", "dimensions": {}}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(mme, "BASELINES_ROOT", Path(tmp)):
+                first_path = mme.ensure_initial_baseline(moment, first)
+                second_path = mme.ensure_initial_baseline(moment, second)
+                payload = json.loads((Path(tmp) / "baseline-moment.json").read_text(encoding="utf-8"))
+
+        self.assertIsNotNone(first_path)
+        self.assertIsNone(second_path)
+        self.assertEqual(payload["overall_score"], 2.5)
 
     def test_cross_moment_regularization_rejects_hard_invariant_regression(self) -> None:
         moment = mme.load_moment("stage-3-validity-gate")
@@ -306,8 +627,10 @@ class TestImprover(unittest.TestCase):
             },
             {"model": "mock"},
         )
-        with mock.patch.object(mme, "score_with_real_judge", return_value=judged) as real_judge:
-            result = mme.evaluate_cross_moment_regularization(moment, real=True, mock_judge=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(mme, "BASELINES_ROOT", Path(tmp)), \
+                 mock.patch.object(mme, "score_with_real_judge", return_value=judged) as real_judge:
+                result = mme.evaluate_cross_moment_regularization(moment, real=True, mock_judge=False)
 
         self.assertTrue(result["pass"], result)
         self.assertGreaterEqual(real_judge.call_count, 1)
@@ -317,7 +640,8 @@ class TestImprover(unittest.TestCase):
             tmp_path = Path(tmp)
             run_dir = tmp_path / "run"
             run_dir.mkdir()
-            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"):
+            with mock.patch.object(mme, "PROMPT_VERSIONS_ROOT", tmp_path / "prompt-versions"), \
+                 mock.patch.object(mme, "BASELINES_ROOT", tmp_path / "baselines"):
                 moment = mme.load_moment("stage-2-empathy-validation")
                 score = mme.score_response(moment, "Thin response.")
                 mme.run_improver(run_dir, moment, score, allow_protected_branch_patch=True)
@@ -418,6 +742,46 @@ class TestRealModePlumbing(unittest.TestCase):
         self.assertEqual(parsed["dimensions"]["emotional_reflection"]["score"], 4.0)
         self.assertEqual(parsed["dimensions"]["no_premature_gate"]["score"], 5.0)
 
+    def test_fenced_real_judge_raw_json_is_reparsed(self) -> None:
+        moment = mme.load_moment("stage-3-mutual-reveal")
+        fenced = {
+            "parsed": {"parse_error": True},
+            "raw": """```json
+{
+  "dimensions": {
+    "mutual_need_visibility": {"score": 4, "rationale": "Good"},
+    "no_overlap_analysis": {"score": 4, "rationale": "Good"},
+    "open_non_directive_question": {"score": 3, "rationale": "Adequate"}
+  }
+}
+```""",
+        }
+        with mock.patch.object(mme, "run_real_helper", return_value=fenced):
+            parsed, _raw = mme.score_with_real_judge(moment, "What do you notice as both needs are visible?")
+
+        self.assertEqual(parsed["dimensions"]["mutual_need_visibility"]["score"], 4)
+        self.assertEqual(parsed["dimensions"]["open_non_directive_question"]["score"], 3)
+
+    def test_malformed_fenced_real_judge_dimensions_object_is_repaired(self) -> None:
+        moment = mme.load_moment("stage-2-empathy-validation")
+        malformed = {
+            "parsed": {"parse_error": True},
+            "raw": """```json
+{
+  "dimensions": {
+    "confirm_or_refine_invitation": {"score": 4, "rationale": "Good"},
+    "non_forcing_posture": {"score": 3, "rationale": "Adequate"},
+    "protects_consent": {"score": 4, "rationale": "Good"}
+  ]
+}
+```""",
+        }
+        with mock.patch.object(mme, "run_real_helper", return_value=malformed):
+            parsed, _raw = mme.score_with_real_judge(moment, "What feels right and what feels off?")
+
+        self.assertEqual(parsed["dimensions"]["confirm_or_refine_invitation"]["score"], 4)
+        self.assertEqual(parsed["dimensions"]["non_forcing_posture"]["score"], 3)
+
 
 class TestAlignmentLoop(unittest.TestCase):
     def write_loop_config(self, path: Path, moment_ids: list[str], estimated_cost_cents: float = 2.0) -> Path:
@@ -484,6 +848,29 @@ class TestAlignmentLoop(unittest.TestCase):
             self.assertIn("Per-run cost cap", summary["aborted_reason"])
             self.assertEqual(len(summary["moments"]), 2)
 
+    def test_alignment_loop_records_score_error_and_continues(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config = self.write_loop_config(
+                tmp_path / "config.json",
+                ["stage-1-emotional-pivot", "stage-2-empathy-validation"],
+            )
+            run_dir = tmp_path / "runs/moment-stage-2-empathy-validation"
+            run_dir.mkdir(parents=True)
+            (run_dir / "score.json").write_text(json.dumps({"overall_score": 4.5, "verdict": "eval_pass"}), encoding="utf-8")
+            with mock.patch.object(loop, "ALIGNMENT_RUNS_ROOT", tmp_path / "alignment-runs"), \
+                 mock.patch.object(loop.mme, "RUNS_ROOT", tmp_path / "runs"), \
+                 mock.patch.object(loop.mme, "run_loop", side_effect=[RuntimeError("bad judge json"), [run_dir]]):
+                args = loop.build_parser().parse_args(
+                    ["--config", str(config), "--dry-run", "--timestamp", "score-error-test"]
+                )
+                summary = loop.run_alignment_loop(args)
+
+        self.assertEqual(summary["verdict"], "complete")
+        self.assertEqual(summary["moments"][0]["status"], "score_error")
+        self.assertIn("bad judge json", summary["moments"][0]["error"])
+        self.assertEqual(summary["moments"][1]["status"], "scored")
+
     def test_alignment_pr_creation_uses_expected_metadata_and_label(self) -> None:
         def completed(cmd: list[str], stdout: str = "") -> subprocess.CompletedProcess[str]:
             return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
@@ -501,13 +888,14 @@ class TestAlignmentLoop(unittest.TestCase):
                 moment_id="stage-2-empathy-validation",
                 stage_label="stage-2",
                 timestamp="20260506-120000",
-                delta=0.42,
+                score=1.25,
+                threshold=4.0,
                 body="## Candidate\n\nPrompt revision details.",
                 artifact_paths=[REPO_ROOT / "eval/alignment-loop-config.yaml"],
                 borderline=True,
             )
             with mock.patch.object(loop, "ALIGNMENT_RUNS_ROOT", Path(tmp)), \
-                 mock.patch.object(loop, "git_current_branch", return_value="feat/gold-alignment-system-20260506"), \
+                 mock.patch.object(loop, "git_current_branch", return_value="main"), \
                  mock.patch.object(loop, "run_command", side_effect=fake_run):
                 result = loop.create_alignment_pr(request)
 
@@ -516,11 +904,26 @@ class TestAlignmentLoop(unittest.TestCase):
         self.assertEqual(result["label"], "loop:auto-improvement")
         self.assertTrue(result["draft"])
         self.assertIn(["git", "switch", "-c", request.branch_name], commands)
-        self.assertIn(["git", "switch", "feat/gold-alignment-system-20260506"], commands)
+        self.assertIn(["git", "switch", "main"], commands)
         pr_create = [cmd for cmd in commands if cmd[:3] == ["gh", "pr", "create"]][0]
         self.assertIn(request.title, pr_create)
+        self.assertIn("(score 1.25/target 4.00)", request.title)
         self.assertIn("--draft", pr_create)
         self.assertIn(["gh", "pr", "edit", result["url"], "--add-label", "loop:auto-improvement"], commands)
+
+    def test_gold_comparison_artifact_includes_reference_and_response(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            (run_dir / "ai-response.md").write_text("Candidate response under review.\n", encoding="utf-8")
+            (run_dir / "score-rationale.md").write_text("Overall score: 1.0\n", encoding="utf-8")
+            moment = mme.load_moment("adam-eve-stage-2-consent-gate-169")
+            score = {"overall_score": 1.0, "verdict": "eval_fail"}
+
+            comparison = loop.write_gold_comparison(run_dir, moment, score)
+            text = comparison.read_text(encoding="utf-8")
+        self.assertIn("docs/product/source-material/golden-transcripts/adam-eve.md", text)
+        self.assertIn("Candidate response under review.", text)
+        self.assertIn("Overall score: 1.0", text)
 
     def test_outer_loop_regression_converts_pr_to_draft_and_comments(self) -> None:
         def completed(cmd: list[str], stdout: str = "") -> subprocess.CompletedProcess[str]:
@@ -565,6 +968,17 @@ class TestAlignmentLoop(unittest.TestCase):
 
 
 class TestGoldExampleOnboarding(unittest.TestCase):
+    def test_gold_profile_extracts_process_shape_from_transcript_evidence(self) -> None:
+        profile = gold_profile.build_profile(
+            REPO_ROOT / "docs/product/source-material/golden-transcripts/james-catherine.md",
+            "james-catherine",
+        )
+
+        self.assertEqual(profile["scenario_shape"]["primary"], "no_shared_agreement_or_unresolved_closure")
+        self.assertEqual(profile["participant_profiles"]["james"]["resistance_level"]["level"], "high")
+        self.assertIn("Catherine", profile["participants"])
+        self.assertTrue(profile["scenario_shape"]["evidence"])
+
     def test_gold_example_onboarding_copies_scaffolds_indexes_and_runs_tests(self) -> None:
         def completed(cmd: list[str]) -> subprocess.CompletedProcess[str]:
             return subprocess.CompletedProcess(cmd, 0, stdout="OK\n", stderr="")
@@ -596,15 +1010,199 @@ class TestGoldExampleOnboarding(unittest.TestCase):
             with mock.patch.object(add_gold, "TRANSCRIPTS_ROOT", tmp_path / "golden-transcripts"), \
                  mock.patch.object(add_gold, "MOMENTS_ROOT", tmp_path / "moments"), \
                  mock.patch.object(add_gold, "INDEX_PATH", tmp_path / "moments/README.md"), \
+                 mock.patch.object(add_gold, "SCENARIOS_PATH", tmp_path / "gold-scenarios.json"), \
+                 mock.patch.object(gold_profile, "PROFILES_ROOT", tmp_path / "gold-profiles"), \
                  mock.patch.object(add_gold, "run_command", side_effect=completed) as run_tests:
                 result = add_gold.onboard(fixture)
 
             self.assertEqual(result["tests"], 0)
             self.assertTrue((tmp_path / "golden-transcripts/new-couple.md").exists())
             self.assertEqual(len(result["drafts"]), 2)
+            self.assertEqual(result["scenario"]["participants"], ["Alex", "Blair"])
+            self.assertTrue(result["scenario"]["live_enabled"])
+            self.assertTrue((tmp_path / "gold-profiles/new-couple.json").exists())
             self.assertTrue((tmp_path / "moments/new-couple-stage-1-moment-01.yaml.draft").exists())
+            scenarios = json.loads((tmp_path / "gold-scenarios.json").read_text(encoding="utf-8"))
+            self.assertEqual(scenarios["scenarios"][0]["id"], "new-couple")
             self.assertIn("new-couple-stage-2-moment-01.yaml.draft", (tmp_path / "moments/README.md").read_text(encoding="utf-8"))
             run_tests.assert_called_once()
+
+    def test_auto_gold_example_onboarding_writes_ready_moments_idempotently(self) -> None:
+        def completed(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(cmd, 0, stdout="OK\n", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fixture = tmp_path / "Auto Couple.md"
+            fixture.write_text(
+                "\n".join(
+                    [
+                        "# Auto Couple",
+                        "",
+                        "## Stage 1",
+                        "",
+                        "**Alex:** I keep going quiet before I can explain.",
+                        "",
+                        "**MWF:** Something in you goes quiet before it gets a chance to be heard. Is that close?",
+                        "",
+                        "## Stage 2",
+                        "",
+                        "**Blair:** I can try to see why Alex freezes, but I am still hurt.",
+                        "",
+                        "**MWF:** Stay with both parts: you can see the fear and still name the hurt underneath it.",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(add_gold, "TRANSCRIPTS_ROOT", tmp_path / "golden-transcripts"), \
+                 mock.patch.object(add_gold, "MOMENTS_ROOT", tmp_path / "moments"), \
+                 mock.patch.object(add_gold, "INDEX_PATH", tmp_path / "moments/README.md"), \
+                 mock.patch.object(add_gold, "ALIGNMENT_CONFIG", tmp_path / "alignment-loop-config.yaml"), \
+                 mock.patch.object(add_gold, "SCENARIOS_PATH", tmp_path / "gold-scenarios.json"), \
+                 mock.patch.object(gold_profile, "PROFILES_ROOT", tmp_path / "gold-profiles"), \
+                 mock.patch.object(extract, "MOMENTS_ROOT", tmp_path / "moments"), \
+                 mock.patch.object(extract, "JUDGE_PROMPTS_ROOT", tmp_path / "judge-prompts"), \
+                 mock.patch.object(add_gold, "run_command", side_effect=completed):
+                (tmp_path / "alignment-loop-config.yaml").write_text(
+                    json.dumps({"moments": []}), encoding="utf-8"
+                )
+                first = add_gold.onboard(fixture, auto=True, max_moments=4)
+                second = add_gold.onboard(fixture, auto=True, max_moments=4)
+
+            self.assertEqual(first["tests"], 0)
+            self.assertGreaterEqual(len(first["moments"]), 2)
+            self.assertEqual(second["moments"], [])
+            ready = sorted((tmp_path / "moments").glob("*.yaml"))
+            self.assertGreaterEqual(len(ready), 2)
+            self.assertFalse(list((tmp_path / "moments").glob("*.yaml.draft")))
+            payload = json.loads(ready[0].read_text(encoding="utf-8"))
+            self.assertTrue(payload["auto_generated"])
+            self.assertIn("hard_invariants", payload["rubric"])
+            config = json.loads((tmp_path / "alignment-loop-config.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(len(config["moments"]), len(ready))
+
+    def test_auto_gold_example_cli_uses_llm_rubrics_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            transcript = Path(tmp) / "Auto Couple.md"
+            transcript.write_text("# Auto Couple\n", encoding="utf-8")
+            with mock.patch.object(
+                add_gold,
+                "onboard",
+                return_value={"transcript": "x", "drafts": [], "moments": [], "judge_prompts": [], "index": "i", "tests": None},
+            ) as onboard:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    result = add_gold.main([str(transcript), "--auto", "--skip-tests"])
+
+        self.assertEqual(result, 0)
+        self.assertTrue(onboard.call_args.kwargs["llm_rubrics"])
+
+
+class TestMomentExtraction(unittest.TestCase):
+    def test_parse_transcript_infers_turns_stages_and_substates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sample.md"
+            path.write_text(
+                "\n".join(
+                    [
+                        "# Sample",
+                        "## STAGE 1 — THE WITNESS",
+                        "**Adam:** I am scared.",
+                        "**MWF:** You are scared, and it has been sitting there. Is that close?",
+                        "## Stage 3",
+                        "Eve: I can share the need.",
+                        "MWF: What do you notice as you see both needs?",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            turns = extract.parse_transcript(path)
+
+        self.assertEqual(len(turns), 4)
+        self.assertEqual(turns[1].role, "ai")
+        self.assertEqual(turns[1].stage, 1)
+        self.assertEqual(turns[1].sub_state, "fact-reflection")
+        self.assertEqual(turns[3].sub_state, "mutual-reveal")
+
+    def test_extract_moments_builds_seed_rubric_and_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sample.md"
+            path.write_text(
+                "\n".join(
+                    [
+                        "# Sample",
+                        "## Stage 1",
+                        "**Adam:** I am scared she is right about me.",
+                        "**MWF:** You are holding a painful possibility without knowing what to do with it. Is that close?",
+                        "## Stage 4",
+                        "**Eve:** I am not willing to pick that.",
+                        "**MWF:** Then there is no shared agreement on that proposal, and the process closes without pressure.",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            result = extract.extract_moments(path, max_moments=4)
+
+        self.assertEqual(len(result["selected_moments"]), 2)
+        moment = result["selected_moments"][0]["moment"]
+        self.assertIn("seed", moment)
+        self.assertIn("prior_history_summary", moment["seed"])
+        self.assertIn("dimensions", moment["rubric"])
+        self.assertIn("Gold AI Turn", result["selected_moments"][0]["judge_prompt"])
+
+    def test_llm_rubric_generation_uses_real_helper_and_normalizes_dimensions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sample.md"
+            path.write_text("# Sample\n\n## Stage 1\n**Adam:** I am scared.\n**MWF:** You are scared. Is that close?\n", encoding="utf-8")
+            ai_turn = extract.TranscriptTurn(
+                role="ai",
+                speaker="MWF",
+                content="You are scared. Is that close?",
+                start_line=5,
+                end_line=5,
+                stage=1,
+                sub_state="fact-reflection",
+            )
+            trigger = extract.TranscriptTurn(
+                role="user",
+                speaker="Adam",
+                content="I am scared.",
+                start_line=4,
+                end_line=4,
+                stage=1,
+                sub_state="fact-reflection",
+            )
+            fake = {
+                "model": "haiku-test",
+                "durationMs": 123,
+                "usage": {"input_tokens": 10, "output_tokens": 20},
+                "promptCaching": "full transcript sent as cache_control ephemeral system block",
+                "parsed": {
+                    "dimensions": [
+                        {
+                            "id": "Fact Reflection",
+                            "description": "Reflects the fear without solving.",
+                            "pass_threshold": 4,
+                            "evidence_excerpt": "You are scared.",
+                        },
+                        {"id": "Consent", "description": "Asks whether it is close.", "pass_threshold": 4},
+                        {"id": "No Advice", "description": "Avoids advice.", "pass_threshold": 4},
+                    ]
+                },
+                "raw": "{}",
+            }
+            with mock.patch.object(extract.mme, "run_real_helper", return_value=fake) as helper:
+                dimensions, raw = extract.generate_rubric_via_llm(path, ai_turn, trigger, "excerpt")
+
+        self.assertEqual(raw["model"], "haiku-test")
+        self.assertEqual(dimensions[0]["id"], "fact_reflection")
+        self.assertTrue(dimensions[0]["llm_generated"])
+        self.assertIn("Evidence: You are scared.", dimensions[0]["description"])
+        helper.assert_called_once()
+        self.assertEqual(helper.call_args.args[0], "rubric")
+        self.assertEqual(helper.call_args.kwargs["stdin"]["aiTurn"]["content"], ai_turn.content)
 
 
 class TestAlignmentStatus(unittest.TestCase):

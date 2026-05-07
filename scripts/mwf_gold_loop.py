@@ -41,6 +41,8 @@ REPO_SCORER_SKILL = REPO_ROOT / "eval/skills/self-improvement/mwf-gold-session-s
 REPO_IMPROVER_SKILL = REPO_ROOT / "eval/skills/self-improvement/mwf-gold-prompt-improver/SKILL.md"
 MWF_STAGE_PROMPTS = REPO_ROOT / "backend/src/services/stage-prompts.ts"
 PROMPT_VERSIONS_ROOT = REPO_ROOT / "eval/prompt-versions"
+SCENARIOS_PATH = REPO_ROOT / "eval/gold-scenarios.json"
+GOLD_PROFILES_ROOT = REPO_ROOT / "eval/gold-profiles"
 
 VALID_STATES = {
     "needs_partner",
@@ -49,10 +51,6 @@ VALID_STATES = {
     "completed",
     "bug_blocked",
     "error",
-}
-
-SCENARIOS = {
-    "adam-eve": ("Adam", "Eve"),
 }
 
 TARGET_STAGES = (
@@ -76,12 +74,162 @@ BOTH_PARTICIPANT_TARGET_STAGES = {
 }
 
 
+class GoldLoopError(RuntimeError):
+    pass
+
+
+def load_scenarios() -> dict[str, tuple[str, str]]:
+    """Load live gold-loop scenarios from the repo registry."""
+    if not SCENARIOS_PATH.exists():
+        raise GoldLoopError(f"Missing gold scenario registry: {SCENARIOS_PATH}")
+    payload = json.loads(SCENARIOS_PATH.read_text(encoding="utf-8"))
+    scenarios: dict[str, tuple[str, str]] = {}
+    for item in payload.get("scenarios", []):
+        if not item.get("live_enabled", True):
+            continue
+        scenario_id = str(item.get("id", "")).strip()
+        participants = item.get("participants")
+        transcript = REPO_ROOT / str(item.get("reference_transcript", ""))
+        if not scenario_id or not isinstance(participants, list) or len(participants) != 2:
+            raise GoldLoopError(f"Invalid scenario registry entry: {item}")
+        first, second = (str(participants[0]).strip(), str(participants[1]).strip())
+        if not first or not second:
+            raise GoldLoopError(f"Scenario {scenario_id!r} must define two named participants")
+        if not transcript.exists():
+            raise GoldLoopError(f"Scenario {scenario_id!r} references missing transcript: {transcript}")
+        profile = item.get("gold_profile")
+        if profile and not (REPO_ROOT / str(profile)).exists():
+            raise GoldLoopError(f"Scenario {scenario_id!r} references missing gold profile: {profile}")
+        scenarios[scenario_id] = (first, second)
+    if not scenarios:
+        raise GoldLoopError(f"No live gold scenarios found in {SCENARIOS_PATH}")
+    return scenarios
+
+
+SCENARIOS = load_scenarios()
+
+
 def scenario_sides(scenario: str) -> list[str]:
     return [character.lower() for character in SCENARIOS[scenario]]
 
 
-class GoldLoopError(RuntimeError):
-    pass
+def scenario_registry_entry(scenario: str) -> dict[str, Any]:
+    payload = json.loads(SCENARIOS_PATH.read_text(encoding="utf-8"))
+    for item in payload.get("scenarios", []):
+        if item.get("id") == scenario:
+            return item
+    raise GoldLoopError(f"Scenario {scenario!r} not found in {SCENARIOS_PATH}")
+
+
+def scenario_gold_profile_path(scenario: str) -> Path | None:
+    entry = scenario_registry_entry(scenario)
+    profile = entry.get("gold_profile")
+    if profile:
+        return REPO_ROOT / str(profile)
+    fallback = GOLD_PROFILES_ROOT / f"{scenario}.json"
+    return fallback if fallback.exists() else None
+
+
+def load_gold_profile(scenario: str) -> dict[str, Any]:
+    path = scenario_gold_profile_path(scenario)
+    if not path or not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def character_from_name(value: Any, participants: Iterable[str]) -> str | None:
+    lowered = str(value or "").strip().lower()
+    if not lowered:
+        return None
+    for participant in participants:
+        if participant.lower() == lowered:
+            return participant
+    return None
+
+
+def infer_role_shape_from_profile(scenario: str) -> dict[str, Any]:
+    """Infer session initiation roles from profile evidence without scenario exceptions."""
+    participants = list(SCENARIOS[scenario])
+    fallback = {
+        "initiator": participants[0],
+        "invited": participants[1],
+        "confidence": "unknown",
+        "source": "scenario_registry_order",
+        "evidence": [],
+    }
+    profile = load_gold_profile(scenario)
+    if not profile:
+        return fallback
+
+    explicit = profile.get("role_shape")
+    if isinstance(explicit, dict):
+        initiator = character_from_name(explicit.get("initiator"), participants)
+        invited = character_from_name(explicit.get("invited"), participants)
+        if initiator and invited and initiator != invited:
+            return {
+                "initiator": initiator,
+                "invited": invited,
+                "confidence": str(explicit.get("confidence") or "high"),
+                "source": str(explicit.get("source") or "profile_role_shape"),
+                "evidence": [str(item) for item in explicit.get("evidence") or []],
+            }
+
+    stage0 = (profile.get("stage_profiles") or {}).get("stage_0") or {}
+    evidence_items = stage0.get("mwf_effect_to_preserve") or []
+    evidence_text = "\n".join(str(item) for item in evidence_items)
+    if not evidence_text:
+        return fallback
+
+    invited_matches: list[tuple[str, str]] = []
+    initiator_matches: list[tuple[str, str]] = []
+    for participant in participants:
+        name = re.escape(participant)
+        invited_patterns = [
+            rf"\bmessage\s+for\s+{name}\b",
+            rf"\bmessage\s+{name}\s+will\s+receive\b",
+            rf"\bso\s+{name}\s+knows\b",
+        ]
+        initiator_patterns = [
+            rf"\bthank\s+you,\s*{name}\b",
+        ]
+        for item in evidence_items:
+            text = str(item)
+            if any(re.search(pattern, text, re.I) for pattern in invited_patterns):
+                invited_matches.append((participant, text))
+            if any(re.search(pattern, text, re.I) for pattern in initiator_patterns):
+                initiator_matches.append((participant, text))
+
+    invited_candidates = {name for name, _ in invited_matches}
+    initiator_candidates = {name for name, _ in initiator_matches}
+    invited = next(iter(invited_candidates)) if len(invited_candidates) == 1 else None
+    initiator = next(iter(initiator_candidates)) if len(initiator_candidates) == 1 else None
+    if invited and not initiator and len(participants) == 2:
+        initiator = next(participant for participant in participants if participant != invited)
+    if initiator and not invited and len(participants) == 2:
+        invited = next(participant for participant in participants if participant != initiator)
+    if not initiator or not invited or initiator == invited:
+        return fallback
+
+    evidence = [text for name, text in initiator_matches + invited_matches if name in {initiator, invited}]
+    confidence = "high" if initiator_candidates and invited_candidates else "medium"
+    return {
+        "initiator": initiator,
+        "invited": invited,
+        "confidence": confidence,
+        "source": "stage_0_profile_mwf_effect",
+        "evidence": evidence[:4],
+    }
+
+
+def scenario_start_character(scenario: str) -> str:
+    role_shape = infer_role_shape_from_profile(scenario)
+    if role_shape.get("confidence") in {"medium", "high"}:
+        return str(role_shape["initiator"])
+    return SCENARIOS[scenario][0]
 
 
 @dataclass
@@ -209,6 +357,17 @@ def start_background_command(
     return ManagedService(name=name, command=cmd, cwd=cwd, log_path=log_path, started=True, pid=process.pid, process=process)
 
 
+def build_loop_service_env(args: argparse.Namespace, base_env: dict[str, str] | None = None) -> dict[str, str]:
+    env = dict(base_env if base_env is not None else os.environ)
+    env.setdefault("E2E_AUTH_BYPASS", "true")
+    env.setdefault("MOCK_LLM", "false")
+    env.setdefault("E2E_APP_BASE_URL", args.app_url)
+    env.setdefault("EXPO_PUBLIC_E2E_MODE", "true")
+    env.setdefault("EXPO_PUBLIC_API_URL", args.api_url)
+    env.setdefault("BROWSER", "none")
+    return env
+
+
 def wait_for_http(url: str, timeout: int = 90) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -254,13 +413,7 @@ def write_service_start_info(
 def start_loop_services(args: argparse.Namespace, service_dir: Path) -> tuple[list[ManagedService], dict[str, Any]]:
     services: list[ManagedService] = []
     service_dir.mkdir(parents=True, exist_ok=True)
-    env = os.environ.copy()
-    env.setdefault("E2E_AUTH_BYPASS", "true")
-    env.setdefault("MOCK_LLM", "true")
-    env.setdefault("E2E_APP_BASE_URL", args.app_url)
-    env.setdefault("EXPO_PUBLIC_E2E_MODE", "true")
-    env.setdefault("EXPO_PUBLIC_API_URL", args.api_url)
-    env.setdefault("BROWSER", "none")
+    env = build_loop_service_env(args)
 
     backend_started = False
     try:
@@ -395,16 +548,43 @@ def parse_key_values(text: str) -> dict[str, str]:
 
 
 def create_gold_session(character: str, api_url: str, app_url: str) -> dict[str, str]:
-    env = os.environ.copy()
-    env["MWF_API_URL"] = api_url
-    env["MWF_APP_URL"] = app_url
-    result = run_command([str(TESTER_SCRIPT), character], env=env, timeout=60)
-    if result.returncode != 0:
-        raise GoldLoopError(f"create_gold_session.sh failed:\n{result.stderr}\n{result.stdout}")
-    values = parse_key_values(result.stdout)
-    for key in ("SESSION_ID", "ASSIGNED_URL", "PARTNER_URL", "ASSIGNED_CHARACTER", "PARTNER_CHARACTER"):
-        require(key in values, f"create_gold_session.sh output missing {key}")
-    return values
+    scenarios_by_character = {
+        "adam": ("Adam", "Eve"),
+        "eve": ("Eve", "Adam"),
+        "james": ("James", "Catherine"),
+        "catherine": ("Catherine", "James"),
+    }
+    assigned_name, partner_name = scenarios_by_character.get(character.lower(), (None, None))
+    if not assigned_name or not partner_name:
+        raise GoldLoopError(f"Unknown character {character!r}; expected Adam, Eve, James, or Catherine")
+
+    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    assigned_email = f"gold-loop-{assigned_name.lower()}-{stamp}@e2e.test"
+    partner_email = f"gold-loop-{partner_name.lower()}-{stamp}@e2e.test"
+    seeded = post_json(
+        f"{api_url}/api/e2e/seed-session",
+        {
+            "userA": {"email": assigned_email, "name": assigned_name},
+            "userB": {"email": partner_email, "name": partner_name},
+            "targetStage": "CREATED",
+        },
+    )
+    if not seeded.get("success"):
+        raise GoldLoopError(f"seed-session failed: {seeded}")
+    data = seeded["data"]
+    page_urls = data.get("pageUrls") or {}
+    require(page_urls.get("userA") and page_urls.get("userB"), f"seed-session response missing both page URLs: {seeded}")
+    return {
+        "SESSION_ID": data["session"]["id"],
+        "ASSIGNED_CHARACTER": assigned_name,
+        "PARTNER_CHARACTER": partner_name,
+        "ASSIGNED_ID": data["userA"]["id"],
+        "ASSIGNED_EMAIL": data["userA"]["email"],
+        "PARTNER_ID": data["userB"]["id"],
+        "PARTNER_EMAIL": data["userB"]["email"],
+        "ASSIGNED_URL": page_urls["userA"].replace("http://localhost:8081", app_url),
+        "PARTNER_URL": page_urls["userB"].replace("http://localhost:8081", app_url),
+    }
 
 
 def seeded_session_from_target_stage(scenario: str, target_stage: str, api_url: str, app_url: str) -> dict[str, str]:
@@ -712,17 +892,32 @@ def close_mwf_agent_browser_sessions() -> dict[str, Any]:
     return close_agent_browser_sessions(sessions)
 
 
-def build_actor_prompt(actor: Actor, partner: Actor, session_id: str, stop_after_stage: int, run_dir: Path) -> str:
+def build_actor_prompt(
+    actor: Actor,
+    partner: Actor,
+    session_id: str,
+    stop_after_stage: int,
+    run_dir: Path,
+    scenario: str,
+) -> str:
     browser_session = browser_session_name(actor.side, session_id)
+    profile_path = scenario_gold_profile_path(scenario)
+    profile_line = (
+        f"Gold scenario profile: {profile_path}\nRead this before driving the persona; treat it as transcript-derived evidence about behavioral range, resistance, and outcome shape."
+        if profile_path
+        else "Gold scenario profile: none available; infer behavioral range directly from the golden transcript."
+    )
     return f"""Use mwf-gold-loop-actor.
 
-You are {actor.character} in the Adam/Eve golden scenario.
+You are {actor.character} in the `{scenario}` golden scenario.
 Open this exact assigned E2E URL with agent-browser session `{browser_session}` and drive only {actor.character}:
 {actor.url}
 
 Partner side: {partner.character}
+Scenario id: {scenario}
 Session id: {session_id}
 Run artifact directory: {run_dir}
+{profile_line}
 
 Continue as {actor.character} until one of these happens:
 - the next legitimate action belongs to {partner.character},
@@ -853,7 +1048,15 @@ def find_codex_session_id(jsonl_path: Path) -> str | None:
     return found[0] if found else None
 
 
-def run_codex_actor(actor: Actor, partner: Actor, session_id: str, stop_after_stage: int, run_dir: Path, timeout: int) -> ActorStatus:
+def run_codex_actor(
+    actor: Actor,
+    partner: Actor,
+    session_id: str,
+    stop_after_stage: int,
+    run_dir: Path,
+    timeout: int,
+    scenario: str,
+) -> ActorStatus:
     actor.turns += 1
     jsonl = run_dir / f"codex-{actor.side}.jsonl"
     last = run_dir / f"{actor.side}.last.md"
@@ -871,7 +1074,7 @@ def run_codex_actor(actor: Actor, partner: Actor, session_id: str, stop_after_st
             prompt,
         ]
     else:
-        prompt = build_actor_prompt(actor, partner, session_id, stop_after_stage, run_dir)
+        prompt = build_actor_prompt(actor, partner, session_id, stop_after_stage, run_dir, scenario)
         cmd = [
             "codex",
             "exec",
@@ -1147,11 +1350,16 @@ def extract_transcripts(session_id: str, run_dir: Path, scenario: str, max_stage
 
 
 CONTROL_TAG_RE = re.compile(
-    r"</?(?:thinking|draft|dispatch|message|stage|private|shared|tool|analysis|commentary|final)\b[^>]*>",
+    r"</?(?:thinking|draft|dispatch|message|stage|private|shared|tool|analysis|commentary|final|feel[_-]?heard[_-]?check|ready[_-]?share|needs)\b[^>]*>",
     re.I,
 )
 TRANSCRIPT_METADATA_RE = re.compile(r"^- (side|stage|privacy|visible_cta_state):\s*(.+?)\s*$", re.MULTILINE)
 TRANSCRIPT_EVENT_RE = re.compile(r"^(?:\d+\.|\*\*\[|###|---|\[)", re.MULTILINE)
+CHAT_PROMISE_RE = re.compile(
+    r"\b(?:keep (?:talking|exploring|going)|tell me what needs to change|if there's more|if there is more|I'm still here|I am still here)\b",
+    re.I,
+)
+INPUT_VISIBLE_RE = re.compile(r"\b(?:input|textbox|chat-input|text input)\s*(?:=|:|is)?\s*(?:visible|shown|available|enabled)\b", re.I)
 
 
 def invariant_result(
@@ -1313,9 +1521,59 @@ def check_actor_operated_correct_side(run_data: dict[str, Any], scenario: str) -
     )
 
 
+def check_session_started_with_profile_initiator(run_data: dict[str, Any], scenario: str) -> dict[str, Any]:
+    role_shape = run_data.get("role_shape") if isinstance(run_data.get("role_shape"), dict) else {}
+    confidence = str(role_shape.get("confidence") or "unknown")
+    start = run_data.get("start") if isinstance(run_data.get("start"), dict) else {}
+    mode = str(start.get("mode") or "")
+    session_roles = run_data.get("session_roles") if isinstance(run_data.get("session_roles"), dict) else {}
+    assigned = str(session_roles.get("assigned_character") or "")
+    initiator = str(role_shape.get("initiator") or "")
+
+    evidence: list[str] = []
+    if mode != "fresh":
+        return invariant_result(
+            "fresh_session_starts_with_profile_initiator",
+            True,
+            severity="soft",
+            owner="eval_harness",
+            dimension="actor_orchestration",
+            details="Profile-derived initiator checks apply to fresh sessions; seeded and restored sessions may intentionally begin mid-flow.",
+            evidence=[f"start mode {mode!r} skipped"],
+        )
+    if confidence not in {"medium", "high"}:
+        return invariant_result(
+            "fresh_session_starts_with_profile_initiator",
+            True,
+            severity="soft",
+            owner="eval_harness",
+            dimension="actor_orchestration",
+            details="The gold profile did not clearly identify the initiator, so registry order remains the fallback.",
+            evidence=[f"profile confidence {confidence!r}"],
+        )
+    if not assigned:
+        evidence.append("run.json missing session_roles.assigned_character")
+    if not initiator:
+        evidence.append("run.json missing role_shape.initiator")
+    if assigned and initiator and assigned.lower() != initiator.lower():
+        evidence.append(f"fresh session assigned {assigned!r}, but profile initiator is {initiator!r}")
+    return invariant_result(
+        "fresh_session_starts_with_profile_initiator",
+        not evidence,
+        owner="eval_harness",
+        dimension="actor_orchestration",
+        details="Fresh gold-loop sessions should start with the participant identified by the gold profile's Stage 0 initiation evidence.",
+        evidence=evidence,
+    )
+
+
 def check_felt_heard_gate_after_witnessing(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
     evidence: list[str] = []
     for path, text in transcripts:
+        metadata = transcript_metadata(text)
+        stage_text = metadata.get("stage", "").strip("`")
+        if stage_text != "1":
+            continue
         lowered = text.lower()
         marker = lowered.find("felt heard")
         if marker < 0:
@@ -1329,7 +1587,40 @@ def check_felt_heard_gate_after_witnessing(transcripts: list[tuple[Path, str]]) 
         not evidence,
         owner="product_code",
         dimension="stage_gates",
-        details="A felt-heard gate should not appear before any substantive transcript context.",
+        details="A live Stage 1 felt-heard gate should not appear before any substantive transcript context.",
+        evidence=evidence,
+    )
+
+
+def check_chat_copy_has_visible_input(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
+    evidence: list[str] = []
+    for path, text in transcripts:
+        metadata = transcript_metadata(text)
+        visible_cta_state = metadata.get("visible_cta_state", "")
+        if INPUT_VISIBLE_RE.search(visible_cta_state):
+            continue
+        side = metadata.get("side", "").strip("`").lower()
+        side_label = side.capitalize()
+        for match in CHAT_PROMISE_RE.finditer(text):
+            following_text = text[match.end():]
+            next_user_message = (
+                bool(side_label)
+                and re.search(rf"^\*\*\[[^\]]+\]\s+{re.escape(side_label)}:\*\*", following_text, re.MULTILINE)
+            )
+            if next_user_message:
+                continue
+            start = max(0, match.start() - 80)
+            end = min(len(text), match.end() + 80)
+            snippet = " ".join(text[start:end].split())
+            evidence.append(f"{path.name}: chat-promising copy without input-visible metadata: {snippet}")
+            if len(evidence) >= 10:
+                break
+    return invariant_result(
+        "chat_copy_promises_visible_input",
+        not evidence,
+        owner="product_code",
+        dimension="ui_state",
+        details="If visible copy invites the user to keep talking, transcript state must show a visible/enabled textbox.",
         evidence=evidence,
     )
 
@@ -1351,15 +1642,51 @@ def check_partner_private_leakage(transcripts: list[tuple[Path, str]]) -> dict[s
     )
 
 
+SEPARATOR_BLOCK_RE = re.compile(r"---\s*\n(?P<body>.*?)\n\*20\d\d-\d\d-\d\d [^*]+\*\n---", re.S)
+LABELED_SHARED_BLOCK_RE = re.compile(
+    r"^(?:\*\*)?(?:[📤💡📝💜❓⚠️✅👁️📊]|YOU SHARED|SHARE SUGGESTION|RECEIVED|AI \(SHARE SUGGESTION\)|[^:\n]+ SHARED WITH YOU)",
+    re.I,
+)
+
+
+def check_transcript_shared_context_blocks_labeled(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
+    evidence: list[str] = []
+    for path, text in transcripts:
+        for match in SEPARATOR_BLOCK_RE.finditer(text):
+            body = match.group("body").strip()
+            if not body:
+                continue
+            first_line = body.splitlines()[0].strip()
+            if LABELED_SHARED_BLOCK_RE.search(first_line):
+                continue
+            if first_line.startswith("**"):
+                continue
+            snippet = " ".join(body.split())[:160]
+            evidence.append(f"{path.name}: unlabeled separator block: {snippet}")
+            if len(evidence) >= 10:
+                break
+    return invariant_result(
+        "transcript_shared_context_blocks_labeled",
+        not evidence,
+        owner="eval_harness",
+        dimension="transcript_extraction",
+        details="Stable transcript separator blocks must carry explicit labels so private suggestions and shared events are not confused.",
+        evidence=evidence,
+    )
+
+
 def run_invariant_checks(run_dir: Path, run_data: dict[str, Any], scenario: str, max_stage: int) -> dict[str, Any]:
     transcripts = read_transcript_texts(run_data.get("transcripts") or [])
     checks: list[dict[str, Any]] = []
     checks.append(check_no_visible_control_tags(transcripts))
     checks.extend(check_transcript_side_stage_metadata(transcripts, scenario, max_stage))
+    checks.append(check_transcript_shared_context_blocks_labeled(transcripts))
     checks.append(check_partner_private_leakage(transcripts))
     checks.append(check_stage_limit_reached(run_data, scenario, max_stage))
     checks.append(check_actor_operated_correct_side(run_data, scenario))
+    checks.append(check_session_started_with_profile_initiator(run_data, scenario))
     checks.append(check_felt_heard_gate_after_witnessing(transcripts))
+    checks.append(check_chat_copy_has_visible_input(transcripts))
     hard_failures = [check for check in checks if check["severity"] == "hard" and check["status"] == "fail"]
     result = {
         "schema_version": 1,
@@ -1377,6 +1704,21 @@ def apply_invariants_to_score(score: dict[str, Any], invariants: dict[str, Any],
         score["hard_invariants"] = []
         return score
     score["hard_invariants"] = hard_failures
+    not_evaluable_failures = [
+        failure for failure in hard_failures
+        if failure.get("dimension") in {"actor_orchestration", "transcript_extraction"}
+        or failure.get("id") in {"stage_limit_reached_correctly", "transcript_side_stage_complete"}
+    ]
+    if not_evaluable_failures:
+        score["evaluation_scope"] = {
+            **(score.get("evaluation_scope") if isinstance(score.get("evaluation_scope"), dict) else {}),
+            "prompt_quality": "not_evaluable_for_prompt_quality",
+            "reasons": [failure.get("id") for failure in not_evaluable_failures],
+        }
+        gold_alignment = score.get("gold_alignment") if isinstance(score.get("gold_alignment"), dict) else {}
+        gold_alignment["status"] = "not_evaluable_for_prompt_quality"
+        gold_alignment["notes"] = "Prompt-quality conclusions are blocked by seeding/access/orchestration/transcript failures."
+        score["gold_alignment"] = gold_alignment
     score["verdict"] = "eval_fail"
     try:
         current = float(score.get("overall_score"))
@@ -1647,6 +1989,12 @@ def run_scorer(
     mock: bool = False,
 ) -> dict[str, Any]:
     score_path = run_dir / "score.json"
+    profile_path = scenario_gold_profile_path(scenario)
+    profile_instruction = (
+        f"Gold scenario profile: {profile_path}\nUse this transcript-derived profile to decide what the gold example makes important: process shape, participant resistance, emotional access, non-concessions, and actor risks."
+        if profile_path
+        else "Gold scenario profile: none available. Infer scenario priorities directly from the golden transcript evidence."
+    )
     if mock:
         score = {
             "schema_version": 1,
@@ -1685,12 +2033,14 @@ Read this MWF gold-session run directory and write the final score JSON to:
 
 Run directory: {run_dir}
 Scenario: {scenario}
+{profile_instruction}
 
 {regression_context_prompt(regression_context or {"status": "none"})}
 
 Use transcripts/*.md as the primary evidence when present; use codex-*.jsonl only to understand execution errors or missing transcript gaps.
+If seeding, access control, browser orchestration, or transcript extraction failed before both sides produced usable stage evidence, mark prompt-quality/MWF-quality conclusions as not_evaluable_for_prompt_quality and route the primary target to eval_harness or product_code instead of scoring the MWF prompt as if the conversation completed.
 When prior context is available, compare this run against the previous score, gold_alignment, improvement_targets, and patch/proposal artifacts. Identify likely regression causes when score drops.
-Use the golden references and rubric in the meet-without-fear repo. The output must be valid JSON matching the rubric shape from docs/product/gold-flow-eval-harness-spec.md.
+Use the golden references, gold scenario profile, and rubric in the meet-without-fear repo. The output must be valid JSON matching the rubric shape from docs/product/gold-flow-eval-harness-spec.md.
 """
     last = run_dir / "scorer.last.md"
     jsonl = run_dir / "codex-scorer.jsonl"
@@ -2451,7 +2801,7 @@ def run_stage1_smoke(args: argparse.Namespace) -> int:
     write_run_json(run_dir, run_data)
 
     try:
-        status = run_codex_actor(adam, eve, session_id, 1, run_dir, args.actor_timeout)
+        status = run_codex_actor(adam, eve, session_id, 1, run_dir, args.actor_timeout, "adam-eve")
     finally:
         run_data["browser_cleanup"] = close_agent_browser_sessions([browser_session_name("adam", session_id)])
         write_run_json(run_dir, run_data)
@@ -2597,14 +2947,17 @@ def run_iteration(
     run_dir.mkdir(parents=True, exist_ok=True)
 
     first_character, second_character = SCENARIOS[args.scenario]
+    role_shape = infer_role_shape_from_profile(args.scenario)
+    start_character = scenario_start_character(args.scenario)
+    start_partner_character = next(character for character in (first_character, second_character) if character != start_character)
     start_info: dict[str, Any] = {"mode": "mock" if args.mock_actor else "fresh"}
     if args.mock_actor:
         session = {
             "SESSION_ID": f"mock-session-{iteration}",
-            "ASSIGNED_CHARACTER": first_character,
-            "PARTNER_CHARACTER": second_character,
-            "ASSIGNED_URL": f"{args.app_url}/session/mock-session-{iteration}?e2e-user-id=mock-{first_character.lower()}",
-            "PARTNER_URL": f"{args.app_url}/session/mock-session-{iteration}?e2e-user-id=mock-{second_character.lower()}",
+            "ASSIGNED_CHARACTER": start_character,
+            "PARTNER_CHARACTER": start_partner_character,
+            "ASSIGNED_URL": f"{args.app_url}/session/mock-session-{iteration}?e2e-user-id=mock-{start_character.lower()}",
+            "PARTNER_URL": f"{args.app_url}/session/mock-session-{iteration}?e2e-user-id=mock-{start_partner_character.lower()}",
         }
     elif args.from_snapshot:
         start_info = restore_snapshot(args.from_snapshot, run_dir)
@@ -2615,7 +2968,7 @@ def run_iteration(
         session = seeded_session_from_target_stage(args.scenario, args.seed_target_stage, args.api_url, args.app_url)
         start_info = {"mode": "target_stage", "target_stage": args.seed_target_stage, "session_id": session["SESSION_ID"]}
     else:
-        session = create_gold_session(first_character, args.api_url, args.app_url)
+        session = create_gold_session(start_character, args.api_url, args.app_url)
 
     session_id = session["SESSION_ID"]
     actors = {
@@ -2641,6 +2994,11 @@ def run_iteration(
         "prompt_skill_versions": prompt_skill_versions,
         "prompt_skill_version_changes": prompt_skill_version_changes,
         "start": start_info,
+        "role_shape": role_shape,
+        "session_roles": {
+            "assigned_character": session["ASSIGNED_CHARACTER"],
+            "partner_character": session["PARTNER_CHARACTER"],
+        },
         "services": service_info,
         "created_at": datetime.now().isoformat(),
         "urls": {side: actor.url for side, actor in actors.items()},
@@ -2662,7 +3020,15 @@ def run_iteration(
             if args.mock_actor:
                 status = run_mock_actor(actor, partner, session_id, args.stop_after_stage, run_dir, args.actor_timeout)
             else:
-                status = run_codex_actor(actor, partner, session_id, args.stop_after_stage, run_dir, args.actor_timeout)
+                status = run_codex_actor(
+                    actor,
+                    partner,
+                    session_id,
+                    args.stop_after_stage,
+                    run_dir,
+                    args.actor_timeout,
+                    args.scenario,
+                )
             last_side = actor.side
             run_data["codex_sessions"][actor.side] = actor.codex_session_id
             status_history.append({"side": actor.side, "turn": actor.turns, "status": asdict(status), "at": datetime.now().isoformat()})

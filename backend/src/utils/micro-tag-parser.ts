@@ -126,11 +126,27 @@ function stripVisibleProposedStrategyLines(responseText: string): {
   };
 }
 
+function extractBooleanControlTag(rawResponse: string, tagName: string): boolean | null {
+  const tagPattern = tagName.replace(/_/g, '[_-]?');
+  const match = rawResponse.match(new RegExp(`<${tagPattern}>\\s*([YN])\\s*<\\/${tagPattern}>`, 'i'));
+  if (!match) return null;
+  return match[1].toUpperCase() === 'Y';
+}
+
+function stripKnownControlTags(rawResponse: string): string {
+  return rawResponse
+    .replace(/<feel[_-]?heard[_-]?check>\s*[YN]\s*<\/feel[_-]?heard[_-]?check>/gi, '')
+    .replace(/<ready[_-]?share>\s*[YN]\s*<\/ready[_-]?share>/gi, '');
+}
+
 /**
  * Parse the micro-tag response format.
  * Extracts semantic blocks and flags from the raw AI response.
  */
 export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagResponse {
+  const feelHeardControlTag = extractBooleanControlTag(rawResponse, 'feel_heard_check');
+  const readyShareControlTag = extractBooleanControlTag(rawResponse, 'ready_share');
+
   // 1. Extract blocks using regex
   const thinkingMatch = rawResponse.match(/<thinking>([\s\S]*?)<\/thinking>/i);
   const draftMatch = rawResponse.match(/<draft>([\s\S]*?)<\/draft>/i);
@@ -150,6 +166,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
     .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '')
     .trim();
+  responseText = stripKnownControlTags(responseText).trim();
 
   // If everything landed inside tags, leave response empty and let the caller
   // decide what to do. A dispatch handler may still fill it in; otherwise the
@@ -167,8 +184,8 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
   responseText = strippedVisibleStrategies.responseText;
 
   // 3. Extract flags from thinking string (no JSON needed!)
-  const offerFeelHeardCheck = /FeelHeardCheck:\s*Y/i.test(thinking);
-  const offerReadyToShare = /ReadyShare:\s*Y/i.test(thinking);
+  const offerFeelHeardCheck = feelHeardControlTag ?? /FeelHeardCheck:\s*Y/i.test(thinking);
+  const offerReadyToShare = readyShareControlTag ?? /ReadyShare:\s*Y/i.test(thinking);
 
   // 4. Extract proposed strategies from thinking (Stage 4)
   const proposedStrategies: string[] = [];

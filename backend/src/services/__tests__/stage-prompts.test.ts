@@ -378,6 +378,20 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('FOUR MODES');
     });
 
+    it('Stage 1 → Stage 2 transition preserves non-agreement and avoids research framing', () => {
+      const context = createContext();
+      const options: BuildStagePromptOptions = {
+        isStageTransition: true,
+        previousStage: 1,
+      };
+      const prompt = fullPrompt(buildStagePrompt(2, context, options));
+
+      expect(prompt).toContain('not about excusing, agreeing, or deciding what happens next');
+      expect(prompt).toContain('without selling repair or agreement');
+      expect(prompt).not.toContain('research');
+      expect(prompt).not.toContain('working things out');
+    });
+
     it('returns transition injection + regular Stage 3 prompt for Stage 2 → Stage 3', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = {
@@ -494,6 +508,16 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('PERSPECTIVE AWARENESS');
     });
 
+    it('Stage 1 prompt requires deeper gating for long-running high-conflict patterns', () => {
+      const context = createContext({ turnCount: 6, emotionalIntensity: 7 });
+      const prompt = fullPrompt(buildStagePrompt(1, context));
+
+      expect(prompt).toContain('HIGH-CONFLICT / LONG-RUNNING CASES');
+      expect(prompt).toContain('Do not offer the felt-heard gate after only naming the pattern');
+      expect(prompt).toContain('what they have already tried');
+      expect(prompt).toContain('understanding the other person is not the same as excusing impact');
+    });
+
     it('uses regular Stage 2 prompt when not transitioning', () => {
       const context = createContext({ turnCount: 5 });
       const options: BuildStagePromptOptions = {
@@ -504,6 +528,29 @@ describe('Stage Prompts Service', () => {
       // Should be regular perspective prompt, not transition
       expect(prompt).toContain('LISTENING:');
       expect(prompt).toContain('BRIDGING:');
+    });
+
+    it('Stage 2 prompt guards against premature empathy drafts under resistance', () => {
+      const context = createContext({ turnCount: 4, emotionalIntensity: 6 });
+      const prompt = fullPrompt(buildStagePrompt(2, context));
+
+      expect(prompt).toContain('Stage 2 is not a speed run to a draft');
+      expect(prompt).toContain('at least 4 substantive Stage 2 turns');
+      expect(prompt).toContain('unfairness, anger, fear, resentment');
+      expect(prompt).toContain('Does that feel like your real attempt');
+      expect(prompt).toContain('ReadyShare guard: TOO EARLY');
+    });
+
+    it('Stage 2 refinement mode can update an existing draft without the early draft guard', () => {
+      const context = createContext({
+        turnCount: 2,
+        empathyDraft: 'I think you feel unseen.',
+        isRefiningEmpathy: true,
+      });
+      const prompt = fullPrompt(buildStagePrompt(2, context));
+
+      expect(prompt).toContain('REFINEMENT MODE');
+      expect(prompt).not.toContain('ReadyShare guard: TOO EARLY');
     });
   });
 
@@ -699,6 +746,7 @@ describe('Stage Prompts Service', () => {
       // The flag instruction is in format "FeelHeardCheck: [Y if ready..., N otherwise]"
       expect(prompt).toContain('FeelHeardCheck:');
       expect(prompt).toMatch(/FeelHeardCheck.*Y.*N/s);
+      expect(prompt).toContain('Do NOT invite more freeform chat unless the input remains visible');
     });
 
     it('Stage 2 protocol includes ReadyShare flag instruction', () => {
@@ -709,6 +757,7 @@ describe('Stage Prompts Service', () => {
       // The flag instruction is in format "ReadyShare: [Y if ready..., N otherwise]"
       expect(prompt).toContain('ReadyShare:');
       expect(prompt).toMatch(/ReadyShare.*Y.*N/s);
+      expect(prompt).toContain('Do NOT invite more freeform chat unless the input remains visible');
     });
 
     it('Stage 0 protocol instructs the AI to emit a topic via <draft> tags', () => {
@@ -718,6 +767,7 @@ describe('Stage Prompts Service', () => {
 
       // Stage 0 now emits the proposed TOPIC inline as <draft> (not an invitation message).
       expect(prompt).toContain('<draft>');
+      expect(prompt).toContain('without inviting freeform chat unless the input remains visible');
     });
 
     it('protocol includes dispatch tag instruction', () => {

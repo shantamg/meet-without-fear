@@ -138,7 +138,5 @@ test-results/
 backend/test-results/
 mobile/test-results/
 
-# Moment evaluator local artifacts (run outputs, caches, real-mode transcripts)
-eval/runs/
+# Moment evaluator local artifacts (Python cache only — run artifacts go in PRs as evidence)
 scripts/__pycache__/
-backend/scripts/transcripts/

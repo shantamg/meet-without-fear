@@ -64,7 +64,7 @@ export interface ChatTimelineProps {
   onHighEmotion?: (value: number) => void;
   /** Use compact emotion slider */
   compactEmotionSlider?: boolean;
-  /** Render content above the input */
+  /** Render guided action content after the input so chat remains attached to the transcript. */
   renderAboveInput?: () => React.ReactNode;
   /** Keyboard vertical offset for iOS */
   keyboardVerticalOffset?: number;
@@ -353,13 +353,13 @@ export function ChatTimeline({
             testID="chat-emotion-slider"
           />
         )}
-        {renderAboveInput?.()}
         {!hideInput && (
           <ChatInput
             onSend={onSendMessage}
             disabled={isInputDisabled}
           />
         )}
+        {renderAboveInput?.()}
       </View>
     </KeyboardAvoidingView>
   );

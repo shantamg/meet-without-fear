@@ -18,25 +18,43 @@
 
 ## Score Trends
 
-- `stage-1-emotional-pivot`: 4.2 eval_pass (moment-stage-1-emotional-pivot-20260506-073924-iter-01), 4.2 eval_pass (moment-stage-1-emotional-pivot-20260506-073929-iter-01), 4.2 eval_pass (moment-stage-1-emotional-pivot-20260506-073945-iter-01), 4.2 eval_pass (moment-stage-1-emotional-pivot-20260506-073949-iter-01), 4.2 eval_pass (moment-stage-1-emotional-pivot-20260506-074638-iter-01)
-- `stage-1-fact-reflection`: 2.77 eval_fail (moment-stage-1-fact-reflection-20260506-073924-iter-01), 2.77 eval_fail (moment-stage-1-fact-reflection-20260506-073929-iter-01), 2.77 eval_fail (moment-stage-1-fact-reflection-20260506-073946-iter-01), 2.77 eval_fail (moment-stage-1-fact-reflection-20260506-073949-iter-01), 2.77 eval_fail (moment-stage-1-fact-reflection-20260506-074638-iter-01)
-- `stage-1-trajectory-fact-to-handoff`: 2.8 eval_fail (moment-stage-1-trajectory-fact-to-handoff-20260506-073314-iter-01), 4.2 eval_pass (moment-stage-1-trajectory-fact-to-handoff-20260506-073924-iter-01), 4.2 eval_pass (moment-stage-1-trajectory-fact-to-handoff-20260506-073946-iter-01), 4.2 eval_pass (moment-stage-1-trajectory-fact-to-handoff-20260506-074638-iter-01)
-- `stage-2-empathy-validation`: 4.5 eval_pass (moment-stage-2-empathy-validation-20260506-072249-iter-01), 0.0 eval_fail (moment-stage-2-empathy-validation-20260506-072411-iter-01), 4.2 eval_pass (moment-stage-2-empathy-validation-20260506-073924-iter-01), 4.2 eval_pass (moment-stage-2-empathy-validation-20260506-073946-iter-01), 4.2 eval_pass (moment-stage-2-empathy-validation-20260506-074638-iter-01)
-- `stage-2-refinement-round`: 2.8 eval_fail (moment-stage-2-refinement-round-20260506-072020-iter-01), 0.97 eval_fail (moment-stage-2-refinement-round-20260506-072423-iter-01), 4.2 eval_pass (moment-stage-2-refinement-round-20260506-073924-iter-01), 4.2 eval_pass (moment-stage-2-refinement-round-20260506-073946-iter-01), 4.2 eval_pass (moment-stage-2-refinement-round-20260506-074638-iter-01)
-- `stage-2-trajectory-empathy-cycle`: 4.2 eval_pass (moment-stage-2-trajectory-empathy-cycle-20260506-073924-iter-01), 4.2 eval_pass (moment-stage-2-trajectory-empathy-cycle-20260506-073946-iter-01), 4.2 eval_pass (moment-stage-2-trajectory-empathy-cycle-20260506-074638-iter-01)
-- `stage-3-mutual-reveal`: 3.27 eval_fail (moment-stage-3-mutual-reveal-20260506-072028-iter-01), 0.67 eval_fail (moment-stage-3-mutual-reveal-20260506-072435-iter-01), 4.2 eval_pass (moment-stage-3-mutual-reveal-20260506-073924-iter-01), 4.2 eval_pass (moment-stage-3-mutual-reveal-20260506-073946-iter-01), 4.2 eval_pass (moment-stage-3-mutual-reveal-20260506-074638-iter-01)
-- `stage-3-trajectory-needs-flow`: 4.2 eval_pass (moment-stage-3-trajectory-needs-flow-20260506-073210-iter-01), 4.2 eval_pass (moment-stage-3-trajectory-needs-flow-20260506-073924-iter-01), 4.2 eval_pass (moment-stage-3-trajectory-needs-flow-20260506-073946-iter-01), 4.2 eval_pass (moment-stage-3-trajectory-needs-flow-20260506-074638-iter-01)
-- `stage-3-validity-gate`: 2.8 eval_fail (moment-stage-3-validity-gate-20260506-072035-iter-01), 0.33 eval_fail (moment-stage-3-validity-gate-20260506-072445-iter-01), 4.2 eval_pass (moment-stage-3-validity-gate-20260506-073924-iter-01), 4.2 eval_pass (moment-stage-3-validity-gate-20260506-073946-iter-01), 4.2 eval_pass (moment-stage-3-validity-gate-20260506-074638-iter-01)
-- `stage-4-no-shared-agreement`: 3.1 eval_fail (moment-stage-4-no-shared-agreement-20260506-072042-iter-01), 4.33 eval_fail (moment-stage-4-no-shared-agreement-20260506-072454-iter-01), 4.07 eval_pass (moment-stage-4-no-shared-agreement-20260506-073924-iter-01), 4.07 eval_pass (moment-stage-4-no-shared-agreement-20260506-073946-iter-01), 4.07 eval_pass (moment-stage-4-no-shared-agreement-20260506-074638-iter-01)
-- `stage-4-no-shared-agreement-closure`: 2.83 eval_fail (moment-stage-4-no-shared-agreement-closure-20260506-072052-iter-01), 4.0 eval_pass (moment-stage-4-no-shared-agreement-closure-20260506-072507-iter-01), 4.17 eval_pass (moment-stage-4-no-shared-agreement-closure-20260506-073924-iter-01), 4.17 eval_pass (moment-stage-4-no-shared-agreement-closure-20260506-073946-iter-01), 4.17 eval_pass (moment-stage-4-no-shared-agreement-closure-20260506-074638-iter-01)
-- `stage-4-trajectory-willingness-to-close`: 4.2 eval_pass (moment-stage-4-trajectory-willingness-to-close-20260506-073924-iter-01), 4.2 eval_pass (moment-stage-4-trajectory-willingness-to-close-20260506-073946-iter-01), 4.2 eval_pass (moment-stage-4-trajectory-willingness-to-close-20260506-074638-iter-01)
-- `stage-4-willingness-selection`: 3.27 eval_fail (moment-stage-4-willingness-selection-20260506-072104-iter-01), 0.0 eval_fail (moment-stage-4-willingness-selection-20260506-072522-iter-01), 4.2 eval_pass (moment-stage-4-willingness-selection-20260506-073924-iter-01), 4.2 eval_pass (moment-stage-4-willingness-selection-20260506-073946-iter-01), 4.2 eval_pass (moment-stage-4-willingness-selection-20260506-074638-iter-01)
-- `transition-stage-2-to-3`: 3.27 eval_fail (moment-transition-stage-2-to-3-20260506-072113-iter-01), 0.6 eval_fail (moment-transition-stage-2-to-3-20260506-072540-iter-01), 4.2 eval_pass (moment-transition-stage-2-to-3-20260506-073924-iter-01), 4.2 eval_pass (moment-transition-stage-2-to-3-20260506-073946-iter-01), 4.2 eval_pass (moment-transition-stage-2-to-3-20260506-074638-iter-01)
+- `adam-eve-stage-1-consent-gate-67`: 3.5 eval_warn (moment-adam-eve-stage-1-consent-gate-67-20260506-085352-iter-01)
+- `adam-eve-stage-1-fact-reflection-47`: 3.5 eval_warn (moment-adam-eve-stage-1-fact-reflection-47-20260506-085352-iter-01)
+- `adam-eve-stage-2-consent-gate-169`: 3.5 eval_warn (moment-adam-eve-stage-2-consent-gate-169-20260506-085352-iter-01)
+- `adam-eve-stage-2-emotional-handling-141`: 3.5 eval_warn (moment-adam-eve-stage-2-emotional-handling-141-20260506-085352-iter-01)
+- `adam-eve-stage-2-fact-reflection-286`: 3.5 eval_warn (moment-adam-eve-stage-2-fact-reflection-286-20260506-085352-iter-01)
+- `adam-eve-stage-3-fact-reflection-408`: 3.5 eval_warn (moment-adam-eve-stage-3-fact-reflection-408-20260506-085352-iter-01)
+- `adam-eve-stage-3-validation-564`: 3.5 eval_warn (moment-adam-eve-stage-3-validation-564-20260506-085352-iter-01)
+- `adam-eve-stage-4-willingness-selection-975`: 3.5 eval_warn (moment-adam-eve-stage-4-willingness-selection-975-20260506-085352-iter-01)
+- `core-protocol-update-stage-2-emotional-handling-84`: 3.5 eval_warn (moment-core-protocol-update-stage-2-emotional-handling-84-20260506-085352-iter-01)
+- `core-protocol-update-stage-3-fact-reflection-137`: 3.5 eval_fail (moment-core-protocol-update-stage-3-fact-reflection-137-20260506-085352-iter-01)
+- `james-catherine-stage-1-fact-reflection-99`: 3.5 eval_warn (moment-james-catherine-stage-1-fact-reflection-99-20260506-085352-iter-01)
+- `james-catherine-stage-2-consent-gate-292`: 3.5 eval_warn (moment-james-catherine-stage-2-consent-gate-292-20260506-085352-iter-01)
+- `james-catherine-stage-2-emotional-handling-237`: 3.5 eval_warn (moment-james-catherine-stage-2-emotional-handling-237-20260506-085352-iter-01)
+- `james-catherine-stage-2-fact-reflection-285`: 3.5 eval_warn (moment-james-catherine-stage-2-fact-reflection-285-20260506-085352-iter-01)
+- `james-catherine-stage-3-validation-683`: 3.5 eval_warn (moment-james-catherine-stage-3-validation-683-20260506-085352-iter-01)
+- `james-catherine-stage-4-emotional-handling-1112`: 3.5 eval_warn (moment-james-catherine-stage-4-emotional-handling-1112-20260506-085352-iter-01)
+- `james-catherine-stage-4-fact-reflection-818`: 3.5 eval_warn (moment-james-catherine-stage-4-fact-reflection-818-20260506-085352-iter-01)
+- `james-catherine-stage-4-willingness-selection-944`: 3.5 eval_warn (moment-james-catherine-stage-4-willingness-selection-944-20260506-085352-iter-01)
+- `stage-1-emotional-pivot`: 4.2 eval_pass (moment-stage-1-emotional-pivot-20260506-085352-iter-01)
+- `stage-1-fact-reflection`: 2.77 eval_fail (moment-stage-1-fact-reflection-20260506-085352-iter-01)
+- `stage-1-trajectory-fact-to-handoff`: 4.2 eval_pass (moment-stage-1-trajectory-fact-to-handoff-20260506-085352-iter-01)
+- `stage-2-empathy-validation`: 4.2 eval_pass (moment-stage-2-empathy-validation-20260506-085352-iter-01)
+- `stage-2-refinement-round`: 4.2 eval_pass (moment-stage-2-refinement-round-20260506-085352-iter-01)
+- `stage-2-trajectory-empathy-cycle`: 4.2 eval_pass (moment-stage-2-trajectory-empathy-cycle-20260506-085352-iter-01)
+- `stage-3-mutual-reveal`: 4.2 eval_pass (moment-stage-3-mutual-reveal-20260506-085352-iter-01)
+- `stage-3-trajectory-needs-flow`: 4.2 eval_pass (moment-stage-3-trajectory-needs-flow-20260506-085352-iter-01)
+- `stage-3-validity-gate`: 4.2 eval_pass (moment-stage-3-validity-gate-20260506-085352-iter-01)
+- `stage-4-no-shared-agreement`: 4.07 eval_pass (moment-stage-4-no-shared-agreement-20260506-085352-iter-01)
+- `stage-4-no-shared-agreement-closure`: 4.17 eval_pass (moment-stage-4-no-shared-agreement-closure-20260506-085352-iter-01)
+- `stage-4-trajectory-willingness-to-close`: 4.2 eval_pass (moment-stage-4-trajectory-willingness-to-close-20260506-085352-iter-01)
+- `stage-4-willingness-selection`: 4.2 eval_pass (moment-stage-4-willingness-selection-20260506-085352-iter-01)
+- `transition-stage-2-to-3`: 4.2 eval_pass (moment-transition-stage-2-to-3-20260506-085352-iter-01)
 
 ## Cost
 
-- This week: `92.0` cents
-- This month: `92.0` cents
+- This week: `296.0` cents
+- This month: `296.0` cents
 
 ## Last E2E Outer Loop
 
@@ -47,3 +65,9 @@
 - `docs/product/source-material/golden-transcripts/adam-eve.md`
 - `docs/product/source-material/golden-transcripts/core-protocol-update.md`
 - `docs/product/source-material/golden-transcripts/james-catherine.md`
+
+## Coverage Check
+
+- `adam-eve`: 9 covered, 5 missing
+- `core-protocol-update`: 3 covered, 11 missing
+- `james-catherine`: 8 covered, 7 missing
