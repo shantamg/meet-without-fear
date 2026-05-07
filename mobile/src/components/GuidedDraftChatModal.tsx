@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
-import { colors } from '@/theme';
+import { appWidthStyle, colors, modalPageStyle } from '@/theme';
 import { ChatInterface, ChatMessage } from './ChatInterface';
 
 export interface GuidedDraftMessage extends ChatMessage {
@@ -108,38 +108,44 @@ export function GuidedDraftChatModal({
       onRequestClose={onClose}
       testID={testID}
     >
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
-          <Text style={styles.headerTitle}>{title}</Text>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={onClose}
-            testID={`${testID}-close`}
-          >
-            <X color={colors.textPrimary} size={24} />
-          </TouchableOpacity>
-        </View>
+      <View style={styles.modalPage}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+          <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
+            <Text style={styles.headerTitle}>{title}</Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={onClose}
+              testID={`${testID}-close`}
+            >
+              <X color={colors.textPrimary} size={24} />
+            </TouchableOpacity>
+          </View>
 
-        <ChatInterface
-          sessionId={sessionKey}
-          messages={messages}
-          onSendMessage={onSendMessage}
-          isLoading={isLoading}
-          isInputDisabled={isFinalizing}
-          partnerName={partnerName}
-          renderMessageExtra={renderMessageExtra}
-          emptyStateTitle={emptyStateTitle}
-          emptyStateMessage={emptyStateMessage}
-        />
-      </SafeAreaView>
+          <ChatInterface
+            sessionId={sessionKey}
+            messages={messages}
+            onSendMessage={onSendMessage}
+            isLoading={isLoading}
+            isInputDisabled={isFinalizing}
+            partnerName={partnerName}
+            renderMessageExtra={renderMessageExtra}
+            emptyStateTitle={emptyStateTitle}
+            emptyStateMessage={emptyStateMessage}
+          />
+        </SafeAreaView>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalPage: {
+    ...modalPageStyle,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.bgPrimary,
+    ...appWidthStyle,
   },
   header: {
     flexDirection: 'row',

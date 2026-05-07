@@ -58,6 +58,7 @@ import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
 import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
 import { TypewriterText } from '../components/TypewriterText';
+import { GuidedActionPanel } from '../components/GuidedActionPanel';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { useConfirmTopicFrame } from '../hooks/useSessions';
@@ -90,6 +91,7 @@ import {
 } from '../utils/realtimeInvalidation';
 import { useToast } from '../contexts/ToastContext';
 import { createStyles } from '../theme/styled';
+import { appWidthStyle } from '../theme';
 import { WaitingBanner } from '../components/WaitingBanner';
 import {
   trackInvitationSent,
@@ -2451,29 +2453,20 @@ export function UnifiedSessionScreen({
       case 'topic-proposal':
         if (!topicFrame) return undefined;
         return (
-          <View style={styles.topicProposalContainer} testID="topic-proposal-panel">
-            <Text style={styles.topicProposalLabel}>Proposed topic</Text>
-            <Text style={styles.topicProposalText}>{topicFrame}</Text>
-            <Text style={styles.topicProposalHint}>To change it, just tell me below.</Text>
-            <View style={styles.topicProposalActions}>
-              <TouchableOpacity
-                style={[
-                  styles.topicProposalButton,
-                  styles.topicProposalPrimaryButton,
-                  isConfirmingTopicFrame && styles.topicProposalButtonDisabled,
-                ]}
-                onPress={handleConfirmTopicFrame}
-                disabled={isConfirmingTopicFrame}
-                testID="topic-proposal-use-button"
-              >
-                {isConfirmingTopicFrame ? (
-                  <ActivityIndicator size="small" color={styles.topicProposalPrimaryButtonText.color} />
-                ) : (
-                  <Text style={styles.topicProposalPrimaryButtonText}>Use this topic</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+          <GuidedActionPanel
+            tone="topic"
+            eyebrow="Topic frame"
+            title={topicFrame}
+            subtitle="This stays above the input at the end of Stage 0. To change it, tell me below."
+            primaryAction={{
+              label: 'Use this topic',
+              onPress: handleConfirmTopicFrame,
+              disabled: isConfirmingTopicFrame,
+              loading: isConfirmingTopicFrame,
+              testID: 'topic-proposal-use-button',
+            }}
+            testID="topic-proposal-panel"
+          />
         );
 
       case 'feel-heard':
@@ -2495,17 +2488,15 @@ export function UnifiedSessionScreen({
             }}
             pointerEvents="auto"
           >
-            <View style={styles.feelHeardContainer}>
-              <FeelHeardConfirmation
-                onConfirm={() => {
-                  // Track felt heard response
-                  trackFeltHeardResponse(sessionId, 'yes');
-                  // Cache-First: useConfirmFeelHeard.onMutate sets milestones.feelHeardConfirmedAt optimistically
-                  handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
-                }}
-                isPending={isConfirmingFeelHeard}
-              />
-            </View>
+            <FeelHeardConfirmation
+              onConfirm={() => {
+                // Track felt heard response
+                trackFeltHeardResponse(sessionId, 'yes');
+                // Cache-First: useConfirmFeelHeard.onMutate sets milestones.feelHeardConfirmedAt optimistically
+                handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
+              }}
+              isPending={isConfirmingFeelHeard}
+            />
           </Animated.View>
         );
 
@@ -2528,18 +2519,20 @@ export function UnifiedSessionScreen({
             }}
             pointerEvents={!isSharingEmpathy ? 'auto' : 'none'}
           >
-            <View style={styles.empathyReviewContainer}>
-              <TouchableOpacity
-                style={styles.empathyReviewButton}
-                onPress={() => setShowEmpathyDrawer(true)}
-                activeOpacity={0.7}
-                testID="empathy-review-button"
-              >
-                <Text style={styles.empathyReviewButtonText}>
-                  {isRefiningEmpathy ? 'Revisit what you\'ll share' : 'Review what you\'ll share'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <GuidedActionPanel
+              tone="review"
+              eyebrow={isRefiningEmpathy ? 'Revision' : 'Empathy draft'}
+              title={isRefiningEmpathy ? 'Revisit what you’ll share' : 'Review what you’ll share'}
+              subtitle={isRefiningEmpathy
+                ? `${partnerName} shared more context. Check whether your understanding should change.`
+                : `Open your draft before sending it to ${partnerName}.`}
+              primaryAction={{
+                label: 'Review',
+                onPress: () => setShowEmpathyDrawer(true),
+                testID: 'empathy-review-button',
+              }}
+              testID="empathy-review-panel"
+            />
           </Animated.View>
         );
 
@@ -2605,22 +2598,22 @@ export function UnifiedSessionScreen({
             }}
             pointerEvents="auto"
           >
-            <View style={styles.needsReviewContainer}>
-              <TouchableOpacity
-                style={styles.needsReviewButton}
-                onPress={() => {
+            <GuidedActionPanel
+              tone="needs"
+              eyebrow="Needs review"
+              title="Review needs together"
+              subtitle="Open both needs lists side by side before continuing."
+              primaryAction={{
+                label: 'Review',
+                onPress: () => {
                   setShowActivityMenu(false);
                   setNeedsDrawerMode('reveal');
                   setShowNeedsDrawer(true);
-                }}
-                activeOpacity={0.7}
-                testID="needs-reveal-validate-button"
-              >
-                <Text style={styles.needsReviewButtonText}>
-                  Review needs together
-                </Text>
-              </TouchableOpacity>
-            </View>
+                },
+                testID: 'needs-reveal-validate-button',
+              }}
+              testID="needs-reveal-validate-panel"
+            />
           </Animated.View>
         );
 
@@ -3563,6 +3556,7 @@ const useStyles = () =>
     container: {
       flex: 1,
       backgroundColor: t.colors.bgPrimary,
+      ...appWidthStyle,
     },
     content: {
       flex: 1,
@@ -3824,129 +3818,7 @@ const useStyles = () =>
       lineHeight: 28,
       textAlign: 'center' as const,
     },
-    topicProposalContainer: {
-      marginHorizontal: t.spacing.lg,
-      marginTop: t.spacing.sm,
-      marginBottom: t.spacing.xs,
-      paddingHorizontal: t.spacing.md,
-      paddingTop: t.spacing.lg,
-      paddingBottom: t.spacing.md,
-      borderRadius: t.radius.md,
-      borderWidth: 1,
-      borderColor: t.colors.border,
-      backgroundColor: t.colors.bgPrimary,
-    },
-    topicProposalLabel: {
-      fontSize: t.typography.fontSize.sm,
-      color: t.colors.textSecondary,
-      fontWeight: '600' as const,
-      marginBottom: t.spacing.sm,
-    },
-    topicProposalText: {
-      fontSize: t.typography.fontSize.lg,
-      color: t.colors.textPrimary,
-      fontWeight: '600' as const,
-      lineHeight: 30,
-      marginBottom: t.spacing.sm,
-    },
-    topicProposalHint: {
-      fontSize: t.typography.fontSize.sm,
-      color: t.colors.textSecondary,
-      marginBottom: t.spacing.md,
-    },
-    topicProposalActions: {
-      flexDirection: 'row',
-      gap: t.spacing.sm,
-      marginTop: t.spacing.md,
-    },
-    topicProposalButton: {
-      flex: 1,
-      minHeight: 40,
-      borderRadius: t.radius.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: t.spacing.md,
-    },
-    topicProposalPrimaryButton: {
-      backgroundColor: t.colors.accent,
-    },
-    topicProposalSecondaryButton: {
-      backgroundColor: t.colors.bgSecondary,
-      borderWidth: 1,
-      borderColor: t.colors.border,
-    },
-    topicProposalButtonDisabled: {
-      opacity: 0.6,
-    },
-    topicProposalPrimaryButtonText: {
-      color: t.colors.textOnAccent,
-      fontSize: t.typography.fontSize.md,
-      fontWeight: '600' as const,
-    },
-    topicProposalSecondaryButtonText: {
-      color: t.colors.textPrimary,
-      fontSize: t.typography.fontSize.md,
-      fontWeight: '600' as const,
-    },
-
-    // Feel Heard Panel
-    feelHeardContainer: {
-      backgroundColor: t.colors.bgSecondary,
-      borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-    },
-    // Empathy Review Panel
-    empathyReviewContainer: {
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.md,
-      backgroundColor: t.colors.bgSecondary,
-      borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-    },
-    empathyReviewButton: {
-      paddingVertical: t.spacing.sm,
-      paddingHorizontal: t.spacing.md,
-      backgroundColor: t.colors.bgPrimary,
-      borderRadius: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    empathyReviewButtonText: {
-      fontSize: t.typography.fontSize.md,
-      fontWeight: '500',
-      color: t.colors.brandBlue,
-    },
-
-    // Share Suggestion Panel
-    shareSuggestionContainer: {
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.md,
-      backgroundColor: t.colors.bgSecondary,
-      borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-    },
-    shareSuggestionButton: {
-      paddingVertical: t.spacing.sm,
-      paddingHorizontal: t.spacing.md,
-      backgroundColor: '#005AC1',
-      borderRadius: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    shareSuggestionButtonText: {
-      fontSize: t.typography.fontSize.md,
-      fontWeight: '500',
-      color: 'white',
-    },
-
     // Needs Review Panel (Stage 3)
-    needsReviewContainer: {
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.md,
-      backgroundColor: t.colors.bgSecondary,
-      borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-    },
     needsReviewBelowInputContainer: {
       paddingHorizontal: t.spacing.lg,
       paddingTop: t.spacing.sm,
@@ -3954,47 +3826,6 @@ const useStyles = () =>
       backgroundColor: t.colors.bgSecondary,
       borderTopWidth: 1,
       borderTopColor: t.colors.border,
-    },
-    needsReviewButton: {
-      paddingVertical: t.spacing.sm,
-      paddingHorizontal: t.spacing.md,
-      backgroundColor: t.colors.bgPrimary,
-      borderRadius: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    needsReviewButtonText: {
-      fontSize: t.typography.fontSize.md,
-      fontWeight: '500',
-      color: t.colors.brandBlue,
-    },
-
-    // Needs Validation Panel (Stage 3)
-    needsRevealContainer: {
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.md,
-      backgroundColor: t.colors.bgSecondary,
-      borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-    },
-    needsRevealButton: {
-      paddingVertical: t.spacing.sm,
-      paddingHorizontal: t.spacing.md,
-      backgroundColor: t.colors.bgPrimary,
-      borderRadius: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    needsRevealButtonText: {
-      fontSize: t.typography.fontSize.md,
-      fontWeight: '500',
-      color: t.colors.brandBlue,
-    },
-    noOverlapText: {
-      fontSize: t.typography.fontSize.sm,
-      color: t.colors.textSecondary,
-      textAlign: 'center' as const,
-      marginBottom: t.spacing.sm,
     },
 
     // Inline Cards
