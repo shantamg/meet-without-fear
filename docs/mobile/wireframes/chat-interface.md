@@ -2,7 +2,7 @@
 title: Chat Interface
 sidebar_position: 3
 description: The primary conversation interface where users interact with the AI.
-updated: 2026-05-02
+updated: 2026-05-07
 status: living
 ---
 # Chat Interface
@@ -274,6 +274,20 @@ Not implemented. The message input accepts text only (`sendMessage(message: stri
 ## Integrated emotional barometer
 
 The chat input hosts an inline emotion slider (`barometerValue` / `handleBarometerChange`). Readings ≥9 automatically open the `support-options` overlay to surface coping exercises before the user continues typing.
+
+## Guided Action Panel
+
+`GuidedActionPanel` is a unified component (added in #446) that replaced six separate inline action surfaces with a single consistent pattern. It accepts a `tone` prop that controls color/icon and a `primaryAction` (and optional secondary). Current tones:
+
+| Tone | Used for |
+|---|---|
+| `topic` | Stage 0 — topic-frame confirmation above the input |
+| `review` | Stage 2 — empathy draft review / revisit |
+| `share` | Stage 2 — share suggestion |
+| `success` | Stage 1 — feel-heard confirmation |
+| `needs` | Stage 3 — needs reveal / validate |
+
+Each panel shows an eyebrow label, title, optional subtitle, and one or two action buttons. The input field remains visible while any `GuidedActionPanel` is displayed — it is not hidden by the panel (this is intentional: users can continue the conversation even while an action is pending).
 
 ## Typewriter + inline Stage 2 cards
 
