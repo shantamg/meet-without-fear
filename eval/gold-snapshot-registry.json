@@ -1,6 +1,34 @@
 {
   "snapshots": [
     {
+      "id": "adam-eve-stage2-pass-pre-stage3-cmov9hgv",
+      "scenario": "adam-eve",
+      "snapshot": "backend/snapshots/snapshot-adam-eve-stage2-pass-pre-stage3-cmov9hgv--2026-05-07T15-50-35.sql",
+      "snapshot_session_id": "cmov9hgva0008px8h37a1x1kf",
+      "starts_at_stage": 2,
+      "starts_for": ["Adam", "Eve"],
+      "purpose": "Resume the passing Adam/Eve Stage 2 state near the transition to Stage 3 for focused Stage 3/4 repair loops.",
+      "expected_state": [
+        "Session cmov9hgva0008px8h37a1x1kf is active",
+        "Both participants have completed Stage 1",
+        "Both participants are in Stage 2 with passing Stage 1/2 transcript evidence",
+        "Adam is in REFINING and Eve is AWAITING_SHARING, so one remaining context-share step may be needed before Stage 3"
+      ],
+      "target_behaviors": [
+        "Continue from late Stage 2 without replaying Stage 0 and Stage 1",
+        "Verify Stage 3 Need Mapping and Stage 4 Strategic Repair behavior after the remaining Stage 2 context-share step"
+      ],
+      "required_invariants": [
+        "hard invariants pass",
+        "privacy and transcript directionality remain intact after restore"
+      ],
+      "last_verified": {
+        "run_dir": "eval/runs/20260507-020609-adam-eve-iter-01",
+        "verified_at": "2026-05-07",
+        "result": "source run passed Stage 2 with score 4.0; snapshot restore not yet replay-verified"
+      }
+    },
+    {
       "id": "james-catherine-stage2-pass-pre-stage3-cmovme43",
       "scenario": "james-catherine",
       "snapshot": "backend/snapshots/snapshot-james-catherine-stage2-pass-pre-stage3-cmovme43--2026-05-07T15-49-26.sql",
