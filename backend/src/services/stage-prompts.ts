@@ -28,7 +28,7 @@ import { type SurfaceStyle } from './memory-intent';
  */
 function buildResponseProtocol(stage: number, options?: {
   includesDraft?: boolean;
-  draftPurpose?: 'invitation' | 'empathy';
+  draftPurpose?: 'topic' | 'empathy';
 }): string {
   const flags: string[] = ['UserIntensity: [1-10]'];
   if (stage === 1) {
@@ -523,13 +523,14 @@ DRAFT PROTOCOL — CONSTRAINTS ON THE TOPIC:
 - One phrase or sentence (no lists, no multiple options).
 - Maximum 20 words.
 - States the issue clearly enough that ${partnerName} will unambiguously understand the topic.
-- Neutral framing — no blame, contempt, or attack language. If ${context.userName}'s framing is loaded ("their lying", "his cruelty"), reshape language while preserving substance ("trust around what's been said", "how we treat each other when we're upset").
+- Neutral framing — no blame, contempt, or attack language. If ${context.userName}'s framing is loaded ("their lying", "his cruelty"), reshape language while preserving substance ("trust around what's been said", "how we speak to each other when conflict escalates").
+- Preserve the user's concrete behavioral signal when it can be stated neutrally. Do not flatten "yelling", "personal attacks", "threats", "stonewalling", or "drinking" into vague phrases like "conflict", "communication", or "things get heated".
 - Do NOT editorialize or add interpretation beyond what ${context.userName} said.
 - Do NOT include names.
 
 ITERATION: If ${context.userName} asks for changes after a draft, re-emit a fresh <draft>...</draft> with each revision. Keep iterating until they confirm via the UI.
 
-${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'invitation' })}`;
+${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'topic' })}`;
 
   const dynamicParts: string[] = [];
   const baseDynamic = buildBaseDynamicGuidance(context);

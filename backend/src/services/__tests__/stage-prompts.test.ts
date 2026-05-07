@@ -324,6 +324,19 @@ describe('Stage Prompts Service', () => {
       expect(prompt.toLowerCase()).toContain('neutral');
       expect(prompt.toLowerCase()).toContain('blame');
     });
+
+    it('stage 0 topic framing preserves concrete behavioral signals while staying neutral', () => {
+      const context = createContext({ userName: 'Catherine', partnerName: 'James' });
+      const options: BuildStagePromptOptions = { isInvitationPhase: true };
+      const prompt = fullPrompt(buildStagePrompt(0, context, options));
+
+      expect(prompt).toContain('Preserve the user\'s concrete behavioral signal');
+      expect(prompt).toContain('yelling');
+      expect(prompt).toContain('personal attacks');
+      expect(prompt).toContain('Do not flatten');
+      expect(prompt).toContain('vague phrases like "conflict"');
+      expect(prompt).toContain('<draft>\ntopic text\n</draft>');
+    });
   });
 
   describe('Stage Transition Prompts', () => {

@@ -966,6 +966,7 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Dropping AI response addressed to another user:', payload.message?.id);
         return;
       }
+      setIsAwaitingInvitationFollowUp(false);
       // Add AI message to the cache - this automatically hides ghost dots
       // because ChatInterface derives showTypingIndicator from last message role
       addAIMessage(sessionId, payload.message);
@@ -1001,6 +1002,7 @@ export function UnifiedSessionScreen({
     },
     onAIError: (payload) => {
       console.error('[UnifiedSessionScreen] AI error received via Ably:', payload.error);
+      setIsAwaitingInvitationFollowUp(false);
       // Note: Ghost dots hide automatically because optimistic message is rolled back on error
       handleAIMessageError(sessionId, payload.userMessageId, payload.error, payload.canRetry);
       showError('Something went wrong', 'Your message could not be processed. Please try again.');
@@ -1049,6 +1051,29 @@ export function UnifiedSessionScreen({
   const [showFeedbackCoachChat, setShowFeedbackCoachChat] = useState(false);
   const [feedbackCoachRoughFeedback, setFeedbackCoachRoughFeedback] = useState('');
   const feedbackCoachInitializedRef = useRef(false);
+  const [isAwaitingInvitationFollowUp, setIsAwaitingInvitationFollowUp] = useState(false);
+
+  const hasInvitationTransitionResponse = useMemo(() => {
+    if (!invitation?.messageConfirmedAt) return false;
+    const confirmedAt = new Date(invitation.messageConfirmedAt).getTime();
+
+    return messages.some((message) => {
+      if (message.role !== MessageRole.AI || message.stage !== Stage.WITNESS) return false;
+      const timestamp = new Date(message.timestamp).getTime();
+      return Number.isFinite(timestamp) && timestamp >= confirmedAt;
+    });
+  }, [invitation?.messageConfirmedAt, messages]);
+
+  useEffect(() => {
+    if (!invitationConfirmed || hasInvitationTransitionResponse) {
+      setIsAwaitingInvitationFollowUp(false);
+    }
+  }, [invitationConfirmed, hasInvitationTransitionResponse]);
+
+  const confirmInvitationAndAwaitFollowUp = useCallback(() => {
+    setIsAwaitingInvitationFollowUp(true);
+    handleConfirmInvitationMessage();
+  }, [handleConfirmInvitationMessage]);
 
   // -------------------------------------------------------------------------
   // Activity Menu Modal
@@ -3064,7 +3089,8 @@ export function UnifiedSessionScreen({
             isSavingEmpathyDraft ||
             isSharingEmpathy ||
             isResubmittingEmpathy ||
-            isConfirmingInvitation
+            isConfirmingInvitation ||
+            isAwaitingInvitationFollowUp
           }
           // isInputDisabled prevents sending while API call is in progress
           isInputDisabled={isSending}
@@ -3396,7 +3422,7 @@ export function UnifiedSessionScreen({
         animationType="fade"
         onRequestClose={() => {
           setInvitationPanelDismissed(true);
-          handleConfirmInvitationMessage();
+          confirmInvitationAndAwaitFollowUp();
           if (!shareLaterTooltipShownThisSession) {
             setShowShareLaterTooltip(true);
             setShareLaterTooltipShownThisSession(true);
@@ -3412,7 +3438,7 @@ export function UnifiedSessionScreen({
               style={styles.invitationModalCloseButton}
               onPress={() => {
                 setInvitationPanelDismissed(true);
-                handleConfirmInvitationMessage();
+                confirmInvitationAndAwaitFollowUp();
                 if (!shareLaterTooltipShownThisSession) {
                   setShowShareLaterTooltip(true);
                   setShareLaterTooltipShownThisSession(true);
@@ -3438,7 +3464,7 @@ export function UnifiedSessionScreen({
                   const didShare = await handleShareInvitation();
                   if (didShare) {
                     setInvitationPanelDismissed(true);
-                    handleConfirmInvitationMessage();
+                    confirmInvitationAndAwaitFollowUp();
                   }
                 }}
                 accessibilityRole="button"

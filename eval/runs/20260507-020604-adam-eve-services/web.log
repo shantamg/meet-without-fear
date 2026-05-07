@@ -1,0 +1,29 @@
+$ npm run dev:mobile:e2e
+
+> meet-without-fear-monorepo@0.0.1 dev:mobile:e2e
+> npm --workspace mobile run start:e2e
+
+
+> @meet-without-fear/mobile@0.0.1 start:e2e
+> EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 expo start --web --port 8082 --clear --no-dev
+
+env: load .env
+env: export EXPO_ROUTER_APP_ROOT EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY EXPO_PUBLIC_MIXPANEL_TOKEN EXPO_PUBLIC_ELEVENLABS_API_KEY
+Starting project at /Users/shantam/Software/meet-without-fear/mobile
+[Metro] E2E Mode: @clerk/clerk-expo replaced with mock module
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8082
+Logs for your project will appear below.
+Recrawled this watch 37 times, most recently because:
+MustScanSubDirs UserDroppedTo resolve, please review the information on
+https://facebook.github.io/watchman/docs/troubleshooting.html#recrawl
+To clear this warning, run:
+`watchman watch-del '/Users/shantam/Software/meet-without-fear' ; watchman watch-project '/Users/shantam/Software/meet-without-fear'`
+
+Web mobile/index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web mobile/index.js ▓▓▓▓▓░░░░░░░░░░░ 34.0% ( 422/2392)
+Web mobile/index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 88.7% (2771/2943)
+Web Bundled 8989ms mobile/index.js (3281 modules)
+Web mobile/index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 733ms mobile/index.js (1 module)

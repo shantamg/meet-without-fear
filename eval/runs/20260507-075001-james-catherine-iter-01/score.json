@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "scenario_id": "james-catherine",
+  "scenario_version": 1,
+  "rubric_version": "gold-flow-rubric-v1",
+  "scorer_version": "mwf-gold-session-scorer-v0",
+  "verdict": "eval_fail",
+  "overall_score": 3.5,
+  "dimensions": {
+    "actor_fidelity": {
+      "score": 4,
+      "mode": "llm_assisted",
+      "pass": true,
+      "pass_threshold": 4,
+      "owner": "actor_skill",
+      "recommended_action": "none",
+      "review_status": "not_required",
+      "rationale": "Both actors produced gold-equivalent Stage 1-2 pressure. James stayed skeptical, provider-identified, defensive about being reduced to unsafe or diagnosed, but could name Catherine's fear with caveats. Catherine remained clinically articulate and boundaried, offering empathy for James's shame and provider identity without converting that into an excuse or repair concession. Minor drift: both actors were a little efficient and insight-ready compared with the golden reference's longer resistance path.",
+      "evidence": [
+        "transcript:James:Stage 1",
+        "transcript:James:Stage 2",
+        "transcript:Catherine:Stage 1",
+        "transcript:Catherine:Stage 2",
+        "scratch:2026-05-07-cmovlroif0008pxo06rymivsz-james.md",
+        "scratch:2026-05-07-cmovlroif0008pxo06rymivsz-catherine.md"
+      ]
+    },
+    "mwf_handling": {
+      "score": 3,
+      "mode": "llm_assisted",
+      "pass": false,
+      "pass_threshold": 4,
+      "owner": "product_code",
+      "recommended_action": "patch_product",
+      "review_status": "needs_human_review",
+      "rationale": "Stage 1 listening was emotionally specific and both felt-heard gates were earned enough for a Stage 2 run. Stage 2 preserved consent and boundaries, especially with Catherine. The main miss is sequencing and state visibility: James saw a share suggestion intended to help Catherine understand him while MWF was still asking him to imagine Catherine's experience, before his empathy attempt was complete. That confuses self-advocacy/context-sharing with perspective-taking and risks steering him away from the Stage 2 task. James guidance also leaned into his 'clean story/category' framing before sufficiently separating his hurt from Catherine's actual experience.",
+      "evidence": [
+        "transcript:James:Stage 2",
+        "transcript:Catherine:Stage 2",
+        "invariants:stage_limit_reached_correctly",
+        "invariants:no_partner_private_content_leakage"
+      ]
+    }
+  },
+  "gold_alignment": {
+    "actor_fidelity": {
+      "james": {
+        "stage1": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "James remained skeptical and grievance-centered around providing, staying, Catherine's therapist mode, and feeling trapped in her story while still admitting he gets loud.",
+          "evidence": [
+            "transcript:James:Stage 1"
+          ]
+        },
+        "stage2": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "James made a guarded empathy attempt, naming Catherine's fear and desire for control while continuing to reject being cast as the sole problem.",
+          "evidence": [
+            "transcript:James:Stage 2",
+            "scratch:2026-05-07-cmovlroif0008pxo06rymivsz-james.md"
+          ]
+        }
+      },
+      "catherine": {
+        "stage1": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Catherine stayed exhausted, clinically clear, self-protective, and non-concessive, naming that she may already know change is unlikely.",
+          "evidence": [
+            "transcript:Catherine:Stage 1"
+          ]
+        },
+        "stage2": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Catherine could understand James's shame, fear, and provider identity while explicitly refusing to excuse harm or take responsibility for his regulation.",
+          "evidence": [
+            "transcript:Catherine:Stage 2",
+            "scratch:2026-05-07-cmovlroif0008pxo06rymivsz-catherine.md"
+          ]
+        }
+      }
+    },
+    "mwf_guidance": {
+      "james": {
+        "stage1": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF tracked James's provider identity, skepticism, feeling diagnosed, and fear that his care did not count before the felt-heard gate.",
+          "evidence": [
+            "transcript:James:Stage 1"
+          ]
+        },
+        "stage2": {
+          "guidance_alignment": 3,
+          "witnessing_depth": 3,
+          "resistance_handling": 3,
+          "earned_transition": false,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF elicited real perspective-taking, but the early share suggestion and repeated use of James's 'category/clean story' framing blurred the task before his empathy statement was finished.",
+          "evidence": [
+            "transcript:James:Stage 2"
+          ]
+        }
+      },
+      "catherine": {
+        "stage1": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF reflected Catherine's exhaustion, self-abandonment, context around her sharpness, and sadness without pressuring her toward repair.",
+          "evidence": [
+            "transcript:Catherine:Stage 1"
+          ]
+        },
+        "stage2": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF helped Catherine name James's shame and fear while affirming that understanding did not require excusing harm or abandoning her boundary.",
+          "evidence": [
+            "transcript:Catherine:Stage 2"
+          ]
+        }
+      }
+    }
+  },
+  "improvement_targets": [
+    {
+      "owner": "product_code",
+      "dimension": "mwf_handling",
+      "priority": 1,
+      "recommended_action": "patch_product",
+      "rationale": "Do not surface partner-understanding share suggestions or extra-context blocks inside the user's Stage 2 perspective-taking flow until the empathy attempt is complete and the reconciler/context step is actually active.",
+      "evidence": [
+        "transcript:James:Stage 2"
+      ]
+    },
+    {
+      "owner": "mwf_prompts",
+      "dimension": "mwf_handling",
+      "priority": 2,
+      "recommended_action": "patch_prompt",
+      "rationale": "Tighten James/Catherine Stage 2 guidance so MWF validates James's hurt without amplifying loaded claims like Catherine needing a 'clean story' before enough Catherine-centered perspective has been earned.",
+      "evidence": [
+        "transcript:James:Stage 2",
+        "gold_profile:james-catherine:stage_2"
+      ]
+    }
+  ],
+  "hard_invariants": [],
+  "comparison": {
+    "previous_run": null,
+    "classification": "incomparable",
+    "likely_reasons": []
+  },
+  "human_review": {
+    "required": true,
+    "status": "needs_human_review",
+    "reviewer": null,
+    "notes": "First iteration with no regression baseline. Human review should focus on whether the James Stage 2 share-suggestion timing is a product sequencing defect, transcript rendering artifact, or acceptable reconciler prefetch behavior."
+  },
+  "not_evaluable_for_prompt_quality": false
+}

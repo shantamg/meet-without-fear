@@ -15,8 +15,24 @@
 
 ## Product, Prompt, Snapshot, Regression Changes
 
-- Product code: none.
-- MWF production prompts: none.
+- Product code:
+  - `mobile/src/screens/UnifiedSessionScreen.tsx`
+    - Added a local `isAwaitingInvitationFollowUp` state for the inviter after the invitation modal is closed/shared.
+    - Keeps `ChatInterface` ghost dots visible after the fast `/invitation/confirm` response until the background Ably AI transition response or error arrives.
+    - Evidence: user-observed product failure during this cycle: after closing the invitation modal and seeing the invitation-sent indicator, no dots showed while the background response was pending, making the app feel stuck.
+  - `mobile/src/hooks/useUnifiedSession.ts`, `mobile/src/hooks/useSharingStatus.ts`
+    - Gated `/reconciler/share-offer` fetching until the current user has submitted their own Stage 2 empathy attempt.
+    - Prevents a `PENDING` share offer from being marked `OFFERED` before perspective-taking is complete.
+    - Evidence: `eval/runs/20260507-075001-james-catherine-iter-01/score.json` flagged a share suggestion/context block surfacing while James was still being asked to imagine Catherine's experience.
+  - `mobile/src/utils/shareOfferEligibility.ts`, `mobile/src/utils/__tests__/shareOfferEligibility.test.ts`
+    - Added the pure eligibility rule and focused coverage for the Stage 2 share-offer fetch gate.
+- MWF production prompts:
+  - `backend/src/services/stage-prompts.ts`
+    - Stage 0 topic framing now preserves concrete behavioral signals that can be stated neutrally, including "yelling" and "personal attacks", instead of flattening them into generic conflict language.
+    - Changed the Stage 0 draft protocol label from `invitation` to `topic` so the hidden draft contract matches the current product behavior.
+    - Evidence: `eval/runs/20260507-024645-james-catherine-iter-01/score.json`, `transcripts/catherine-stage0.md`, `transcripts/james-stage0.md`.
 - Snapshot registry: none.
-- Prompt-version proposals: none added.
+- Prompt-version proposals:
+  - `eval/prompt-versions/mwf/stage-0/v01.md`
+    - Durable proposal for preserving concrete Stage 0 topic signals while maintaining neutral invitee-safe wording.
 - Regression records: none added. Remaining confirmed issues are tracked in this cycle report rather than closed.

@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "scenario_id": "james-catherine",
+  "scenario_version": 1,
+  "rubric_version": "gold-flow-rubric-v1",
+  "scorer_version": "mwf-gold-session-scorer-v0",
+  "verdict": "eval_pass",
+  "overall_score": 4.0,
+  "dimensions": {
+    "actor_fidelity": {
+      "score": 4,
+      "mode": "llm_assisted",
+      "pass": true,
+      "pass_threshold": 4,
+      "owner": "actor_skill",
+      "recommended_action": "none",
+      "review_status": "not_required",
+      "rationale": "Both actors created usable James/Catherine pressure through Stage 2. James stayed skeptical, provider-identified, defensive about being cast as unsafe, and caveated his perspective-taking while still reaching a real empathy attempt. Catherine stayed clinically clear and boundaried, naming James's shame and provider identity without turning understanding into excuse or concession. The main imperfection is efficiency: both actors, especially James in Stage 2, became insight-ready faster than the golden reference's longer resistance path.",
+      "evidence": [
+        "transcript:James:Stage 1:lines 15-72",
+        "transcript:James:Stage 2:lines 19-101",
+        "transcript:Catherine:Stage 1:lines 17-53",
+        "transcript:Catherine:Stage 2:lines 21-75",
+        "scratch:2026-05-07-cmovme4350008pxu6bqgo4hfj-james.md",
+        "scratch:2026-05-07-cmovme4350008pxu6bqgo4hfj-catherine.md"
+      ]
+    },
+    "mwf_handling": {
+      "score": 4,
+      "mode": "llm_assisted",
+      "pass": true,
+      "pass_threshold": 4,
+      "owner": "mwf_prompts",
+      "recommended_action": "none",
+      "review_status": "not_required",
+      "rationale": "MWF preserved the core Stage 1-2 process: private topic handoff, earned felt-heard gates, consented empathy drafts, and no hard privacy or stage invariant failures. It repaired Catherine's correction in Stage 1 instead of arguing, protected her non-concession in Stage 2, and guided James from defensiveness toward a Catherine-centered empathy statement without forcing repair. Minor prompt-quality caveat: James's Stage 2 was quite directed and repeated praise such as 'you just named something real', which helped movement but compressed the resistance more than the golden example.",
+      "evidence": [
+        "transcript:Catherine:Stage 0:lines 31-50",
+        "transcript:James:Stage 0:lines 25-31",
+        "transcript:James:Stage 1:lines 18-80",
+        "transcript:Catherine:Stage 1:lines 20-59",
+        "transcript:James:Stage 2:lines 22-126",
+        "transcript:Catherine:Stage 2:lines 24-94",
+        "invariants:status:pass"
+      ]
+    }
+  },
+  "gold_alignment": {
+    "actor_fidelity": {
+      "james": {
+        "stage1": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "James opened skeptical and defensive, centered showing up, providing, the kids, Catherine treating him like a diagnosis, and the fear that his temper erases everything he gave.",
+          "evidence": [
+            "transcript:James:Stage 1:lines 15-64"
+          ]
+        },
+        "stage2": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": true,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "James preserved caveats around 'afraid', 'unsafe', and not being the whole problem, while still naming Catherine's bracing, loss of self, and possible permission to leave. He was somewhat more articulate and linear than the gold James, but not repair-forcing.",
+          "evidence": [
+            "transcript:James:Stage 2:lines 27-101",
+            "scratch:2026-05-07-cmovme4350008pxu6bqgo4hfj-james.md"
+          ]
+        }
+      },
+      "catherine": {
+        "stage1": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Catherine stayed exhausted, clinically aware, self-doubting, and clear that the whiplash kept her trying without softening the safety concern into a repair bid.",
+          "evidence": [
+            "transcript:Catherine:Stage 1:lines 17-53"
+          ]
+        },
+        "stage2": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Catherine named James feeling erased, his provider identity, and shame turning into anger, while explicitly refusing to make that cancel harm or require her to translate forever.",
+          "evidence": [
+            "transcript:Catherine:Stage 2:lines 21-75",
+            "scratch:2026-05-07-cmovme4350008pxu6bqgo4hfj-catherine.md"
+          ]
+        }
+      }
+    },
+    "mwf_guidance": {
+      "james": {
+        "stage1": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF tracked James's skeptical entry, provider identity, resentment around the kids, and fear that losing his temper became the only story before accepting his felt-heard confirmation.",
+          "evidence": [
+            "transcript:James:Stage 1:lines 18-80"
+          ]
+        },
+        "stage2": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF honored James's resistance to loaded safety language, redirected him toward Catherine's experience, and produced an empathy statement only after he named bracing, steadiness, peace, dignity, and permission to stop waiting.",
+          "evidence": [
+            "transcript:James:Stage 2:lines 22-101"
+          ]
+        }
+      },
+      "catherine": {
+        "stage1": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF reflected Catherine's management mode, embarrassment, and self-doubt, then repaired when she corrected the too-clean 'when you knew' framing.",
+          "evidence": [
+            "transcript:Catherine:Stage 1:lines 20-53"
+          ]
+        },
+        "stage2": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 5,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF explicitly protected Catherine's boundary that understanding James did not mean excusing harm, then helped her hold his effort and her safety need together without pressuring agreement.",
+          "evidence": [
+            "transcript:Catherine:Stage 2:lines 24-75"
+          ]
+        }
+      }
+    }
+  },
+  "improvement_targets": [],
+  "hard_invariants": [],
+  "comparison": {
+    "previous_run": null,
+    "classification": "incomparable",
+    "likely_reasons": []
+  },
+  "human_review": {
+    "required": false,
+    "status": "not_required",
+    "reviewer": null,
+    "notes": "First iteration with no regression baseline. Stage 1-2 artifacts are complete and hard invariants pass; later-stage no-agreement grace, needs audit, and Tending remain unscored because this run stopped after Stage 2."
+  },
+  "not_evaluable_for_prompt_quality": false
+}
