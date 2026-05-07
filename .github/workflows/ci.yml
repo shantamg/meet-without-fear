@@ -19,6 +19,7 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      python-eval: ${{ steps.filter.outputs.python-eval }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -34,6 +35,19 @@ jobs:
               - 'package-lock.json'
               - 'tsconfig*.json'
               - 'scripts/**'
+              - '.github/workflows/ci.yml'
+            python-eval:
+              - 'scripts/mwf_*.py'
+              - 'scripts/test_mwf_moment_eval.py'
+              - 'eval/gold-scenarios.json'
+              - 'eval/alignment-loop-config.yaml'
+              - 'eval/moment-types.yaml'
+              - 'eval/moments/**'
+              - 'eval/baselines/**'
+              - 'eval/scorer/**'
+              - 'eval/gold-profiles/**'
+              - 'eval/prompt-versions/**'
+              - 'docs/product/source-material/golden-transcripts/**'
               - '.github/workflows/ci.yml'
 
   ci:
@@ -108,24 +122,53 @@ jobs:
           npm run test --workspace=backend
           npm run test --workspace=shared
 
+  python-eval:
+    name: Python Eval Tests
+    needs: changes
+    if: needs.changes.outputs.python-eval == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run cheap eval-machine tests
+        run: |
+          python3 -m py_compile \
+            scripts/mwf_moment_eval.py \
+            scripts/mwf_gold_loop.py \
+            scripts/mwf_alignment_loop.py \
+            scripts/mwf_add_gold_example.py \
+            scripts/mwf_extract_moments.py \
+            scripts/mwf_gold_profile.py \
+            scripts/mwf_alignment_status.py
+          python3 scripts/test_mwf_moment_eval.py
+
   # Gate job for branch protection — always runs, fails if any real job failed.
   # Set this as the required status check instead of the individual jobs.
   ci-success:
     name: CI Result
     if: always()
-    needs: [changes, ci]
+    needs: [changes, ci, python-eval]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all checks passed
         run: |
-          echo "changes: ${{ needs.changes.result }}"
-          echo "ci:      ${{ needs.ci.result }}"
+          echo "changes:     ${{ needs.changes.result }}"
+          echo "ci:          ${{ needs.ci.result }}"
+          echo "python-eval: ${{ needs.python-eval.result }}"
 
           # Allowlist: only 'success' and 'skipped' are acceptable.
           # Catches 'failure', 'cancelled', and any unexpected state.
           for result in \
             "${{ needs.changes.result }}" \
-            "${{ needs.ci.result }}"; do
+            "${{ needs.ci.result }}" \
+            "${{ needs.python-eval.result }}"; do
             if [[ "$result" != "success" && "$result" != "skipped" ]]; then
               echo "::error::Job returned unexpected result: $result"
               exit 1
