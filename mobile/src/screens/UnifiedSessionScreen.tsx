@@ -1902,6 +1902,91 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // Render Inline Card
   // -------------------------------------------------------------------------
+  const renderStrategyPreviewCard = useCallback((
+    card: InlineChatCard,
+    placement: 'inline' | 'bottom' = 'inline',
+  ) => {
+    const stratCount = card.props.strategyCount as number;
+    if (stratCount === 0) return null;
+
+    const canMarkReadyToRank = card.props.canMarkReadyToRank === true;
+    const canRank = card.props.canRank === true;
+    const showPoolActions = stratCount > 0 && canRank;
+    const canReviewIdeas = stratCount > 0;
+    const countLabel = canRank
+      ? `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} ready to review`
+      : `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} saved from your side`;
+
+    if (placement === 'bottom') {
+      return (
+        <View style={styles.strategyPreviewCompactCard} key={card.id} testID="strategy-preview-bottom-card">
+          <TouchableOpacity
+            style={styles.strategyPreviewCompactBody}
+            onPress={() => {
+              if (canReviewIdeas) {
+                openOverlay('strategy-pool');
+              }
+            }}
+            activeOpacity={canReviewIdeas ? 0.8 : 1}
+            disabled={!canReviewIdeas}
+          >
+            <View style={styles.strategyPreviewCompactText}>
+              <Text style={styles.needsSummaryCompactTitle}>Ideas So Far</Text>
+              <Text style={styles.needsSummaryCount}>{countLabel}</Text>
+            </View>
+            {canReviewIdeas && (
+              <Text style={styles.needsSummaryActionCompact}>Review</Text>
+            )}
+          </TouchableOpacity>
+          {showPoolActions && (
+            <View style={styles.strategyPreviewCompactActions}>
+              <TouchableOpacity
+                style={styles.strategyPreviewCompactPrimary}
+                onPress={() => openOverlay('strategy-ranking')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.strategyPreviewCompactPrimaryText}>Ready to Rank</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.inlineCard} key={card.id}>
+        <Text style={styles.cardTitle}>Ideas So Far</Text>
+        <Text style={styles.cardSubtitle}>{countLabel}</Text>
+        <View style={styles.strategyPreviewButtons}>
+          {showPoolActions && (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => openOverlay('strategy-pool')}
+            >
+              <Text style={styles.secondaryButtonText}>View All</Text>
+            </TouchableOpacity>
+          )}
+          {canMarkReadyToRank && (
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => openOverlay('strategy-pool')}
+            >
+              <Text style={styles.primaryButtonText}>Review Ideas</Text>
+            </TouchableOpacity>
+          )}
+          {showPoolActions && (
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => openOverlay('strategy-ranking')}
+            >
+              <Text style={styles.primaryButtonText}>Ready to Rank</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  }, [handleMarkReadyToRank, openOverlay, styles]);
+
   const renderInlineCard = useCallback(
     (card: InlineChatCard) => {
       switch (card.type) {
@@ -1924,48 +2009,7 @@ export function UnifiedSessionScreen({
         // the above-input buttons (needs-review, needs-reveal-validation).
 
         case 'strategy-pool-preview': {
-          const stratCount = card.props.strategyCount as number;
-          if (stratCount === 0) return null;
-
-          const canMarkReadyToRank = card.props.canMarkReadyToRank === true;
-          const canRank = card.props.canRank === true;
-          const showPoolActions = stratCount > 0 && canRank;
-          return (
-            <View style={styles.inlineCard} key={card.id}>
-              <Text style={styles.cardTitle}>Ideas So Far</Text>
-              <Text style={styles.cardSubtitle}>
-                {canRank
-                    ? `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} ready to review`
-                    : `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} saved from your side`}
-              </Text>
-              <View style={styles.strategyPreviewButtons}>
-                {showPoolActions && (
-                  <TouchableOpacity
-                    style={styles.secondaryButton}
-                    onPress={() => openOverlay('strategy-pool')}
-                  >
-                    <Text style={styles.secondaryButtonText}>View All</Text>
-                  </TouchableOpacity>
-                )}
-                {canMarkReadyToRank && (
-                  <TouchableOpacity
-                    style={styles.primaryButton}
-                    onPress={handleMarkReadyToRank}
-                  >
-                    <Text style={styles.primaryButtonText}>Done Adding Ideas</Text>
-                  </TouchableOpacity>
-                )}
-                {showPoolActions && (
-                  <TouchableOpacity
-                    style={styles.primaryButton}
-                    onPress={() => openOverlay('strategy-ranking')}
-                  >
-                    <Text style={styles.primaryButtonText}>Ready to Rank</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          );
+          return renderStrategyPreviewCard(card);
         }
 
         case 'overlap-preview':
@@ -2063,7 +2107,18 @@ export function UnifiedSessionScreen({
       sendMessage,
       onStageComplete,
       onNavigateBack,
+      renderStrategyPreviewCard,
     ]
+  );
+
+  const strategyPreviewCard = useMemo(
+    () => inlineCards.find((card) => card.type === 'strategy-pool-preview'),
+    [inlineCards]
+  );
+
+  const transcriptInlineCards = useMemo(
+    () => inlineCards.filter((card) => card.type !== 'strategy-pool-preview'),
+    [inlineCards]
   );
 
   // -------------------------------------------------------------------------
@@ -2306,7 +2361,7 @@ export function UnifiedSessionScreen({
         );
 
       case 'strategy-pool':
-        if (strategyData?.canRank !== true) return null;
+        if (strategies.length === 0) return null;
         return (
           <View style={styles.overlayContainer}>
             <StrategyPool
@@ -2320,6 +2375,7 @@ export function UnifiedSessionScreen({
                 handleMarkReadyToRank();
                 closeOverlay();
               }}
+              readyLabel={strategyData?.canRank === true ? 'These look good - rank my choices' : 'Done adding ideas'}
               onClose={closeOverlay}
               isGenerating={isGenerating}
             />
@@ -2698,58 +2754,76 @@ export function UnifiedSessionScreen({
   ]);
 
   const renderBelowInput = useCallback((): React.ReactNode | undefined => {
-    if (aboveInputPanel !== 'needs-review' && aboveInputPanel !== 'needs-share') {
-      return undefined;
-    }
-    if (!needs || needs.length === 0) {
-      return undefined;
-    }
+    if (aboveInputPanel === 'needs-review' || aboveInputPanel === 'needs-share') {
+      if (!needs || needs.length === 0) {
+        return undefined;
+      }
 
-    const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
-    let needsStatus: 'ready' | 'confirmed' | 'shared' = 'ready';
-    if (gates?.needsShared === true) {
-      needsStatus = 'shared';
-    } else if (allNeedsConfirmed) {
-      needsStatus = 'confirmed';
-    }
+      const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
+      let needsStatus: 'ready' | 'confirmed' | 'shared' = 'ready';
+      if (gates?.needsShared === true) {
+        needsStatus = 'shared';
+      } else if (allNeedsConfirmed) {
+        needsStatus = 'confirmed';
+      }
 
-    return (
-      <Animated.View
-        style={{
-          opacity: needsReviewAnim,
-          maxHeight: needsReviewAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0, 420],
-          }),
-          transform: [{
-            translateY: needsReviewAnim.interpolate({
+      return (
+        <Animated.View
+          style={{
+            opacity: needsReviewAnim,
+            maxHeight: needsReviewAnim.interpolate({
               inputRange: [0, 1],
-              outputRange: [20, 0],
+              outputRange: [0, 420],
             }),
-          }],
-          overflow: 'hidden',
-        }}
-        pointerEvents="auto"
-      >
-        <View style={styles.needsReviewBelowInputContainer}>
-          <NeedsIdentifiedChatCard
-            needs={needs.map((need) => ({
-              id: need.id,
-              need: need.need,
-              category: String(need.category),
-            }))}
-            status={needsStatus}
-            compact
-            onReview={() => {
-              setShowActivityMenu(false);
-              setNeedsDrawerMode('needs');
-              setShowNeedsDrawer(true);
-            }}
-          />
+            transform: [{
+              translateY: needsReviewAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [20, 0],
+              }),
+            }],
+            overflow: 'hidden',
+          }}
+          pointerEvents="auto"
+        >
+          <View style={styles.needsReviewBelowInputContainer}>
+            <NeedsIdentifiedChatCard
+              needs={needs.map((need) => ({
+                id: need.id,
+                need: need.need,
+                category: String(need.category),
+              }))}
+              status={needsStatus}
+              compact
+              onReview={() => {
+                setShowActivityMenu(false);
+                setNeedsDrawerMode('needs');
+                setShowNeedsDrawer(true);
+              }}
+            />
+          </View>
+        </Animated.View>
+      );
+    }
+
+    if (strategyPreviewCard) {
+      return (
+        <View style={styles.strategyPreviewBelowInputContainer}>
+          {renderStrategyPreviewCard(strategyPreviewCard, 'bottom')}
         </View>
-      </Animated.View>
-    );
-  }, [aboveInputPanel, needsReviewAnim, styles, needs, myProgress?.gatesSatisfied, allNeedsConfirmed]);
+      );
+    }
+
+    return undefined;
+  }, [
+    aboveInputPanel,
+    needsReviewAnim,
+    styles,
+    needs,
+    myProgress?.gatesSatisfied,
+    allNeedsConfirmed,
+    strategyPreviewCard,
+    renderStrategyPreviewCard,
+  ]);
 
   // -------------------------------------------------------------------------
   // Loading State
@@ -3135,13 +3209,13 @@ export function UnifiedSessionScreen({
           }
           renderAboveInput={aboveInputPanel ? renderAboveInput : undefined}
           renderBelowInput={
-            aboveInputPanel === 'needs-review' || aboveInputPanel === 'needs-share'
+            aboveInputPanel === 'needs-review' || aboveInputPanel === 'needs-share' || strategyPreviewCard
               ? renderBelowInput
               : undefined
           }
-          renderBelowChat={(inlineCards.length > 0 || memorySuggestion || hasRedesignedStage4) ? () => (
+          renderBelowChat={(transcriptInlineCards.length > 0 || memorySuggestion || hasRedesignedStage4) ? () => (
             <>
-              {inlineCards.map((card) => renderInlineCard(card))}
+              {transcriptInlineCards.map((card) => renderInlineCard(card))}
               {hasRedesignedStage4 && stage4State && (
                 <Stage4RedesignPanel
                   state={stage4State}
@@ -3855,6 +3929,14 @@ const useStyles = () =>
       borderTopWidth: 1,
       borderTopColor: t.colors.border,
     },
+    strategyPreviewBelowInputContainer: {
+      paddingHorizontal: t.spacing.lg,
+      paddingTop: t.spacing.sm,
+      paddingBottom: t.spacing.md,
+      backgroundColor: t.colors.bgSecondary,
+      borderTopWidth: 1,
+      borderTopColor: t.colors.border,
+    },
 
     // Inline Cards
     inlineCard: {
@@ -3862,6 +3944,46 @@ const useStyles = () =>
       padding: 16,
       backgroundColor: t.colors.bgSecondary,
       borderRadius: 12,
+    },
+    strategyPreviewCompactCard: {
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      backgroundColor: t.colors.bgSecondary,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+    },
+    strategyPreviewCompactBody: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    strategyPreviewCompactText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    strategyPreviewCompactActions: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 10,
+    },
+    strategyPreviewCompactPrimary: {
+      flex: 1,
+      minHeight: 40,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: t.colors.brandBlue,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    strategyPreviewCompactPrimaryText: {
+      fontSize: 14,
+      lineHeight: 18,
+      fontWeight: '700',
+      color: t.colors.textOnAccent,
+      textAlign: 'center',
     },
     needsSummaryCard: {
       marginHorizontal: 16,
