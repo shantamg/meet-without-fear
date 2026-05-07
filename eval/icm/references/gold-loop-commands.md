@@ -20,7 +20,7 @@ Command template:
 MOCK_LLM=false python3 scripts/mwf_gold_loop.py run --scenario <scenario-id> --max-iterations <max-iterations> --stop-after-stage <stop-after-stage> --target-score <target-score> --start-services --no-improve-on-final-fail
 ```
 
-Current registry expansion:
+Current registry expansion (run this to see actual commands — do not treat the output as static):
 
 ```sh
 python3 - <<'PY'
