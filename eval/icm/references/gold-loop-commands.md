@@ -4,11 +4,43 @@ Use `scripts/mwf_gold_loop.py` as the canonical bounded loop runner. Do not repl
 
 ## Required Reruns
 
-Run both canonical pairs with real LLM mode:
+Read required scenarios from `eval/gold-scenarios.json`. Rerun every scenario where `live_enabled` is `true` or omitted with real LLM mode. Exclude only scenarios with `live_enabled: false`.
+
+Use the scenario's `gate` values when present:
+
+- `target_score`
+- `stop_after_stage`
+- `max_iterations`
+
+Use bounded defaults for legacy entries that omit gate settings: target score `4.0`, stop after Stage `2`, and max iterations `1`.
+
+Command template:
 
 ```sh
-MOCK_LLM=false python3 scripts/mwf_gold_loop.py run --scenario adam-eve --max-iterations 1 --stop-after-stage 2 --target-score 4.0 --start-services --no-improve-on-final-fail
-MOCK_LLM=false python3 scripts/mwf_gold_loop.py run --scenario james-catherine --max-iterations 1 --stop-after-stage 2 --target-score 4.0 --start-services --no-improve-on-final-fail
+MOCK_LLM=false python3 scripts/mwf_gold_loop.py run --scenario <scenario-id> --max-iterations <max-iterations> --stop-after-stage <stop-after-stage> --target-score <target-score> --start-services --no-improve-on-final-fail
+```
+
+Current registry expansion:
+
+```sh
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path("eval/gold-scenarios.json").read_text())
+for item in payload.get("scenarios", []):
+    if not item.get("live_enabled", True):
+        continue
+    gate = item.get("gate", {})
+    print(
+        "MOCK_LLM=false python3 scripts/mwf_gold_loop.py run "
+        f"--scenario {item['id']} "
+        f"--max-iterations {gate.get('max_iterations', 1)} "
+        f"--stop-after-stage {gate.get('stop_after_stage', 2)} "
+        f"--target-score {gate.get('target_score', 4.0)} "
+        "--start-services --no-improve-on-final-fail"
+    )
+PY
 ```
 
 If the CLI shape changes, inspect `python scripts/mwf_gold_loop.py --help` and record the exact commands used in `stages/06-rerun/output/run-results.md`.

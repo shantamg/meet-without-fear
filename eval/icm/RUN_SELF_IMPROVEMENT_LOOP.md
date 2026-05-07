@@ -24,7 +24,7 @@ The loop may improve either MWF itself or the eval machine, depending on artifac
 4. Run Stage 03 repair plan.
 5. Implement the highest-priority artifact-backed fix.
 6. Run focused verification.
-7. Rerun Adam/Eve and James/Catherine bounded loops with `MOCK_LLM=false`.
+7. Rerun every live-enabled scenario in `eval/gold-scenarios.json` with `MOCK_LLM=false`.
 8. Judge against `eval/icm/COMPLETION_CRITERIA.md`.
 9. Write report outputs.
 10. Improve the eval machine if the cycle exposed routing, scoring, actor, reporter, harness, or ICM weaknesses.
