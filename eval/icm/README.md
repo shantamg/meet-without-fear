@@ -4,7 +4,9 @@ This directory implements the control plane described in `eval/icm-build-plan.md
 
 ICM owns durable routing, governance, completion criteria, failure taxonomy, stage contracts, regression records, self-improvement proposals, and cycle reporting conventions. Existing scripts and MWF gold-loop skills remain the mechanical and specialist execution layer.
 
-Start with `CONTEXT.md` for a repair-test-rerun cycle.
+To run the autonomous self-improvement loop, start with `RUN_SELF_IMPROVEMENT_LOOP.md`.
+
+Start with `CONTEXT.md` when manually inspecting or resuming a repair-test-rerun cycle.
 
 ## Canonical Inputs
 
