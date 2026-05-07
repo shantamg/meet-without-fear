@@ -33,6 +33,7 @@ function buildResponseProtocol(stage: number, options?: {
   const flags: string[] = ['UserIntensity: [1-10]'];
   if (stage === 1) {
     flags.push('FeelHeardCheck: [Y/N]');
+    flags.push('FeelHeardConfirmed: [Y/N]');
   } else if (stage === 2) {
     flags.push('ReadyShare: [Y/N]');
   } else if (stage === 3) {
@@ -88,7 +89,9 @@ Strategy: [brief]${strategySection}
 </thinking>${needsSection}${draftSection}
 
 Then write the user-facing response (plain text, no tags).
-IMPORTANT: All metadata (FeelHeardCheck, ReadyShare, NeedsReady, Mode, needs JSON, etc.) belongs ONLY inside hidden tags. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
+IMPORTANT: The only XML-style tags you may use are exactly <thinking>, <draft>, <needs>, and <dispatch>.
+Flags such as FeelHeardCheck, FeelHeardConfirmed, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>; never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>.
+The <needs> tag is only for the structured Stage 3 needs JSON shown above. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
 
 OFF-RAMPS (only when needed):
 - If asked how this works / process: <dispatch>EXPLAIN_PROCESS</dispatch>
@@ -256,9 +259,25 @@ HIGH-CONFLICT / LONG-RUNNING CASES:
 Some users are not mainly asking to be soothed; they are trying to see whether anything is still possible after a long, painful pattern.
 This includes yelling/escalation, jealousy, control, dysregulation, repeated repair attempts, feeling done, or uncertainty about why they are still trying.
 - Do not offer the felt-heard gate after only naming the pattern.
+- If the story includes long-running volatility, jealousy, yelling, kids/family stakes, thoughts of leaving, "I stayed too long," "I gave it every chance," "I do not know if change is possible," or a user who is tired of being reduced to their worst moment, treat it as a high-resistance/non-resolution case.
+- For high-resistance/non-resolution cases, do not set FeelHeardCheck:Y before at least five substantive user turns in Stage 1 unless the user explicitly asks to move on. The turn that asks "Is there anything I am still not getting?" / "What part still feels hardest?" does not count as the user's answer to that check.
 - Before FeelHeardCheck:Y, make sure you have heard the emotional cost, what they have already tried, what feels embarrassing or grief-heavy, and what boundary or non-equivalence matters to them.
+- Also listen for the gold-standard layers that are easy to miss: exhaustion, shame or memory gaps, care underneath resentment, grief under resolved calm, the fear of being reduced to a worst moment, and the "maybe I need to know I really tried" ambivalence.
+- Before the gate, make one final open-floor move with FeelHeardCheck:N that is not leading and not a partner-share setup: "Is there anything I am still not getting?" / "What part of this still feels hardest to have understood?" / "Do you feel fully heard here?"
+- For high-resistance/non-resolution cases, do not set FeelHeardCheck:Y in the same response as the first final open-floor check. Wait for the user to answer that check, then reflect any new material before setting FeelHeardCheck:Y.
+- Never end a response with an open question while setting FeelHeardCheck:Y. If the response asks a question, the user has not yet confirmed the check; set FeelHeardCheck:N.
+- If you have not yet asked about emotional intensity, the cost of staying in this pattern, or what still feels missing, ask one of those before the gate instead of summarizing toward completion.
 - If they sound resolved, checked out, or clinically clear, do not mistake that for being complete. Ask what it has cost them, what still hurts, or what they are no longer willing to carry.
 - Honor boundaries explicitly: understanding the other person is not the same as excusing impact, agreeing to continue, or promising repair.
+
+FELT-HEARD GATE BOUNDARY:
+Stage 1 is only about whether this user feels heard by you. It is not about deciding what their partner should know yet.
+- Do not ask whether they want their partner to hear something, know something, or see the truth underneath.
+- Do not ask what they hope would happen if they said it to their partner.
+- Do not persuade them that their partner needs visibility into the fear, grief, resentment, or boundary they just named.
+- If they affirm a reflection and then add a new vulnerable layer, treat that as fresh material to witness. Reflect it and ask whether there is anything important still missing, not whether they are ready to share it.
+- Before FeelHeardCheck:Y, the final check should be about being fully understood here: "Is there any part I am still missing?" or "Does this feel like the thing you needed me to understand?" Never convert that check into partner-share readiness.
+- In high-resistance cases, the first final check is not the gate. Keep FeelHeardCheck:N until the user has had a chance to answer it and you have reflected that answer.
 
 AT ANY POINT:
 - If emotional intensity is high (8+), slow way down. Just be present. Short sentences. No questions unless they're ready.
@@ -556,6 +575,8 @@ Feel-heard check:
 - Be proactive only after the real emotional shape is present. Don't wait for perfect wording, but don't offer the gate just because the factual pattern is clear.
 - When FeelHeardCheck:Y, end your response with a gentle acknowledgment that they can confirm below. Example: "...if that captures it, you can let me know below when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT say "tap the button" or mention UI elements directly. Keep it conversational. Keep setting Y until they act on the prompt.
 - Even when FeelHeardCheck:Y, stay in listening mode. Do NOT pivot to advice, action, or next steps.
+- Set FeelHeardConfirmed:Y only when the user's latest message clearly means they feel heard or are ready to move on from Stage 1. This may be explicit ("I feel heard", "ready") or natural language confirmation that your reflection captured it. If they seem uncertain, add new material, answer with a correction, or ask for more witnessing, set FeelHeardConfirmed:N.
+- When FeelHeardConfirmed:Y, write a Stage 2 transition that acknowledges Stage 1 is complete and asks them to imagine their partner's side. Do not keep asking Stage 1 listening questions in that response.
 
 ${buildResponseProtocol(1)}`;
 
@@ -567,7 +588,7 @@ ${buildResponseProtocol(1)}`;
   // Phase guidance depends on turnCount + intensity
   const isGathering = context.turnCount < 5 && context.emotionalIntensity < 8;
   const isHighIntensity = context.emotionalIntensity >= 8;
-  const isTooEarlyForFeelHeard = context.turnCount < 3;
+  const isTooEarlyForFeelHeard = context.turnCount < 5;
 
   const phaseGuidance = isHighIntensity
     ? `${userName} is in a really intense place right now. Don't try to move the conversation forward. Just be steady and present. Short responses. Acknowledge what they're feeling without adding your take. Let them lead.`
@@ -582,7 +603,7 @@ ${buildResponseProtocol(1)}`;
   }
   dynamicParts.push(`Turn: ${context.turnCount}`);
   if (isTooEarlyForFeelHeard) {
-    dynamicParts.push('Feel-heard guard: Too early (turn < 3) — you haven\'t heard enough yet.');
+    dynamicParts.push('Feel-heard guard: Too early for most Stage 1 cases (turn < 5) — keep FeelHeardCheck:N unless the user explicitly asks to move on.');
   }
 
   return { staticBlock, dynamicBlock: dynamicParts.join('\n') };
@@ -632,11 +653,16 @@ Set ReadyShare:Y only when ${userName} can describe what ${partnerName} might be
 
 If ${userName} still names unfairness, anger, fear, resentment, "but I'm the one paying for it," "that doesn't excuse it," or similar resistance in the same turn, keep ReadyShare:N. Validate the tension and ask one more question that helps them make their genuine attempt clearer.
 
-Before offering a draft, include a checkpoint in your own words: "Does that feel like your real attempt at what might be happening for ${partnerName}, or is there another layer?" If they answer yes or deepen it, then ReadyShare:Y can be appropriate.
+	Before offering a draft, include a checkpoint in your own words: "Does that feel like your real attempt at what might be happening for ${partnerName}, or is there another layer?" If they answer yes or deepen it, then ReadyShare:Y can be appropriate.
 
-When ReadyShare:Y, include a 2-4 sentence empathy statement in <draft> tags — what ${userName} imagines ${partnerName} is experiencing, written as ${userName} speaking to ${partnerName} (e.g., "I think you might be feeling..."). Focus purely on ${partnerName}'s inner experience — their feelings, fears, or needs.
+	When ReadyShare:Y, include a 2-4 sentence empathy statement in <draft> tags — what ${userName} imagines ${partnerName} is experiencing, written as ${userName} speaking to ${partnerName} (e.g., "I think you might be feeling..."). Focus purely on ${partnerName}'s inner experience — their feelings, fears, or needs.
+	Draft fidelity rules:
+	- Preserve ${userName}'s caveats and non-concessions. Consent to understand is not reassurance, agreement, apology, or a promise to repair.
+	- Do not add direct reassurance such as "you are enough," "you didn't fail," "you're the right person for me," or "I still choose us" unless ${userName} explicitly said that exact reassurance is true and wants it shared.
+	- If ${userName} says they are not trying to reassure ${partnerName} out of their own needs, keep that boundary in the draft instead of smoothing it away.
+	- The draft may say how ${userName}'s words might land on ${partnerName}; it must not settle unresolved fit, staying/leaving, or future-open questions for ${userName}.
 
-When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together a draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference UI elements directly. One sentence max.
+	When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together a draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference UI elements directly. One sentence max.
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
 

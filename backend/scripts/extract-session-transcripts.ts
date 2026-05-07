@@ -29,6 +29,23 @@ interface TranscriptEvent {
   metadata?: Record<string, unknown>;
 }
 
+function timestampBeforeChatStart(timestamp?: Date | string | null): Date {
+  const source = timestamp ? new Date(timestamp) : new Date(0);
+  const time = source.getTime();
+  if (!Number.isFinite(time)) return source;
+  return new Date(time - 2000);
+}
+
+function inviteeTopicHandoffContent(partnerName: string, topicFrame: string): string {
+  return [
+    `Before we begin, this is what ${partnerName || 'your partner'} would like to work through with you:`,
+    '',
+    topicFrame,
+    '',
+    "This is how things look from their side right now. You don't need to agree with it, respond to it, or do anything with it yet. Instead, I'd like to know what is happening from your point of view.",
+  ].join('\n');
+}
+
 async function extractTranscripts() {
   console.log(`\n=== Extracting transcripts for session: ${sessionId} ===\n`);
 
@@ -171,19 +188,33 @@ async function buildUserTranscript(
 
   // 3. Stage progress milestones
   const userProgress = session.stageProgress.filter((sp: any) => sp.userId === userId);
+  const stage0Progress = userProgress.find((sp: any) => sp.stage === 0);
+  if (
+    invitation &&
+    invitation.invitedById !== userId &&
+    session.topicFrame &&
+    session.topicFrameConfirmedAt &&
+    stage0Progress?.gatesSatisfied &&
+    typeof stage0Progress.gatesSatisfied === 'object' &&
+    stage0Progress.gatesSatisfied.compactSigned
+  ) {
+    events.push({
+      timestamp: timestampBeforeChatStart(
+        stage0Progress.startedAt || invitation.acceptedAt || session.createdAt
+      ),
+      type: 'system',
+      role: '🧭 INVITEE TOPIC HANDOFF',
+      content: inviteeTopicHandoffContent(partnerName, session.topicFrame),
+      metadata: { stage: 0 }
+    });
+  }
+
   for (const progress of userProgress) {
     if (progress.startedAt) {
       events.push({
         timestamp: progress.startedAt,
         type: 'milestone',
         content: `🎯 STAGE ${progress.stage} STARTED`
-      });
-    }
-    if (progress.completedAt) {
-      events.push({
-        timestamp: progress.completedAt,
-        type: 'milestone',
-        content: `✅ STAGE ${progress.stage} COMPLETED`
       });
     }
     // Check for gates satisfied
@@ -196,26 +227,33 @@ async function buildUserTranscript(
           content: '📝 COMPACT SIGNED'
         });
       }
-      if (gates.feltHeard) {
+      if (gates.feelHeardConfirmed) {
         events.push({
-          timestamp: progress.completedAt || session.createdAt,
+          timestamp: typeof gates.feelHeardConfirmedAt === 'string'
+            ? new Date(gates.feelHeardConfirmedAt)
+            : progress.completedAt || session.createdAt,
           type: 'milestone',
-          content: '💚 FELT HEARD CONFIRMED'
+          content: `💚 ${userName.toUpperCase()} CONFIRMED THEY FEEL HEARD`
         });
       }
+    }
+    if (progress.completedAt) {
+      events.push({
+        timestamp: progress.completedAt,
+        type: 'milestone',
+        content: `✅ STAGE ${progress.stage} COMPLETED`
+      });
     }
   }
 
   // 4. Messages (filtered to this user's conversation)
-  const userMessages = allMessages.filter((msg: any) =>
-    msg.senderId === userId ||
-    (msg.role === 'AI' && msg.forUserId === userId) ||
-    (msg.role === 'EMPATHY_STATEMENT' && msg.forUserId === userId) ||
-    (msg.role === 'EMPATHY_REVEAL_INTRO' && msg.forUserId === userId) ||
-    (msg.role === 'SHARED_CONTEXT' && msg.forUserId === userId) ||
-    (msg.role === 'SHARE_SUGGESTION' && msg.forUserId === userId) ||
-    (msg.role === 'EMPATHY_VALIDATION_PROMPT' && msg.forUserId === userId)
-  );
+  const userMessages = allMessages.filter((msg: any) => {
+    if (msg.role === 'USER') {
+      return msg.senderId === userId;
+    }
+
+    return msg.forUserId === userId;
+  });
 
   for (const msg of userMessages) {
     let eventType: TranscriptEvent['type'] = 'message';
@@ -238,7 +276,9 @@ async function buildUserTranscript(
         break;
       case 'SHARED_CONTEXT':
         eventType = 'shared_context';
-        roleLabel = `📤 ${partnerName} SHARED WITH YOU`;
+        roleLabel = msg.senderId === userId
+          ? `📤 YOU SHARED WITH ${partnerName.toUpperCase()}`
+          : `📤 ${partnerName} SHARED WITH YOU`;
         break;
       case 'SHARE_SUGGESTION':
         eventType = 'shared_context';
@@ -346,17 +386,9 @@ async function buildUserTranscript(
       }
     }
 
-    if (result.guesserId === userId) {
-      // You're the guesser - show reconciler summary
-      events.push({
-        timestamp: result.createdAt,
-        type: 'system',
-        content: `📊 RECONCILER ANALYSIS (Your empathy vs ${partnerName}'s actual feelings):
-  Alignment: ${result.alignmentScore}%
-  Gap Severity: ${result.gapSeverity}
-  Action: ${result.recommendedAction}`
-      });
-    }
+    // ReconcilerResult internals are scoring/debug metadata, not user-facing chat.
+    // Stable transcripts should preserve share offers and shared content without
+    // exposing alignment scores or orchestration actions.
   }
 
   // Sort events by timestamp
@@ -428,7 +460,12 @@ function formatTranscriptMarkdown(
         break;
 
       case 'system':
-        md += `*${event.content}*\n`;
+        if (event.role) {
+          md += `**${event.role}:**\n`;
+          md += `${event.content}\n`;
+        } else {
+          md += `*${event.content}*\n`;
+        }
         md += `*${time}*\n\n`;
         break;
     }

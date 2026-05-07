@@ -925,6 +925,8 @@ Continue as {actor.character} until one of these happens:
 - the run is completed,
 - a product/state/browser bug blocks progress.
 
+If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present for {actor.character}, either click it or give a clear in-character typed confirmation such as "I feel heard" / "Ready" when that is realistic. Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate.
+
 If Stage {stop_after_stage} shows a visible share suggestion, context-share decision, validation card, draft review, or text input for {actor.character}, treat it as legitimate in-stage work. Respond to that action before reporting "stage_limit_reached".
 
 Do not operate the partner side. Use agent-browser CLI through the mwf-gold-loop-actor skill. Maintain the scratch log required by the gold skills.
@@ -958,6 +960,7 @@ Partner side: {partner.character}
 Stop after Stage {stop_after_stage}.
 
 Inspect the current in-app browser state, continue if {actor.character} has a legitimate action, and stop when blocked on {partner.character}, Stage {stop_after_stage} is reached, completed, or bug-blocked.
+If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present for {actor.character}, either click it or give a clear in-character typed confirmation such as "I feel heard" / "Ready" when that is realistic. Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate.
 If Stage {stop_after_stage} shows a visible share suggestion, context-share decision, validation card, draft review, or text input for {actor.character}, handle that in-stage action before reporting "stage_limit_reached".
 
 End with the required MWF_GOLD_STATUS JSON block using one of: {", ".join(sorted(VALID_STATES))}.
@@ -1350,11 +1353,15 @@ def extract_transcripts(session_id: str, run_dir: Path, scenario: str, max_stage
 
 
 CONTROL_TAG_RE = re.compile(
-    r"</?(?:thinking|draft|dispatch|message|stage|private|shared|tool|analysis|commentary|final|feel[_-]?heard[_-]?check|ready[_-]?share|needs)\b[^>]*>",
+    r"</?(?:thinking|draft|dispatch|message|stage|private|shared|tool|analysis|commentary|final|feel[_-]?heard[_-]?check|ready[_-]?share|needs(?:[_-]?ready)?)\b[^>]*>",
     re.I,
 )
 TRANSCRIPT_METADATA_RE = re.compile(r"^- (side|stage|privacy|visible_cta_state):\s*(.+?)\s*$", re.MULTILINE)
 TRANSCRIPT_EVENT_RE = re.compile(r"^(?:\d+\.|\*\*\[|###|---|\[)", re.MULTILINE)
+TRANSCRIPT_AI_BLOCK_RE = re.compile(
+    r"^\*\*\[(?P<timestamp>[^\]]+)\]\s+AI:\*\*\n(?P<body>.*?)(?=^\*\*\[|^###|^---|\Z)",
+    re.M | re.S,
+)
 CHAT_PROMISE_RE = re.compile(
     r"\b(?:keep (?:talking|exploring|going)|tell me what needs to change|if there's more|if there is more|I'm still here|I am still here)\b",
     re.I,
@@ -1461,6 +1468,67 @@ def check_transcript_side_stage_metadata(
             evidence=cta_evidence,
         ),
     ]
+
+
+def check_invitee_topic_handoff_transcribed(
+    transcripts: list[tuple[Path, str]],
+    run_data: dict[str, Any],
+    scenario: str,
+) -> dict[str, Any]:
+    start = run_data.get("start") if isinstance(run_data.get("start"), dict) else {}
+    if str(start.get("mode") or "") != "fresh":
+        return invariant_result(
+            "invitee_topic_handoff_transcribed",
+            True,
+            severity="soft",
+            owner="eval_harness",
+            dimension="transcript_extraction",
+            details="Invitee topic handoff transcription applies to fresh sessions; restored/seeded runs may start after the handoff.",
+            evidence=[f"start mode {start.get('mode')!r} skipped"],
+        )
+
+    sides = scenario_sides(scenario)
+    if len(sides) < 2:
+        return invariant_result(
+            "invitee_topic_handoff_transcribed",
+            True,
+            severity="soft",
+            owner="eval_harness",
+            dimension="transcript_extraction",
+            details="Invitee topic handoff transcription requires a two-sided scenario.",
+            evidence=[f"sides={sides!r}"],
+        )
+
+    session_roles = run_data.get("session_roles") if isinstance(run_data.get("session_roles"), dict) else {}
+    inviter = str(session_roles.get("assigned_character") or sides[0]).lower()
+    invitees = [side for side in sides if side != inviter]
+    expected_phrases = (
+        "INVITEE TOPIC HANDOFF",
+        "Before we begin, this is what",
+        "would like to work through with you",
+        "This is how things look from their side right now",
+    )
+
+    evidence: list[str] = []
+    transcript_by_name = {path.name: text for path, text in transcripts}
+    for invitee in invitees:
+        name = f"{invitee}-stage0.md"
+        text = transcript_by_name.get(name, "")
+        if not text:
+            evidence.append(f"{name}: missing invitee stage 0 transcript")
+            continue
+        missing = [phrase for phrase in expected_phrases if phrase not in text]
+        if missing:
+            evidence.append(f"{name}: missing topic handoff transcript phrase(s): {', '.join(missing)}")
+
+    return invariant_result(
+        "invitee_topic_handoff_transcribed",
+        not evidence,
+        owner="eval_harness",
+        dimension="transcript_extraction",
+        details="Fresh invitee Stage 0 transcripts must preserve the visible topic/process handoff card shown before the invitee opener.",
+        evidence=evidence,
+    )
 
 
 def check_stage_limit_reached(run_data: dict[str, Any], scenario: str, max_stage: int) -> dict[str, Any]:
@@ -1592,6 +1660,30 @@ def check_felt_heard_gate_after_witnessing(transcripts: list[tuple[Path, str]]) 
     )
 
 
+def check_stage1_felt_heard_confirmation_transcribed(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
+    stage1_transcripts: list[Path] = []
+    evidence: list[str] = []
+    for path, text in transcripts:
+        metadata = transcript_metadata(text)
+        stage_text = metadata.get("stage", "").strip("`")
+        if stage_text != "1":
+            continue
+        stage1_transcripts.append(path)
+        lowered = text.lower()
+        if "confirmed they feel heard" not in lowered:
+            evidence.append(f"{path.name}: missing explicit feel-heard confirmation milestone")
+    if not stage1_transcripts:
+        evidence.append("missing stage 1 transcript artifacts")
+    return invariant_result(
+        "stage1_felt_heard_confirmation_transcribed",
+        not evidence,
+        owner="eval_harness",
+        dimension="transcript_extraction",
+        details="Stable Stage 1 transcripts must make the user's explicit feel-heard confirmation auditable.",
+        evidence=evidence,
+    )
+
+
 def check_chat_copy_has_visible_input(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
     evidence: list[str] = []
     for path, text in transcripts:
@@ -1601,18 +1693,24 @@ def check_chat_copy_has_visible_input(transcripts: list[tuple[Path, str]]) -> di
             continue
         side = metadata.get("side", "").strip("`").lower()
         side_label = side.capitalize()
-        for match in CHAT_PROMISE_RE.finditer(text):
-            following_text = text[match.end():]
-            next_user_message = (
-                bool(side_label)
-                and re.search(rf"^\*\*\[[^\]]+\]\s+{re.escape(side_label)}:\*\*", following_text, re.MULTILINE)
-            )
-            if next_user_message:
-                continue
-            start = max(0, match.start() - 80)
-            end = min(len(text), match.end() + 80)
-            snippet = " ".join(text[start:end].split())
-            evidence.append(f"{path.name}: chat-promising copy without input-visible metadata: {snippet}")
+        for ai_block in TRANSCRIPT_AI_BLOCK_RE.finditer(text):
+            block = ai_block.group("body")
+            for match in CHAT_PROMISE_RE.finditer(block):
+                following_text = text[ai_block.end():]
+                next_user_message = (
+                    bool(side_label)
+                    and re.search(rf"^\*\*\[[^\]]+\]\s+{re.escape(side_label)}:\*\*", following_text, re.MULTILINE)
+                )
+                if next_user_message:
+                    continue
+                absolute_start = ai_block.start("body") + match.start()
+                absolute_end = ai_block.start("body") + match.end()
+                start = max(0, absolute_start - 80)
+                end = min(len(text), absolute_end + 80)
+                snippet = " ".join(text[start:end].split())
+                evidence.append(f"{path.name}: chat-promising copy without input-visible metadata: {snippet}")
+                if len(evidence) >= 10:
+                    break
             if len(evidence) >= 10:
                 break
     return invariant_result(
@@ -1675,17 +1773,94 @@ def check_transcript_shared_context_blocks_labeled(transcripts: list[tuple[Path,
     )
 
 
+SHARE_SUGGESTION_BLOCK_RE = re.compile(
+    r"💡 SHARE SUGGESTION \(to help (?P<partner>[^)]+) understand you better\):\s*\n"
+    r"(?P<content>.*?)\n\*20\d\d-\d\d-\d\d [^*]+\*",
+    re.S,
+)
+PARTNER_SHARED_BLOCK_RE = re.compile(
+    r"📤 (?P<partner>[^\n:]+) SHARED WITH YOU:\*\*\s*\n"
+    r"(?P<content>.*?)\n\*20\d\d-\d\d-\d\d [^*]+\*",
+    re.S,
+)
+
+
+def normalize_transcript_block(text: str) -> str:
+    return " ".join(text.strip().strip('"').split())
+
+
+def check_shared_context_directionality(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
+    evidence: list[str] = []
+    for path, text in transcripts:
+        own_suggestions = [
+            normalize_transcript_block(match.group("content"))
+            for match in SHARE_SUGGESTION_BLOCK_RE.finditer(text)
+        ]
+        if not own_suggestions:
+            continue
+        for incoming in PARTNER_SHARED_BLOCK_RE.finditer(text):
+            incoming_content = normalize_transcript_block(incoming.group("content"))
+            if not incoming_content:
+                continue
+            for own_suggestion in own_suggestions:
+                if incoming_content == own_suggestion:
+                    evidence.append(
+                        f"{path.name}: partner-shared block duplicates this side's own share suggestion"
+                    )
+                    break
+            if len(evidence) >= 10:
+                break
+    return invariant_result(
+        "shared_context_directionality_consistent",
+        not evidence,
+        owner="eval_harness",
+        dimension="transcript_extraction",
+        details="A transcript must not label the current user's own share suggestion as incoming partner-shared context.",
+        evidence=evidence,
+    )
+
+
+INTERNAL_RECONCILER_ANALYSIS_RE = re.compile(
+    r"RECONCILER ANALYSIS|Gap Severity:|Action:\s*(?:OFFER_|ADVANCE_|WAIT_|COMPLETE)|Alignment:\s*\d+%",
+    re.I,
+)
+
+
+def check_no_internal_reconciler_analysis(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
+    evidence: list[str] = []
+    for path, text in transcripts:
+        for match in INTERNAL_RECONCILER_ANALYSIS_RE.finditer(text):
+            start = max(0, match.start() - 80)
+            end = min(len(text), match.end() + 80)
+            snippet = " ".join(text[start:end].split())
+            evidence.append(f"{path.name}: internal reconciler analysis leaked into stable transcript: {snippet}")
+            if len(evidence) >= 10:
+                break
+    return invariant_result(
+        "no_internal_reconciler_analysis",
+        not evidence,
+        owner="eval_harness",
+        dimension="transcript_extraction",
+        details="Stable transcripts must not expose internal reconciler analysis, alignment scores, or action labels.",
+        evidence=evidence,
+    )
+
+
 def run_invariant_checks(run_dir: Path, run_data: dict[str, Any], scenario: str, max_stage: int) -> dict[str, Any]:
     transcripts = read_transcript_texts(run_data.get("transcripts") or [])
     checks: list[dict[str, Any]] = []
     checks.append(check_no_visible_control_tags(transcripts))
     checks.extend(check_transcript_side_stage_metadata(transcripts, scenario, max_stage))
+    checks.append(check_invitee_topic_handoff_transcribed(transcripts, run_data, scenario))
     checks.append(check_transcript_shared_context_blocks_labeled(transcripts))
+    checks.append(check_shared_context_directionality(transcripts))
+    checks.append(check_no_internal_reconciler_analysis(transcripts))
     checks.append(check_partner_private_leakage(transcripts))
     checks.append(check_stage_limit_reached(run_data, scenario, max_stage))
     checks.append(check_actor_operated_correct_side(run_data, scenario))
     checks.append(check_session_started_with_profile_initiator(run_data, scenario))
     checks.append(check_felt_heard_gate_after_witnessing(transcripts))
+    checks.append(check_stage1_felt_heard_confirmation_transcribed(transcripts))
     checks.append(check_chat_copy_has_visible_input(transcripts))
     hard_failures = [check for check in checks if check["severity"] == "hard" and check["status"] == "fail"]
     result = {
