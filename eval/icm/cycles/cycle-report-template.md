@@ -9,8 +9,8 @@
 
 ## Artifacts
 
-- Adam/Eve run dir:
-- James/Catherine run dir:
+- Required scenarios from `eval/gold-scenarios.json`:
+- Run dirs by scenario:
 - Loop summaries:
 - Scores:
 - Invariants:
@@ -37,7 +37,7 @@
 
 ## Reruns
 
-| Pair | Command | Run Dir | Score | Invariants | Result |
+| Scenario | Command | Run Dir | Score | Invariants | Result |
 |---|---|---|---|---|---|
 
 ## Cleanup
