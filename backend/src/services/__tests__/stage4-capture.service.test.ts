@@ -1252,6 +1252,9 @@ describe('stage4-capture.service', () => {
           'know I am staying with it if I can say I am scared or defensive instead of just going quiet',
           'feel steady in myself again',
           'Find something that is mine, outside of whether Eve feels okay with our life (still forming - user acknowledges they do not know exactly what yet)',
+          'think of is a weekly conversation that does not become a verdict',
+          'know the rules before I walk in',
+          "be open to that too, but I don't want to make a long list just to feel safer",
         ],
       })
     );
