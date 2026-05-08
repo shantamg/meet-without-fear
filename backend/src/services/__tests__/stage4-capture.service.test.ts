@@ -1256,6 +1256,7 @@ describe('stage4-capture.service', () => {
           'know the rules before I walk in',
           "be open to that too, but I don't want to make a long list just to feel safer",
           'feel less scared',
+          'ask to slow down without disappearing',
           'say I am scared and ask for five minutes instead of disappearing',
           'brace before we even start',
           'Willingness to try something new together (vague, needs refinement if pursued)',
@@ -1409,6 +1410,7 @@ describe('stage4-capture.service', () => {
         userMessage: 'Those are elaborations on the same two ideas.',
         compatibilityProposedStrategies: [
           'feel less scared',
+          'ask to slow down without disappearing',
           'say I am scared and ask for five minutes instead of disappearing',
           'brace before we even start',
           'Saturday mornings - walk without phone, write down feelings before coming home, practice noticing himself without needing Eve to settle him',
