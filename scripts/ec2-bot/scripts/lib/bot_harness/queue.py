@@ -129,9 +129,16 @@ def slack_cancelled(config: BotConfig, item: dict, logfile: Path) -> bool:
     ts = item.get("slack_ts") or ""
     if not token or not channel or not ts:
         return False
-    qs = parse.urlencode({"channel": channel, "oldest": ts, "latest": ts, "inclusive": "true", "limit": "1"})
+    thread_ts = str(item.get("thread_ts") or "")
+    if thread_ts:
+        endpoint = "conversations.replies"
+        params = {"channel": channel, "ts": thread_ts, "oldest": ts, "latest": ts, "inclusive": "true", "limit": "1"}
+    else:
+        endpoint = "conversations.history"
+        params = {"channel": channel, "oldest": ts, "latest": ts, "inclusive": "true", "limit": "1"}
+    qs = parse.urlencode(params)
     req = request.Request(
-        f"https://slack.com/api/conversations.history?{qs}",
+        f"https://slack.com/api/{endpoint}?{qs}",
         headers={"Authorization": f"Bearer {token}"},
     )
     try:
@@ -139,11 +146,12 @@ def slack_cancelled(config: BotConfig, item: dict, logfile: Path) -> bool:
     except Exception:
         return False
     messages = payload.get("messages") or []
-    if not messages:
+    message = next((m for m in messages if str(m.get("ts", "")) == str(ts)), None)
+    if not message:
         log(logfile, f"CANCELLED {item.get('command_slug', '')} - original message deleted (channel={channel} ts={ts})")
         mark_cancelled(config, item)
         return True
-    for reaction in messages[0].get("reactions") or []:
+    for reaction in message.get("reactions") or []:
         if reaction.get("name") == "x":
             log(logfile, f"CANCELLED {item.get('command_slug', '')} - x reaction found (channel={channel} ts={ts})")
             mark_cancelled(config, item)

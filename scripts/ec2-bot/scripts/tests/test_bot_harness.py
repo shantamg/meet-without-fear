@@ -15,7 +15,7 @@ from bot_harness.agent_runtime import cleanup, setup_agent
 from bot_harness.config import BotConfig
 from bot_harness.dispatcher import build_prompt, dispatch_labels, scheduled
 from bot_harness.json_store import append_jsonl, read_json, write_json
-from bot_harness.queue import process_one, select_next
+from bot_harness.queue import process_one, select_next, slack_cancelled
 from bot_harness.registry import LabelRegistry
 from bot_harness.shared_state import create_queue_entry
 
@@ -137,6 +137,40 @@ class HarnessTests(unittest.TestCase):
                         ("reactions.add", "eyes"),
                     ],
                 )
+
+    def test_queue_slack_cancel_checks_thread_replies_endpoint(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            env = self.env(tmp)
+            env["SLACK_BOT_TOKEN"] = "fake-token"
+            item = {
+                "command_slug": "threaded",
+                "slack_channel": "C1",
+                "slack_ts": "123.456",
+                "thread_ts": "111.000",
+            }
+
+            class FakeResponse:
+                def read(self):
+                    return json.dumps(
+                        {
+                            "messages": [
+                                {"ts": "123.456", "reactions": [{"name": "x"}]},
+                            ]
+                        }
+                    ).encode("utf-8")
+
+            urls = []
+            with patch.dict(os.environ, env, clear=False):
+                config = BotConfig.from_env()
+                with (
+                    patch("bot_harness.queue.request.urlopen", side_effect=lambda req, timeout=10: urls.append(req.full_url) or FakeResponse()),
+                    patch("bot_harness.queue.mark_cancelled"),
+                ):
+                    self.assertTrue(slack_cancelled(config, item, Path(env["BOT_LOG_DIR"]) / "process-queue.log"))
+
+            self.assertIn("conversations.replies", urls[0])
+            self.assertIn("ts=111.000", urls[0])
 
     def test_queue_ttl_retry_thread_and_workspace_gates(self):
         with tempfile.TemporaryDirectory() as td:
@@ -397,6 +431,7 @@ printf '%s\\n' "$@" >> "{capture}"
             self.assertEqual(calls[0][0], "review-pr-42")
             self.assertIn("/review-pr 42 shantamg/meet-without-fear", calls[0][1])
             context = Path(calls[0][2]["SESSION_CONTEXT"])
+            self.assertEqual(context.parent, Path("/tmp/slam-bot"))
             self.assertEqual(read_json(context, {})["source"], "github-state-scanner")
             self.assertTrue(list(Path(env["BOT_STATE_DIR"], "claims").glob("claimed-gh-n1-*.txt")))
 

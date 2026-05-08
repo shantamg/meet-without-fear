@@ -14,6 +14,9 @@ from .json_store import read_json, write_json
 from .logging import log
 
 
+BOT_USER_LOGINS = {"MwfBot", "slam-paws", "mwf-bot-app[bot]", "slam-bot-app[bot]", "slam-paws-app[bot]"}
+
+
 def gh(repo: str, args: list[str], *, mutate: bool = False) -> object | None:
     if mutate and os.environ.get("BOT_HARNESS_NO_GH_MUTATION") == "1":
         return None
@@ -39,7 +42,7 @@ def bot_commented(repo: str, issue_number: int) -> bool:
     if not isinstance(comments, list):
         return False
     return any(
-        ((comment.get("user") or {}).get("login") in {"slam-paws", "slam-paws-app[bot]"})
+        ((comment.get("user") or {}).get("login") in BOT_USER_LOGINS)
         for comment in comments
         if isinstance(comment, dict)
     )

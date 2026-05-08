@@ -17,7 +17,7 @@ from .json_store import read_json, write_json
 from .logging import append
 
 
-BOT_USER_LOGINS = {"slam-paws", "slam-paws-app[bot]"}
+BOT_USER_LOGINS = {"MwfBot", "slam-paws", "mwf-bot-app[bot]", "slam-bot-app[bot]", "slam-paws-app[bot]"}
 BOT_MENTION_TOKENS = {"@slam-paws", "@slam_paws"}
 
 
@@ -174,7 +174,7 @@ def already_reviewed_head(config: BotConfig, repo: str, number: str) -> bool:
 
 
 def session_context(config: BotConfig, repo: str, number: str) -> Path:
-    path = Path("/tmp/slam-paws") / f"review-pr-{number}-session-context.json"
+    path = Path("/tmp/slam-bot") / f"review-pr-{number}-session-context.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     pr = state_pr(config, number)
     if pr:

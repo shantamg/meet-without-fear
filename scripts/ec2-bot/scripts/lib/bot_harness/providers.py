@@ -163,7 +163,8 @@ class InvokeProvider:
 
         with input_file.open("rb") as stdin, raw_stream.open("ab") as raw_out, stream_log.open("a", encoding="utf-8") as stream_out, stderr_file.open("wb") as stderr_out:
             proc = subprocess.Popen(cmd, stdin=stdin, stdout=subprocess.PIPE, stderr=stderr_out)
-            assert proc.stdout is not None
+            if proc.stdout is None:
+                return False, "provider produced no stdout pipe"
             for raw_line in proc.stdout:
                 raw_out.write(raw_line)
                 raw_out.flush()
