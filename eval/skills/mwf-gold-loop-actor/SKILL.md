@@ -96,3 +96,5 @@ Allowed `state` values:
 Set `blocked_on` to the lowercase partner side when partner action is needed; otherwise use `null`. Keep JSON valid.
 
 For Stage 4, do not use `stage_limit_reached` while waiting for the partner to submit proposals, selections, review, or closure. Report `needs_partner` with `blocked_on` set to the partner instead. A Stage 4 `stage_limit_reached` status must have `"blocked_on": null` and should only appear after this side has submitted selections or the stage is visibly closed for this side.
+
+Stage 4 keeps chat input available while proposals are being shaped. Do not keep adding ideas indefinitely just because input remains visible. Once the assigned side has contributed one or two concrete proposals or individual commitments and made visible willingness selections for the current inventory, stop and report `needs_partner` if closure is still disabled because partner-private proposals, selections, review, or closure are pending.
