@@ -1248,6 +1248,10 @@ describe('stage4-capture.service', () => {
           'start this week',
           'stay present better if I knew that going in',
           'say what we heard',
+          'add that we try it for four weeks before deciding what it means',
+          'know I am staying with it if I can say I am scared or defensive instead of just going quiet',
+          'feel steady in myself again',
+          'Find something that is mine, outside of whether Eve feels okay with our life (still forming - user acknowledges they do not know exactly what yet)',
         ],
       })
     );
@@ -1347,6 +1351,30 @@ describe('stage4-capture.service', () => {
       captureInput({
         userMessage: 'That is the same idea.',
         compatibilityProposedStrategies: ['research one real itinerary in the next two weeks and write it down'],
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(prisma.strategyProposal.update).not.toHaveBeenCalled();
+    expect(result.appliedOperationCount).toBe(0);
+    expect(result.skippedOperationCount).toBe(1);
+  });
+
+  it('deduplicates weekly walk understanding variants', async () => {
+    (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+      proposal({
+        description:
+          "Weekly walk where we're outside, moving, and each share one real thing before going home - with the rule that it's not a decision meeting, each person names one true thing and the other reflects it back before responding, and if Adam freezes he says that out loud instead of disappearing",
+        kind: Stage4ProposalKind.SHARED_PROPOSAL,
+      }),
+    ]);
+
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'That is the same shared idea.',
+        compatibilityProposedStrategies: [
+          'Weekly walk where each person names one true thing and the other reflects it back before responding. Not a decision meeting. If Adam freezes, he says it out loud. Four-week trial before evaluating',
+        ],
       })
     );
 
