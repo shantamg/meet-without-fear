@@ -19,6 +19,7 @@ import {
   StyleSheet,
   BackHandler,
   useWindowDimensions,
+  LayoutChangeEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { appWidthStyle, colors } from '@/theme';
@@ -85,29 +86,39 @@ export function NeedsDrawer({
 }: NeedsDrawerProps) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const position3Q = windowHeight * 0.25;
-  const windowHeightRef = useRef(windowHeight);
+  const [drawerHostHeight, setDrawerHostHeight] = useState(windowHeight);
+  const position3Q = drawerHostHeight * 0.25;
+  const drawerHostHeightRef = useRef(drawerHostHeight);
   const position3QRef = useRef(position3Q);
   const positionFullRef = useRef(insets.top);
-  windowHeightRef.current = windowHeight;
+  drawerHostHeightRef.current = drawerHostHeight;
   position3QRef.current = position3Q;
   positionFullRef.current = insets.top;
 
   // -------------------------------------------------------------------------
   // Animation refs
   // -------------------------------------------------------------------------
-  const drawerTranslate = useRef(new Animated.Value(windowHeight)).current;
+  const drawerTranslate = useRef(new Animated.Value(drawerHostHeight)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const isDragging = useRef(false);
   const currentSnap = useRef<'3q' | 'full'>('3q');
-  const [contentHeight, setContentHeight] = useState(windowHeight - position3Q);
+  const [contentHeight, setContentHeight] = useState(drawerHostHeight - position3Q);
+
+  const handleHostLayout = useCallback((event: LayoutChangeEvent) => {
+    const measuredHeight = event.nativeEvent.layout.height;
+    if (measuredHeight > 0) {
+      setDrawerHostHeight((current) =>
+        Math.abs(current - measuredHeight) > 1 ? measuredHeight : current,
+      );
+    }
+  }, []);
 
   // -------------------------------------------------------------------------
   // Open / Close / Snap animations
   // -------------------------------------------------------------------------
   const snapTo = useCallback(
     (position: number, backdrop: number) => {
-      setContentHeight(windowHeightRef.current - position);
+      setContentHeight(drawerHostHeightRef.current - position);
       Animated.parallel([
         Animated.spring(drawerTranslate, {
           toValue: position,
@@ -133,7 +144,7 @@ export function NeedsDrawer({
   const closeDrawer = useCallback(() => {
     Animated.parallel([
       Animated.timing(drawerTranslate, {
-        toValue: windowHeightRef.current,
+        toValue: drawerHostHeightRef.current,
         duration: 200,
         useNativeDriver: true,
       }),
@@ -156,14 +167,14 @@ export function NeedsDrawer({
 
   useEffect(() => {
     if (!visible) {
-      drawerTranslate.setValue(windowHeight);
+      drawerTranslate.setValue(drawerHostHeight);
       return;
     }
 
     const position = currentSnap.current === 'full' ? positionFullRef.current : position3Q;
     drawerTranslate.setValue(position);
-    setContentHeight(windowHeight - position);
-  }, [visible, windowHeight, position3Q, drawerTranslate]);
+    setContentHeight(drawerHostHeight - position);
+  }, [visible, drawerHostHeight, position3Q, drawerTranslate]);
 
   // -------------------------------------------------------------------------
   // Android back button
@@ -191,7 +202,7 @@ export function NeedsDrawer({
         const pFull = positionFullRef.current;
         const base = currentSnap.current === 'full' ? pFull : position3QRef.current;
         const newPos = base + gestureState.dy;
-        const clamped = Math.max(pFull, Math.min(newPos, windowHeightRef.current));
+        const clamped = Math.max(pFull, Math.min(newPos, drawerHostHeightRef.current));
         drawerTranslate.setValue(clamped);
       },
       onPanResponderRelease: (_, gestureState) => {
@@ -377,6 +388,7 @@ export function NeedsDrawer({
   return (
     <View
       style={[StyleSheet.absoluteFill, { zIndex: 100, elevation: 100 }]}
+      onLayout={handleHostLayout}
       pointerEvents="auto"
       testID={testID}
     >
@@ -400,13 +412,14 @@ export function NeedsDrawer({
           styles.drawer,
           appWidthStyle,
           {
-            height: windowHeight,
+            height: drawerHostHeight,
             transform: [{ translateY: drawerTranslate }],
           },
         ]}
+        testID={`${testID}-sheet`}
       >
         {/* Content wrapper constrains layout to visible drawer area */}
-        <View style={{ height: contentHeight }}>
+        <View style={{ height: contentHeight }} testID={`${testID}-content`}>
           {/* Drag handle */}
           <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
             <View style={styles.dragHandle} />
