@@ -54,6 +54,9 @@ expo-env.d.ts
 # Testing
 coverage
 eval/alignment-runs/
+eval/runs/
+backend/scripts/transcripts/
+docs/product/gold-session-scratch/*.md
 
 # Prisma
 backend/prisma/*.db
