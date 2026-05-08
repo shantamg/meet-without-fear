@@ -318,6 +318,7 @@ function isConcreteProposal(description: string): boolean {
   if (/^work with\b/.test(normalized)) return false;
   if (/^actually try\b/.test(normalized)) return false;
   if (/^try is\b/.test(normalized)) return false;
+  if (/^ask to slow down without disappearing\b/.test(normalized)) return false;
   if (/^ask (?:(?:a few|some)\s+)?questions?\s+before\b/.test(normalized)) return false;
   if (/^ask what helped\b/.test(normalized)) return false;
   if (/^(?:want to learn|learn whether)\b/.test(normalized)) return false;
