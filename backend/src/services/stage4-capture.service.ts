@@ -601,6 +601,9 @@ function proposalFamily(value: string): string | null {
   ) {
     return 'self-editing-checkin';
   }
+  if (/\bvolunteer\s+shift\b/.test(normalized) && /\b(?:this month|again|outside|useful|relationship)\b/.test(normalized)) {
+    return 'volunteer-shift';
+  }
   if (
     /\bprivate\s+(?:weekly\s+)?note\b/.test(normalized) &&
     /\b(?:edited|edit|speaking|spoke|choice|chose|chosen)\b/.test(normalized)
