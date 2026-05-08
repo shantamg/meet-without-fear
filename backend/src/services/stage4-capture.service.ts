@@ -623,6 +623,7 @@ async function applyOperation(
           status: Stage4ProposalStatus.ACTIVE,
         },
       });
+      const beforeSnapshot = proposalSnapshot(superseded);
       Object.assign(superseded, {
         description: operation.description,
         needsAddressed: operation.needsAddressed,
@@ -637,16 +638,8 @@ async function applyOperation(
           sessionId: input.sessionId,
           actorUserId: input.userId,
           action: 'REVISED',
-          before: proposalSnapshot(superseded),
-          after: {
-            ...proposalSnapshot(superseded),
-            description: operation.description,
-            needsAddressed: operation.needsAddressed,
-            duration: operation.duration ?? null,
-            measureOfSuccess: operation.measureOfSuccess ?? null,
-            kind: operation.kind,
-            status: Stage4ProposalStatus.ACTIVE,
-          },
+          before: beforeSnapshot,
+          after: proposalSnapshot(superseded),
           reason: 'Captured refined Stage 4 proposal superseding an existing draft.',
           messageId: input.messageId,
         },

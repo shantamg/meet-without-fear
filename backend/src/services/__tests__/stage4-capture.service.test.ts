@@ -281,6 +281,49 @@ describe('stage4-capture.service', () => {
     expect(result.appliedOperationCount).toBe(1);
   });
 
+  it('captures pre-mutation before-snapshot when revising a superseded proposal', async () => {
+    const originalSnapshot = {
+      description:
+        "weekly conversation where Eve names one thing she is wanting or curious about, and Adam's first job is to ask what it means to her",
+      needsAddressed: ['need-original'],
+      duration: 'one week',
+      measureOfSuccess: 'felt heard',
+      kind: Stage4ProposalKind.SHARED_PROPOSAL,
+      status: Stage4ProposalStatus.ACTIVE,
+    };
+    (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([proposal({ ...originalSnapshot })]);
+
+    await captureStage4Turn(
+      captureInput({
+        userMessage:
+          "I think I could try a weekly conversation where I name one thing I am wanting or curious about, and Adam's first job is just to ask what it means to me before defending what we already have.",
+      })
+    );
+
+    const revisionCall = (prisma.stage4ProposalRevision.create as jest.Mock).mock.calls.find(
+      ([args]) => args?.data?.action === 'REVISED'
+    );
+    expect(revisionCall).toBeDefined();
+    const { before, after } = revisionCall![0].data;
+    expect(before).toEqual(
+      expect.objectContaining({
+        description: originalSnapshot.description,
+        needsAddressed: originalSnapshot.needsAddressed,
+        duration: originalSnapshot.duration,
+        measureOfSuccess: originalSnapshot.measureOfSuccess,
+        kind: originalSnapshot.kind,
+        status: originalSnapshot.status,
+      })
+    );
+    expect(before).not.toEqual(after);
+    expect(after).toEqual(
+      expect.objectContaining({
+        description:
+          "try a weekly conversation where I name one thing I am wanting or curious about, and Adam's first job is just to ask what it means to me before defending what we already have",
+      })
+    );
+  });
+
   it('revises semantically superseded proposal drafts instead of adding duplicates', async () => {
     (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
       proposal({
