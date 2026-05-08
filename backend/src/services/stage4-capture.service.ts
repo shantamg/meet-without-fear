@@ -200,7 +200,7 @@ function inferProposalKind(text: string): Stage4ProposalKind {
   }
   if (
     /\bone small new thing each month\b/i.test(text) &&
-    /\b(?:adam|eve|they|together|stays engaged|naming when|comes? back)\b/i.test(text)
+    /\b(?:adam|eve|they|together|partner|he|she|stays engaged|naming when|comes? back)\b/i.test(text)
   ) {
     return Stage4ProposalKind.SHARED_PROPOSAL;
   }
@@ -318,6 +318,7 @@ function isConcreteProposal(description: string): boolean {
   if (/^work with\b/.test(normalized)) return false;
   if (/^actually try\b/.test(normalized)) return false;
   if (/^try is\b/.test(normalized)) return false;
+  if (/^try one small new thing each month that (?:she|he|they|partner) chooses\b/.test(normalized)) return false;
   if (/^ask to slow down without disappearing\b/.test(normalized)) return false;
   if (/^ask (?:(?:a few|some)\s+)?questions?\s+before\b/.test(normalized)) return false;
   if (/^ask what helped\b/.test(normalized)) return false;
@@ -359,6 +360,7 @@ function isConcreteProposal(description: string): boolean {
   if (/^keep the (?:sunday|weekly|30 minute|thirty minute).*conversation\b/.test(normalized)) return false;
   if (/^choose (?:myself|for myself)\b/.test(normalized)) return false;
   if (/^choose without waiting\b/.test(normalized)) return false;
+  if (/^choose it and see what it feels like\b/.test(normalized)) return false;
   if (/^start by each saying the thing\b/.test(normalized)) return false;
   if (/^both say we feel less alone\b/.test(normalized)) return false;
   if (/^name when i am scared before i shut down\b/.test(normalized)) return false;
@@ -415,6 +417,7 @@ function isConcreteProposal(description: string): boolean {
   if (/^know whether it is opening something\b/.test(normalized)) return false;
   if (/^edit it down before it even starts\b/.test(normalized)) return false;
   if (/^not promising it fixes everything\b/.test(normalized)) return false;
+  if (/^(?:adam|eve|partner) responds?\b/.test(normalized) && /\b(?:gladness|instead of interpreting|rejection|failure)\b/.test(normalized)) return false;
   return true;
 }
 
@@ -517,7 +520,7 @@ function proposalFamily(value: string): string | null {
   }
   if (
     /\b(?:monthly experiment|one small new thing each month|small new thing each month)\b/.test(normalized) &&
-    /\b(?:eve chooses|eve initiates|adam stays engaged|naming when|scared|shutting down|category|details together|three month|check in)\b/.test(normalized)
+    /\b(?:eve chooses|eve initiates|adam stays engaged|she chooses|he chooses|partner chooses|naming when|scared|shutting down|category|details together|three month|check in)\b/.test(normalized)
   ) {
     return 'monthly-experiment';
   }

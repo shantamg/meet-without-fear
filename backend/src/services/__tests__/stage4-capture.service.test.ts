@@ -1518,6 +1518,43 @@ describe('stage4-capture.service', () => {
     expect(result.skippedOperationCount).toBe(1);
   });
 
+  it('does not recapture first-person monthly experiment variants as individual commitments', async () => {
+    (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+      proposal({
+        description:
+          "One small new thing each month that Eve chooses, kept small enough that Adam doesn't retreat into over-planning",
+        kind: Stage4ProposalKind.SHARED_PROPOSAL,
+      }),
+    ]);
+
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage:
+          "I could try one small new thing each month that she chooses, as long as it stays small enough that I don't start hiding inside the planning.",
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(prisma.strategyProposal.update).not.toHaveBeenCalled();
+    expect(result.appliedOperationCount).toBe(0);
+    expect(result.skippedOperationCount).toBe(0);
+  });
+
+  it('skips live Stage 4 monthly follow-through and outcome fragments', async () => {
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'Those are not separate proposals.',
+        compatibilityProposedStrategies: [
+          'choose it and see what it feels like to follow through',
+          'Adam responds to the news with gladness instead of interpreting it as rejection or failure',
+        ],
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(result.appliedOperationCount).toBe(0);
+  });
+
   it('deduplicates pause-and-return variants as one shared proposal', async () => {
     (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
       proposal({
