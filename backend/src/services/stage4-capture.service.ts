@@ -349,6 +349,8 @@ function isConcreteProposal(description: string): boolean {
   if (/^start this week\b/.test(normalized)) return false;
   if (/^add that we try it\b/.test(normalized)) return false;
   if (/^want it to be predictable\b/.test(normalized)) return false;
+  if (/^think of is\b/.test(normalized)) return false;
+  if (/^know the rules before\b/.test(normalized)) return false;
   if (/^keep the (?:sunday|weekly|30 minute|thirty minute).*conversation\b/.test(normalized)) return false;
   if (/^choose (?:myself|for myself)\b/.test(normalized)) return false;
   if (/^choose without waiting\b/.test(normalized)) return false;
@@ -390,6 +392,7 @@ function isConcreteProposal(description: string): boolean {
   if (/^know i am staying with it if\b/.test(normalized)) return false;
   if (/^feel steady in myself again\b/.test(normalized)) return false;
   if (/^show up better then than after work\b/.test(normalized)) return false;
+  if (/^be open to that too\b/.test(normalized)) return false;
   if (/^restart that twice a week\b/.test(normalized) && /\bmaybe meet\b/.test(normalized)) return false;
   if (/\bdevelop something that is (?:his|her|their|my) own outside\b/.test(normalized)) return false;
   if (/^find something that is (?:mine|his|hers|theirs|yours) outside\b/.test(normalized)) return false;
