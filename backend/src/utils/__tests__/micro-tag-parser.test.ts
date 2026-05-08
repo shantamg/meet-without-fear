@@ -318,12 +318,63 @@ That gives you a concrete experiment and a time to revisit it.`;
       ]);
     });
 
+    it('extracts typed Stage 4 proposal classifications from a hidden block', () => {
+      const raw = `<thinking>Mode:REPAIR | StrategyProposed:N</thinking>
+<stage4_proposals>
+[
+  {
+    "action": "ADD",
+    "targetProposalId": null,
+    "classification": "PROPOSAL",
+    "description": "This Friday, one quiet conversation without the kids in the room",
+    "kind": "SHARED_PROPOSAL",
+    "ownerUserId": null,
+    "needsAddressed": ["clarity"],
+    "duration": "Friday evening",
+    "measureOfSuccess": "They leave with an actual answer"
+  },
+  {
+    "action": "IGNORE",
+    "targetProposalId": null,
+    "classification": "SUCCESS_MARKER",
+    "description": "I would walk away knowing where I stand",
+    "kind": null,
+    "ownerUserId": null
+  }
+]
+</stage4_proposals>
+That gives this a clearer shape.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.response).toBe('That gives this a clearer shape.');
+      expect(result.response).not.toContain('stage4_proposals');
+      expect(result.stage4ProposalBlockPresent).toBe(true);
+      expect(result.stage4Proposals).toEqual([
+        {
+          action: 'ADD',
+          classification: 'PROPOSAL',
+          description: 'This Friday, one quiet conversation without the kids in the room',
+          kind: 'SHARED_PROPOSAL',
+          needsAddressed: ['clarity'],
+          duration: 'Friday evening',
+          measureOfSuccess: 'They leave with an actual answer',
+        },
+        {
+          action: 'IGNORE',
+          classification: 'SUCCESS_MARKER',
+          description: 'I would walk away knowing where I stand',
+        },
+      ]);
+    });
+
     it('defaults flags to false when not present', () => {
       const raw = `<thinking>Just some analysis</thinking>Response`;
       const result = parseMicroTagResponse(raw);
       expect(result.offerFeelHeardCheck).toBe(false);
       expect(result.feelHeardConfirmed).toBe(false);
       expect(result.offerReadyToShare).toBe(false);
+      expect(result.stage4ProposalBlockPresent).toBe(false);
     });
 
     it('extracts FeelHeardConfirmed:Y as true', () => {

@@ -62,7 +62,25 @@ Do NOT list AI ideas the user has not accepted, declined ideas, removed items, v
 Do NOT write generic labels such as "User will..." in ProposedStrategy lines; preserve the user's own actor or role language so ownership stays clear.
 If StrategyProposed is Y, list each concrete user-endorsed proposal on its own line, prefixed with "ProposedStrategy: ". Example:
 ProposedStrategy: 10-minute check-in after dinner each night for one week
-ProposedStrategy: Sunday evening phone call to plan the week ahead`
+ProposedStrategy: Sunday evening phone call to plan the week ahead
+
+Prefer the typed hidden Stage 4 proposal block over ProposedStrategy lines. When the user's latest turn contains possible proposal material, emit a hidden JSON block immediately after </thinking>:
+<stage4_proposals>
+[
+  {
+    "action": "ADD|REVISE|REMOVE|IGNORE",
+    "targetProposalId": null,
+    "classification": "PROPOSAL|REFLECTION|SUCCESS_MARKER|PROCESS",
+    "description": "the exact user-endorsed proposal, reflection, success marker, or process statement",
+    "kind": "SHARED_PROPOSAL|INDIVIDUAL_COMMITMENT|null",
+    "ownerUserId": "current user's id for individual commitments, otherwise null",
+    "needsAddressed": [],
+    "duration": null,
+    "measureOfSuccess": null
+  }
+]
+</stage4_proposals>
+Emit this block on every Stage 4 turn. Only action ADD with classification PROPOSAL creates a proposal card. Use REVISE with targetProposalId when the user is sharpening or restating an existing proposal. Use IGNORE with REFLECTION for accountability acknowledgments or past-tense observations. Use IGNORE with SUCCESS_MARKER for desired outcomes or tests of whether something helped. Use IGNORE with PROCESS for questions about the app, waiting, reviewing, or seeing what happens.`
     : '';
 
   const needsSection = stage === 3
@@ -399,6 +417,8 @@ export interface PromptBlocks {
 
 export interface PromptContext {
   userName: string;
+  currentUserId?: string;
+  partnerUserId?: string | null;
   partnerName?: string;
   turnCount: number;
   emotionalIntensity: number;
@@ -443,6 +463,8 @@ export interface PromptContext {
   };
   /** Stage 2B: Content from previous empathy attempt being refined */
   previousEmpathyContent?: string | null;
+  /** Stage 4: active proposal inventory with stable IDs for typed add/revise/remove decisions */
+  stage4InventoryContext?: string | null;
   /** Partner's progress status for transition messages */
   partnerStatus?: 'not_joined' | 'in_progress' | 'completed';
   /**
@@ -997,8 +1019,21 @@ ${buildResponseProtocol(4)}`;
   const dynamicParts: string[] = [];
   const baseDynamic = buildBaseDynamicGuidance(context);
   if (baseDynamic) dynamicParts.push(baseDynamic);
+  if (context.stage4InventoryContext) {
+    dynamicParts.push(`CURRENT STAGE 4 PROPOSAL INVENTORY:
+${context.stage4InventoryContext}
+
+Use these IDs in <stage4_proposals>. If the latest user turn refines, narrows, adds timing to, or restates one of these cards, emit action REVISE with targetProposalId instead of ADD. Do not create duplicate ADD cards for the same practical experiment.`);
+  }
 
   const earlyStage4 = context.turnCount <= 2;
+  if (context.currentUserId) {
+    dynamicParts.push(`STAGE 4 STRUCTURED CAPTURE IDS:
+- currentUserId: ${context.currentUserId}
+- partnerUserId: ${context.partnerUserId ?? 'unknown'}
+
+When emitting <stage4_proposals>, set ownerUserId to currentUserId for INDIVIDUAL_COMMITMENT proposals this user volunteers to do. For SHARED_PROPOSAL, set ownerUserId to null. If the text is a reflection, success marker, or process statement, classify it that way and set kind and ownerUserId to null.`);
+  }
   if (earlyStage4) {
     dynamicParts.push('EARLY STAGE 4: User may need help shifting from needs to action. Start in INVITING mode. Keep proposals provisional and reversible; the point is learning what is actually workable, not proving anything.');
   }

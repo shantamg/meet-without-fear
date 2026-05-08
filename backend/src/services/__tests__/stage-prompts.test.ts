@@ -325,6 +325,11 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('desired-outcome fragments');
       expect(prompt).toContain('walk away knowing');
       expect(prompt).toContain('Do NOT write generic labels such as "User will..."');
+      expect(prompt).toContain('<stage4_proposals>');
+      expect(prompt).toContain('"action": "ADD|REVISE|REMOVE|IGNORE"');
+      expect(prompt).toContain('"classification": "PROPOSAL|REFLECTION|SUCCESS_MARKER|PROCESS"');
+      expect(prompt).toContain('Emit this block on every Stage 4 turn');
+      expect(prompt).toContain('Only action ADD with classification PROPOSAL creates a proposal card');
       expect(prompt).toContain('one person');
       expect(prompt).toContain('as if it were a shared agreement');
     });
@@ -336,6 +341,31 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Not a proposal yet');
       expect(prompt).toContain('Reflect it as a success criterion');
       expect(prompt).toContain('what concrete action would produce that outcome');
+    });
+
+    it('Stage 4 prompt includes structured capture ids for typed ownership', () => {
+      const context = createContext({
+        currentUserId: 'user-current',
+        partnerUserId: 'user-partner',
+      });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('currentUserId: user-current');
+      expect(prompt).toContain('partnerUserId: user-partner');
+      expect(prompt).toContain('ownerUserId to currentUserId for INDIVIDUAL_COMMITMENT');
+    });
+
+    it('Stage 4 prompt includes proposal ids for typed revisions', () => {
+      const context = createContext({
+        currentUserId: 'user-current',
+        stage4InventoryContext:
+          '- id=proposal-1 | kind=SHARED_PROPOSAL | owner=current user | description="weekly check-in"',
+      });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('CURRENT STAGE 4 PROPOSAL INVENTORY');
+      expect(prompt).toContain('id=proposal-1');
+      expect(prompt).toContain('emit action REVISE with targetProposalId instead of ADD');
     });
 
     it('returns topic-articulation prompt for stage 0 with isInvitationPhase', () => {

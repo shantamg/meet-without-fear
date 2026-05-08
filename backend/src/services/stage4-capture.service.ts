@@ -22,7 +22,20 @@ export type Stage4CaptureInput = {
   currentInventory?: ProposalInventoryDTO;
   confirmedNeeds?: Stage4NeedDTO[];
   recentStage4Messages?: Array<{ role: 'USER' | 'AI'; userId?: string; content: string; timestamp: string }>;
+  structuredProposals?: Stage4StructuredProposalInput[];
   compatibilityProposedStrategies?: string[];
+};
+
+export type Stage4StructuredProposalInput = {
+  action?: 'ADD' | 'REVISE' | 'REMOVE' | 'IGNORE';
+  targetProposalId?: string;
+  classification: 'PROPOSAL' | 'REFLECTION' | 'SUCCESS_MARKER' | 'PROCESS';
+  description: string;
+  kind?: Stage4ProposalKind;
+  ownerUserId?: string;
+  needsAddressed?: string[];
+  duration?: string;
+  measureOfSuccess?: string;
 };
 
 export type Stage4NeedDTO = {
@@ -367,15 +380,11 @@ function isConcreteProposal(description: string): boolean {
   if (/^be clear that\b/.test(normalized) && /\bindividual commitments?\b/.test(normalized)) return false;
   if (/^see what actually works\b/.test(normalized)) return false;
   if (/^see what actually overlaps\b/.test(normalized)) return false;
-  if (/^see what (?:this|that|it) is supposed to do\b/.test(normalized)) return false;
   if (/^see what (?:he|she|they|catherine|james|adam|eve) actually brings? forward\b/.test(normalized)) return false;
   if (/^(?:bring|brings|brought) forward\b/.test(normalized)) return false;
   if (/^see what (?:he|she|they) does? with it\b/.test(normalized)) return false;
   if (/^step in on\b/.test(normalized)) return false;
   if (/^own (?:that part|without|get|what)\b/.test(normalized)) return false;
-  if (/^own that i\b/.test(normalized) && /\b(?:got|was|were|did|said|made|have|had)\b/.test(normalized)) return false;
-  if (/^have a\b/.test(normalized) && /\b(?:calm|respectful|safe)\b/.test(normalized) && /\bconversation\b/.test(normalized) && !/\b(?:for|within|by|on|weekly|daily|monthly|minutes?|hours?|weeks?)\b/.test(normalized)) return false;
-  if (/^(?:whether|if)\s+we\s+can\s+have\b/.test(normalized) && /\bconversation\b/.test(normalized)) return false;
   if (/^think we understood each other\b/.test(normalized)) return false;
   if (/^know it was helping if\b/.test(normalized)) return false;
   if (/^stay more present if\b/.test(normalized)) return false;
@@ -545,12 +554,6 @@ function proposalFamily(value: string): string | null {
     return 'kids-role-clarity';
   }
   if (
-    /\b(?:heat(?:ing)? up|hot|activated|yell(?:ing)?|voice|loud|escalat(?:e|ing|ion)|cuts? (?:me|you|him|her|them) down)\b/.test(normalized) &&
-    /\b(?:name|say|step away|stop|pause|before|acknowledg(?:e|ing)|later)\b/.test(normalized)
-  ) {
-    return 'escalation-self-interruption';
-  }
-  if (
     /\b(?:name what i see|debating my reality|step away from conversations|defending his character)\b/.test(normalized)
   ) {
     return 'self-reality-boundary';
@@ -639,6 +642,54 @@ function hasRemoveIntent(text: string): boolean {
 
 function extractAddOperations(input: Stage4CaptureInput): Stage4InventoryOperation[] {
   const operations: Stage4InventoryOperation[] = [];
+  for (const proposal of input.structuredProposals ?? []) {
+    const action = proposal.action ?? 'ADD';
+    if (action === 'IGNORE') continue;
+    if (action === 'REMOVE' && proposal.targetProposalId) {
+      operations.push({
+        type: 'REMOVE_PROPOSAL',
+        proposalId: proposal.targetProposalId,
+        reason: proposal.description,
+      });
+      continue;
+    }
+    if (proposal.classification !== 'PROPOSAL' || !proposal.kind) continue;
+    const description = cleanProposalDescription(proposal.description);
+    if (!description) continue;
+    if (action === 'REVISE' && proposal.targetProposalId) {
+      operations.push({
+        type: 'REVISE_PROPOSAL',
+        proposalId: proposal.targetProposalId,
+        description,
+        kind: proposal.kind,
+        ownerUserId: proposal.kind === Stage4ProposalKind.INDIVIDUAL_COMMITMENT
+          ? proposal.ownerUserId ?? input.userId
+          : proposal.ownerUserId,
+        needsAddressed: proposal.needsAddressed ?? [],
+        duration: proposal.duration,
+        measureOfSuccess: proposal.measureOfSuccess,
+        reason: proposal.description,
+      });
+      continue;
+    }
+    operations.push({
+      type: 'ADD_PROPOSAL',
+      tempKey: `structured-${operations.length}`,
+      kind: proposal.kind,
+      ownerUserId: proposal.kind === Stage4ProposalKind.INDIVIDUAL_COMMITMENT
+        ? proposal.ownerUserId ?? input.userId
+        : proposal.ownerUserId,
+      description,
+      needsAddressed: proposal.needsAddressed ?? [],
+      duration: proposal.duration,
+      measureOfSuccess: proposal.measureOfSuccess,
+      capturedQuote: proposal.description,
+    });
+  }
+  if (input.structuredProposals !== undefined) {
+    return operations;
+  }
+
   const compatibility = input.compatibilityProposedStrategies ?? [];
 
   compatibility.forEach((description, index) => {
@@ -1136,6 +1187,7 @@ export async function captureStage4Turn(input: Stage4CaptureInput): Promise<Stag
   const selection = extractSelection(input.userMessage, input.userId, proposals);
   const confidence = operations.length > 0 || selection
     ? Math.max(
+        input.structuredProposals !== undefined && operations.length > 0 ? 0.92 : 0,
         operations.some((operation) => operation.type === 'ADD_PROPOSAL') ? 0.78 : 0,
         destructiveOrRevision.confidence,
         selection ? 0.82 : 0

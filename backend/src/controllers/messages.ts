@@ -73,6 +73,36 @@ async function hasPartnerCompletedStage1(
   return gates?.feelHeard === true || gates?.feelHeardConfirmed === true;
 }
 
+async function getStage4InventoryPromptContext(sessionId: string, currentUserId: string): Promise<string | null> {
+  const proposals = await prisma.strategyProposal.findMany({
+    where: { sessionId },
+    orderBy: { updatedAt: 'asc' },
+    take: 12,
+  });
+
+  const activeProposals = proposals.filter((proposal) => proposal.status !== 'REMOVED');
+  if (activeProposals.length === 0) return null;
+
+  return activeProposals
+    .map((proposal) => {
+      const owner = proposal.createdByUserId === currentUserId
+        ? 'current user'
+        : proposal.createdByUserId
+          ? 'partner'
+          : 'shared/no owner';
+      const details = [
+        `id=${proposal.id}`,
+        `kind=${proposal.kind}`,
+        `owner=${owner}`,
+        `description="${proposal.description}"`,
+      ];
+      if (proposal.duration) details.push(`duration="${proposal.duration}"`);
+      if (proposal.measureOfSuccess) details.push(`success="${proposal.measureOfSuccess}"`);
+      return `- ${details.join(' | ')}`;
+    })
+    .join('\n');
+}
+
 /**
  * Get a fallback initial message when AI is unavailable
  */
@@ -1511,9 +1541,14 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         }
       }
     }
+    const stage4InventoryContext = currentStage === 4
+      ? await getStage4InventoryPromptContext(sessionId, user.id)
+      : null;
 
     const prompt = buildStagePrompt(effectiveStage, {
       userName,
+      currentUserId: user.id,
+      partnerUserId: partnerId,
       partnerName,
       turnCount: stageTurnCount,
       emotionalIntensity,
@@ -1525,6 +1560,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       sharedContextFromPartner: stage2BSharedContext || undefined,
       empathyDraft: empathyDraftContent || undefined,
       isRefiningEmpathy: isRefiningEmpathy || undefined,
+      stage4InventoryContext,
     }, { isInvitationPhase });
 
     // Prompt already includes semantic tag format instructions via buildResponseProtocol()
@@ -1591,6 +1627,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     let thinkingContent = ''; // Store hidden thinking for logging
     let draftContent = ''; // Store draft content for metadata
     let needsTagContent = ''; // Store structured Stage 3 needs metadata
+    let stage4ProposalsTagContent = ''; // Store structured Stage 4 proposal metadata
     let dispatchTagContent = ''; // Store dispatch tag content for handling
     let isDispatchMessage = false; // Track if this is a dispatch response (skip processing)
 
@@ -1629,6 +1666,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           .replace(/<\/thinking>/gi, '')                     // Orphaned closing tag
           .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
           .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
+          .replace(/<stage4_proposals>[\s\S]*?<\/stage4_proposals>/gi, '')
+          .replace(/<stage4_proposals>[\s\S]*/gi, '')
+          .replace(/<\/stage4_proposals>/gi, '')
           .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
 
         // Trim LEADING whitespace only on the FIRST chunk (after </thinking> tag removal)
@@ -1665,6 +1705,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           logger.info(`[sendMessageStream:${requestId}] [HIDDEN NEEDS]:`, needsTagContent.substring(0, 160) + (needsTagContent.length > 160 ? '...' : ''));
         }
 
+        const stage4ProposalsMatch = buffer.match(/<stage4_proposals>([\s\S]*?)<\/stage4_proposals>/i);
+        if (stage4ProposalsMatch) {
+          stage4ProposalsTagContent = stage4ProposalsMatch[1].trim();
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN STAGE 4 PROPOSALS]:`, stage4ProposalsTagContent.substring(0, 160) + (stage4ProposalsTagContent.length > 160 ? '...' : ''));
+        }
+
         // Extract dispatch tag if present - store for handling after streaming
         const dispatchMatch = buffer.match(/<dispatch>([\s\S]*?)<\/dispatch>/i);
         if (dispatchMatch) {
@@ -1677,6 +1723,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         return buffer
           .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
           .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
+          .replace(/<stage4_proposals>[\s\S]*?<\/stage4_proposals>/gi, '')
           .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
       };
 
@@ -1723,17 +1770,21 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             const hasDraftEnd = tagTrapBuffer.includes('</draft>');
             const hasNeedsStart = tagTrapBuffer.includes('<needs>');
             const hasNeedsEnd = tagTrapBuffer.includes('</needs>');
+            const hasStage4ProposalsStart = tagTrapBuffer.includes('<stage4_proposals>');
+            const hasStage4ProposalsEnd = tagTrapBuffer.includes('</stage4_proposals>');
             const hasDispatchStart = tagTrapBuffer.includes('<dispatch>');
             const hasDispatchEnd = tagTrapBuffer.includes('</dispatch>');
 
             // Check for partial tag starts at the end of buffer
             // Matches: <d..., <n..., </d..., </n..., etc. - anything that could become
-            // <draft>, </draft>, <dispatch>, </dispatch>, <needs>, or </needs>.
-            const hasPotentialTagStart = /<\/?(d|n)[a-z]*$/i.test(tagTrapBuffer);
+            // <draft>, </draft>, <dispatch>, </dispatch>, <needs>, </needs>,
+            // <stage4_proposals>, or </stage4_proposals>.
+            const hasPotentialTagStart = /<\/?(d|n|s)[a-z0-9_]*$/i.test(tagTrapBuffer);
 
             // If we see opening tags, wait for closing tags
             const waitingForDraft = hasDraftStart && !hasDraftEnd;
             const waitingForNeeds = hasNeedsStart && !hasNeedsEnd;
+            const waitingForStage4Proposals = hasStage4ProposalsStart && !hasStage4ProposalsEnd;
             const waitingForDispatch = hasDispatchStart && !hasDispatchEnd;
 
             // Process buffer and check if we can exit:
@@ -1742,6 +1793,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             const strippedBuffer = tagTrapBuffer
               .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
               .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
+              .replace(/<stage4_proposals>[\s\S]*?<\/stage4_proposals>/gi, '')
               .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
             const trimmedStripped = strippedBuffer.trim();
 
@@ -1751,7 +1803,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             // - No partial tag at the end that might become a hidden semantic tag
             // OR buffer is too big (safety limit)
             const hasResponseContent = trimmedStripped.length > 50 && !trimmedStripped.startsWith('<');
-            const safeToExit = !waitingForDraft && !waitingForNeeds && !waitingForDispatch && hasResponseContent && !hasPotentialTagStart;
+            const safeToExit = !waitingForDraft && !waitingForNeeds && !waitingForStage4Proposals && !waitingForDispatch && hasResponseContent && !hasPotentialTagStart;
 
             if (safeToExit || tagTrapBuffer.length > 2000) {
               isTrappingTags = false;
@@ -1768,9 +1820,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             const hasUnclosedDispatch = combined.includes('<dispatch>') && !combined.includes('</dispatch>');
             const hasUnclosedDraft = combined.includes('<draft>') && !combined.includes('</draft>');
             const hasUnclosedNeeds = combined.includes('<needs>') && !combined.includes('</needs>');
-            const hasPotentialTagStart = /<\/?(d|n)[a-z]*$/i.test(combined);
+            const hasUnclosedStage4Proposals = combined.includes('<stage4_proposals>') && !combined.includes('</stage4_proposals>');
+            const hasPotentialTagStart = /<\/?(d|n|s)[a-z0-9_]*$/i.test(combined);
 
-            if (hasUnclosedDispatch || hasUnclosedDraft || hasUnclosedNeeds || hasPotentialTagStart) {
+            if (hasUnclosedDispatch || hasUnclosedDraft || hasUnclosedNeeds || hasUnclosedStage4Proposals || hasPotentialTagStart) {
               // Buffer and wait for closing tag
               tagTrapBuffer = combined;
             } else {
@@ -1829,7 +1882,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       // The accumulated text may contain <draft>...</draft> that needs stripping
       // =========================================================================
       const needsBlock = needsTagContent ? `<needs>${needsTagContent}</needs>\n` : '';
-      const fullResponse = `<thinking>${thinkingContent}</thinking>\n${needsBlock}${accumulatedText}`;
+      const stage4ProposalsBlock = stage4ProposalsTagContent ? `<stage4_proposals>${stage4ProposalsTagContent}</stage4_proposals>\n` : '';
+      const fullResponse = `<thinking>${thinkingContent}</thinking>\n${needsBlock}${stage4ProposalsBlock}${accumulatedText}`;
       const parsed = parseMicroTagResponse(fullResponse);
 
       // Extract metadata from parsed response
@@ -1838,6 +1892,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       metadata.offerReadyToShare = parsed.offerReadyToShare;
       if (parsed.proposedStrategies.length > 0) {
         metadata.proposedStrategies = parsed.proposedStrategies;
+      }
+      if (currentStage === 4 && parsed.stage4ProposalBlockPresent) {
+        metadata.stage4Proposals = parsed.stage4Proposals;
       }
       if (currentStage === 3 && parsed.proposedNeeds.length > 0) {
         metadata.proposedNeeds = parsed.proposedNeeds;
@@ -1859,6 +1916,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         offerReadyToShare: metadata.offerReadyToShare,
         hasDraft: !!parsed.draft,
         proposedNeedsCount: metadata.proposedNeeds?.length ?? 0,
+        stage4ProposalCount: metadata.stage4Proposals?.length ?? 0,
         dispatchTag: dispatchTagContent || parsed.dispatchTag,
       });
 
@@ -2166,6 +2224,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         messageId: userMessage.id,
         userMessage: content,
         aiResponse: aiMessage.content,
+        structuredProposals: metadata.stage4Proposals,
         compatibilityProposedStrategies: metadata.proposedStrategies,
       });
       const stage4CaptureMetadata: NonNullable<SessionStateToolInput['stage4Capture']> = {
