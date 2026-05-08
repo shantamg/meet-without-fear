@@ -15,8 +15,8 @@ fi
 
 # ── is_bot_user ──────────────────────────────────────────────────────────────
 # Check if a GitHub user.login is the Slam Paws bot identity.
-# Accepts both the legacy PAT identity ("MwfBot") and the GitHub App
-# bot-user identity ("mwf-bot-app[bot]"). This is the ONLY place the
+# Accepts the historical Meet Without Fear bot identities and current
+# Slam Paws GitHub App bot identities. This is the ONLY place the
 # bot-user name should be hardcoded; all other call sites must use this
 # helper (or the BOT_USER_JQ_MATCH jq snippet below) so that a future
 # rename is one-line.
@@ -24,7 +24,7 @@ fi
 # Usage: if is_bot_user "$author"; then ...
 is_bot_user() {
   case "$1" in
-    MwfBot|slam-bot-app\[bot\]) return 0 ;;
+    MwfBot|slam-paws|mwf-bot-app\[bot\]|slam-bot-app\[bot\]|slam-paws-app\[bot\]) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -33,18 +33,18 @@ is_bot_user() {
 # Kept in sync with is_bot_user() above. Used when constructing gh CLI
 # queries (e.g. `--author`) that accept only one identity at a time and
 # must be unioned at the caller.
-BOT_USER_LOGINS=("MwfBot" "mwf-bot-app[bot]")
+BOT_USER_LOGINS=("MwfBot" "slam-paws" "mwf-bot-app[bot]" "slam-bot-app[bot]" "slam-paws-app[bot]")
 
 # BOT_USER_JQ_MATCH — jq boolean expression that matches either bot-user
 # identity. Expects `.user.login` in scope; wrap in parens when composing.
 # Example:
 #   jq '[.[] | select('"$BOT_USER_JQ_MATCH"')] | length'
-BOT_USER_JQ_MATCH='.user.login == "MwfBot" or .user.login == "mwf-bot-app[bot]"'
+BOT_USER_JQ_MATCH='.user.login == "MwfBot" or .user.login == "slam-paws" or .user.login == "mwf-bot-app[bot]" or .user.login == "slam-bot-app[bot]" or .user.login == "slam-paws-app[bot]"'
 
 # BOT_AUTHOR_JQ_MATCH — same as BOT_USER_JQ_MATCH but for `.author.login`
 # (used by the GraphQL-shaped fields returned by `gh pr view --json reviews`
 # and `gh pr view --json comments`).
-BOT_AUTHOR_JQ_MATCH='.author.login == "MwfBot" or .author.login == "mwf-bot-app[bot]"'
+BOT_AUTHOR_JQ_MATCH='.author.login == "MwfBot" or .author.login == "slam-paws" or .author.login == "mwf-bot-app[bot]" or .author.login == "slam-bot-app[bot]" or .author.login == "slam-paws-app[bot]"'
 
 # ── count_running_agents ─────────────────────────────────────────────────────
 # Count currently running agents via _active/ directories and legacy lockfiles.
@@ -133,4 +133,3 @@ create_queue_entry() {
 
   echo "$queue_file"
 }
-

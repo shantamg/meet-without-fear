@@ -140,3 +140,5 @@ mobile/test-results/
 
 # Moment evaluator local artifacts (Python cache only — run artifacts go in PRs as evidence)
 scripts/__pycache__/
+scripts/ec2-bot/scripts/**/__pycache__/
+*.pyc
