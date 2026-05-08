@@ -836,7 +836,12 @@ export function ChatInterface({
           styles.messageList,
           listItems.length === 0 && (customEmptyState ? styles.customMessageListEmpty : styles.messageListEmpty),
         ]}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={
+          <>
+            {renderBelowChat?.()}
+            {renderHeader?.()}
+          </>
+        }
         ListFooterComponent={renderFooter}
         ListEmptyComponent={emptyStateElement}
         showsVerticalScrollIndicator={false}
@@ -848,7 +853,6 @@ export function ChatInterface({
         onContentSizeChange={handleContentSizeChange}
       />
       <View style={styles.bottomContainer}>
-        {renderBelowChat?.()}
         {showEmotionSlider && onEmotionChange && (
           <EmotionSlider
             value={emotionValue}
@@ -952,5 +956,6 @@ const useStyles = () =>
       // Container for emotion slider, panels above input, and input
       // This ensures KeyboardAvoidingView adjusts relative to this container's bottom
       // rather than just the input field itself
+      paddingBottom: t.spacing.sm,
     },
   }));

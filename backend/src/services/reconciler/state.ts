@@ -384,8 +384,9 @@ export async function hasPartnerCompletedStage1(
 // ============================================================================
 
 /**
- * Check if both empathy attempts are READY and if so, reveal both simultaneously.
- * This ensures neither user sees their partner's empathy until both have completed Stage 2.
+ * Check if both empathy attempts are ready for review and reveal any unrevealed
+ * READY attempt. This also handles the refinement path where one direction was
+ * already VALIDATED and the other partner resubmits a READY revision.
  *
  * @returns true if both were revealed, false otherwise
  */
@@ -406,22 +407,24 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
       return null;
     }
 
-    // Check if both are in READY status
-    const bothReady = attempts.every((a: EmpathyAttemptState) => a.status === 'READY');
-    if (!bothReady) {
+    const readyStatuses = new Set(['READY', 'VALIDATED']);
+    const readyForReview = attempts.every((a: EmpathyAttemptState) => readyStatuses.has(a.status));
+    const hasUnrevealedReadyAttempt = attempts.some((a: EmpathyAttemptState) => a.status === 'READY');
+    if (!readyForReview || !hasUnrevealedReadyAttempt) {
       const statuses = Object.fromEntries(attempts.map((a: EmpathyAttemptState) => [a.sourceUserId, a.status]));
-      logger.debug('Not both READY yet', { statuses });
+      logger.debug('Not ready to reveal empathy attempts yet', { statuses });
       return null;
     }
 
-    logger.info('Both empathy attempts READY, revealing simultaneously', { sessionId });
+    logger.info('Empathy attempts ready for review, revealing READY attempts', { sessionId });
 
-    // Validate state transition for both attempts
-    for (const attempt of attempts) {
+    // Validate state transition for unrevealed attempts.
+    for (const attempt of attempts.filter((a: EmpathyAttemptState) => a.status === 'READY')) {
       transition(attempt.status as EmpathyStatus, 'MUTUAL_REVEAL');
     }
 
-    // Reveal both attempts
+    // Reveal any READY attempt. VALIDATED attempts were already revealed and
+    // seen; leave their terminal state intact.
     const revealedNow = new Date();
     await tx.empathyAttempt.updateMany({
       where: {

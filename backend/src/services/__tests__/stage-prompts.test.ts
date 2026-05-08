@@ -169,6 +169,17 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('That insight belongs to the users');
     });
 
+    it('Stage 3 prompt slows down compressed high-stakes needs before capture', () => {
+      const context = createContext({ userName: 'Catherine', partnerName: 'James' });
+      const prompt = fullPrompt(buildStagePrompt(3, context));
+
+      expect(prompt).toContain('COMPRESSED-NEEDS PACING');
+      expect(prompt).toContain('one dense answer that stacks multiple real needs');
+      expect(prompt).toContain('safety/accountability/autonomy/self-trust');
+      expect(prompt).toContain('care/belonging/recognition/heard');
+      expect(prompt).toContain('before NeedsReady:Y');
+    });
+
     it('Stage 3 prompt does not contain hardcoded user-facing opening phrase', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(3, context));
@@ -206,6 +217,16 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Willingness from one person is not a shared agreement');
     });
 
+    it('Stage 4 prompt forbids speculative partner placeholders', () => {
+      const context = createContext({ userName: 'Adam', partnerName: 'Eve' });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain("Do not ask Adam to compare against Eve's experiments");
+      expect(prompt).toContain('unless the current visible/app context includes actual partner proposals');
+      expect(prompt).toContain('Never output placeholders');
+      expect(prompt).toContain('[these would appear here]');
+    });
+
     it('Stage 4 prompt covers declined AI ideas and removals', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(4, context));
@@ -225,6 +246,17 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Do not describe no-overlap or no-shared-agreement as failure');
       expect(prompt).toContain('individual commitments can still be carried forward');
       expect(prompt).toContain('Do not ask for scheduled shared check-in timing for individual-only commitments');
+    });
+
+    it('Stage 4 prompt gives both partners a no-shared-agreement closure path', () => {
+      const context = createContext({ userName: 'Catherine', partnerName: 'James' });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('shared proposal inventory');
+      expect(prompt).toContain('individual commitment(s) being preserved');
+      expect(prompt).toContain('needs that remain open');
+      expect(prompt).toContain('Give both partners a dignified path');
+      expect(prompt).toContain('boundary or individual commitment is still a legitimate outcome');
     });
 
     it('Stage 4 no-shared-agreement prompt avoids failure-language tokens', () => {

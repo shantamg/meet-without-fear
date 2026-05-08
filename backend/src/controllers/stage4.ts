@@ -257,6 +257,10 @@ function bothPartnersWilling(
   );
 }
 
+function requiresSharedSelection(proposal: Stage4ProposalForClosure): boolean {
+  return proposal.kind === Stage4ProposalKind.SHARED_PROPOSAL && proposal.status === Stage4ProposalStatus.ACTIVE;
+}
+
 function getWillingIndividualCommitmentIds(
   proposals: Stage4ProposalForClosure[],
   selections: Stage4SelectionForClosure[]
@@ -428,7 +432,7 @@ async function submitStage4SelectionsInternal(
     where: {
       sessionId,
       id: { in: uniqueProposalIds },
-      status: { not: Stage4ProposalStatus.REMOVED },
+      status: Stage4ProposalStatus.ACTIVE,
     },
     select: { id: true },
   });
@@ -574,12 +578,12 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
     );
     const selectionsByProposal = selectionsByProposalAndUser(selections);
     const mutuallyWillingSharedProposals = proposals
-      .filter((proposal) => proposal.kind === Stage4ProposalKind.SHARED_PROPOSAL)
+      .filter(requiresSharedSelection)
       .filter((proposal) => bothPartnersWilling(proposal.id, mutable.session, selectionsByProposal))
       .slice(0, MAX_AGREEMENTS);
     const individualProposalIds = getWillingIndividualCommitmentIds(proposals, selections);
     const openNeedIds = coverageRows
-      .filter((row) => row.coverageStatus === 'OPEN' || row.coverageStatus === 'PARTIAL')
+      .filter((row) => row.coverageStatus === 'OPEN')
       .map((row) => row.needId ?? row.id);
 
     const requestedKind = parseResult.data.kind;

@@ -329,7 +329,7 @@ export function useUnifiedSession(
       ownEmpathyAttempt: empathyStatusData?.myAttempt,
     }),
   });
-  const { mutate: respondToShareOffer } = useRespondToShareOffer();
+  const { mutate: respondToShareOffer, isPending: isRespondingToShareOffer } = useRespondToShareOffer();
 
   // -------------------------------------------------------------------------
   // Mutation Hooks
@@ -1279,6 +1279,7 @@ export function useUnifiedSession(
     isSavingEmpathyDraft,
     isSharingEmpathy,
     isResubmittingEmpathy,
+    isRespondingToShareOffer,
     isProposing,
     isConfirmingNeeds,
 
