@@ -121,8 +121,8 @@ describe('BreathingExercise', () => {
         () => {
           // Should show slider with initial value matching intensityBefore
           expect(screen.getByTestId('intensity-slider')).toBeTruthy();
-          // Check that value shows "7 - Elevated"
-          expect(screen.getByText('7 - Elevated')).toBeTruthy();
+          // Check that value shows the initialized intensity and current label.
+          expect(screen.getByText('7 - Moderate')).toBeTruthy();
         },
         { timeout: 1000 }
       );

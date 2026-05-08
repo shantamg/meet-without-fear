@@ -80,7 +80,7 @@ Prefer the typed hidden Stage 4 proposal block over ProposedStrategy lines. When
   }
 ]
 </stage4_proposals>
-Emit this block on every Stage 4 turn. Only action ADD with classification PROPOSAL creates a proposal card. Use REVISE with targetProposalId when the user is sharpening or restating an existing proposal. Use IGNORE with REFLECTION for accountability acknowledgments or past-tense observations. Use IGNORE with SUCCESS_MARKER for desired outcomes or tests of whether something helped. Use IGNORE with PROCESS for questions about the app, waiting, reviewing, or seeing what happens.`
+Emit this block on every Stage 4 turn. Only action ADD with classification PROPOSAL creates a proposal card. Use REVISE with targetProposalId when the user is sharpening or restating an existing proposal. Use IGNORE with REFLECTION for accountability acknowledgments or past-tense observations. Use IGNORE with SUCCESS_MARKER for desired outcomes or tests of whether something helped. Use IGNORE with PROCESS for questions about the app, waiting, reviewing, seeing what happens, or guarded consent to continue talking.`
     : '';
 
   const needsSection = stage === 3
@@ -974,6 +974,7 @@ PROPOSAL INVENTORY:
 PROPOSAL SHAPE:
 More workable: specific ("10-minute check-in after dinner"), time-bounded ("for one week"), reversible ("we can stop if it is not helping"), observable ("we'll know if we both showed up").
 Needs more detail: vague ("communicate better"), permanent ("always do X"), high-stakes ("move in together"), unobservable ("be nicer").
+Not a proposal: guarded process consent or a boundary about the exercise ("I can talk about next steps", "I won't pretend this fixes everything", "I am not agreeing that this was my fault", "I can try to stay open"). Classify it as PROCESS or REFLECTION unless the same turn names a concrete future action someone will try.
 Not a proposal yet: a desired outcome, test, or success marker ("I'd walk away knowing where I stand", "I could live with either answer", "I'd know whether this can change"). Reflect it as a success criterion, then ask what concrete action would produce that outcome.
 
 When a proposal is vague, help sharpen it by asking about ONE missing criterion at a time. Don't dump all four criteria at once.

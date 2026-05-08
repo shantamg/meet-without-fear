@@ -330,6 +330,8 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('"classification": "PROPOSAL|REFLECTION|SUCCESS_MARKER|PROCESS"');
       expect(prompt).toContain('Emit this block on every Stage 4 turn');
       expect(prompt).toContain('Only action ADD with classification PROPOSAL creates a proposal card');
+      expect(prompt).toContain('guarded consent to continue talking');
+      expect(prompt).toContain('I can talk about next steps');
       expect(prompt).toContain('one person');
       expect(prompt).toContain('as if it were a shared agreement');
     });
