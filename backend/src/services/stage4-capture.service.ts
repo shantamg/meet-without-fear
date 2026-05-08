@@ -367,11 +367,15 @@ function isConcreteProposal(description: string): boolean {
   if (/^be clear that\b/.test(normalized) && /\bindividual commitments?\b/.test(normalized)) return false;
   if (/^see what actually works\b/.test(normalized)) return false;
   if (/^see what actually overlaps\b/.test(normalized)) return false;
+  if (/^see what (?:this|that|it) is supposed to do\b/.test(normalized)) return false;
   if (/^see what (?:he|she|they|catherine|james|adam|eve) actually brings? forward\b/.test(normalized)) return false;
   if (/^(?:bring|brings|brought) forward\b/.test(normalized)) return false;
   if (/^see what (?:he|she|they) does? with it\b/.test(normalized)) return false;
   if (/^step in on\b/.test(normalized)) return false;
   if (/^own (?:that part|without|get|what)\b/.test(normalized)) return false;
+  if (/^own that i\b/.test(normalized) && /\b(?:got|was|were|did|said|made|have|had)\b/.test(normalized)) return false;
+  if (/^have a\b/.test(normalized) && /\b(?:calm|respectful|safe)\b/.test(normalized) && /\bconversation\b/.test(normalized) && !/\b(?:for|within|by|on|weekly|daily|monthly|minutes?|hours?|weeks?)\b/.test(normalized)) return false;
+  if (/^(?:whether|if)\s+we\s+can\s+have\b/.test(normalized) && /\bconversation\b/.test(normalized)) return false;
   if (/^think we understood each other\b/.test(normalized)) return false;
   if (/^know it was helping if\b/.test(normalized)) return false;
   if (/^stay more present if\b/.test(normalized)) return false;
@@ -539,6 +543,12 @@ function proposalFamily(value: string): string | null {
     /\b(?:kids|children|role|authority|later|conversation)\b/.test(normalized)
   ) {
     return 'kids-role-clarity';
+  }
+  if (
+    /\b(?:heat(?:ing)? up|hot|activated|yell(?:ing)?|voice|loud|escalat(?:e|ing|ion)|cuts? (?:me|you|him|her|them) down)\b/.test(normalized) &&
+    /\b(?:name|say|step away|stop|pause|before|acknowledg(?:e|ing)|later)\b/.test(normalized)
+  ) {
+    return 'escalation-self-interruption';
   }
   if (
     /\b(?:name what i see|debating my reality|step away from conversations|defending his character)\b/.test(normalized)

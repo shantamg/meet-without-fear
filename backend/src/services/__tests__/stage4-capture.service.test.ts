@@ -1102,6 +1102,34 @@ describe('stage4-capture.service', () => {
     expect(result.appliedOperationCount).toBe(0);
   });
 
+  it('does not capture process curiosity as an individual commitment', async () => {
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'I am here, though. I want to see what this is supposed to do.',
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(result.appliedOperationCount).toBe(0);
+  });
+
+  it('does not capture accountability reflections or safety preconditions as proposals', async () => {
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage:
+          'Safety means starting with whether we can have a calm conversation at all. I can own that I got sharp and clinical sometimes, but I am not treating that as the same thing as escalation.',
+        compatibilityProposedStrategies: [
+          'own that I got sharp and clinical sometimes, but I am not going to treat that as the same thing as being called names or having to manage his escalation',
+          'have a calm, respectful conversation at all',
+          'whether we can have a calm, respectful conversation at all',
+        ],
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(result.appliedOperationCount).toBe(0);
+  });
+
   it('deduplicates pause protocol and self-boundary proposal families', async () => {
     (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
       proposal({
@@ -1149,6 +1177,28 @@ describe('stage4-capture.service', () => {
         compatibilityProposedStrategies: [
           'Acknowledgment a couple times a week when James shows up — just "thank you for doing that" in the moment',
           "One conversation to clarify James's role with the kids, with agreement that if Catherine disagrees with how he handles something, she talks to him later instead of contradicting him in front of them",
+        ],
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(result.appliedOperationCount + result.skippedOperationCount).toBe(2);
+  });
+
+  it('deduplicates escalation self-interruption proposal variants', async () => {
+    (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+      proposal({
+        description: "I'll name it when I'm starting to heat up, before it gets to yelling",
+        kind: Stage4ProposalKind.INDIVIDUAL_COMMITMENT,
+      }),
+    ]);
+
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'That is the same thing.',
+        compatibilityProposedStrategies: [
+          'User will name it when starting to heat up, before it gets to yelling',
+          'James stepping away before he yells or cuts Catherine down when he is getting activated',
         ],
       })
     );
