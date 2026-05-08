@@ -347,8 +347,6 @@ function isConcreteProposal(description: string): boolean {
   if (/^need permission to pause\b/.test(normalized)) return false;
   if (/^need us to be allowed to slow it down\b/.test(normalized)) return false;
   if (/^need to ask one real question before\b/.test(normalized)) return false;
-  if (/^need (?:him|her|them|adam|eve|partner) to not make\b/.test(normalized)) return false;
-  if (/^need (?:him|her|them|adam|eve|partner) to agree that we can pause\b/.test(normalized)) return false;
   if (/^already be braced\b/.test(normalized)) return false;
   if (/^say what i am reaching for\b/.test(normalized) && /\bwithout either of us turning it into a verdict\b/.test(normalized)) return false;
   if (/^after one month\b/.test(normalized) && /\bcheck\s*in\b/.test(normalized)) return false;
