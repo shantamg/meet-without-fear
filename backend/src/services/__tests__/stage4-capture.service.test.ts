@@ -1561,17 +1561,25 @@ describe('stage4-capture.service', () => {
         userMessage: 'That is my own practice.',
         compatibilityProposedStrategies: [
           "Saturday mornings reserved for individual steadiness practice (user's own commitment)",
+          'Two hours on Saturday morning for personal creative/building time',
         ],
       })
     );
 
-    expect(prisma.strategyProposal.create).toHaveBeenCalledWith({
+    expect(prisma.strategyProposal.create).toHaveBeenCalledTimes(2);
+    expect(prisma.strategyProposal.create).toHaveBeenNthCalledWith(1, {
       data: expect.objectContaining({
         description: "Saturday mornings reserved for individual steadiness practice (user's own commitment)",
         kind: Stage4ProposalKind.INDIVIDUAL_COMMITMENT,
       }),
     });
-    expect(result.appliedOperationCount).toBe(1);
+    expect(prisma.strategyProposal.create).toHaveBeenNthCalledWith(2, {
+      data: expect.objectContaining({
+        description: 'Two hours on Saturday morning for personal creative/building time',
+        kind: Stage4ProposalKind.INDIVIDUAL_COMMITMENT,
+      }),
+    });
+    expect(result.appliedOperationCount).toBe(2);
   });
 
   it('skips live weekly-conversation fragment phrasing', async () => {

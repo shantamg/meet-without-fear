@@ -269,6 +269,7 @@ function inferProposalKind(text: string): Stage4ProposalKind {
     /\bsaturday\b/i.test(text) &&
       /\b(?:morning|mornings)\b/i.test(text) &&
       /\b(?:hands|project|build|make|making|steady|independent|independently)\b/i.test(text) ||
+    /\bpersonal\s+(?:(?:creative|building|project|making|make)[\s/-]+)+(?:time|block)\b/i.test(text) ||
     /\bclass or trip[-\s]planning block each week\b/i.test(text) &&
       /\b(?:chooses?|chosen|alone|pre[-\s]approval|pre[-\s]justifying|without asking|without waiting)\b/i.test(text) ||
     /\b(?:adam|eve)\s+picks?\s+one small thing\b/i.test(text) ||
