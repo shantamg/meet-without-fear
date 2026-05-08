@@ -60,6 +60,13 @@ const SCRIPTS_DIR = '/opt/slam-bot/scripts';
 const QUEUE_DIR = '/opt/slam-bot/queue';
 const MWF_APP_DIR = process.env.HOME + '/meet-without-fear';
 
+function providerOverrideForMessage(event) {
+  if (/\bcodex\b/i.test(event?.text || '')) {
+    return 'codex';
+  }
+  return '';
+}
+
 // Health check: write last event timestamp so the watchdog can verify liveness
 const HEARTBEAT_FILE = join(STATE_DIR, 'socket-mode-heartbeat.txt');
 
@@ -438,7 +445,7 @@ async function resolveUserName(userId) {
 // Agent dispatch (spawns run-claude.sh as background process)
 // ---------------------------------------------------------------------------
 
-function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey = null) {
+function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey = null, { providerOverride = '' } = {}) {
   // Write prompt to temp file (avoids shell quoting issues)
   const promptFile = join(tmpdir(), `slam-bot-prompt-${ts.replace('.', '_')}.md`);
   writeFileSync(promptFile, promptContent);
@@ -451,13 +458,14 @@ function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey
     const [sessionChannel, sessionThreadTs] = tKey.split(':');
     sessionArgs.push('--session', `slack-${sessionChannel}-${sessionThreadTs}`);
   }
+  const providerArgs = providerOverride ? ['--provider', providerOverride] : [];
 
   if (config.workspace) {
     // Workspace mode: --workspace <name> [--session <key>] <PROMPT> <PROMPT_FILE> <MSG_TS>
-    args = ['--workspace', config.workspace, ...sessionArgs, '', promptFile, ts];
+    args = ['--workspace', config.workspace, ...sessionArgs, ...providerArgs, '', promptFile, ts];
   } else {
     // Command-slug mode (legacy): [--session <key>] <COMMAND_SLUG> <PROMPT> <PROMPT_FILE> <MSG_TS>
-    args = [...sessionArgs, config.commandSlug, '', promptFile, ts];
+    args = [...sessionArgs, ...providerArgs, config.commandSlug, '', promptFile, ts];
   }
 
   // Extract thread_ts from tKey so run-claude.sh can pass it to the queue.
@@ -498,7 +506,7 @@ function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey
 
   const mode = config.workspace ? `workspace=${config.workspace}` : `slug=${config.commandSlug}`;
   child.on('exit', async (code) => {
-    log(config.logName, `Agent for ${ts} (${mode}) exited with code ${code}`);
+    log(config.logName, `Agent for ${ts} (${mode}${providerOverride ? `, provider=${providerOverride}` : ''}) exited with code ${code}`);
     await removeReaction(channel, ts, 'eyes');
 
     if (code === 0) {
@@ -517,7 +525,7 @@ function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey
     }
   });
 
-  log(config.logName, `Dispatched agent for ${ts} (PID ${child.pid}, ${mode})`);
+  log(config.logName, `Dispatched agent for ${ts} (PID ${child.pid}, ${mode}${providerOverride ? `, provider=${providerOverride}` : ''})`);
 }
 
 /**
@@ -558,7 +566,12 @@ async function drainThreadQueue(tKey) {
     message: event.text || '(no text)',
   };
 
-  dispatchAgent(channel, ts, config, promptContent, provenance, tKey);
+  const providerOverride = providerOverrideForMessage(event);
+  if (providerOverride) {
+    logMain(`Provider override: routing ${ts} through ${providerOverride} because message contains "codex"`);
+  }
+
+  dispatchAgent(channel, ts, config, promptContent, provenance, tKey, { providerOverride });
 }
 
 // ---------------------------------------------------------------------------
@@ -753,8 +766,13 @@ async function handleMessageEvent(event) {
     message: event.text || '(no text)',
   };
 
-  // Dispatch Claude agent (tracked by thread key — updates the pid set above)
-  dispatchAgent(channel, ts, config, promptContent, provenance, tKey);
+  const providerOverride = providerOverrideForMessage(event);
+  if (providerOverride) {
+    logMain(`Provider override: routing ${ts} through ${providerOverride} because message contains "codex"`);
+  }
+
+  // Dispatch provider agent (tracked by thread key — updates the pid set above)
+  dispatchAgent(channel, ts, config, promptContent, provenance, tKey, { providerOverride });
 
   // Update heartbeat
   writeFileSync(HEARTBEAT_FILE, new Date().toISOString());

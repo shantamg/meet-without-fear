@@ -1,6 +1,6 @@
 # ICM Workspace Conventions
 
-Rules enforced by the workspace-builder when scaffolding and auditing workspaces. Adapted from ICM `_core/CONVENTIONS.md` for the Lovely bot context.
+Rules enforced by the workspace-builder when scaffolding and auditing Slam Paws workspaces for Meet Without Fear.
 
 ## File Structure
 
