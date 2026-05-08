@@ -1627,6 +1627,21 @@ describe('stage4-capture.service', () => {
     expect(result.appliedOperationCount).toBe(0);
   });
 
+  it('skips live pause-language fragments already covered by the weekly proposal', async () => {
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'Those are details inside the shared proposal.',
+        compatibilityProposedStrategies: [
+          "need permission to pause without it meaning I'm leaving the conversation",
+          'say I need five minutes, and then I come back',
+        ],
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(result.appliedOperationCount).toBe(0);
+  });
+
   it('deduplicates pause-and-return variants as one shared proposal', async () => {
     (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
       proposal({

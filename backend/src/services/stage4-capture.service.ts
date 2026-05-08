@@ -343,6 +343,7 @@ function isConcreteProposal(description: string): boolean {
   if (/^want us to pick one thing each of us is carrying\b/.test(normalized)) return false;
   if (/^want to feel\b/.test(normalized) && /\bless alone\b/.test(normalized)) return false;
   if (/^know if i start saying things before i have edited them down\b/.test(normalized)) return false;
+  if (/^need permission to pause\b/.test(normalized)) return false;
   if (/^say what i am reaching for\b/.test(normalized) && /\bwithout either of us turning it into a verdict\b/.test(normalized)) return false;
   if (/^after one month\b/.test(normalized) && /\bcheck\s*in\b/.test(normalized)) return false;
   if (/^(?:try together|a way to check|and a way to check)\b/.test(normalized)) return false;
@@ -354,6 +355,7 @@ function isConcreteProposal(description: string): boolean {
   if (/^say what we heard\b/.test(normalized)) return false;
   if (/^say if i am anxious\b/.test(normalized)) return false;
   if (/^say i am scared and ask for\b/.test(normalized)) return false;
+  if (/^say i need five minutes\b/.test(normalized)) return false;
   if (/^start this week\b/.test(normalized)) return false;
   if (/^add that we try it\b/.test(normalized)) return false;
   if (/^want it to be predictable\b/.test(normalized)) return false;
