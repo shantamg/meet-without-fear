@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -202,6 +203,10 @@ class InvokeProvider:
 class ClaudeProvider(InvokeProvider):
     name = "claude"
 
+    @property
+    def settings_file(self) -> Path:
+        return self.ctx.agent_home / "claude-settings.json"
+
     def prepare_session(self) -> None:
         self.session_id = ""
         self.session_mode = "stateless"
@@ -209,6 +214,24 @@ class ClaudeProvider(InvokeProvider):
             self.session_id = str(uuid.uuid5(uuid.NAMESPACE_URL, self.ctx.session_key))
             exists = any(Path.home().glob(f".claude/projects/**/{self.session_id}.jsonl"))
             self.session_mode = "resume" if exists else "new"
+        hook = self.ctx.lib_dir.parent / "check-pending-messages.sh"
+        write_json(
+            self.settings_file,
+            {
+                "hooks": {
+                    "PostToolUse": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": str(hook),
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+        )
 
     def command(self) -> list[str]:
         cmd = ["claude"]
@@ -218,8 +241,135 @@ class ClaudeProvider(InvokeProvider):
             cmd += ["--effort", self.ctx.effort]
         if self.session_id:
             cmd += ["--resume" if self.session_mode == "resume" else "--session-id", self.session_id]
-        cmd += ["--dangerously-skip-permissions", "-p", "-", "--output-format", "stream-json", "--verbose"]
+        cmd += ["--settings", str(self.settings_file)]
+        cmd += ["--dangerously-skip-permissions", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
         return cmd
+
+    def stream_user_message(self, text: str) -> str:
+        return json.dumps({"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": text}]}}) + "\n"
+
+    def pending_context_after_tool(self, event: dict[str, Any]) -> str:
+        tool_result = event.get("message", {}).get("content", []) if event.get("type") == "user" else []
+        if not any(isinstance(part, dict) and part.get("type") == "tool_result" for part in tool_result):
+            return ""
+        hook = self.ctx.lib_dir.parent / "check-pending-messages.sh"
+        if not hook.exists():
+            return ""
+        env = os.environ.copy()
+        env["SLAM_BOT_AGENT_HOME"] = str(self.ctx.agent_home)
+        proc = subprocess.run(
+            [str(hook)],
+            input=json.dumps(event),
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return ""
+        try:
+            payload = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            return ""
+        return str(payload.get("hookSpecificOutput", {}).get("additionalContext", ""))
+
+    def run(self, input_file: Path, raw_stream: Path, stream_log: Path, stderr_file: Path) -> tuple[bool, str]:
+        self.prepare_session()
+        cmd = self.command()
+        if shutil.which(cmd[0]) is None:
+            return False, f"missing_binary: {cmd[0]}"
+        self.ctx.log(f"Provider={self.name} session_mode={self.session_mode}{(' session_id=' + self.session_id) if self.session_id else ''}")
+        raw_stream.write_text("", encoding="utf-8")
+        stream_log.write_text("", encoding="utf-8")
+        stderr_file.write_text("", encoding="utf-8")
+
+        stdin_lock = threading.Lock()
+        stdin_open = True
+        close_timer: threading.Timer | None = None
+
+        def close_stdin(proc: subprocess.Popen[bytes]) -> None:
+            nonlocal stdin_open
+            with stdin_lock:
+                if not stdin_open or proc.stdin is None:
+                    return
+                try:
+                    proc.stdin.close()
+                except OSError:
+                    pass
+                stdin_open = False
+
+        def schedule_close(proc: subprocess.Popen[bytes]) -> None:
+            nonlocal close_timer
+            if close_timer is not None:
+                close_timer.cancel()
+            close_timer = threading.Timer(1.0, close_stdin, args=(proc,))
+            close_timer.daemon = True
+            close_timer.start()
+
+        def cancel_close() -> None:
+            nonlocal close_timer
+            if close_timer is not None:
+                close_timer.cancel()
+                close_timer = None
+
+        with raw_stream.open("ab") as raw_out, stream_log.open("a", encoding="utf-8") as stream_out, stderr_file.open("wb") as stderr_out:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr_out)
+            assert proc.stdin is not None
+            assert proc.stdout is not None
+            initial = input_file.read_text(encoding="utf-8", errors="replace")
+            proc.stdin.write(self.stream_user_message(initial).encode("utf-8"))
+            proc.stdin.flush()
+            for raw_line in proc.stdout:
+                raw_out.write(raw_line)
+                raw_out.flush()
+                try:
+                    event = json.loads(raw_line.decode("utf-8"))
+                except json.JSONDecodeError:
+                    continue
+
+                parts = event.get("message", {}).get("content", []) if isinstance(event.get("message"), dict) else []
+                has_tool_use = any(isinstance(part, dict) and part.get("type") == "tool_use" for part in parts)
+                has_text = bool(self.text_from_event(event))
+                if has_tool_use:
+                    cancel_close()
+
+                context = self.pending_context_after_tool(event)
+                if context:
+                    with stdin_lock:
+                        if stdin_open and proc.stdin is not None:
+                            proc.stdin.write(self.stream_user_message(context).encode("utf-8"))
+                            proc.stdin.flush()
+
+                text = self.text_from_event(event)
+                if text:
+                    stream_out.write(text + "\n")
+                    stream_out.flush()
+                    append(self.ctx.log_file, text + "\n")
+                if has_text and not has_tool_use:
+                    schedule_close(proc)
+            if close_timer is not None:
+                close_timer.cancel()
+            close_stdin(proc)
+            exit_code = proc.wait()
+
+        stderr = stderr_file.read_text(encoding="utf-8", errors="replace")
+        if stderr:
+            append(self.ctx.log_file, stderr)
+
+        reason = self.failure_reason(stderr, raw_stream)
+        if exit_code != 0:
+            detail = reason or stderr or f"exit_code={exit_code}"
+            return False, f"exit_code={exit_code}\n{detail}".strip()
+        if reason:
+            return False, reason
+
+        self.finalize_session(raw_stream)
+        for event in iter_jsonl(raw_stream):
+            usage = self.usage_from_event(event)
+            if usage:
+                self.ctx.update_meta(providerUsage=usage)
+                break
+        return True, ""
 
     def text_from_event(self, event: dict[str, Any]) -> str:
         if event.get("type") != "assistant":

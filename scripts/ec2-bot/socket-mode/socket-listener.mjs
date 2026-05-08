@@ -11,9 +11,8 @@
  *   3. Claim message (atomic file creation)
  *   4. Add :eyes: reaction
  *   5. Build prompt (context + message + template/prompt file)
- *   6. Spawn run-claude.sh as background process
- *   7. On completion: remove :eyes:, add :white_check_mark:
- *      - Exit code 75/76: rate limited → add :zzz: instead of :white_check_mark:
+ *   6. Enqueue a durable Python harness job
+ *   7. Worker updates reactions on completion
  *
  * Environment variables (from /opt/slam-bot/.env):
  *   SLACK_APP_TOKEN       — App-level token (xapp-...) for Socket Mode
@@ -29,7 +28,7 @@
 
 import { SocketModeClient } from '@slack/socket-mode';
 import { WebClient } from '@slack/web-api';
-import { spawn, execSync } from 'node:child_process';
+import { spawn, execSync, spawnSync } from 'node:child_process';
 import { writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
@@ -74,22 +73,15 @@ const HEARTBEAT_FILE = join(STATE_DIR, 'socket-mode-heartbeat.txt');
 mkdirSync(CLAIMS_DIR, { recursive: true });
 
 // ---------------------------------------------------------------------------
-// Thread-aware queuing — thread replies wait for parent agent
+// Priority bypass — channels that should skip resource gates in the worker
 // ---------------------------------------------------------------------------
 
-/**
- * Tracks active agents by thread. Key = "channel:thread_ts".
- * Value = { channel, ts, config, child } of the running agent.
- * @type {Map<string, object>}
- */
-const activeThreadAgents = new Map();
-
-/**
- * Queued thread replies waiting for the active agent to finish.
- * Key = "channel:thread_ts". Value = array of { event, config } objects.
- * @type {Map<string, Array<{event: object, config: object}>>}
- */
-const threadQueue = new Map();
+function isPriorityChannel(channel) {
+  if (!channel) return false;
+  if (channel.startsWith('D')) return true;
+  if (channel === AGENTIC_DEVS_CHANNEL) return true;
+  return false;
+}
 
 /**
  * Get the thread key for an event. A top-level message starts a thread
@@ -114,7 +106,7 @@ const socketClient = new SocketModeClient({ appToken: APP_TOKEN });
  *
  * Each channel can be dispatched in one of two modes:
  *   1. Command-slug mode (legacy): uses `commandSlug` + optional `promptFile`/`inlineTemplate`
- *   2. Workspace mode (new): uses `workspace` — run-claude.sh cds into bot-workspaces/<name>/
+ *   2. Workspace mode (new): uses `workspace` — the harness cds into bot-workspaces/<name>/
  *      and Claude's native CLAUDE.md auto-loading handles context routing.
  *
  * When `workspace` is set, the prompt content (context + message + template) is still built
@@ -442,7 +434,7 @@ async function resolveUserName(userId) {
 }
 
 // ---------------------------------------------------------------------------
-// Agent dispatch (spawns run-claude.sh as background process)
+// Agent dispatch (durably enqueues work for the independent worker service)
 // ---------------------------------------------------------------------------
 
 function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey = null, { providerOverride = '' } = {}) {
@@ -450,128 +442,51 @@ function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey
   const promptFile = join(tmpdir(), `slam-bot-prompt-${ts.replace('.', '_')}.md`);
   writeFileSync(promptFile, promptContent);
 
-  // Build args based on mode: workspace or command-slug (legacy)
-  // Thread replies get --session for continuity (same thread = same Claude session)
-  let args;
-  const sessionArgs = [];
-  if (tKey) {
-    const [sessionChannel, sessionThreadTs] = tKey.split(':');
-    sessionArgs.push('--session', `slack-${sessionChannel}-${sessionThreadTs}`);
-  }
-  const providerArgs = providerOverride ? ['--provider', providerOverride] : [];
-
-  if (config.workspace) {
-    // Workspace mode: --workspace <name> [--session <key>] <PROMPT> <PROMPT_FILE> <MSG_TS>
-    args = ['--workspace', config.workspace, ...sessionArgs, ...providerArgs, '', promptFile, ts];
-  } else {
-    // Command-slug mode (legacy): [--session <key>] <COMMAND_SLUG> <PROMPT> <PROMPT_FILE> <MSG_TS>
-    args = [...sessionArgs, ...providerArgs, config.commandSlug, '', promptFile, ts];
-  }
-
-  // Extract thread_ts from tKey so run-claude.sh can pass it to the queue.
-  // Without this, queued thread replies have no thread_ts and the
-  // process-queue cancellation check uses conversations.history (which
-  // doesn't return threaded replies), falsely concluding the message was
-  // deleted and cancelling the job (#562 follow-up).
-  const threadTs = tKey ? (tKey.split(':')[1] || '') : '';
-
-  const env = {
-    ...process.env,
-    SLAM_BOT: '1',
-    PRIORITY: 'high',
-    CHANNEL: channel,
-    THREAD_TS: threadTs,
-    PROVENANCE_CHANNEL: provenance.channel || '',
-    PROVENANCE_REQUESTER: provenance.requester || '',
-    PROVENANCE_MESSAGE: provenance.message || '',
+  const mode = config.workspace ? `workspace=${config.workspace}` : `slug=${config.commandSlug}`;
+  const payload = {
+    channel,
+    slack_channel: channel,
+    slack_ts: ts,
+    thread_ts: tKey ? tKey.split(':')[1] : ts,
+    command_slug: config.commandSlug,
+    workspace: config.workspace || '',
+    session_key: tKey ? `slack-${tKey.replace(':', '-')}` : '',
+    prompt: '',
+    prompt_file: promptFile,
+    msg_ts: ts,
+    priority: isPriorityChannel(channel) ? 'high' : 'normal',
+    provider: providerOverride || '',
+    fallback_provider: '',
+    review_provider: '',
+    model: '',
+    effort: '',
+    provenance_channel: provenance.channel || '',
+    provenance_requester: provenance.requester || '',
+    provenance_message: provenance.message || '',
+    log_name: config.logName,
   };
 
-  const child = spawn(
-    join(SCRIPTS_DIR, 'run-claude.sh'),
-    args,
-    {
-      cwd: MWF_APP_DIR,
-      stdio: 'ignore',
-      detached: true,
-      env,
-    }
-  );
-
-  child.unref();
-
-  // Track this agent as active for its thread
-  if (tKey) {
-    activeThreadAgents.set(tKey, { channel, ts, config, pid: child.pid });
-  }
-
-  const mode = config.workspace ? `workspace=${config.workspace}` : `slug=${config.commandSlug}`;
-  child.on('exit', async (code) => {
-    log(config.logName, `Agent for ${ts} (${mode}${providerOverride ? `, provider=${providerOverride}` : ''}) exited with code ${code}`);
-    await removeReaction(channel, ts, 'eyes');
-
-    if (code === 0) {
-      await addReaction(channel, ts, 'white_check_mark');
-    } else if (code === 75 || code === 76) {
-      await addReaction(channel, ts, 'zzz');
-    } else {
-      await addReaction(channel, ts, 'x');
-    }
-
-    // Thread queue drain: when this agent finishes, dispatch the next
-    // queued reply for the same thread (if any).
-    if (tKey) {
-      activeThreadAgents.delete(tKey);
-      drainThreadQueue(tKey);
-    }
+  const proc = spawnSync('/usr/bin/python3', ['-m', 'bot_harness', 'jobs', 'enqueue'], {
+    cwd: MWF_APP_DIR,
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PYTHONPATH: [join(SCRIPTS_DIR, 'lib'), process.env.PYTHONPATH].filter(Boolean).join(':'),
+      BOT_SCRIPTS_DIR: SCRIPTS_DIR,
+      SLAM_BOT: '1',
+      PRIORITY: payload.priority,
+      CHANNEL: channel,
+    },
   });
 
-  log(config.logName, `Dispatched agent for ${ts} (PID ${child.pid}, ${mode}${providerOverride ? `, provider=${providerOverride}` : ''})`);
-}
-
-/**
- * Drain the next queued thread reply for the given thread key.
- * Called when an agent exits for that thread.
- */
-async function drainThreadQueue(tKey) {
-  const queue = threadQueue.get(tKey);
-  if (!queue || queue.length === 0) {
-    threadQueue.delete(tKey);
-    return;
+  if (proc.status !== 0) {
+    const detail = (proc.stderr || proc.stdout || '').trim();
+    throw new Error(`failed to enqueue job for ${ts}: ${detail || `exit ${proc.status}`}`);
   }
 
-  const next = queue.shift();
-  if (queue.length === 0) {
-    threadQueue.delete(tKey);
-  }
-
-  const { event, config } = next;
-  const channel = event.channel;
-  const ts = event.ts;
-
-  logMain(`Draining thread queue for ${tKey}: dispatching queued reply ${ts} (${queue?.length || 0} remaining)`);
-
-  // Add :eyes: reaction (the :hourglass_flowing_sand: was added when queued)
-  await removeReaction(channel, ts, 'hourglass_flowing_sand');
-  await addReaction(channel, ts, 'eyes');
-
-  // Build prompt and provenance for the queued message
-  const [promptContent, requesterName] = await Promise.all([
-    buildPrompt(channel, config, event),
-    event.user ? resolveUserName(event.user) : Promise.resolve('unknown'),
-  ]);
-
-  const provenance = {
-    channel: config.channelName || channel,
-    requester: requesterName,
-    message: event.text || '(no text)',
-  };
-
-  const providerOverride = providerOverrideForMessage(event);
-  if (providerOverride) {
-    logMain(`Provider override: routing ${ts} through ${providerOverride} because message contains "codex"`);
-  }
-
-  dispatchAgent(channel, ts, config, promptContent, provenance, tKey, { providerOverride });
+  const jobId = (proc.stdout || '').trim();
+  log(config.logName, `Enqueued agent job ${jobId || '(unknown)'} for ${ts} (${mode}${providerOverride ? `, provider=${providerOverride}` : ''})`);
 }
 
 // ---------------------------------------------------------------------------
@@ -727,32 +642,10 @@ async function handleMessageEvent(event) {
 
   logMain(`Claimed message ${ts} in ${config.logName} from user=${user}`);
 
-  // Thread-aware queuing: if an agent is already working on this thread,
-  // queue this message instead of dispatching immediately.
   const tKey = threadKey(channel, event);
-  if (activeThreadAgents.has(tKey)) {
-    logMain(`Thread ${tKey} has active agent — queuing reply ${ts}`);
-    if (!threadQueue.has(tKey)) {
-      threadQueue.set(tKey, []);
-    }
-    threadQueue.get(tKey).push({ event, config });
 
-    // Add :hourglass_flowing_sand: to indicate the message is queued
-    await addReaction(channel, ts, 'hourglass_flowing_sand');
-
-    // Update heartbeat
-    writeFileSync(HEARTBEAT_FILE, new Date().toISOString());
-    return;
-  }
-
-  // Mark thread as active IMMEDIATELY (synchronously) to prevent race conditions.
-  // Without this, rapid-fire messages can slip through the activeThreadAgents check
-  // because buildPrompt/resolveUserName are async and the map isn't set until
-  // dispatchAgent completes.
-  activeThreadAgents.set(tKey, { channel, ts, config, pid: null });
-
-  // Add :eyes: reaction
-  await addReaction(channel, ts, 'eyes');
+  // Add :hourglass_flowing_sand: while the durable worker owns scheduling.
+  await addReaction(channel, ts, 'hourglass_flowing_sand');
 
   // Resolve provenance in parallel with prompt building
   const [promptContent, requesterName] = await Promise.all([
@@ -771,8 +664,13 @@ async function handleMessageEvent(event) {
     logMain(`Provider override: routing ${ts} through ${providerOverride} because message contains "codex"`);
   }
 
-  // Dispatch provider agent (tracked by thread key — updates the pid set above)
-  dispatchAgent(channel, ts, config, promptContent, provenance, tKey, { providerOverride });
+  try {
+    dispatchAgent(channel, ts, config, promptContent, provenance, tKey, { providerOverride });
+  } catch (err) {
+    log(config.logName, `Failed to enqueue agent for ${ts}: ${err.message}`);
+    await removeReaction(channel, ts, 'hourglass_flowing_sand');
+    await addReaction(channel, ts, 'x');
+  }
 
   // Update heartbeat
   writeFileSync(HEARTBEAT_FILE, new Date().toISOString());
@@ -809,8 +707,28 @@ async function handleReactionAdded(event) {
     return;
   }
 
-  // Find and remove matching queue file(s)
+  // Find and cancel matching durable job and legacy queue file(s)
   let removed = 0;
+  let cancelledJob = '';
+  try {
+    const proc = spawnSync('/usr/bin/python3', ['-m', 'bot_harness', 'jobs', 'cancel', channel, ts], {
+      cwd: MWF_APP_DIR,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PYTHONPATH: [join(SCRIPTS_DIR, 'lib'), process.env.PYTHONPATH].filter(Boolean).join(':'),
+        BOT_SCRIPTS_DIR: SCRIPTS_DIR,
+      },
+    });
+    if (proc.status === 0) {
+      cancelledJob = (proc.stdout || '').trim();
+    } else {
+      logMain(`Cancel: durable job cancel failed for ${ts}: ${(proc.stderr || proc.stdout || '').trim()}`);
+    }
+  } catch (err) {
+    logMain(`Cancel: durable job cancel threw for ${ts}: ${err.message}`);
+  }
+
   try {
     if (existsSync(QUEUE_DIR)) {
       const files = readdirSync(QUEUE_DIR).filter((f) => f.startsWith('queue-') && f.endsWith('.json'));
@@ -835,7 +753,7 @@ async function handleReactionAdded(event) {
   // Remove the hourglass emoji
   await removeReaction(channel, ts, 'hourglass_flowing_sand');
 
-  logMain(`Cancel: ❌ reaction on ${ts} in ${channel} — removed ${removed} queue file(s)`);
+  logMain(`Cancel: ❌ reaction on ${ts} in ${channel} — durable job ${cancelledJob || 'none'}, removed ${removed} legacy queue file(s)`);
 }
 
 // ---------------------------------------------------------------------------

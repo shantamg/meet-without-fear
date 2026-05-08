@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from bot_harness import github_check, run
+from bot_harness import github_check, jobs, run
 from bot_harness.activity_journal import render_recent
 from bot_harness.agent_runtime import cleanup, setup_agent
 from bot_harness.config import BotConfig
@@ -255,6 +255,90 @@ class HarnessTests(unittest.TestCase):
                 self.assertFalse((Path(env["BOT_LOG_DIR"]) / "run-claude.calls").exists())
                 log_text = (Path(env["BOT_LOG_DIR"]) / "workspace-dispatcher.log").read_text(encoding="utf-8")
                 self.assertIn("duplicate detected by check-duplicates.sh", log_text)
+
+    def test_enqueue_thread_reply_delivers_to_running_agent_inbox(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            env = self.env(tmp)
+            with patch.dict(os.environ, env, clear=False):
+                config = BotConfig.from_env()
+                agent_home = Path(env["ACTIVE_DIR"]) / f"agent-{os.getpid()}"
+                (agent_home / "inbox" / "unread").mkdir(parents=True)
+                write_json(agent_home / "meta.json", {"channel": "C1", "messageTs": "111.000"})
+                now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                with jobs.connect(config) as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO jobs (status, thread_ts, command_slug, prompt, pid, created_at, last_heartbeat_at)
+                        VALUES ('running', '111.000', 'active', 'prompt', ?, ?, ?)
+                        """,
+                        (os.getpid(), now, now),
+                    )
+                    conn.commit()
+
+                payload = {
+                    "channel": "C1",
+                    "slack_channel": "C1",
+                    "slack_ts": "222.000",
+                    "thread_ts": "111.000",
+                    "command_slug": "reply",
+                    "provenance_requester": "Shantam (U1)",
+                    "provenance_message": "can you include this while you are still working?",
+                }
+                job_id = jobs.enqueue(config, payload)
+                self.assertEqual(jobs.enqueue(config, payload), job_id)
+
+                delivered = list((agent_home / "inbox" / "unread").glob("slack-*.md"))
+                self.assertEqual(len(delivered), 1)
+                self.assertIn("can you include this", delivered[0].read_text(encoding="utf-8"))
+                with jobs.connect(config) as conn:
+                    row = conn.execute("SELECT status, failure_reason FROM jobs WHERE id=?", (job_id,)).fetchone()
+                self.assertEqual(row["status"], "succeeded")
+                self.assertIn("delivered_to_active_agent", row["failure_reason"])
+
+    def test_enqueue_thread_reply_waits_for_active_agent_race(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            env = self.env(tmp)
+            with patch.dict(os.environ, env, clear=False):
+                config = BotConfig.from_env()
+                agent_home = Path(env["ACTIVE_DIR"]) / f"agent-{os.getpid()}"
+                (agent_home / "inbox" / "unread").mkdir(parents=True)
+                write_json(agent_home / "meta.json", {"channel": "C1", "messageTs": "111.000"})
+                now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                with jobs.connect(config) as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO jobs (status, thread_ts, command_slug, prompt, pid, created_at, last_heartbeat_at)
+                        VALUES ('running', '111.000', 'active', 'prompt', ?, ?, ?)
+                        """,
+                        (os.getpid(), now, now),
+                    )
+                    conn.commit()
+
+                with (
+                    patch("bot_harness.jobs.active_agent_for_thread", side_effect=[None, agent_home]),
+                    patch("bot_harness.jobs.time.sleep", return_value=None),
+                ):
+                    job_id = jobs.enqueue(
+                        config,
+                        {
+                            "channel": "C1",
+                            "slack_channel": "C1",
+                            "slack_ts": "222.000",
+                            "thread_ts": "111.000",
+                            "command_slug": "reply",
+                            "provenance_message": "arrived before active dir was visible",
+                        },
+                    )
+
+                delivered = list((agent_home / "inbox" / "unread").glob("slack-*.md"))
+                self.assertEqual(len(delivered), 1)
+                self.assertIn("arrived before active dir", delivered[0].read_text(encoding="utf-8"))
+                with jobs.connect(config) as conn:
+                    row = conn.execute("SELECT status, failure_reason FROM jobs WHERE id=?", (job_id,)).fetchone()
+                self.assertEqual(row["status"], "succeeded")
+                self.assertIn("delivered_to_active_agent", row["failure_reason"])
 
     def test_agent_metadata_cleanup_and_journal_render(self):
         with tempfile.TemporaryDirectory() as td:
