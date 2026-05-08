@@ -1555,6 +1555,37 @@ describe('stage4-capture.service', () => {
     expect(result.appliedOperationCount).toBe(0);
   });
 
+  it('classifies live individual steadiness wording as an individual commitment', async () => {
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'That is my own practice.',
+        compatibilityProposedStrategies: [
+          "Saturday mornings reserved for individual steadiness practice (user's own commitment)",
+        ],
+      })
+    );
+
+    expect(prisma.strategyProposal.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        description: "Saturday mornings reserved for individual steadiness practice (user's own commitment)",
+        kind: Stage4ProposalKind.INDIVIDUAL_COMMITMENT,
+      }),
+    });
+    expect(result.appliedOperationCount).toBe(1);
+  });
+
+  it('skips live weekly-conversation fragment phrasing', async () => {
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'That fragment should not be captured.',
+        compatibilityProposedStrategies: ['actually imagine is a weekly conversation with rules before we start'],
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(result.appliedOperationCount).toBe(0);
+  });
+
   it('deduplicates pause-and-return variants as one shared proposal', async () => {
     (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
       proposal({

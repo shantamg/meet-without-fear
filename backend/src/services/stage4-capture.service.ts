@@ -209,6 +209,7 @@ function inferProposalKind(text: string): Stage4ProposalKind {
   }
   if (
     /\b(?:mine alone|individual for me|individual commitment|my commitment|just for me|mine to do)\b/i.test(text) ||
+    /\b(?:user'?s|my|his|her|their)\s+own\s+commitment\b/i.test(text) ||
     /\bcommits?\s+individually\b/i.test(text) ||
     /\b(?:give|giving)\s+(?:myself|herself|himself|themself|themselves)\s+permission\s+to\b/i.test(text) ||
     /\b(?:name|naming)\s+what\s+is\s+happening\s+once\b/i.test(text) ||
@@ -241,7 +242,7 @@ function inferProposalKind(text: string): Stage4ProposalKind {
     /\b(?:journal|journaling|write\s+things?\s+down)\b/i.test(text) &&
       /\b(?:self\s*trust|second\s+guessing|outsourcing\s+(?:my|her|his|their)\s+reality)\b/i.test(text) ||
     /\b(?:return|go(?:ing)?\s+back|pursue|start)\s+(?:to\s+)?individual\s+therapy\b/i.test(text) ||
-    /\bindividual\s+practice\s+for\s+steadiness\b/i.test(text) ||
+    /\bindividual\s+(?:practice\s+for\s+steadiness|steadiness\s+practice)\b/i.test(text) ||
     /\bsomething\s+(?:adam|eve|he|she|they)\s+does\s+on\s+(?:his|her|their)\s+own\b/i.test(text) ||
     /\b(?:running|counseling|therapy|exercise)\b/i.test(text) &&
       /\b(?:steadiness|steady|prove\s+(?:he|she|they|i)'?s\s+okay|on\s+(?:his|her|their|my)\s+own)\b/i.test(text) ||
@@ -317,6 +318,7 @@ function isConcreteProposal(description: string): boolean {
   if (/^honestly name right now\b/.test(normalized)) return false;
   if (/^work with\b/.test(normalized)) return false;
   if (/^actually try\b/.test(normalized)) return false;
+  if (/^actually imagine is\b/.test(normalized)) return false;
   if (/^try is\b/.test(normalized)) return false;
   if (/^try one small new thing each month that (?:she|he|they|partner) chooses\b/.test(normalized)) return false;
   if (/^ask to slow down without disappearing\b/.test(normalized)) return false;
