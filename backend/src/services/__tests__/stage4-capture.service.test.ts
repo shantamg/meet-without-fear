@@ -1633,6 +1633,8 @@ describe('stage4-capture.service', () => {
         userMessage: 'Those are details inside the shared proposal.',
         compatibilityProposedStrategies: [
           "need permission to pause without it meaning I'm leaving the conversation",
+          'need us to be allowed to slow it down',
+          'need to ask one real question before I defend anything',
           'say I need five minutes, and then I come back',
         ],
       })
