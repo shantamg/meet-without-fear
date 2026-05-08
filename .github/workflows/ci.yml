@@ -19,6 +19,7 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      bot-harness: ${{ steps.filter.outputs.bot-harness }}
       python-eval: ${{ steps.filter.outputs.python-eval }}
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +52,19 @@ jobs:
               - 'eval/gold-profiles/**'
               - 'eval/prompt-versions/**'
               - 'docs/product/source-material/golden-transcripts/**'
+              - '.github/workflows/ci.yml'
+            bot-harness:
+              - 'scripts/ec2-bot/scripts/lib/bot_harness/**'
+              - 'scripts/ec2-bot/scripts/lib/invoke_provider.py'
+              - 'scripts/ec2-bot/scripts/tests/**'
+              - 'scripts/ec2-bot/scripts/run-claude.sh'
+              - 'scripts/ec2-bot/scripts/process-queue.sh'
+              - 'scripts/ec2-bot/scripts/workspace-dispatcher.sh'
+              - 'scripts/ec2-bot/scripts/check-github.sh'
+              - 'scripts/ec2-bot/scripts/thread-tracker.sh'
+              - 'scripts/ec2-bot/socket-mode/**'
+              - 'bot-workspaces/label-registry.json'
+              - 'bot-workspaces/workspace-builder/shared/conventions.md'
               - '.github/workflows/ci.yml'
 
   ci:
@@ -152,12 +166,49 @@ jobs:
             scripts/mwf_alignment_status.py
           python3 scripts/test_mwf_moment_eval.py
 
+  bot-harness:
+    name: EC2 Bot Harness Tests
+    needs: changes
+    if: needs.changes.outputs.bot-harness == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate registry and Python harness
+        run: |
+          jq empty bot-workspaces/label-registry.json
+          python3 -m py_compile \
+            scripts/ec2-bot/scripts/lib/invoke_provider.py \
+            scripts/ec2-bot/scripts/lib/bot_harness/*.py
+          bash -n \
+            scripts/ec2-bot/scripts/run-claude.sh \
+            scripts/ec2-bot/scripts/process-queue.sh \
+            scripts/ec2-bot/scripts/workspace-dispatcher.sh \
+            scripts/ec2-bot/scripts/check-github.sh \
+            scripts/ec2-bot/scripts/thread-tracker.sh
+          node --check scripts/ec2-bot/socket-mode/socket-listener.mjs
+          node scripts/ec2-bot/socket-mode/test-parse-test-command.mjs
+          ! rg -n \
+            'LovelyBot|@LvlyBot|lvlybot|LvlyAI/lovely|/opt/lovely-bot|lovely-bot|peter-app|C08SNTYV3AK|C0AM2J47R4L' \
+            scripts/ec2-bot bot-workspaces docs/infrastructure/index.md \
+            -g '!scripts/ec2-bot/scripts/tests/test_bot_harness.py'
+          PYTHONPATH=scripts/ec2-bot/scripts/lib python3 -m unittest \
+            scripts/ec2-bot/scripts/tests/test_bot_harness.py \
+            scripts/ec2-bot/scripts/tests/test_invoke_provider.py
+
   # Gate job for branch protection — always runs, fails if any real job failed.
   # Set this as the required status check instead of the individual jobs.
   ci-success:
     name: CI Result
     if: always()
-    needs: [changes, ci, python-eval]
+    needs: [changes, ci, python-eval, bot-harness]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all checks passed
@@ -165,13 +216,15 @@ jobs:
           echo "changes:     ${{ needs.changes.result }}"
           echo "ci:          ${{ needs.ci.result }}"
           echo "python-eval: ${{ needs.python-eval.result }}"
+          echo "bot-harness: ${{ needs.bot-harness.result }}"
 
           # Allowlist: only 'success' and 'skipped' are acceptable.
           # Catches 'failure', 'cancelled', and any unexpected state.
           for result in \
             "${{ needs.changes.result }}" \
             "${{ needs.ci.result }}" \
-            "${{ needs.python-eval.result }}"; do
+            "${{ needs.python-eval.result }}" \
+            "${{ needs.bot-harness.result }}"; do
             if [[ "$result" != "success" && "$result" != "skipped" ]]; then
               echo "::error::Job returned unexpected result: $result"
               exit 1
