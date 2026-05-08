@@ -1255,6 +1255,10 @@ describe('stage4-capture.service', () => {
           'think of is a weekly conversation that does not become a verdict',
           'know the rules before I walk in',
           "be open to that too, but I don't want to make a long list just to feel safer",
+          'feel less scared',
+          'say I am scared and ask for five minutes instead of disappearing',
+          'brace before we even start',
+          'Willingness to try something new together (vague, needs refinement if pursued)',
         ],
       })
     );
@@ -1385,6 +1389,38 @@ describe('stage4-capture.service', () => {
     expect(prisma.strategyProposal.update).not.toHaveBeenCalled();
     expect(result.appliedOperationCount).toBe(0);
     expect(result.skippedOperationCount).toBe(1);
+  });
+
+  it('deduplicates live Adam steadiness practice variants and skips folded fragments', async () => {
+    (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+      proposal({
+        description: 'Saturday mornings for something that builds steadiness in Adam (his individual commitment, not shared)',
+        kind: Stage4ProposalKind.INDIVIDUAL_COMMITMENT,
+      }),
+      proposal({
+        description:
+          'Weekly 30-minute structured conversation (Sunday evening or set time), one thing each, repeat back before responding, with ground rules: not a decision conversation',
+        kind: Stage4ProposalKind.SHARED_PROPOSAL,
+      }),
+    ]);
+
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'Those are elaborations on the same two ideas.',
+        compatibilityProposedStrategies: [
+          'feel less scared',
+          'say I am scared and ask for five minutes instead of disappearing',
+          'brace before we even start',
+          'Saturday mornings - walk without phone, write down feelings before coming home, practice noticing himself without needing Eve to settle him',
+          'Once a month do something unfamiliar on purpose to prove change is not always danger',
+        ],
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(prisma.strategyProposal.update).not.toHaveBeenCalled();
+    expect(result.appliedOperationCount).toBe(0);
+    expect(result.skippedOperationCount).toBe(0);
   });
 
   it('classifies Adam verdict-pause practice as individual and deduplicates variants', async () => {
