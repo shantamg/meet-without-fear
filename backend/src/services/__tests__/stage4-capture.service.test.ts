@@ -1642,6 +1642,27 @@ describe('stage4-capture.service', () => {
     expect(result.appliedOperationCount).toBe(0);
   });
 
+  it('deduplicates live volunteer-shift individual commitment variants', async () => {
+    (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+      proposal({
+        description: 'One volunteer shift this month to test whether feeling useful outside their relationship still matters',
+        kind: Stage4ProposalKind.INDIVIDUAL_COMMITMENT,
+      }),
+    ]);
+
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'That is the same volunteer idea.',
+        compatibilityProposedStrategies: ['try one volunteer shift again this month'],
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(prisma.strategyProposal.update).not.toHaveBeenCalled();
+    expect(result.appliedOperationCount).toBe(0);
+    expect(result.skippedOperationCount).toBe(1);
+  });
+
   it('deduplicates pause-and-return variants as one shared proposal', async () => {
     (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
       proposal({
