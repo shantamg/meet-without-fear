@@ -263,6 +263,31 @@ describe('Stage4RedesignPanel', () => {
     expect(screen.getByText('This is a valid close. Passive Tending re-entry remains available.')).toBeTruthy();
   });
 
+  it('renders closed proposal selections as read-only', () => {
+    const state: GetStage4StateResponse = {
+      ...baseState,
+      phase: Stage4Phase.CLOSED_NO_SHARED_AGREEMENT,
+      outcome: {
+        kind: Stage4ClosureKind.NO_SHARED_AGREEMENT,
+        reason: Stage4ClosureReason.NO_OVERLAP,
+        summary: 'No shared experiment was right to try yet.',
+        agreements: [],
+        individualCommitments: [],
+        openNeeds: baseState.inventory.unaddressedNeeds,
+        closedAt: '2026-05-06T00:00:00.000Z',
+      },
+    };
+
+    render(<Stage4RedesignPanel {...defaultProps} state={state} />);
+
+    const willingButtons = screen.getAllByLabelText('Willing for proposal');
+    expect(willingButtons[0]).toBeDisabled();
+
+    fireEvent.press(willingButtons[0]);
+
+    expect(defaultProps.onSelectProposal).not.toHaveBeenCalled();
+  });
+
   it('renders shared agreement outcome details', () => {
     const state: GetStage4StateResponse = {
       ...baseState,

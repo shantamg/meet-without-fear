@@ -98,3 +98,7 @@ Set `blocked_on` to the lowercase partner side when partner action is needed; ot
 For Stage 4, do not use `stage_limit_reached` while waiting for the partner to submit proposals, selections, review, or closure. Report `needs_partner` with `blocked_on` set to the partner instead. A Stage 4 `stage_limit_reached` status must have `"blocked_on": null` and should only appear after this side has submitted selections or the stage is visibly closed for this side.
 
 Stage 4 keeps chat input available while proposals are being shaped. Do not keep adding ideas indefinitely just because input remains visible. Once the assigned side has contributed one or two concrete proposals or individual commitments and made visible willingness selections for the current inventory, stop and report `needs_partner` if closure is still disabled because partner-private proposals, selections, review, or closure are pending.
+
+If Stage 4 asks to hear this assigned side's perspective or what has been going on, answer once in character before voting on partner proposals or closing. Do not skip the assigned side's own Stage 4 turn just because partner proposal controls are visible.
+
+When a facilitator asks what the assigned side would walk away knowing, how they would know it helped, or what would make a proposal feel workable, answer as a success marker or refinement, not as a separate new commitment. If the app later shows those fragments as proposals, use the visible review/done controls or a concise correction instead of treating every fragment as a real new proposal.

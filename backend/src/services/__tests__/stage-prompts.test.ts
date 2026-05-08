@@ -322,8 +322,20 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('compatibility fallback');
       expect(prompt).toContain('user clearly volunteered, accepted, or committed');
       expect(prompt).toContain('Do NOT list AI ideas the user has not accepted');
+      expect(prompt).toContain('desired-outcome fragments');
+      expect(prompt).toContain('walk away knowing');
+      expect(prompt).toContain('Do NOT write generic labels such as "User will..."');
       expect(prompt).toContain('one person');
       expect(prompt).toContain('as if it were a shared agreement');
+    });
+
+    it('Stage 4 prompt treats success markers as not proposals yet', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('Not a proposal yet');
+      expect(prompt).toContain('Reflect it as a success criterion');
+      expect(prompt).toContain('what concrete action would produce that outcome');
     });
 
     it('returns topic-articulation prompt for stage 0 with isInvitationPhase', () => {

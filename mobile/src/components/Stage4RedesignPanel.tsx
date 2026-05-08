@@ -96,11 +96,13 @@ function ProposalCard({
   proposal,
   partnerName,
   isSelecting,
+  readOnly,
   onSelectProposal,
 }: {
   proposal: ProposalCardDTO;
   partnerName?: string | null;
   isSelecting?: boolean;
+  readOnly?: boolean;
   onSelectProposal: (proposalId: string, decision: Stage4SelectionDecision) => void;
 }) {
   const needsText = proposal.needsAddressed
@@ -141,15 +143,16 @@ function ProposalCard({
           Stage4SelectionDecision.NOT_WILLING,
         ].map((decision) => {
           const selected = proposal.myDecision === decision;
+          const disabled = Boolean(isSelecting || readOnly);
           return (
             <TouchableOpacity
               key={decision}
               style={[styles.selectionButton, selected && styles.selectionButtonSelected]}
               onPress={() => onSelectProposal(proposal.id, decision)}
-              disabled={isSelecting}
+              disabled={disabled}
               accessibilityRole="button"
               accessibilityLabel={`${decisionLabels[decision]} for proposal`}
-              accessibilityState={{ selected, disabled: isSelecting }}
+              accessibilityState={{ selected, disabled }}
             >
               <Text style={[styles.selectionButtonText, selected && styles.selectionButtonTextSelected]}>
                 {decisionLabels[decision]}
@@ -219,6 +222,7 @@ export function Stage4RedesignPanel({
     state.phase === Stage4Phase.SELECTION ||
     state.phase === Stage4Phase.COVERAGE_REVIEW;
   const noSharedCloseDisabled = !canCloseNoShared || isClosing;
+  const proposalSelectionsReadOnly = Boolean(state.outcome);
 
   return (
     <View style={styles.container} testID="stage4-redesign-panel">
@@ -243,6 +247,7 @@ export function Stage4RedesignPanel({
               proposal={proposal}
               partnerName={partnerName}
               isSelecting={isSelecting}
+              readOnly={proposalSelectionsReadOnly}
               onSelectProposal={onSelectProposal}
             />
           ))

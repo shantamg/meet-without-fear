@@ -58,7 +58,8 @@ ${options.draftPurpose} text
   const strategySection = stage === 4
     ? `\nStructured Stage 4 capture primarily reads the user's conversation turn. StrategyProposed/ProposedStrategy is only a compatibility fallback.
 Set StrategyProposed to Y only when the user clearly volunteered, accepted, or committed to a specific actionable proposal in their own turn.
-Do NOT list AI ideas the user has not accepted, declined ideas, removed items, vague intentions like "communicate better", or one person's willingness as if it were a shared agreement.
+Do NOT list AI ideas the user has not accepted, declined ideas, removed items, vague intentions like "communicate better", desired-outcome fragments like what they would walk away knowing or could live with, or one person's willingness as if it were a shared agreement.
+Do NOT write generic labels such as "User will..." in ProposedStrategy lines; preserve the user's own actor or role language so ownership stays clear.
 If StrategyProposed is Y, list each concrete user-endorsed proposal on its own line, prefixed with "ProposedStrategy: ". Example:
 ProposedStrategy: 10-minute check-in after dinner each night for one week
 ProposedStrategy: Sunday evening phone call to plan the week ahead`
@@ -951,6 +952,7 @@ PROPOSAL INVENTORY:
 PROPOSAL SHAPE:
 More workable: specific ("10-minute check-in after dinner"), time-bounded ("for one week"), reversible ("we can stop if it is not helping"), observable ("we'll know if we both showed up").
 Needs more detail: vague ("communicate better"), permanent ("always do X"), high-stakes ("move in together"), unobservable ("be nicer").
+Not a proposal yet: a desired outcome, test, or success marker ("I'd walk away knowing where I stand", "I could live with either answer", "I'd know whether this can change"). Reflect it as a success criterion, then ask what concrete action would produce that outcome.
 
 When a proposal is vague, help sharpen it by asking about ONE missing criterion at a time. Don't dump all four criteria at once.
 

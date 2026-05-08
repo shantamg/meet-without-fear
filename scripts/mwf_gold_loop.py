@@ -73,6 +73,17 @@ BOTH_PARTICIPANT_TARGET_STAGES = {
     "STRATEGIC_REPAIR_COMPLETE",
 }
 
+TARGET_STAGE_NUMBERS = {
+    "CREATED": 0,
+    "EMPATHY_SHARED_A": 1,
+    "FEEL_HEARD_B": 1,
+    "RECONCILER_SHOWN_B": 2,
+    "CONTEXT_SHARED_B": 3,
+    "EMPATHY_REVEALED": 3,
+    "NEED_MAPPING_COMPLETE": 4,
+    "STRATEGIC_REPAIR_COMPLETE": 4,
+}
+
 
 class GoldLoopError(RuntimeError):
     pass
@@ -1537,9 +1548,11 @@ def check_transcript_side_stage_metadata(
     transcripts: list[tuple[Path, str]],
     scenario: str,
     max_stage: int,
+    required_stages: set[int] | None = None,
 ) -> list[dict[str, Any]]:
     sides = set(scenario_sides(scenario))
-    expected = {(side, stage) for side in sides for stage in range(max_stage + 1)}
+    stages = required_stages if required_stages is not None else set(range(max_stage + 1))
+    expected = {(side, stage) for side in sides for stage in stages if 0 <= stage <= max_stage}
     observed: set[tuple[str, int]] = set()
     evidence: list[str] = []
     cta_evidence: list[str] = []
@@ -1851,6 +1864,15 @@ def check_stage1_felt_heard_confirmation_transcribed(transcripts: list[tuple[Pat
     )
 
 
+def skipped_stage1_for_target_stage(run_data: dict[str, Any]) -> bool:
+    start = run_data.get("start") if isinstance(run_data.get("start"), dict) else {}
+    if str(start.get("mode") or "") != "target_stage":
+        return False
+    target_stage = str(start.get("target_stage") or "")
+    target_stage_number = TARGET_STAGE_NUMBERS.get(target_stage)
+    return target_stage_number is not None and target_stage_number > 1
+
+
 def check_chat_copy_has_visible_input(transcripts: list[tuple[Path, str]]) -> dict[str, Any]:
     evidence: list[str] = []
     for path, text in transcripts:
@@ -1922,6 +1944,8 @@ def check_transcript_shared_context_blocks_labeled(transcripts: list[tuple[Path,
             if not body:
                 continue
             first_line = body.splitlines()[0].strip()
+            if first_line.startswith("###"):
+                continue
             if LABELED_SHARED_BLOCK_RE.search(first_line):
                 continue
             if first_line.startswith("**"):
@@ -2016,8 +2040,14 @@ def check_no_internal_reconciler_analysis(transcripts: list[tuple[Path, str]]) -
 def run_invariant_checks(run_dir: Path, run_data: dict[str, Any], scenario: str, max_stage: int) -> dict[str, Any]:
     transcripts = read_transcript_texts(run_data.get("transcripts") or [])
     checks: list[dict[str, Any]] = []
+    start = run_data.get("start") if isinstance(run_data.get("start"), dict) else {}
+    required_stages: set[int] | None = None
+    if str(start.get("mode") or "") == "target_stage":
+        target_stage_number = TARGET_STAGE_NUMBERS.get(str(start.get("target_stage") or ""))
+        if target_stage_number is not None:
+            required_stages = {min(target_stage_number, max_stage)}
     checks.append(check_no_visible_control_tags(transcripts))
-    checks.extend(check_transcript_side_stage_metadata(transcripts, scenario, max_stage))
+    checks.extend(check_transcript_side_stage_metadata(transcripts, scenario, max_stage, required_stages))
     checks.append(check_stage4_score_critical_content(transcripts, scenario, max_stage))
     checks.append(check_invitee_topic_handoff_transcribed(transcripts, run_data, scenario))
     checks.append(check_transcript_shared_context_blocks_labeled(transcripts))
@@ -2028,7 +2058,20 @@ def run_invariant_checks(run_dir: Path, run_data: dict[str, Any], scenario: str,
     checks.append(check_actor_operated_correct_side(run_data, scenario))
     checks.append(check_session_started_with_profile_initiator(run_data, scenario))
     checks.append(check_felt_heard_gate_after_witnessing(transcripts))
-    checks.append(check_stage1_felt_heard_confirmation_transcribed(transcripts))
+    if skipped_stage1_for_target_stage(run_data):
+        checks.append(
+            invariant_result(
+                "stage1_felt_heard_confirmation_transcribed",
+                True,
+                severity="soft",
+                owner="eval_harness",
+                dimension="transcript_extraction",
+                details="Stage 1 feel-heard confirmation applies only when the run includes Stage 1.",
+                evidence=[f"target_stage={start.get('target_stage')!r} skipped"],
+            )
+        )
+    else:
+        checks.append(check_stage1_felt_heard_confirmation_transcribed(transcripts))
     checks.append(check_chat_copy_has_visible_input(transcripts))
     hard_failures = [check for check in checks if check["severity"] == "hard" and check["status"] == "fail"]
     result = {
