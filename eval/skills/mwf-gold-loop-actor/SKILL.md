@@ -27,6 +27,8 @@ agent-browser --session <side-session> snapshot -i
 
 Use a distinct `--session` per participant, for example `mwf-gold-adam-<session-id>` and `mwf-gold-eve-<session-id>`, so both sides keep separate browser state.
 
+Keep browser observations compact. Prefer `snapshot -i` for normal state checks. Do not paste long prior transcript history into the final response; the orchestrator only needs the required status block.
+
 If `agent-browser` reports a stale closed browser context, run `agent-browser --session <side-session> close` once, then reopen the assigned URL.
 
 ## Persona And References
@@ -86,9 +88,11 @@ Allowed `state` values:
 
 - `needs_partner`: no legitimate action remains for the assigned side until the partner acts.
 - `can_continue`: this Codex turn stopped due to time/tool/context interruption, but the assigned side still has a legitimate action.
-- `stage_limit_reached`: the assigned side reached the requested stage limit.
+- `stage_limit_reached`: the assigned side reached the requested stage limit and has no partner dependency left in the requested gate.
 - `completed`: the requested run completed.
 - `bug_blocked`: a product, state, privacy, or browser issue blocks progress.
 - `error`: the browser/tooling run failed before a reliable state could be established.
 
 Set `blocked_on` to the lowercase partner side when partner action is needed; otherwise use `null`. Keep JSON valid.
+
+For Stage 4, do not use `stage_limit_reached` while waiting for the partner to submit proposals, selections, review, or closure. Report `needs_partner` with `blocked_on` set to the partner instead. A Stage 4 `stage_limit_reached` status must have `"blocked_on": null` and should only appear after this side has submitted selections or the stage is visibly closed for this side.

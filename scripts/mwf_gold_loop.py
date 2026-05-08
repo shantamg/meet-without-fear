@@ -929,6 +929,10 @@ If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present for
 
 If Stage {stop_after_stage} shows a visible share suggestion, context-share decision, validation card, proposal inventory, rank/select/submit controls, draft review, or text input for {actor.character}, treat it as legitimate in-stage work. Respond to that action before reporting "stage_limit_reached". In Stage 4, do not report "stage_limit_reached" merely after adding ideas; use it only after this assigned side has submitted selections or the stage is visibly closed for this side. If the visible next action belongs to {partner.character}, use "needs_partner" with "blocked_on": "{partner.side}".
 
+For Stage 4 specifically, "stage_limit_reached" must have `"blocked_on": null`. If {actor.character} is waiting for {partner.character} to submit proposals, selections, review, or closure, report `"state": "needs_partner"` instead.
+
+Keep browser observations compact. Prefer `agent-browser ... snapshot -i` over full snapshots, and do not paste long prior transcript history into the final answer.
+
 Do not operate the partner side. Use agent-browser CLI through the mwf-gold-loop-actor skill. Maintain the scratch log required by the gold skills.
 
 End your final answer with exactly one machine-readable status block:
@@ -962,6 +966,8 @@ Stop after Stage {stop_after_stage}.
 Inspect the current in-app browser state, continue if {actor.character} has a legitimate action, and stop when blocked on {partner.character}, Stage {stop_after_stage} is reached, completed, or bug-blocked.
 If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present for {actor.character}, either click it or give a clear in-character typed confirmation such as "I feel heard" / "Ready" when that is realistic. Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate.
 If Stage {stop_after_stage} shows a visible share suggestion, context-share decision, validation card, proposal inventory, rank/select/submit controls, draft review, or text input for {actor.character}, handle that in-stage action before reporting "stage_limit_reached". In Stage 4, do not report "stage_limit_reached" merely after adding ideas; use it only after this assigned side has submitted selections or the stage is visibly closed for this side. If the visible next action belongs to {partner.character}, use "needs_partner" with "blocked_on": "{partner.side}".
+For Stage 4 specifically, "stage_limit_reached" must have `"blocked_on": null`. If {actor.character} is waiting for {partner.character} to submit proposals, selections, review, or closure, report `"state": "needs_partner"` instead.
+Keep browser observations compact. Prefer `agent-browser ... snapshot -i` over full snapshots, and do not paste long prior transcript history into the final answer.
 
 End with the required MWF_GOLD_STATUS JSON block using one of: {", ".join(sorted(VALID_STATES))}.
 """
@@ -1158,6 +1164,7 @@ def run_codex_actor(
     if not actor.codex_session_id:
         actor.codex_session_id = find_codex_session_id(jsonl)
     if status is not None:
+        status = normalize_actor_status(status)
         actor.status = status
         return status
     if result.returncode != 0:
@@ -1166,6 +1173,7 @@ def run_codex_actor(
         return status
     try:
         status = parse_status(last.read_text(encoding="utf-8"), actor.side, session_id)
+        status = normalize_actor_status(status)
     except Exception as exc:
         status = ActorStatus.error(actor.side, session_id, str(exc))
     actor.status = status
@@ -1213,6 +1221,23 @@ def run_mock_actor(actor: Actor, partner: Actor, session_id: str, stop_after_sta
 
 TERMINAL_ACTOR_STATES = {"stage_limit_reached", "completed"}
 FAILED_ACTOR_STATES = {"bug_blocked", "error"}
+
+
+def normalize_actor_status(status: ActorStatus) -> ActorStatus:
+    """Convert contradictory terminal waits back into partner waits."""
+    if status.state in TERMINAL_ACTOR_STATES and status.blocked_on:
+        return ActorStatus(
+            side=status.side,
+            session_id=status.session_id,
+            stage=status.stage,
+            state="needs_partner",
+            blocked_on=status.blocked_on,
+            next_action_needed=status.next_action_needed,
+            scratch_log=status.scratch_log,
+            current_url=status.current_url,
+            raw=status.raw,
+        )
+    return status
 
 
 def actor_satisfies_stop_boundary(actor: Actor, stop_after_stage: int) -> bool:

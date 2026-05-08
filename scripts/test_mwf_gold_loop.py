@@ -9,6 +9,7 @@ from mwf_gold_loop import (
     actor_satisfies_stop_boundary,
     check_stage4_score_critical_content,
     choose_next_actor,
+    normalize_actor_status,
 )
 
 
@@ -45,6 +46,22 @@ class GoldLoopActorHandoffTest(unittest.TestCase):
         )
 
         self.assertFalse(actor_satisfies_stop_boundary(actor, 4))
+
+    def test_terminal_status_with_blocker_is_normalized_to_partner_wait(self) -> None:
+        status = normalize_actor_status(
+            ActorStatus(
+                side="catherine",
+                session_id="session-1",
+                stage=4,
+                state="stage_limit_reached",
+                blocked_on="james",
+                next_action_needed="James needs to submit selections.",
+            )
+        )
+
+        self.assertEqual(status.state, "needs_partner")
+        self.assertEqual(status.blocked_on, "james")
+        self.assertEqual(status.stage, 4)
 
     def test_stage4_handoff_resumes_partner_after_selection_wait_changes_sides(self) -> None:
         james = self.actor(
