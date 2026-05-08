@@ -16,11 +16,11 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Animated,
-  Dimensions,
   FlatList,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,7 +29,7 @@ import type { TakeawayDTO } from '@meet-without-fear/shared';
 import { useTakeaways, useUpdateTakeaway, useDeleteTakeaway } from '../hooks/useDistillation';
 import { TakeawayRow } from './TakeawayRow';
 import { createStyles } from '../theme/styled';
-import { colors } from '../theme';
+import { appWidthStyle, colors } from '../theme';
 
 // ============================================================================
 // Types
@@ -48,7 +48,7 @@ interface TakeawayReviewSheetProps {
 export function TakeawayReviewSheet({ sessionId, visible, onClose }: TakeawayReviewSheetProps) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const screenHeight = Dimensions.get('window').height;
+  const { height: windowHeight } = useWindowDimensions();
 
   // ---- Animation -----------------------------------------------------------
   const sheetAnim = useRef(new Animated.Value(0)).current;
@@ -153,13 +153,14 @@ export function TakeawayReviewSheet({ sessionId, visible, onClose }: TakeawayRev
       <Animated.View
         style={[
           styles.sheet,
+          appWidthStyle,
           {
             paddingBottom: insets.bottom,
             transform: [
               {
                 translateY: sheetAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [screenHeight, 0],
+                  outputRange: [windowHeight, 0],
                 }),
               },
             ],

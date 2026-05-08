@@ -206,13 +206,14 @@ export function Stage4RedesignPanel({
       proposal.myDecision === Stage4SelectionDecision.WILLING &&
       proposal.partnerDecisionVisible === Stage4SelectionDecision.WILLING
   );
-  const partnerSelections = state.partnerSelections ?? [];
-  const canCloseShared = mutualShared.length > 0;
+  const canCloseShared =
+    mutualShared.length > 0 &&
+    state.partnerSelectionStatus === 'SUBMITTED';
   const canCloseNoShared =
     (state.phase === Stage4Phase.OUTCOME_REVIEW ||
       state.phase === Stage4Phase.SELECTION ||
       state.phase === Stage4Phase.COVERAGE_REVIEW) &&
-    partnerSelections.length > 0;
+    state.partnerSelectionStatus === 'SUBMITTED';
   const showNoSharedClose =
     state.phase === Stage4Phase.OUTCOME_REVIEW ||
     state.phase === Stage4Phase.SELECTION ||
@@ -352,7 +353,7 @@ export function Stage4RedesignPanel({
               </Text>
             </TouchableOpacity>
           )}
-          {showNoSharedClose && partnerSelections.length === 0 && (
+          {showNoSharedClose && state.partnerSelectionStatus !== 'SUBMITTED' && (
             <Text style={styles.actionHint}>
               Available once both partners have made selections.
             </Text>

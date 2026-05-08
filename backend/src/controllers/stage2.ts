@@ -1023,6 +1023,7 @@ export async function getPartnerEmpathy(
           status: partnerAttempt.status,
           revealedAt: partnerAttempt.revealedAt?.toISOString() ?? null,
           revisionCount: partnerAttempt.revisionCount,
+          statusVersion: partnerAttempt.statusVersion,
         }
         : null,
       // Waiting if no attempt exists, or if it exists but isn't revealed yet

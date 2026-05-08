@@ -41,6 +41,7 @@ import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from '.
 import { captureProposedNeedsForUser } from '../services/needs';
 import { cleanVisibleAIText } from '../utils/visible-text';
 import { captureStage4Turn } from '../services/stage4-capture.service';
+import { applyStage4AutoClosureFromSignal } from '../services/stage4-auto-closure.service';
 
 // ============================================================================
 // Helpers
@@ -2167,12 +2168,14 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         aiResponse: aiMessage.content,
         compatibilityProposedStrategies: metadata.proposedStrategies,
       });
-      metadata.stage4Capture = {
+      const stage4CaptureMetadata: NonNullable<SessionStateToolInput['stage4Capture']> = {
         appliedOperationCount: captureResult.appliedOperationCount,
         skippedOperationCount: captureResult.skippedOperationCount,
         selectionCaptured: Boolean(captureResult.selection),
+        closureSignalCaptured: Boolean(captureResult.closureSignal?.readyToClose),
         confidence: captureResult.confidence,
       };
+      metadata.stage4Capture = stage4CaptureMetadata;
 
       if (captureResult.appliedOperationCount > 0 || captureResult.selection) {
         logger.info(`[sendMessageStream:${requestId}] Stage 4 capture applied`, {
@@ -2187,6 +2190,18 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           appliedOperationCount: captureResult.appliedOperationCount,
           skippedOperationCount: captureResult.skippedOperationCount,
           selectionCaptured: Boolean(captureResult.selection),
+        });
+      }
+
+      const autoClosure = await applyStage4AutoClosureFromSignal({
+        sessionId,
+        userId: user.id,
+        signal: captureResult.closureSignal,
+      });
+      if (autoClosure.closed) {
+        stage4CaptureMetadata.autoClosed = true;
+        logger.info(`[sendMessageStream:${requestId}] Stage 4 closed from conversation signal`, {
+          reason: autoClosure.reason,
         });
       }
     }

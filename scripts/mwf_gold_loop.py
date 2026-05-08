@@ -927,7 +927,7 @@ Continue as {actor.character} until one of these happens:
 
 If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present for {actor.character}, either click it or give a clear in-character typed confirmation such as "I feel heard" / "Ready" when that is realistic. Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate.
 
-If Stage {stop_after_stage} shows a visible share suggestion, context-share decision, validation card, draft review, or text input for {actor.character}, treat it as legitimate in-stage work. Respond to that action before reporting "stage_limit_reached".
+If Stage {stop_after_stage} shows a visible share suggestion, context-share decision, validation card, proposal inventory, rank/select/submit controls, draft review, or text input for {actor.character}, treat it as legitimate in-stage work. Respond to that action before reporting "stage_limit_reached". In Stage 4, do not report "stage_limit_reached" merely after adding ideas; use it only after this assigned side has submitted selections or the stage is visibly closed for this side. If the visible next action belongs to {partner.character}, use "needs_partner" with "blocked_on": "{partner.side}".
 
 Do not operate the partner side. Use agent-browser CLI through the mwf-gold-loop-actor skill. Maintain the scratch log required by the gold skills.
 
@@ -961,7 +961,7 @@ Stop after Stage {stop_after_stage}.
 
 Inspect the current in-app browser state, continue if {actor.character} has a legitimate action, and stop when blocked on {partner.character}, Stage {stop_after_stage} is reached, completed, or bug-blocked.
 If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present for {actor.character}, either click it or give a clear in-character typed confirmation such as "I feel heard" / "Ready" when that is realistic. Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate.
-If Stage {stop_after_stage} shows a visible share suggestion, context-share decision, validation card, draft review, or text input for {actor.character}, handle that in-stage action before reporting "stage_limit_reached".
+If Stage {stop_after_stage} shows a visible share suggestion, context-share decision, validation card, proposal inventory, rank/select/submit controls, draft review, or text input for {actor.character}, handle that in-stage action before reporting "stage_limit_reached". In Stage 4, do not report "stage_limit_reached" merely after adding ideas; use it only after this assigned side has submitted selections or the stage is visibly closed for this side. If the visible next action belongs to {partner.character}, use "needs_partner" with "blocked_on": "{partner.side}".
 
 End with the required MWF_GOLD_STATUS JSON block using one of: {", ".join(sorted(VALID_STATES))}.
 """
@@ -1051,6 +1051,62 @@ def find_codex_session_id(jsonl_path: Path) -> str | None:
     return found[0] if found else None
 
 
+def run_codex_status_command(
+    cmd: list[str],
+    last_path: Path,
+    jsonl_path: Path,
+    expected_side: str,
+    session_id: str,
+    timeout: int,
+    require_session_id: bool,
+) -> tuple[subprocess.CompletedProcess[str], ActorStatus | None]:
+    """Run a Codex actor command, accepting a valid status file even if the CLI lingers."""
+    jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+    if last_path.exists():
+        last_path.unlink()
+    deadline = time.time() + timeout if timeout else None
+    with jsonl_path.open("a", encoding="utf-8") as handle:
+        process = subprocess.Popen(
+            cmd,
+            cwd=str(REPO_ROOT),
+            text=True,
+            stdout=handle,
+            stderr=subprocess.STDOUT,
+        )
+        while True:
+            returncode = process.poll()
+            if last_path.exists():
+                try:
+                    status = parse_status(last_path.read_text(encoding="utf-8"), expected_side, session_id)
+                    if require_session_id and find_codex_session_id(jsonl_path) is None and returncode is None:
+                        session_deadline = time.time() + 10
+                        while time.time() < session_deadline and find_codex_session_id(jsonl_path) is None:
+                            time.sleep(1)
+                            returncode = process.poll()
+                            if returncode is not None:
+                                break
+                    if returncode is None:
+                        process.terminate()
+                        try:
+                            returncode = process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            returncode = process.wait(timeout=5)
+                    return subprocess.CompletedProcess(cmd, returncode or 0, "", ""), status
+                except Exception:
+                    if returncode is not None:
+                        break
+            if returncode is not None:
+                break
+            if deadline is not None and time.time() >= deadline:
+                process.kill()
+                returncode = process.wait(timeout=5)
+                return subprocess.CompletedProcess(cmd, returncode, "", "codex actor timed out"), None
+            time.sleep(2)
+
+    return subprocess.CompletedProcess(cmd, process.returncode or 1, "", ""), None
+
+
 def run_codex_actor(
     actor: Actor,
     partner: Actor,
@@ -1090,9 +1146,20 @@ def run_codex_actor(
             prompt,
         ]
 
-    result = run_command(cmd, timeout=timeout, stdout_path=jsonl)
+    result, status = run_codex_status_command(
+        cmd,
+        last,
+        jsonl,
+        actor.side,
+        session_id,
+        timeout,
+        require_session_id=actor.codex_session_id is None,
+    )
     if not actor.codex_session_id:
         actor.codex_session_id = find_codex_session_id(jsonl)
+    if status is not None:
+        actor.status = status
+        return status
     if result.returncode != 0:
         status = ActorStatus.error(actor.side, session_id, f"codex exited {result.returncode}: {result.stderr.strip()}")
         actor.status = status
@@ -1153,22 +1220,40 @@ def actor_satisfies_stop_boundary(actor: Actor, stop_after_stage: int) -> bool:
     if not status:
         return False
     if status.state in TERMINAL_ACTOR_STATES:
-        return True
+        return not status.blocked_on
     try:
         stage = int(status.stage)
     except (TypeError, ValueError):
         return False
-    return status.state == "needs_partner" and stage >= stop_after_stage
+    return status.state == "needs_partner" and stage >= stop_after_stage and not status.blocked_on
+
+
+def actor_has_unanswered_blocker(actors: dict[str, Actor], target_side: str) -> bool:
+    target = actors[target_side]
+    for actor in actors.values():
+        status = actor.status
+        if not status or not status.blocked_on:
+            continue
+        if str(status.blocked_on).lower() == target_side and actor.turns > target.turns:
+            return True
+    return False
 
 
 def choose_next_actor(actors: dict[str, Actor], last_side: str | None = None, stop_after_stage: int = 0) -> Actor | None:
     if any(actor.status and actor.status.state in FAILED_ACTOR_STATES for actor in actors.values()):
         return None
-    if all(actor_satisfies_stop_boundary(actor, stop_after_stage) for actor in actors.values()):
+    if all(
+        actor_satisfies_stop_boundary(actor, stop_after_stage) and not actor_has_unanswered_blocker(actors, side)
+        for side, actor in actors.items()
+    ):
         return None
 
     for actor in actors.values():
         if actor.status and actor.status.state == "can_continue":
+            return actor
+
+    for side, actor in actors.items():
+        if actor_has_unanswered_blocker(actors, side):
             return actor
 
     if last_side and actors[last_side].status:
@@ -1177,7 +1262,7 @@ def choose_next_actor(actors: dict[str, Actor], last_side: str | None = None, st
             blocked_on = str(blocked_on).lower()
             if blocked_on in actors:
                 target = actors[blocked_on]
-                if not actor_satisfies_stop_boundary(target, stop_after_stage):
+                if not actor_satisfies_stop_boundary(target, stop_after_stage) or actor_has_unanswered_blocker(actors, blocked_on):
                     return target
 
     for actor in actors.values():
@@ -1363,7 +1448,7 @@ TRANSCRIPT_AI_BLOCK_RE = re.compile(
     re.M | re.S,
 )
 CHAT_PROMISE_RE = re.compile(
-    r"\b(?:keep (?:talking|exploring|going)|tell me what needs to change|if there's more|if there is more|I'm still here|I am still here)\b",
+    r"\b(?:keep (?:talking|exploring|going)|tell me what needs to change|if there's more|if there is more)\b",
     re.I,
 )
 INPUT_VISIBLE_RE = re.compile(r"\b(?:input|textbox|chat-input|text input)\s*(?:=|:|is)?\s*(?:visible|shown|available|enabled)\b", re.I)
@@ -1468,6 +1553,60 @@ def check_transcript_side_stage_metadata(
             evidence=cta_evidence,
         ),
     ]
+
+
+def check_stage4_score_critical_content(
+    transcripts: list[tuple[Path, str]],
+    scenario: str,
+    max_stage: int,
+) -> dict[str, Any]:
+    if max_stage < 4:
+        return invariant_result(
+            "stage4_score_critical_content_transcribed",
+            True,
+            severity="soft",
+            owner="eval_harness",
+            dimension="transcript_extraction",
+            details="Stage 4 score-critical content only applies to runs that target Stage 4.",
+            evidence=[f"stop_after_stage={max_stage} skipped"],
+        )
+
+    sides = set(scenario_sides(scenario))
+    transcript_by_name = {path.name: text for path, text in transcripts}
+    required_markers = {
+        "proposal inventory": ("STAGE 4 PROPOSAL INVENTORY",),
+        "selection evidence": ("Your selection:", "Partner selection:", "Selection submitted:"),
+        "coverage audit": ("STAGE 4 NEEDS COVERAGE AUDIT",),
+        "closure or product-blocked state": (
+            "STAGE 4 CLOSURE",
+            "product-blocked",
+            "bug_blocked",
+            "No Stage 4 closure captured.",
+        ),
+    }
+    evidence: list[str] = []
+
+    for side in sorted(sides):
+        name = f"{side}-stage4.md"
+        text = transcript_by_name.get(name, "")
+        if not text:
+            evidence.append(f"{name}: missing Stage 4 transcript")
+            continue
+        for label, markers in required_markers.items():
+            if not any(marker in text for marker in markers):
+                evidence.append(f"{name}: missing {label}")
+
+    return invariant_result(
+        "stage4_score_critical_content_transcribed",
+        not evidence,
+        owner="eval_harness",
+        dimension="transcript_extraction",
+        details=(
+            "Stage 4 transcripts must preserve score-critical product state: proposal inventory, "
+            "selection evidence, needs coverage audit, and closure/outcome or an explicit product-blocked state."
+        ),
+        evidence=evidence,
+    )
 
 
 def check_invitee_topic_handoff_transcribed(
@@ -1851,6 +1990,7 @@ def run_invariant_checks(run_dir: Path, run_data: dict[str, Any], scenario: str,
     checks: list[dict[str, Any]] = []
     checks.append(check_no_visible_control_tags(transcripts))
     checks.extend(check_transcript_side_stage_metadata(transcripts, scenario, max_stage))
+    checks.append(check_stage4_score_critical_content(transcripts, scenario, max_stage))
     checks.append(check_invitee_topic_handoff_transcribed(transcripts, run_data, scenario))
     checks.append(check_transcript_shared_context_blocks_labeled(transcripts))
     checks.append(check_shared_context_directionality(transcripts))

@@ -162,10 +162,50 @@ describe('Stage4RedesignPanel', () => {
     );
   });
 
-  it('renders close-without-agreement button as disabled when partner selections are empty', () => {
+  it('enables shared-agreement closure when mutual willingness exists even if other active fragments are unreviewed', () => {
+    const state: GetStage4StateResponse = {
+      ...baseState,
+      phase: Stage4Phase.SELECTION,
+      partnerSelectionStatus: 'SUBMITTED',
+      inventory: {
+        ...baseState.inventory,
+        sharedProposals: [
+          {
+            ...baseState.inventory.sharedProposals[0],
+            partnerDecisionVisible: Stage4SelectionDecision.WILLING,
+          },
+          {
+            ...baseState.inventory.sharedProposals[0],
+            id: 'proposal-3',
+            description: 'Monthly desire conversation.',
+            myDecision: undefined,
+            partnerDecisionVisible: Stage4SelectionDecision.WILLING,
+          },
+        ],
+      },
+    };
+
+    render(<Stage4RedesignPanel {...defaultProps} state={state} />);
+
+    const closeButton = screen.getByText('Close with shared agreement');
+    expect(closeButton).not.toBeDisabled();
+
+    fireEvent.press(closeButton);
+
+    expect(defaultProps.onCloseStage4).toHaveBeenCalledWith(
+      Stage4ClosureKind.SHARED_AGREEMENT,
+      Stage4ClosureReason.MUTUAL_SELECTION
+    );
+
+    const noSharedButton = screen.getByText('Close with no shared agreement');
+    expect(noSharedButton).not.toBeDisabled();
+  });
+
+  it('renders close-without-agreement button as disabled before partner submits selections', () => {
     const state: GetStage4StateResponse = {
       ...baseState,
       phase: Stage4Phase.OUTCOME_REVIEW,
+      partnerSelectionStatus: 'NOT_STARTED',
       partnerSelections: [],
     };
 
@@ -180,20 +220,12 @@ describe('Stage4RedesignPanel', () => {
     expect(defaultProps.onCloseStage4).not.toHaveBeenCalled();
   });
 
-  it('renders close-without-agreement button as enabled when partner selections exist', () => {
+  it('renders close-without-agreement button as enabled when partner has submitted selections', () => {
     const state: GetStage4StateResponse = {
       ...baseState,
       phase: Stage4Phase.OUTCOME_REVIEW,
       partnerSelectionStatus: 'SUBMITTED',
-      partnerSelections: [
-        {
-          proposalId: 'proposal-1',
-          decision: Stage4SelectionDecision.NOT_WILLING,
-          note: null,
-          selectedAt: '2026-05-06T00:00:00.000Z',
-          updatedAt: '2026-05-06T00:00:00.000Z',
-        },
-      ],
+      partnerSelections: [],
     };
 
     render(<Stage4RedesignPanel {...defaultProps} state={state} />);

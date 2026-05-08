@@ -46,6 +46,33 @@ function inviteeTopicHandoffContent(partnerName: string, topicFrame: string): st
   ].join('\n');
 }
 
+function displayDecision(decision?: string | null): string {
+  switch (decision) {
+    case 'WILLING':
+      return 'willing';
+    case 'NOT_WILLING':
+      return 'not willing';
+    case 'NEEDS_DISCUSSION':
+      return 'needs discussion';
+    default:
+      return 'not selected';
+  }
+}
+
+function userLabelFor(sourceUserId: string | null | undefined, userId: string, partnerId?: string): string {
+  if (!sourceUserId) return 'unknown';
+  if (sourceUserId === userId) return 'you';
+  if (sourceUserId === partnerId) return 'partner';
+  return 'other';
+}
+
+function latestDate(dates: Array<Date | null | undefined>, fallback: Date): Date {
+  return dates.reduce((latest, value) => {
+    if (!value) return latest;
+    return value > latest ? value : latest;
+  }, fallback);
+}
+
 async function extractTranscripts() {
   console.log(`\n=== Extracting transcripts for session: ${sessionId} ===\n`);
 
@@ -88,6 +115,35 @@ async function extractTranscripts() {
     include: { shareOffer: true },
     orderBy: { createdAt: 'asc' }
   });
+
+  const [
+    stage4Proposals,
+    stage4CoverageRows,
+    stage4Closure,
+    stage4Agreements,
+    stage4ProgressRows,
+  ] = await Promise.all([
+    prisma.strategyProposal.findMany({
+      where: { sessionId },
+      include: { selections: true },
+      orderBy: [{ updatedAt: 'asc' }, { createdAt: 'asc' }],
+    }),
+    prisma.stage4NeedCoverage.findMany({
+      where: { sessionId },
+      orderBy: [{ updatedAt: 'asc' }, { createdAt: 'asc' }],
+    }),
+    prisma.stage4Closure.findUnique({
+      where: { sessionId },
+    }),
+    prisma.agreement.findMany({
+      where: { sharedVessel: { sessionId } },
+      orderBy: [{ agreedAt: 'asc' }, { id: 'asc' }],
+    }),
+    prisma.stageProgress.findMany({
+      where: { sessionId, stage: 4 },
+      orderBy: [{ userId: 'asc' }],
+    }),
+  ]);
 
   // Get all messages
   const messages = await prisma.message.findMany({
@@ -132,7 +188,14 @@ async function extractTranscripts() {
       users,
       session,
       messages,
-      reconcilerResults
+      reconcilerResults,
+      {
+        proposals: stage4Proposals,
+        coverageRows: stage4CoverageRows,
+        closure: stage4Closure,
+        agreements: stage4Agreements,
+        progressRows: stage4ProgressRows,
+      }
     );
 
     const filename = `transcript_${user.name.replace(/\s+/g, '_')}_${sessionId.slice(0, 8)}.md`;
@@ -151,7 +214,14 @@ async function buildUserTranscript(
   users: Record<string, { id: string; name: string; email: string }>,
   session: any,
   allMessages: any[],
-  reconcilerResults: any[]
+  reconcilerResults: any[],
+  stage4Artifacts: {
+    proposals: any[];
+    coverageRows: any[];
+    closure: any | null;
+    agreements: any[];
+    progressRows: any[];
+  }
 ): Promise<string> {
   const events: TranscriptEvent[] = [];
 
@@ -391,11 +461,134 @@ async function buildUserTranscript(
     // exposing alignment scores or orchestration actions.
   }
 
+  appendStage4ArtifactEvents(events, userId, partnerId, stage4Artifacts, session.createdAt);
+
   // Sort events by timestamp
   events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
   // Format as markdown
   return formatTranscriptMarkdown(userName, partnerName, session, events);
+}
+
+function appendStage4ArtifactEvents(
+  events: TranscriptEvent[],
+  userId: string,
+  partnerId: string | undefined,
+  artifacts: {
+    proposals: any[];
+    coverageRows: any[];
+    closure: any | null;
+    agreements: any[];
+    progressRows: any[];
+  },
+  fallbackTimestamp: Date
+) {
+  const activeProposals = artifacts.proposals.filter((proposal) => proposal.status === 'ACTIVE');
+  const removedProposals = artifacts.proposals.filter((proposal) => proposal.status !== 'ACTIVE');
+  if (
+    activeProposals.length === 0 &&
+    removedProposals.length === 0 &&
+    artifacts.coverageRows.length === 0 &&
+    !artifacts.closure
+  ) {
+    return;
+  }
+
+  const timestamp = latestDate(
+    [
+      ...artifacts.proposals.map((proposal) => proposal.updatedAt),
+      ...artifacts.coverageRows.map((row) => row.updatedAt),
+      artifacts.closure?.closedAt,
+    ],
+    fallbackTimestamp
+  );
+
+  const progress = artifacts.progressRows.find((row) => row.userId === userId);
+  const partnerProgress = partnerId
+    ? artifacts.progressRows.find((row) => row.userId === partnerId)
+    : undefined;
+  const selectionSubmitted = progress?.gatesSatisfied?.selectionSubmitted === true;
+  const partnerSelectionSubmitted = partnerProgress?.gatesSatisfied?.selectionSubmitted === true;
+
+  const lines: string[] = [
+    '### STAGE 4 PRODUCT ARTIFACTS',
+    '',
+    `Selection submitted: ${selectionSubmitted ? 'yes' : 'no'}`,
+    `Partner selection submitted: ${partnerSelectionSubmitted ? 'yes' : 'no'}`,
+    '',
+    '#### STAGE 4 PROPOSAL INVENTORY',
+  ];
+
+  if (activeProposals.length === 0) {
+    lines.push('- No active proposals captured.');
+  } else {
+    for (const proposal of activeProposals) {
+      const mySelection = proposal.selections?.find((selection: any) => selection.userId === userId);
+      const partnerSelection = partnerId
+        ? proposal.selections?.find((selection: any) => selection.userId === partnerId)
+        : undefined;
+      const owner = userLabelFor(proposal.createdByUserId, userId, partnerId);
+      const kind = proposal.kind === 'INDIVIDUAL_COMMITMENT' ? 'individual commitment' : 'shared proposal';
+      lines.push(`- ${kind} (${owner}): ${proposal.description}`);
+      lines.push(`  - Your selection: ${displayDecision(mySelection?.decision)}`);
+      lines.push(`  - Partner selection: ${displayDecision(partnerSelection?.decision)}`);
+      if (Array.isArray(proposal.needsAddressed) && proposal.needsAddressed.length > 0) {
+        lines.push(`  - Needs addressed: ${proposal.needsAddressed.join('; ')}`);
+      }
+      if (proposal.duration) lines.push(`  - Duration: ${proposal.duration}`);
+      if (proposal.measureOfSuccess) lines.push(`  - Measure of success: ${proposal.measureOfSuccess}`);
+    }
+  }
+
+  if (removedProposals.length > 0) {
+    lines.push('', '#### REMOVED OR REVISED PROPOSALS');
+    for (const proposal of removedProposals) {
+      lines.push(`- ${proposal.status}: ${proposal.description}`);
+      if (proposal.removalReason) lines.push(`  - Reason: ${proposal.removalReason}`);
+    }
+  }
+
+  lines.push('', '#### STAGE 4 NEEDS COVERAGE AUDIT');
+  if (artifacts.coverageRows.length === 0) {
+    lines.push('- No needs coverage rows captured.');
+  } else {
+    for (const row of artifacts.coverageRows) {
+      const source = userLabelFor(row.sourceUserId, userId, partnerId);
+      lines.push(`- ${row.coverageStatus} (${source}): ${row.needLabel}`);
+      if (Array.isArray(row.coveringProposalIds) && row.coveringProposalIds.length > 0) {
+        lines.push(`  - Covering proposals: ${row.coveringProposalIds.join(', ')}`);
+      }
+      if (row.note) lines.push(`  - Note: ${row.note}`);
+    }
+  }
+
+  lines.push('', '#### STAGE 4 CLOSURE');
+  if (!artifacts.closure) {
+    lines.push('- No Stage 4 closure captured.');
+  } else {
+    lines.push(`- Kind: ${artifacts.closure.kind}`);
+    lines.push(`- Reason: ${artifacts.closure.reason}`);
+    lines.push(`- Summary: ${artifacts.closure.summary}`);
+    lines.push(`- Shared agreement IDs: ${artifacts.closure.sharedAgreementIds.join(', ') || 'none'}`);
+    lines.push(`- Individual commitment IDs: ${artifacts.closure.individualProposalIds.join(', ') || 'none'}`);
+    lines.push(`- Open need IDs: ${artifacts.closure.openNeedIds.join(', ') || 'none'}`);
+  }
+
+  if (artifacts.agreements.length > 0) {
+    lines.push('', '#### AGREEMENTS');
+    for (const agreement of artifacts.agreements) {
+      lines.push(`- ${agreement.status}: ${agreement.description}`);
+      if (agreement.duration) lines.push(`  - Duration: ${agreement.duration}`);
+      if (agreement.measureOfSuccess) lines.push(`  - Measure of success: ${agreement.measureOfSuccess}`);
+    }
+  }
+
+  events.push({
+    timestamp,
+    type: 'system',
+    content: lines.join('\n'),
+    metadata: { stage: 4 },
+  });
 }
 
 function formatTranscriptMarkdown(

@@ -39,6 +39,89 @@ function words(value: string): string[] {
     .filter((word) => word.length > 2);
 }
 
+function concepts(value: string): Set<string> {
+  const normalized = normalizeText(value);
+  const tokens = new Set<string>();
+
+  const addIf = (concept: string, patterns: RegExp[]) => {
+    if (patterns.some((pattern) => pattern.test(normalized))) {
+      tokens.add(concept);
+    }
+  };
+
+  addIf('stable-life-counts', [
+    /\bstabil/,
+    /\blife\b.*\bcount/,
+    /\bcount\b.*\blife/,
+    /\bnot\b.*\bmistake/,
+    /\bthrow(?:n|ing)?\s+out\b/,
+    /\bnot\b.*\btrial\b/,
+    /\bnot\b.*\bwhole future\b/,
+  ]);
+  addIf('hear-wants-without-failure', [
+    /\bhear\b.*\bwant/,
+    /\bwant\b.*\bproof\b.*\bfail/,
+    /\bproof\b.*\bfail/,
+    /\bnot\b.*\bshut\b.*\bdown/,
+    /\bnot\b.*\bcase against\b/,
+    /\bnot\b.*\bcritique/,
+    /\bnot\b.*\breasonab/,
+  ]);
+  addIf('stay-present-pause-return', [
+    /\bstay present\b/,
+    /\bpause\b/,
+    /\bten minutes?\b/,
+    /\bcome back\b/,
+    /\breturn\b/,
+    /\bwithout disappearing\b/,
+    /\bdisappear/,
+    /\bfreeze\b/,
+  ]);
+  addIf('voice-wants-before-editing', [
+    /\bexpress\b.*\bwant/,
+    /\bname\b.*\bwant/,
+    /\bsay\b.*\bwant/,
+    /\bbrings? one\b/,
+    /\bone specific thing\b/,
+    /\bwithout editing\b/,
+    /\bsoften\b/,
+    /\bmaking myself smaller\b/,
+    /\bsmaller\b/,
+  ]);
+  addIf('agency-choice-life-mine', [
+    /\bchoose\b/,
+    /\bmy life\b.*\bmine\b/,
+    /\blife\b.*\bmine\b/,
+    /\bwithout asking\b.*\bapprove/,
+    /\bsign up\b/,
+    /\bresearch\b.*\bitinerary\b/,
+    /\bcommitment\b/,
+  ]);
+  addIf('growth-movement-aliveness', [
+    /\bgrow/,
+    /\bbecoming\b/,
+    /\bchange\b/,
+    /\bmovement\b/,
+    /\baliveness\b/,
+    /\bsomething new\b/,
+    /\bclass\b/,
+    /\bhike\b/,
+    /\bday trip\b/,
+    /\brestaurant\b/,
+    /\bitinerary\b/,
+  ]);
+  addIf('temperature-fear-regulation', [
+    /\bmanage\b.*\bfear/,
+    /\btemperature\b/,
+    /\boverwhelm/,
+    /\bscared\b/,
+    /\bfear\b/,
+    /\bname\b.*\boverwhelm/,
+  ]);
+
+  return tokens;
+}
+
 function overlapScore(needLabel: string, proposalText: string): number {
   const needWords = words(needLabel);
   if (needWords.length === 0) return 0;
@@ -46,6 +129,15 @@ function overlapScore(needLabel: string, proposalText: string): number {
   const proposalWords = new Set(words(proposalText));
   const overlap = needWords.filter((word) => proposalWords.has(word)).length;
   return overlap / needWords.length;
+}
+
+function conceptOverlapScore(needLabel: string, proposalText: string): number {
+  const needConcepts = concepts(needLabel);
+  if (needConcepts.size === 0) return 0;
+
+  const proposalConcepts = concepts(proposalText);
+  const overlap = [...needConcepts].filter((concept) => proposalConcepts.has(concept)).length;
+  return overlap / needConcepts.size;
 }
 
 function proposalText(proposal: ProposalRow): string {
@@ -68,10 +160,14 @@ function classifyCoverage(
       const text = proposalText(proposal);
       const normalizedProposalText = normalizeText(text);
       const directMention = normalizedProposalText.includes(normalizedNeed);
-      const score = addressed || directMention ? 1 : overlapScore(need.need, text);
+      const lexicalScore = overlapScore(need.need, text);
+      const semanticScore = conceptOverlapScore(need.need, text);
+      const score = addressed || directMention
+        ? 1
+        : Math.max(lexicalScore, Math.min(semanticScore, 0.74));
       return { proposal, score };
     })
-    .filter((item) => item.score >= 0.34)
+    .filter((item) => item.score >= 0.25)
     .sort((a, b) => b.score - a.score);
 
   if (scored.length === 0) {

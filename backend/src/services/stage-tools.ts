@@ -75,6 +75,8 @@ export interface SessionStateToolInput {
     appliedOperationCount: number;
     skippedOperationCount: number;
     selectionCaptured: boolean;
+    closureSignalCaptured?: boolean;
+    autoClosed?: boolean;
     confidence: number;
   };
   /** Stage 0: AI's proposed topic frame extracted from <draft> tag */

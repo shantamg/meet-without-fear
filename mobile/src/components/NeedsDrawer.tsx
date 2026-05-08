@@ -16,12 +16,12 @@ import {
   Pressable,
   Animated,
   PanResponder,
-  Dimensions,
   StyleSheet,
   BackHandler,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '@/theme';
+import { appWidthStyle, colors } from '@/theme';
 import { NeedCard } from './NeedCard';
 
 // ============================================================================
@@ -60,8 +60,6 @@ export interface NeedsDrawerProps {
 // Constants
 // ============================================================================
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-const POSITION_3Q = SCREEN_HEIGHT * 0.25;
 const SNAP_UP_THRESHOLD = 80;
 const SNAP_DOWN_THRESHOLD = 100;
 
@@ -86,24 +84,30 @@ export function NeedsDrawer({
   testID = 'needs-drawer',
 }: NeedsDrawerProps) {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const position3Q = windowHeight * 0.25;
+  const windowHeightRef = useRef(windowHeight);
+  const position3QRef = useRef(position3Q);
   const positionFullRef = useRef(insets.top);
+  windowHeightRef.current = windowHeight;
+  position3QRef.current = position3Q;
   positionFullRef.current = insets.top;
 
   // -------------------------------------------------------------------------
   // Animation refs
   // -------------------------------------------------------------------------
-  const drawerTranslate = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const drawerTranslate = useRef(new Animated.Value(windowHeight)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const isDragging = useRef(false);
   const currentSnap = useRef<'3q' | 'full'>('3q');
-  const [contentHeight, setContentHeight] = useState(SCREEN_HEIGHT - POSITION_3Q);
+  const [contentHeight, setContentHeight] = useState(windowHeight - position3Q);
 
   // -------------------------------------------------------------------------
   // Open / Close / Snap animations
   // -------------------------------------------------------------------------
   const snapTo = useCallback(
     (position: number, backdrop: number) => {
-      setContentHeight(SCREEN_HEIGHT - position);
+      setContentHeight(windowHeightRef.current - position);
       Animated.parallel([
         Animated.spring(drawerTranslate, {
           toValue: position,
@@ -123,13 +127,13 @@ export function NeedsDrawer({
 
   const openDrawer = useCallback(() => {
     currentSnap.current = '3q';
-    snapTo(POSITION_3Q, 0.4);
+    snapTo(position3QRef.current, 0.4);
   }, [snapTo]);
 
   const closeDrawer = useCallback(() => {
     Animated.parallel([
       Animated.timing(drawerTranslate, {
-        toValue: SCREEN_HEIGHT,
+        toValue: windowHeightRef.current,
         duration: 200,
         useNativeDriver: true,
       }),
@@ -149,6 +153,17 @@ export function NeedsDrawer({
       openDrawer();
     }
   }, [visible, openDrawer]);
+
+  useEffect(() => {
+    if (!visible) {
+      drawerTranslate.setValue(windowHeight);
+      return;
+    }
+
+    const position = currentSnap.current === 'full' ? positionFullRef.current : position3Q;
+    drawerTranslate.setValue(position);
+    setContentHeight(windowHeight - position);
+  }, [visible, windowHeight, position3Q, drawerTranslate]);
 
   // -------------------------------------------------------------------------
   // Android back button
@@ -174,9 +189,9 @@ export function NeedsDrawer({
       },
       onPanResponderMove: (_, gestureState) => {
         const pFull = positionFullRef.current;
-        const base = currentSnap.current === 'full' ? pFull : POSITION_3Q;
+        const base = currentSnap.current === 'full' ? pFull : position3QRef.current;
         const newPos = base + gestureState.dy;
-        const clamped = Math.max(pFull, Math.min(newPos, SCREEN_HEIGHT));
+        const clamped = Math.max(pFull, Math.min(newPos, windowHeightRef.current));
         drawerTranslate.setValue(clamped);
       },
       onPanResponderRelease: (_, gestureState) => {
@@ -191,12 +206,12 @@ export function NeedsDrawer({
           } else if (dy > SNAP_DOWN_THRESHOLD || vy > 0.5) {
             closeDrawer();
           } else {
-            snapTo(POSITION_3Q, 0.4);
+            snapTo(position3QRef.current, 0.4);
           }
         } else {
           if (dy > SNAP_DOWN_THRESHOLD || vy > 0.5) {
             currentSnap.current = '3q';
-            snapTo(POSITION_3Q, 0.4);
+            snapTo(position3QRef.current, 0.4);
           } else {
             snapTo(pFull, 0.6);
           }
@@ -383,8 +398,9 @@ export function NeedsDrawer({
       <Animated.View
         style={[
           styles.drawer,
+          appWidthStyle,
           {
-            height: SCREEN_HEIGHT,
+            height: windowHeight,
             transform: [{ translateY: drawerTranslate }],
           },
         ]}
