@@ -1052,7 +1052,7 @@ describe('Stage 4 API', () => {
             kind: Stage4ClosureKind.SHARED_AGREEMENT,
             reason: Stage4ClosureReason.MUTUAL_SELECTION,
             sharedAgreementIds: ['agreement-1'],
-            openNeedIds: ['need-open'],
+            openNeedIds: ['need-partial', 'need-open'],
           }),
         })
       );

@@ -583,7 +583,7 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
       .slice(0, MAX_AGREEMENTS);
     const individualProposalIds = getWillingIndividualCommitmentIds(proposals, selections);
     const openNeedIds = coverageRows
-      .filter((row) => row.coverageStatus === 'OPEN')
+      .filter((row) => row.coverageStatus === 'OPEN' || row.coverageStatus === 'PARTIAL')
       .map((row) => row.needId ?? row.id);
 
     const requestedKind = parseResult.data.kind;

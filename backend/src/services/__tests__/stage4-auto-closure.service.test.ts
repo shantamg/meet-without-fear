@@ -114,4 +114,45 @@ describe('stage4-auto-closure.service', () => {
       expect.objectContaining({ closureKind: Stage4ClosureKind.NO_SHARED_AGREEMENT })
     );
   });
+
+  it('records open need ids for both OPEN and PARTIAL coverage rows (parity with manual closeStage4)', async () => {
+    (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+      id: sessionId,
+      status: 'ACTIVE',
+      relationship: {
+        members: [
+          { userId, joinedAt: new Date('2026-05-07T10:00:00.000Z') },
+          { userId: partnerId, joinedAt: new Date('2026-05-07T10:01:00.000Z') },
+        ],
+      },
+    });
+    (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({ stage: 4 });
+    (prisma.stage4Closure.findUnique as jest.Mock).mockResolvedValue(null);
+    (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.stage4ProposalSelection.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.stage4NeedCoverage.findMany as jest.Mock).mockResolvedValue([
+      { id: 'coverage-partial', needId: 'need-partial', coverageStatus: 'PARTIAL' },
+      { id: 'coverage-open', needId: 'need-open', coverageStatus: 'OPEN' },
+      { id: 'coverage-covered', needId: 'need-covered', coverageStatus: 'COVERED' },
+    ]);
+    (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+      relationship: { members: [{ userId }, { userId: partnerId }] },
+    });
+
+    await applyStage4AutoClosureFromSignal({
+      sessionId,
+      userId,
+      signal: {
+        readyToClose: true,
+        kind: Stage4ClosureKind.NO_SHARED_AGREEMENT,
+        reason: Stage4ClosureReason.USER_STOPPED,
+      },
+    });
+
+    expect(prisma.stage4Closure.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        openNeedIds: ['need-partial', 'need-open'],
+      }),
+    });
+  });
 });
