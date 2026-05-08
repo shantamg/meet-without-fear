@@ -77,6 +77,8 @@ export interface EmpathyAttemptDTO {
   status: EmpathyStatus;
   revealedAt: string | null;
   revisionCount: number;
+  /** Monotonic server-side status version used to ignore stale local/realtime state */
+  statusVersion?: number;
   /** Delivery status: pending (not revealed to partner), delivered (revealed), seen (partner validated) */
   deliveryStatus?: SharedContentDeliveryStatus;
 }

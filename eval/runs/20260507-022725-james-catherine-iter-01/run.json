@@ -1,0 +1,603 @@
+{
+  "browser_cleanup": {
+    "mwf-gold-catherine-cmova8thv0008pxyeenglav31": {
+      "returncode": 0,
+      "stderr": ""
+    },
+    "mwf-gold-james-cmova8thv0008pxyeenglav31": {
+      "returncode": 0,
+      "stderr": ""
+    }
+  },
+  "code_sha": "4cfd661c38211709c44aa3800d157f0a5cb95a73",
+  "codex_sessions": {
+    "catherine": "019e01c3-6e0d-7973-b07f-9d1021cb4db2",
+    "james": "019e01c9-9c8c-7a22-8a8a-0656728fa251"
+  },
+  "created_at": "2026-05-07T02:27:25.296495",
+  "improver_ran": false,
+  "invariants": {
+    "checks": [
+      {
+        "details": "Stable transcripts must not expose internal micro-tags or control tags.",
+        "dimension": "visible_text",
+        "evidence": [],
+        "id": "no_visible_internal_control_tags",
+        "owner": "product_code",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "Stable transcript files must exist for every expected side/stage and carry matching metadata.",
+        "dimension": "transcript_extraction",
+        "evidence": [],
+        "id": "transcript_side_stage_complete",
+        "owner": "eval_harness",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "Transcript artifacts must include visible CTA/input state metadata or an explicit captured-state note.",
+        "dimension": "transcript_extraction",
+        "evidence": [],
+        "id": "cta_input_visibility_state_sane",
+        "owner": "eval_harness",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "Fresh invitee Stage 0 transcripts must preserve the visible topic/process handoff card shown before the invitee opener.",
+        "dimension": "transcript_extraction",
+        "evidence": [],
+        "id": "invitee_topic_handoff_transcribed",
+        "owner": "eval_harness",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "Stable transcript separator blocks must carry explicit labels so private suggestions and shared events are not confused.",
+        "dimension": "transcript_extraction",
+        "evidence": [],
+        "id": "transcript_shared_context_blocks_labeled",
+        "owner": "eval_harness",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "A transcript must not label the current user's own share suggestion as incoming partner-shared context.",
+        "dimension": "transcript_extraction",
+        "evidence": [],
+        "id": "shared_context_directionality_consistent",
+        "owner": "eval_harness",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "Stable transcripts must not expose internal reconciler analysis, alignment scores, or action labels.",
+        "dimension": "transcript_extraction",
+        "evidence": [],
+        "id": "no_internal_reconciler_analysis",
+        "owner": "eval_harness",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "First slice checks explicit leak markers; richer structured leakage checks need DB event metadata.",
+        "dimension": "privacy",
+        "evidence": [],
+        "id": "no_partner_private_content_leakage",
+        "owner": "product_code",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "Every scenario side must reach the requested stage limit, a completed state, or a no-action partner wait at the requested stop stage.",
+        "dimension": "actor_orchestration",
+        "evidence": [],
+        "id": "stage_limit_reached_correctly",
+        "owner": "eval_harness",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "Actor status blocks must match the side assigned by the orchestrator.",
+        "dimension": "actor_fidelity",
+        "evidence": [],
+        "id": "actor_operated_correct_side",
+        "owner": "actor_skill",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "Fresh gold-loop sessions should start with the participant identified by the gold profile's Stage 0 initiation evidence.",
+        "dimension": "actor_orchestration",
+        "evidence": [],
+        "id": "fresh_session_starts_with_profile_initiator",
+        "owner": "eval_harness",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "A live Stage 1 felt-heard gate should not appear before any substantive transcript context.",
+        "dimension": "stage_gates",
+        "evidence": [],
+        "id": "felt_heard_gate_after_substantive_witnessing",
+        "owner": "product_code",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "Stable Stage 1 transcripts must make the user's explicit feel-heard confirmation auditable.",
+        "dimension": "transcript_extraction",
+        "evidence": [],
+        "id": "stage1_felt_heard_confirmation_transcribed",
+        "owner": "eval_harness",
+        "severity": "hard",
+        "status": "pass"
+      },
+      {
+        "details": "If visible copy invites the user to keep talking, transcript state must show a visible/enabled textbox.",
+        "dimension": "ui_state",
+        "evidence": [],
+        "id": "chat_copy_promises_visible_input",
+        "owner": "product_code",
+        "severity": "hard",
+        "status": "pass"
+      }
+    ],
+    "hard_failures": [],
+    "schema_version": 1,
+    "status": "pass"
+  },
+  "iteration": 1,
+  "previous_run_dir": null,
+  "previous_score": null,
+  "prompt_skill_version_changes": {
+    "changes": [],
+    "status": "incomparable"
+  },
+  "prompt_skill_versions": {
+    "actor_skill_repo": {
+      "exists": false,
+      "path": "/Users/shantam/Software/meet-without-fear/eval/skills/self-improvement/mwf-gold-loop-actor/SKILL.md"
+    },
+    "actor_skill_runtime": {
+      "bytes": 4705,
+      "exists": true,
+      "path": "/Users/shantam/.codex/skills/mwf-gold-loop-actor/SKILL.md",
+      "sha256": "ea38b8acb3da93070e1ce3daf868e41a541ac08212f3ab60c22f298d19f41893"
+    },
+    "improver_skill_repo": {
+      "exists": false,
+      "path": "/Users/shantam/Software/meet-without-fear/eval/skills/self-improvement/mwf-gold-prompt-improver/SKILL.md"
+    },
+    "improver_skill_runtime": {
+      "bytes": 7668,
+      "exists": true,
+      "path": "/Users/shantam/.codex/skills/mwf-gold-prompt-improver/SKILL.md",
+      "sha256": "769af89176d3b34945622747728b3cb4e3a7fc2f8e2dfd9b72e7403fb46271bb"
+    },
+    "mwf_stage_prompts": {
+      "bytes": 109030,
+      "exists": true,
+      "path": "/Users/shantam/Software/meet-without-fear/backend/src/services/stage-prompts.ts",
+      "sha256": "c03591c8df54bed53d7d2af311cee6e6463634fb79d0ca7dae53e3fdcd911cbd"
+    },
+    "prompt_proposals": [],
+    "scorer_skill_repo": {
+      "exists": false,
+      "path": "/Users/shantam/Software/meet-without-fear/eval/skills/self-improvement/mwf-gold-session-scorer/SKILL.md"
+    },
+    "scorer_skill_runtime": {
+      "bytes": 10725,
+      "exists": true,
+      "path": "/Users/shantam/.codex/skills/mwf-gold-session-scorer/SKILL.md",
+      "sha256": "eb606dbe82223e09a4f36d86e8733146ad28c34600004d102afb68335f1e4d88"
+    },
+    "tester_skill_runtime": {
+      "bytes": 17076,
+      "exists": true,
+      "path": "/Users/shantam/.codex/skills/mwf-gold-session-tester/SKILL.md",
+      "sha256": "ef4cf9e801fa38d3cb217b91a623bca59e9b2307ae116723c8069da7560b8948"
+    }
+  },
+  "regression_context": {
+    "status": "none"
+  },
+  "role_shape": {
+    "confidence": "high",
+    "evidence": [
+      "MWF lines 23-24: Thank you, Catherine. Here\u2019s what I\u2019d share with James: \"Catherine feels the yelling and personal attacks during conflict are overwhelming and destroying their bond.\" Does that feel right?",
+      "MWF lines 15-16: Before we begin, let\u2019s put together a short message for James so he knows what this is about. The goal is to share the topic \u2014 not the details yet. I\u2019ll get the details from both of you later. Tell me what\u2019s going on,...",
+      "MWF lines 27-30: Got it. Here\u2019s the message James will receive: \"I\u2019d like to talk through something that\u2019s been on my mind between us. I\u2019m using a tool that helps both people feel heard before anything gets worked out. Would you be op..."
+    ],
+    "initiator": "Catherine",
+    "invited": "James",
+    "source": "stage_0_profile_mwf_effect"
+  },
+  "scenario": "james-catherine",
+  "score": {
+    "comparison": {
+      "classification": "incomparable",
+      "likely_reasons": [],
+      "previous_run": null
+    },
+    "dimensions": {
+      "actor_fidelity": {
+        "evidence": [
+          "transcripts/catherine-stage1.md: Catherine confirms feeling heard immediately after MWF asks what still feels hardest to have understood.",
+          "transcripts/catherine-stage2.md: Catherine preserves the boundary that understanding James does not make yelling or cruelty acceptable.",
+          "transcripts/james-stage1.md: James stays defensive about being erased, treated like the whole problem, and reduced to Catherine's case study.",
+          "transcripts/james-stage2.md: James rapidly names Catherine's fear, loneliness, need for steadiness/safety, embarrassment, and self-protection."
+        ],
+        "mode": "llm_assisted",
+        "owner": "actor_skill",
+        "pass": false,
+        "pass_threshold": 4,
+        "rationale": "Both actors produced usable James/Catherine pressure through Stage 2, but the pressure was softened relative to the gold profile. Catherine preserved boundaries and non-concession well, but her Stage 1 closed after only a few turns and without the transcript showing an answer to MWF's final deepening question. James preserved defensiveness in Stage 1, then became unusually psychologically articulate and empathy-ready in Stage 2, naming Catherine's fear, loneliness, safety, embarrassment, and self-protection with less resistance than the gold benchmark supports.",
+        "recommended_action": "patch_skill",
+        "review_status": "needs_human_review",
+        "score": 3
+      },
+      "mwf_handling": {
+        "evidence": [
+          "transcripts/catherine-stage1.md: MWF reflects cost, scanning, self-adjustment, and shame, then Stage 1 completes before a final substantive answer is captured.",
+          "transcripts/james-stage2.md: After James says Catherine has decided he is the problem, MWF immediately asks what she might be protecting herself from.",
+          "transcripts/catherine-stage2.md: MWF successfully frames empathy as protected understanding, not excusing or agreement.",
+          "transcripts/james-stage2.md: MWF thanks James for sharing and moves into partner-wait copy after the empathy statement."
+        ],
+        "mode": "llm_assisted",
+        "owner": "mwf_prompts",
+        "pass": false,
+        "pass_threshold": 4,
+        "rationale": "MWF preserved privacy invariants and produced several strong reflections, especially around Catherine's boundary and James's erased-effort story. It still under-shot the gold process shape: Catherine's Stage 1 transition was not earned enough, James's Stage 2 moved from blame into perspective-taking too quickly, and the facilitation leaned on broad praise and process language. Product issues also affected the run, but the prompt-level quality itself did not meet the 4.0 target.",
+        "recommended_action": "patch_prompt",
+        "review_status": "needs_human_review",
+        "score": 3
+      }
+    },
+    "gold_alignment": {
+      "actor_fidelity": {
+        "catherine": {
+          "stage0": {
+            "copied_gold_lines": false,
+            "evidence": [
+              "transcripts/catherine-stage0.md"
+            ],
+            "forced_gold_path": false,
+            "persona_alignment": 4,
+            "rationale": "Catherine initiated with the correct no-shared-agreement pressure: six years, escalation, yelling, personal attacks, and uncertainty about whether anything can change.",
+            "resistance_preserved": true,
+            "too_articulate": false,
+            "too_compliant": false
+          },
+          "stage1": {
+            "copied_gold_lines": false,
+            "evidence": [
+              "transcripts/catherine-stage1.md"
+            ],
+            "forced_gold_path": false,
+            "persona_alignment": 3,
+            "rationale": "Catherine's content matched the profile, including therapist awareness, shame, scanning, and a pattern she can no longer live with. The weakness is process behavior: she accepted feeling heard after a compressed witness sequence, before the transcript shows her answering the last deepening question.",
+            "resistance_preserved": true,
+            "too_articulate": false,
+            "too_compliant": true
+          },
+          "stage2": {
+            "copied_gold_lines": false,
+            "evidence": [
+              "transcripts/catherine-stage2.md",
+              "scratch/2026-05-07-cmova8thv0008pxyeenglav31-catherine.md"
+            ],
+            "forced_gold_path": false,
+            "persona_alignment": 4,
+            "rationale": "Catherine made a credible empathy attempt around James's provider identity and shame while explicitly preserving the boundary that understanding does not excuse yelling or cruelty.",
+            "resistance_preserved": true,
+            "too_articulate": false,
+            "too_compliant": false
+          }
+        },
+        "james": {
+          "stage0": {
+            "copied_gold_lines": false,
+            "evidence": [
+              "transcripts/james-stage0.md"
+            ],
+            "forced_gold_path": false,
+            "persona_alignment": 3,
+            "rationale": "James's invitee handoff preserved the resisted setup, but the transcript contains no substantive James actor response before Stage 1, limiting persona evidence.",
+            "resistance_preserved": true,
+            "too_articulate": false,
+            "too_compliant": false
+          },
+          "stage1": {
+            "copied_gold_lines": false,
+            "evidence": [
+              "transcripts/james-stage1.md"
+            ],
+            "forced_gold_path": false,
+            "persona_alignment": 4,
+            "rationale": "James stayed defensive and aggrieved: skeptical of the tool, focused on six years of providing and staying, resentful of Catherine's therapist voice, and resistant to being reduced to his worst moments.",
+            "resistance_preserved": true,
+            "too_articulate": false,
+            "too_compliant": false
+          },
+          "stage2": {
+            "copied_gold_lines": false,
+            "evidence": [
+              "transcripts/james-stage2.md"
+            ],
+            "forced_gold_path": false,
+            "persona_alignment": 3,
+            "rationale": "James began with the expected blame that Catherine has diagnosed him as the problem, but he then moved very quickly into polished insight about her fear, safety, loneliness, and embarrassment. The gold profile supports a reluctant empathy stretch, not this much fluent psychological access so early.",
+            "resistance_preserved": true,
+            "too_articulate": true,
+            "too_compliant": true
+          }
+        }
+      },
+      "mwf_guidance": {
+        "catherine": {
+          "stage0": {
+            "earned_transition": true,
+            "evidence": [
+              "transcripts/catherine-stage0.md",
+              "invariants.json:no_partner_private_content_leakage"
+            ],
+            "guidance_alignment": 3,
+            "premature_repair": false,
+            "privacy_or_consent_issue": false,
+            "rationale": "MWF kept the topic at invitation level and did not expose private detail, but the transcript shows a terse 'take a look' moment rather than the fuller consented-summary loop from the gold protocol.",
+            "resistance_handling": 4,
+            "witnessing_depth": 3
+          },
+          "stage1": {
+            "earned_transition": false,
+            "evidence": [
+              "transcripts/catherine-stage1.md"
+            ],
+            "guidance_alignment": 3,
+            "premature_repair": false,
+            "privacy_or_consent_issue": false,
+            "rationale": "MWF reflected meaningful specifics: Catherine's scanning, shame, years of self-adjustment, and conclusion that the pattern itself is the issue. The felt-heard transition was still under-earned because the transcript closes the stage immediately after a question asking what still felt hardest to have understood.",
+            "resistance_handling": 3,
+            "witnessing_depth": 3
+          },
+          "stage2": {
+            "earned_transition": true,
+            "evidence": [
+              "transcripts/catherine-stage2.md"
+            ],
+            "guidance_alignment": 4,
+            "premature_repair": false,
+            "privacy_or_consent_issue": false,
+            "rationale": "MWF strongly supported Catherine in seeing James's shame and provider identity while keeping her own truth intact. The draft did not ask her to excuse or concede the safety boundary.",
+            "resistance_handling": 4,
+            "witnessing_depth": 4
+          }
+        },
+        "james": {
+          "stage0": {
+            "earned_transition": true,
+            "evidence": [
+              "transcripts/james-stage0.md",
+              "invariants.json:invitee_topic_handoff_transcribed"
+            ],
+            "guidance_alignment": 4,
+            "premature_repair": false,
+            "privacy_or_consent_issue": false,
+            "rationale": "The invitee handoff showed Catherine's consented topic and explicitly told James he did not need to agree, respond, or do anything with it yet.",
+            "resistance_handling": 4,
+            "witnessing_depth": 3
+          },
+          "stage1": {
+            "earned_transition": true,
+            "evidence": [
+              "transcripts/james-stage1.md"
+            ],
+            "guidance_alignment": 4,
+            "premature_repair": false,
+            "privacy_or_consent_issue": false,
+            "rationale": "MWF tracked James's erased effort, resentment about being treated as a case study, shutdown, anger, and partial shame about not remembering what he said, without arguing him into accountability.",
+            "resistance_handling": 4,
+            "witnessing_depth": 4
+          },
+          "stage2": {
+            "earned_transition": false,
+            "evidence": [
+              "transcripts/james-stage2.md"
+            ],
+            "guidance_alignment": 3,
+            "premature_repair": false,
+            "privacy_or_consent_issue": false,
+            "rationale": "MWF framed perspective-taking correctly as a guess, not a test. But after James's first resisted answer, it redirected immediately toward Catherine's self-protection rather than giving fuller space to his remaining grievance, so the bridge into empathy felt too fast for this high-resistance profile.",
+            "resistance_handling": 2,
+            "witnessing_depth": 3
+          }
+        }
+      }
+    },
+    "hard_invariants": [],
+    "human_review": {
+      "notes": "The run is structurally scoreable through stop_after_stage=2 and all hard invariants passed. Human review should calibrate whether Catherine's compressed Stage 1 and James's unusually fluent Stage 2 empathy are actor-skill drift, prompt over-steering, or an acceptable live variation.",
+      "required": true,
+      "reviewer": null,
+      "status": "needs_human_review"
+    },
+    "improvement_targets": [
+      {
+        "dimension": "actor_fidelity",
+        "evidence": [
+          "transcripts/james-stage2.md"
+        ],
+        "owner": "actor_skill",
+        "priority": 1,
+        "rationale": "James should preserve more resistance and less polished psychological access during Stage 2. He can arrive at empathy, but the actor should make MWF earn it through more reluctance, correction, and concrete grievance before naming Catherine's fear or safety needs.",
+        "recommended_action": "patch_skill"
+      },
+      {
+        "dimension": "mwf_handling",
+        "evidence": [
+          "transcripts/james-stage2.md"
+        ],
+        "owner": "mwf_prompts",
+        "priority": 2,
+        "rationale": "Stage 2 should include a stronger venting/listening bridge for high-resistance users before asking them to infer the partner's protected feelings. James's first Stage 2 answer was still blame-heavy, but MWF immediately asked what Catherine might be protecting herself from.",
+        "recommended_action": "patch_prompt"
+      },
+      {
+        "dimension": "mwf_handling",
+        "evidence": [
+          "transcripts/catherine-stage1.md"
+        ],
+        "owner": "mwf_prompts",
+        "priority": 3,
+        "rationale": "Stage 1 should avoid presenting or accepting a felt-heard transition immediately after an unanswered deepening prompt. Catherine's Stage 1 had good reflections but did not reach the golden depth before completion.",
+        "recommended_action": "patch_prompt"
+      },
+      {
+        "dimension": "ui_state",
+        "evidence": [
+          "scratch/2026-05-07-cmova8thv0008pxyeenglav31-catherine.md"
+        ],
+        "owner": "product_code",
+        "priority": 4,
+        "rationale": "The Catherine browser showed James in the page header throughout the run, even while AI messages and URL identity addressed Catherine. This can confuse actor drivers and live participants.",
+        "recommended_action": "patch_product"
+      },
+      {
+        "dimension": "realtime_ui",
+        "evidence": [
+          "scratch/2026-05-07-cmova8thv0008pxyeenglav31-james.md"
+        ],
+        "owner": "product_code",
+        "priority": 5,
+        "rationale": "James's Stage 2 draft-review CTA did not appear until the page was refreshed, according to the scratch log. This did not invalidate the transcript, but it is a live orchestration reliability issue.",
+        "recommended_action": "patch_product"
+      }
+    ],
+    "overall_score": 3.0,
+    "rubric_version": "gold-flow-rubric-v1",
+    "scenario_id": "james-catherine",
+    "scenario_version": 1,
+    "schema_version": 1,
+    "scorer_version": "mwf-gold-session-scorer-v0",
+    "verdict": "eval_fail"
+  },
+  "score_movement": {
+    "classification": "incomparable",
+    "current_score": 3.0,
+    "delta": null,
+    "previous_score": null
+  },
+  "scratch_logs": [
+    "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-022725-james-catherine-iter-01/scratch/2026-05-07-cmova8thv0008pxyeenglav31-james.md",
+    "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-022725-james-catherine-iter-01/scratch/2026-05-07-cmova8thv0008pxyeenglav31-catherine.md"
+  ],
+  "services": {
+    "service_dir": "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-022720-james-catherine-services",
+    "services": [
+      {
+        "command": [
+          "npm",
+          "run",
+          "dev:api"
+        ],
+        "cwd": "/Users/shantam/Software/meet-without-fear",
+        "log_path": "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-022720-james-catherine-services/backend.log",
+        "name": "backend",
+        "pid": 21883,
+        "started": true
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "dev:mobile:e2e"
+        ],
+        "cwd": "/Users/shantam/Software/meet-without-fear",
+        "log_path": "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-022720-james-catherine-services/web.log",
+        "name": "web",
+        "pid": 21976,
+        "started": true
+      }
+    ],
+    "started_backend": true,
+    "status": "pass"
+  },
+  "session_id": "cmova8thv0008pxyeenglav31",
+  "session_roles": {
+    "assigned_character": "Catherine",
+    "partner_character": "James"
+  },
+  "start": {
+    "mode": "fresh"
+  },
+  "status_history": [
+    {
+      "at": "2026-05-07T02:34:10.434175",
+      "side": "catherine",
+      "status": {
+        "blocked_on": "james",
+        "current_url": "http://localhost:8082/session/cmova8thv0008pxyeenglav31?e2e-user-id=cmova8thl0001pxyecn65epnz&e2e-user-email=gold-loop-catherine-20260507022725%40e2e.test",
+        "next_action_needed": "James needs to complete and share his Stage 2 perspective.",
+        "raw": {
+          "blocked_on": "james",
+          "current_url": "http://localhost:8082/session/cmova8thv0008pxyeenglav31?e2e-user-id=cmova8thl0001pxyecn65epnz&e2e-user-email=gold-loop-catherine-20260507022725%40e2e.test",
+          "next_action_needed": "James needs to complete and share his Stage 2 perspective.",
+          "scratch_log": "docs/product/gold-session-scratch/2026-05-07-cmova8thv0008pxyeenglav31-catherine.md",
+          "session_id": "cmova8thv0008pxyeenglav31",
+          "side": "catherine",
+          "stage": 2,
+          "state": "stage_limit_reached"
+        },
+        "scratch_log": "docs/product/gold-session-scratch/2026-05-07-cmova8thv0008pxyeenglav31-catherine.md",
+        "session_id": "cmova8thv0008pxyeenglav31",
+        "side": "catherine",
+        "stage": 2,
+        "state": "stage_limit_reached"
+      },
+      "turn": 1
+    },
+    {
+      "at": "2026-05-07T02:43:21.122314",
+      "side": "james",
+      "status": {
+        "blocked_on": "catherine",
+        "current_url": "http://localhost:8082/session/cmova8thv0008pxyeenglav31?e2e-user-id=cmova8tho0002pxyecwquzuij&e2e-user-email=gold-loop-james-20260507022725%40e2e.test",
+        "next_action_needed": "Catherine needs to read James's shared context and decide/respond on her Stage 2 side.",
+        "raw": {
+          "blocked_on": "catherine",
+          "current_url": "http://localhost:8082/session/cmova8thv0008pxyeenglav31?e2e-user-id=cmova8tho0002pxyecwquzuij&e2e-user-email=gold-loop-james-20260507022725%40e2e.test",
+          "next_action_needed": "Catherine needs to read James's shared context and decide/respond on her Stage 2 side.",
+          "scratch_log": "docs/product/gold-session-scratch/2026-05-07-cmova8thv0008pxyeenglav31-james.md",
+          "session_id": "cmova8thv0008pxyeenglav31",
+          "side": "james",
+          "stage": 2,
+          "state": "needs_partner"
+        },
+        "scratch_log": "docs/product/gold-session-scratch/2026-05-07-cmova8thv0008pxyeenglav31-james.md",
+        "session_id": "cmova8thv0008pxyeenglav31",
+        "side": "james",
+        "stage": 2,
+        "state": "needs_partner"
+      },
+      "turn": 1
+    }
+  ],
+  "stop_after_stage": 2,
+  "target_score": 4.0,
+  "transcripts": [
+    "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-022725-james-catherine-iter-01/transcripts/james-stage0.md",
+    "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-022725-james-catherine-iter-01/transcripts/james-stage1.md",
+    "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-022725-james-catherine-iter-01/transcripts/james-stage2.md",
+    "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-022725-james-catherine-iter-01/transcripts/catherine-stage0.md",
+    "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-022725-james-catherine-iter-01/transcripts/catherine-stage1.md",
+    "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-022725-james-catherine-iter-01/transcripts/catherine-stage2.md"
+  ],
+  "urls": {
+    "catherine": "http://localhost:8082/session/cmova8thv0008pxyeenglav31?e2e-user-id=cmova8thl0001pxyecn65epnz&e2e-user-email=gold-loop-catherine-20260507022725%40e2e.test",
+    "james": "http://localhost:8082/session/cmova8thv0008pxyeenglav31?e2e-user-id=cmova8tho0002pxyecwquzuij&e2e-user-email=gold-loop-james-20260507022725%40e2e.test"
+  },
+  "verification_failed": false
+}

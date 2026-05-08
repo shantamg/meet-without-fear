@@ -123,6 +123,7 @@ import {
   incrementAttempts,
   hasContextAlreadyBeenShared,
   getFallbackContinuation,
+  generatePostShareContinuation,
   generateShareSuggestionForDirection,
   checkAndRevealBothIfReady,
   runReconciler,
@@ -368,6 +369,7 @@ describe('Reconciler Service', () => {
       const result = getFallbackContinuation(2, 'Jordan');
 
       expect(result).toContain('Thank you for sharing that with Jordan');
+      expect(result).toContain("Revisit what you'll share");
       expect(result).toContain("don't need to do anything more on their behalf");
       expect(result).not.toContain("Jordan's perspective");
     });
@@ -403,7 +405,59 @@ describe('Reconciler Service', () => {
   });
 
   // ==========================================================================
-  // 5. generateShareSuggestionForDirection
+  // 5. Post-share Continuation
+  // ==========================================================================
+
+  describe('generatePostShareContinuation', () => {
+    it('tells stage 2 users to review their own draft when their attempt is still refining', async () => {
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({ stage: 2 });
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
+        status: EmpathyStatus.REFINING,
+      });
+
+      const result = await generatePostShareContinuation(
+        'session-1',
+        'adam-id',
+        'Adam',
+        'Eve',
+        'Shared context'
+      );
+
+      expect(prisma.empathyAttempt.findFirst).toHaveBeenCalledWith({
+        where: {
+          sessionId: 'session-1',
+          sourceUserId: 'adam-id',
+        },
+        select: {
+          status: true,
+        },
+      });
+      expect(result).toContain("Revisit what you'll share");
+      expect(result).toContain('resubmit it');
+      expect(result).not.toContain("For now, you don't need to do anything more");
+    });
+
+    it('keeps stage 2 post-share waiting copy when the sender has no draft refinement pending', async () => {
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({ stage: 2 });
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
+        status: EmpathyStatus.READY,
+      });
+
+      const result = await generatePostShareContinuation(
+        'session-1',
+        'adam-id',
+        'Adam',
+        'Eve',
+        'Shared context'
+      );
+
+      expect(result).toContain('If your own empathy draft asks for review');
+      expect(result).toContain("don't need to do anything more on their behalf");
+    });
+  });
+
+  // ==========================================================================
+  // 6. generateShareSuggestionForDirection
   // ==========================================================================
 
   describe('generateShareSuggestionForDirection', () => {
@@ -593,6 +647,27 @@ describe('Reconciler Service', () => {
       (prisma.empathyAttempt.findMany as jest.Mock).mockResolvedValue([
         { id: 'attempt-1', sessionId: 'session-1', sourceUserId: 'user-1', status: 'READY' },
         { id: 'attempt-2', sessionId: 'session-1', sourceUserId: 'user-2', status: 'READY' },
+      ]);
+
+      const result = await checkAndRevealBothIfReady('session-1');
+
+      expect(result).toBe(true);
+      expect(prisma.empathyAttempt.updateMany).toHaveBeenCalledWith({
+        where: {
+          sessionId: 'session-1',
+          status: 'READY',
+        },
+        data: expect.objectContaining({
+          status: 'REVEALED',
+          statusVersion: { increment: 1 },
+        }),
+      });
+    });
+
+    it('reveals a READY revision when the other direction was already VALIDATED', async () => {
+      (prisma.empathyAttempt.findMany as jest.Mock).mockResolvedValue([
+        { id: 'attempt-1', sessionId: 'session-1', sourceUserId: 'user-1', status: 'READY' },
+        { id: 'attempt-2', sessionId: 'session-1', sourceUserId: 'user-2', status: 'VALIDATED' },
       ]);
 
       const result = await checkAndRevealBothIfReady('session-1');

@@ -17,15 +17,15 @@
 import { useCallback, useEffect, useRef } from 'react';
 import {
   Animated,
-  Dimensions,
   ScrollView,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createStyles } from '../theme/styled';
-import { colors } from '../theme';
+import { appWidthStyle, colors } from '../theme';
 
 // ============================================================================
 // Types
@@ -66,7 +66,7 @@ export function TranscriptionDrawer({
 }: TranscriptionDrawerProps) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const screenHeight = Dimensions.get('window').height;
+  const { height: windowHeight } = useWindowDimensions();
 
   // ---- Slide-up animation --------------------------------------------------
   const sheetAnim = useRef(new Animated.Value(0)).current;
@@ -168,13 +168,14 @@ export function TranscriptionDrawer({
       <Animated.View
         style={[
           styles.sheet,
+          appWidthStyle,
           {
             paddingBottom: insets.bottom + 16,
             transform: [
               {
                 translateY: sheetAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [screenHeight, 0],
+                  outputRange: [windowHeight, 0],
                 }),
               },
             ],

@@ -142,6 +142,59 @@ describe('stage4-coverage.service', () => {
     expect(result).toEqual({ covered: 0, partial: 0, open: 2, total: 2 });
   });
 
+  it('partly covers Stage 4 needs when proposals use process language instead of repeated need text', async () => {
+    (prisma.identifiedNeed.findMany as jest.Mock).mockResolvedValue([
+      need({
+        id: 'need-adam-presence',
+        need: 'I want to be able to stay present, maybe even pause, without disappearing or feeling like the whole life we built is on trial every time',
+        vessel: { userId },
+      }),
+      need({
+        id: 'need-eve-voice',
+        need: 'To express what I actually want without editing it first or managing Adam fear',
+        vessel: { userId: partnerId },
+      }),
+      need({
+        id: 'need-eve-growth',
+        need: 'To keep growing and changing without having to prove it is harmless first',
+        vessel: { userId: partnerId },
+      }),
+    ]);
+    (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+      proposal({
+        id: 'proposal-weekly-conversation',
+        description: 'Weekly 20-30 minute conversation where each person brings one specific thing, with the option to pause for ten minutes and return if Adam feels overwhelmed',
+      }),
+      proposal({
+        id: 'proposal-monthly-new-thing',
+        description: 'Once a month Eve chooses something new to do together, such as a day trip, class, hike, or restaurant, within a budget and one day',
+      }),
+    ]);
+
+    const result = await refreshStage4NeedCoverage(sessionId);
+
+    expect(prisma.stage4NeedCoverage.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({
+          needId: 'need-adam-presence',
+          coverageStatus: 'PARTIAL',
+          coveringProposalIds: expect.arrayContaining(['proposal-weekly-conversation']),
+        }),
+        expect.objectContaining({
+          needId: 'need-eve-voice',
+          coverageStatus: 'PARTIAL',
+          coveringProposalIds: expect.arrayContaining(['proposal-weekly-conversation']),
+        }),
+        expect.objectContaining({
+          needId: 'need-eve-growth',
+          coverageStatus: 'PARTIAL',
+          coveringProposalIds: expect.arrayContaining(['proposal-monthly-new-thing']),
+        }),
+      ]),
+    });
+    expect(result).toEqual({ covered: 0, partial: 3, open: 0, total: 3 });
+  });
+
   it('refreshes coverage after add, revise, remove, and restore inventory changes', async () => {
     (prisma.strategyProposal.create as jest.Mock).mockResolvedValue({ id: 'created-proposal' });
     (prisma.identifiedNeed.findMany as jest.Mock).mockResolvedValue([need()]);

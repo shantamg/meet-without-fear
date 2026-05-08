@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "scenario_id": "adam-eve",
+  "scenario_version": 1,
+  "rubric_version": "gold-flow-rubric-v1",
+  "scorer_version": "mwf-gold-session-scorer-v0",
+  "verdict": "eval_warn",
+  "overall_score": 4.0,
+  "dimensions": {
+    "actor_fidelity": {
+      "score": 4,
+      "mode": "llm_assisted",
+      "pass": true,
+      "pass_threshold": 4,
+      "owner": "actor_skill",
+      "recommended_action": "none",
+      "review_status": "needs_human_review",
+      "rationale": "Adam and Eve produced usable gold-equivalent pressure through Stage 2. Adam stayed fear-driven around not being enough and freezing as protection, while Eve stayed sad, attached, resentful, and undecided rather than becoming quickly repair-oriented. Their language was polished, but it preserved the reference emotional trajectory and did not copy distinctive gold lines or force later-stage outcomes.",
+      "evidence": [
+        "transcripts/adam-stage1.md: Adam says freezing buys him a second because he fears hearing Eve wants a life he cannot be part of.",
+        "transcripts/eve-stage1.md: Eve says she is not already decided to leave and wants to know whether she can stay without disappearing.",
+        "transcripts/adam-stage2.md: Adam moves from nothing he builds counting to seeing Eve as erased, lonely, and needing to keep becoming.",
+        "transcripts/eve-stage2.md: Eve names Adam's fear that her wanting more means he and the life he built are not enough while preserving her own need not to be treated as a threat."
+      ]
+    },
+    "mwf_handling": {
+      "score": 4,
+      "mode": "llm_assisted",
+      "pass": true,
+      "pass_threshold": 4,
+      "owner": "mwf_prompts",
+      "recommended_action": "none",
+      "review_status": "needs_human_review",
+      "rationale": "MWF gave both users specific witnessing before gates, handled Stage 2 as protected perspective-taking rather than agreement, and did not pressure either side into repair. Stage 2 drafts were strong and consent/share events were labeled, though the facilitation sometimes praised the user in generic process language and the Adam transcript compresses the draft submission/share moment enough that human calibration should review the exact UI sequence.",
+      "evidence": [
+        "transcripts/adam-stage1.md: MWF reflects Adam's silence as fear and self-protection before Adam confirms he feels heard.",
+        "transcripts/eve-stage1.md: MWF tracks Eve's shrinking, love, ambivalence, and stay-or-disappear question before Eve confirms she feels heard.",
+        "transcripts/adam-stage2.md: MWF frames empathy as a guess, not excusing or deciding what happens next.",
+        "transcripts/eve-stage2.md: MWF helps Eve distinguish reassurance from understanding without asking her to drop her own truth."
+      ]
+    }
+  },
+  "gold_alignment": {
+    "actor_fidelity": {
+      "adam": {
+        "stage0": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Adam initiated from fear that Eve wants more change than he can give and that he is being outgrown, matching the gold initiator shape without over-solving.",
+          "evidence": [
+            "transcripts/adam-stage0.md"
+          ]
+        },
+        "stage1": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Adam stayed in the defensive/fearful shutdown pattern and explicitly asked for the silence to be understood before repair.",
+          "evidence": [
+            "transcripts/adam-stage1.md"
+          ]
+        },
+        "stage2": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Adam made a credible perspective shift toward Eve feeling erased and needing an open future, while keeping unfairness, uncertainty, and fear present.",
+          "evidence": [
+            "transcripts/adam-stage2.md"
+          ]
+        }
+      },
+      "eve": {
+        "stage0": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Eve accepted the handoff as process context only; no premature agreement or partner validation was introduced.",
+          "evidence": [
+            "transcripts/eve-stage0.md"
+          ]
+        },
+        "stage1": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Eve stayed attached but guarded, naming disappearance, resentment, love, and uncertainty about leaving.",
+          "evidence": [
+            "transcripts/eve-stage1.md"
+          ]
+        },
+        "stage2": {
+          "persona_alignment": 4,
+          "resistance_preserved": true,
+          "too_compliant": false,
+          "too_articulate": false,
+          "copied_gold_lines": false,
+          "forced_gold_path": false,
+          "rationale": "Eve recognized Adam's fear and investment in stability without abandoning her own objection to being treated as a threat.",
+          "evidence": [
+            "transcripts/eve-stage2.md"
+          ]
+        }
+      }
+    },
+    "mwf_guidance": {
+      "adam": {
+        "stage0": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF helped Adam create a topic-level invitation without exposing the fuller private story.",
+          "evidence": [
+            "transcripts/adam-stage0.md"
+          ]
+        },
+        "stage1": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF followed Adam from general insufficiency into the protective function of freezing before offering the felt-heard gate.",
+          "evidence": [
+            "transcripts/adam-stage1.md"
+          ]
+        },
+        "stage2": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF clearly framed perspective-taking as protected guessing, honored Adam's own truth, and produced a share draft that named Eve's erasure without forcing resolution.",
+          "evidence": [
+            "transcripts/adam-stage2.md"
+          ]
+        }
+      },
+      "eve": {
+        "stage0": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "The invitee handoff preserved Adam's topic while explicitly telling Eve she did not need to agree, respond, or use it yet.",
+          "evidence": [
+            "transcripts/eve-stage0.md"
+          ]
+        },
+        "stage1": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF reflected Eve's shrinking, self-editing, love, and uncertainty without pushing her to stay, leave, or reassure Adam.",
+          "evidence": [
+            "transcripts/eve-stage1.md"
+          ]
+        },
+        "stage2": {
+          "guidance_alignment": 4,
+          "witnessing_depth": 4,
+          "resistance_handling": 4,
+          "earned_transition": true,
+          "premature_repair": false,
+          "privacy_or_consent_issue": false,
+          "rationale": "MWF guided Eve into Adam's fear while keeping her own need for an open future in view; it did not turn empathy into concession.",
+          "evidence": [
+            "transcripts/eve-stage2.md"
+          ]
+        }
+      }
+    }
+  },
+  "improvement_targets": [
+    {
+      "owner": "product_code",
+      "dimension": "ui_state",
+      "priority": 1,
+      "recommended_action": "patch_product",
+      "rationale": "Both scratch logs report current-side header/name mismatches even though role assignment and transcript side metadata were correct. This can confuse live users or actor drivers and should be fixed in the session header/title helper.",
+      "evidence": [
+        "scratch/2026-05-07-cmov9hgva0008px8h37a1x1kf-adam.md: Adam session header repeatedly shows Eve",
+        "scratch/2026-05-07-cmov9hgva0008px8h37a1x1kf-eve.md: Eve URL initially labels page as Adam Getting Started"
+      ]
+    },
+    {
+      "owner": "mwf_prompts",
+      "dimension": "mwf_handling",
+      "priority": 2,
+      "recommended_action": "human_review",
+      "rationale": "Stage 2 quality is strong, but MWF uses repeated praise such as 'real shift' and 'real courage'. Human review should decide whether this is acceptable warmth or too much process formula for the gold benchmark.",
+      "evidence": [
+        "transcripts/adam-stage2.md",
+        "transcripts/eve-stage2.md"
+      ]
+    }
+  ],
+  "hard_invariants": [],
+  "comparison": {
+    "previous_run": null,
+    "classification": "incomparable",
+    "likely_reasons": []
+  },
+  "human_review": {
+    "required": true,
+    "status": "needs_human_review",
+    "reviewer": null,
+    "notes": "Automated score is usable through stop_after_stage=2. Review suspected UI header/name mismatch and calibrate whether Stage 2 praise/formula language is acceptable."
+  }
+}

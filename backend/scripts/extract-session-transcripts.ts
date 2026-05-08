@@ -29,6 +29,50 @@ interface TranscriptEvent {
   metadata?: Record<string, unknown>;
 }
 
+function timestampBeforeChatStart(timestamp?: Date | string | null): Date {
+  const source = timestamp ? new Date(timestamp) : new Date(0);
+  const time = source.getTime();
+  if (!Number.isFinite(time)) return source;
+  return new Date(time - 2000);
+}
+
+function inviteeTopicHandoffContent(partnerName: string, topicFrame: string): string {
+  return [
+    `Before we begin, this is what ${partnerName || 'your partner'} would like to work through with you:`,
+    '',
+    topicFrame,
+    '',
+    "This is how things look from their side right now. You don't need to agree with it, respond to it, or do anything with it yet. Instead, I'd like to know what is happening from your point of view.",
+  ].join('\n');
+}
+
+function displayDecision(decision?: string | null): string {
+  switch (decision) {
+    case 'WILLING':
+      return 'willing';
+    case 'NOT_WILLING':
+      return 'not willing';
+    case 'NEEDS_DISCUSSION':
+      return 'needs discussion';
+    default:
+      return 'not selected';
+  }
+}
+
+function userLabelFor(sourceUserId: string | null | undefined, userId: string, partnerId?: string): string {
+  if (!sourceUserId) return 'unknown';
+  if (sourceUserId === userId) return 'you';
+  if (sourceUserId === partnerId) return 'partner';
+  return 'other';
+}
+
+function latestDate(dates: Array<Date | null | undefined>, fallback: Date): Date {
+  return dates.reduce((latest, value) => {
+    if (!value) return latest;
+    return value > latest ? value : latest;
+  }, fallback);
+}
+
 async function extractTranscripts() {
   console.log(`\n=== Extracting transcripts for session: ${sessionId} ===\n`);
 
@@ -71,6 +115,35 @@ async function extractTranscripts() {
     include: { shareOffer: true },
     orderBy: { createdAt: 'asc' }
   });
+
+  const [
+    stage4Proposals,
+    stage4CoverageRows,
+    stage4Closure,
+    stage4Agreements,
+    stage4ProgressRows,
+  ] = await Promise.all([
+    prisma.strategyProposal.findMany({
+      where: { sessionId },
+      include: { selections: true },
+      orderBy: [{ updatedAt: 'asc' }, { createdAt: 'asc' }],
+    }),
+    prisma.stage4NeedCoverage.findMany({
+      where: { sessionId },
+      orderBy: [{ updatedAt: 'asc' }, { createdAt: 'asc' }],
+    }),
+    prisma.stage4Closure.findUnique({
+      where: { sessionId },
+    }),
+    prisma.agreement.findMany({
+      where: { sharedVessel: { sessionId } },
+      orderBy: [{ agreedAt: 'asc' }, { id: 'asc' }],
+    }),
+    prisma.stageProgress.findMany({
+      where: { sessionId, stage: 4 },
+      orderBy: [{ userId: 'asc' }],
+    }),
+  ]);
 
   // Get all messages
   const messages = await prisma.message.findMany({
@@ -115,7 +188,14 @@ async function extractTranscripts() {
       users,
       session,
       messages,
-      reconcilerResults
+      reconcilerResults,
+      {
+        proposals: stage4Proposals,
+        coverageRows: stage4CoverageRows,
+        closure: stage4Closure,
+        agreements: stage4Agreements,
+        progressRows: stage4ProgressRows,
+      }
     );
 
     const filename = `transcript_${user.name.replace(/\s+/g, '_')}_${sessionId.slice(0, 8)}.md`;
@@ -134,7 +214,14 @@ async function buildUserTranscript(
   users: Record<string, { id: string; name: string; email: string }>,
   session: any,
   allMessages: any[],
-  reconcilerResults: any[]
+  reconcilerResults: any[],
+  stage4Artifacts: {
+    proposals: any[];
+    coverageRows: any[];
+    closure: any | null;
+    agreements: any[];
+    progressRows: any[];
+  }
 ): Promise<string> {
   const events: TranscriptEvent[] = [];
 
@@ -171,19 +258,33 @@ async function buildUserTranscript(
 
   // 3. Stage progress milestones
   const userProgress = session.stageProgress.filter((sp: any) => sp.userId === userId);
+  const stage0Progress = userProgress.find((sp: any) => sp.stage === 0);
+  if (
+    invitation &&
+    invitation.invitedById !== userId &&
+    session.topicFrame &&
+    session.topicFrameConfirmedAt &&
+    stage0Progress?.gatesSatisfied &&
+    typeof stage0Progress.gatesSatisfied === 'object' &&
+    stage0Progress.gatesSatisfied.compactSigned
+  ) {
+    events.push({
+      timestamp: timestampBeforeChatStart(
+        stage0Progress.startedAt || invitation.acceptedAt || session.createdAt
+      ),
+      type: 'system',
+      role: '🧭 INVITEE TOPIC HANDOFF',
+      content: inviteeTopicHandoffContent(partnerName, session.topicFrame),
+      metadata: { stage: 0 }
+    });
+  }
+
   for (const progress of userProgress) {
     if (progress.startedAt) {
       events.push({
         timestamp: progress.startedAt,
         type: 'milestone',
         content: `🎯 STAGE ${progress.stage} STARTED`
-      });
-    }
-    if (progress.completedAt) {
-      events.push({
-        timestamp: progress.completedAt,
-        type: 'milestone',
-        content: `✅ STAGE ${progress.stage} COMPLETED`
       });
     }
     // Check for gates satisfied
@@ -196,26 +297,33 @@ async function buildUserTranscript(
           content: '📝 COMPACT SIGNED'
         });
       }
-      if (gates.feltHeard) {
+      if (gates.feelHeardConfirmed) {
         events.push({
-          timestamp: progress.completedAt || session.createdAt,
+          timestamp: typeof gates.feelHeardConfirmedAt === 'string'
+            ? new Date(gates.feelHeardConfirmedAt)
+            : progress.completedAt || session.createdAt,
           type: 'milestone',
-          content: '💚 FELT HEARD CONFIRMED'
+          content: `💚 ${userName.toUpperCase()} CONFIRMED THEY FEEL HEARD`
         });
       }
+    }
+    if (progress.completedAt) {
+      events.push({
+        timestamp: progress.completedAt,
+        type: 'milestone',
+        content: `✅ STAGE ${progress.stage} COMPLETED`
+      });
     }
   }
 
   // 4. Messages (filtered to this user's conversation)
-  const userMessages = allMessages.filter((msg: any) =>
-    msg.senderId === userId ||
-    (msg.role === 'AI' && msg.forUserId === userId) ||
-    (msg.role === 'EMPATHY_STATEMENT' && msg.forUserId === userId) ||
-    (msg.role === 'EMPATHY_REVEAL_INTRO' && msg.forUserId === userId) ||
-    (msg.role === 'SHARED_CONTEXT' && msg.forUserId === userId) ||
-    (msg.role === 'SHARE_SUGGESTION' && msg.forUserId === userId) ||
-    (msg.role === 'EMPATHY_VALIDATION_PROMPT' && msg.forUserId === userId)
-  );
+  const userMessages = allMessages.filter((msg: any) => {
+    if (msg.role === 'USER') {
+      return msg.senderId === userId;
+    }
+
+    return msg.forUserId === userId;
+  });
 
   for (const msg of userMessages) {
     let eventType: TranscriptEvent['type'] = 'message';
@@ -238,7 +346,9 @@ async function buildUserTranscript(
         break;
       case 'SHARED_CONTEXT':
         eventType = 'shared_context';
-        roleLabel = `📤 ${partnerName} SHARED WITH YOU`;
+        roleLabel = msg.senderId === userId
+          ? `📤 YOU SHARED WITH ${partnerName.toUpperCase()}`
+          : `📤 ${partnerName} SHARED WITH YOU`;
         break;
       case 'SHARE_SUGGESTION':
         eventType = 'shared_context';
@@ -346,24 +456,139 @@ async function buildUserTranscript(
       }
     }
 
-    if (result.guesserId === userId) {
-      // You're the guesser - show reconciler summary
-      events.push({
-        timestamp: result.createdAt,
-        type: 'system',
-        content: `📊 RECONCILER ANALYSIS (Your empathy vs ${partnerName}'s actual feelings):
-  Alignment: ${result.alignmentScore}%
-  Gap Severity: ${result.gapSeverity}
-  Action: ${result.recommendedAction}`
-      });
-    }
+    // ReconcilerResult internals are scoring/debug metadata, not user-facing chat.
+    // Stable transcripts should preserve share offers and shared content without
+    // exposing alignment scores or orchestration actions.
   }
+
+  appendStage4ArtifactEvents(events, userId, partnerId, stage4Artifacts, session.createdAt);
 
   // Sort events by timestamp
   events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
   // Format as markdown
   return formatTranscriptMarkdown(userName, partnerName, session, events);
+}
+
+function appendStage4ArtifactEvents(
+  events: TranscriptEvent[],
+  userId: string,
+  partnerId: string | undefined,
+  artifacts: {
+    proposals: any[];
+    coverageRows: any[];
+    closure: any | null;
+    agreements: any[];
+    progressRows: any[];
+  },
+  fallbackTimestamp: Date
+) {
+  const activeProposals = artifacts.proposals.filter((proposal) => proposal.status === 'ACTIVE');
+  const removedProposals = artifacts.proposals.filter((proposal) => proposal.status !== 'ACTIVE');
+  if (
+    activeProposals.length === 0 &&
+    removedProposals.length === 0 &&
+    artifacts.coverageRows.length === 0 &&
+    !artifacts.closure
+  ) {
+    return;
+  }
+
+  const timestamp = latestDate(
+    [
+      ...artifacts.proposals.map((proposal) => proposal.updatedAt),
+      ...artifacts.coverageRows.map((row) => row.updatedAt),
+      artifacts.closure?.closedAt,
+    ],
+    fallbackTimestamp
+  );
+
+  const progress = artifacts.progressRows.find((row) => row.userId === userId);
+  const partnerProgress = partnerId
+    ? artifacts.progressRows.find((row) => row.userId === partnerId)
+    : undefined;
+  const selectionSubmitted = progress?.gatesSatisfied?.selectionSubmitted === true;
+  const partnerSelectionSubmitted = partnerProgress?.gatesSatisfied?.selectionSubmitted === true;
+
+  const lines: string[] = [
+    '### STAGE 4 PRODUCT ARTIFACTS',
+    '',
+    `Selection submitted: ${selectionSubmitted ? 'yes' : 'no'}`,
+    `Partner selection submitted: ${partnerSelectionSubmitted ? 'yes' : 'no'}`,
+    '',
+    '#### STAGE 4 PROPOSAL INVENTORY',
+  ];
+
+  if (activeProposals.length === 0) {
+    lines.push('- No active proposals captured.');
+  } else {
+    for (const proposal of activeProposals) {
+      const mySelection = proposal.selections?.find((selection: any) => selection.userId === userId);
+      const partnerSelection = partnerId
+        ? proposal.selections?.find((selection: any) => selection.userId === partnerId)
+        : undefined;
+      const owner = userLabelFor(proposal.createdByUserId, userId, partnerId);
+      const kind = proposal.kind === 'INDIVIDUAL_COMMITMENT' ? 'individual commitment' : 'shared proposal';
+      lines.push(`- ${kind} (${owner}): ${proposal.description}`);
+      lines.push(`  - Your selection: ${displayDecision(mySelection?.decision)}`);
+      lines.push(`  - Partner selection: ${displayDecision(partnerSelection?.decision)}`);
+      if (Array.isArray(proposal.needsAddressed) && proposal.needsAddressed.length > 0) {
+        lines.push(`  - Needs addressed: ${proposal.needsAddressed.join('; ')}`);
+      }
+      if (proposal.duration) lines.push(`  - Duration: ${proposal.duration}`);
+      if (proposal.measureOfSuccess) lines.push(`  - Measure of success: ${proposal.measureOfSuccess}`);
+    }
+  }
+
+  if (removedProposals.length > 0) {
+    lines.push('', '#### REMOVED OR REVISED PROPOSALS');
+    for (const proposal of removedProposals) {
+      lines.push(`- ${proposal.status}: ${proposal.description}`);
+      if (proposal.removalReason) lines.push(`  - Reason: ${proposal.removalReason}`);
+    }
+  }
+
+  lines.push('', '#### STAGE 4 NEEDS COVERAGE AUDIT');
+  if (artifacts.coverageRows.length === 0) {
+    lines.push('- No needs coverage rows captured.');
+  } else {
+    for (const row of artifacts.coverageRows) {
+      const source = userLabelFor(row.sourceUserId, userId, partnerId);
+      lines.push(`- ${row.coverageStatus} (${source}): ${row.needLabel}`);
+      if (Array.isArray(row.coveringProposalIds) && row.coveringProposalIds.length > 0) {
+        lines.push(`  - Covering proposals: ${row.coveringProposalIds.join(', ')}`);
+      }
+      if (row.note) lines.push(`  - Note: ${row.note}`);
+    }
+  }
+
+  lines.push('', '#### STAGE 4 CLOSURE');
+  if (!artifacts.closure) {
+    lines.push('- No Stage 4 closure captured.');
+  } else {
+    lines.push(`- Kind: ${artifacts.closure.kind}`);
+    lines.push(`- Reason: ${artifacts.closure.reason}`);
+    lines.push(`- Summary: ${artifacts.closure.summary}`);
+    lines.push(`- Shared agreement IDs: ${artifacts.closure.sharedAgreementIds.join(', ') || 'none'}`);
+    lines.push(`- Individual commitment IDs: ${artifacts.closure.individualProposalIds.join(', ') || 'none'}`);
+    lines.push(`- Open need IDs: ${artifacts.closure.openNeedIds.join(', ') || 'none'}`);
+  }
+
+  if (artifacts.agreements.length > 0) {
+    lines.push('', '#### AGREEMENTS');
+    for (const agreement of artifacts.agreements) {
+      lines.push(`- ${agreement.status}: ${agreement.description}`);
+      if (agreement.duration) lines.push(`  - Duration: ${agreement.duration}`);
+      if (agreement.measureOfSuccess) lines.push(`  - Measure of success: ${agreement.measureOfSuccess}`);
+    }
+  }
+
+  events.push({
+    timestamp,
+    type: 'system',
+    content: lines.join('\n'),
+    metadata: { stage: 4 },
+  });
 }
 
 function formatTranscriptMarkdown(
@@ -428,7 +653,12 @@ function formatTranscriptMarkdown(
         break;
 
       case 'system':
-        md += `*${event.content}*\n`;
+        if (event.role) {
+          md += `**${event.role}:**\n`;
+          md += `${event.content}\n`;
+        } else {
+          md += `*${event.content}*\n`;
+        }
         md += `*${time}*\n\n`;
         break;
     }

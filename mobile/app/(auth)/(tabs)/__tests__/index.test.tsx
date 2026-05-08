@@ -46,6 +46,10 @@ jest.mock('../../../../src/hooks/useSessions', () => ({
   },
 }));
 
+jest.mock('@/src/hooks/useUnreadSessionCount', () => ({
+  useUnreadSessionCount: () => ({ count: 0, isLoading: false }),
+}));
+
 // Mock useAuth hook
 const mockUseAuth = jest.fn();
 jest.mock('@/src/hooks/useAuth', () => ({

@@ -379,6 +379,21 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(true);
   });
 
+  it('hides input while partner empathy validation owns the next action', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      hasPartnerEmpathy: true,
+      myValidation: { validated: false },
+      empathyStatus: { myAttemptStatus: 'REVEALED' },
+      empathyDraft: { alreadyConsented: true },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.shouldHideInput).toBe(true);
+  });
+
   it('hides input while waiting for partner to share Stage 3 needs', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
@@ -438,7 +453,7 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(true);
   });
 
-  it('keeps input visible while the needs reveal validation panel is offered', () => {
+  it('hides input while the needs reveal validation panel is offered', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -456,7 +471,7 @@ describe('Input Hiding (shouldHideInput)', () => {
 
     const result = computeChatUIState(inputs);
     expect(result.aboveInputPanel).toBe('needs-reveal-validation');
-    expect(result.shouldHideInput).toBe(false);
+    expect(result.shouldHideInput).toBe(true);
   });
 
   it('hides input while Stage 4 agreement review owns the next action', () => {
@@ -671,7 +686,7 @@ describe('Empathy Panel Visibility', () => {
     expect(result.panels.showEmpathyPanel).toBe(true);
   });
 
-  it('does not show in refining mode before user sends message', () => {
+  it('shows in refining mode before user sends another message when an attempt is reviewable', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -683,12 +698,10 @@ describe('Empathy Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showEmpathyPanel).toBe(false);
+    expect(result.panels.showEmpathyPanel).toBe(true);
   });
 
-  it('does not show in refining mode before user sends message even with new AI content', () => {
-    // Before user engages with Stage 2B chat (messageCountSinceSharedContext === 0),
-    // hide panel — user should first view partner's shared context in Activity menu.
+  it('shows in refining mode before user sends another message when new AI content is reviewable', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -696,6 +709,22 @@ describe('Empathy Panel Visibility', () => {
       isRefiningEmpathy: true,
       messageCountSinceSharedContext: 0,
       hasEmpathyContent: true,
+      empathyStatus: { hasNewSharedContext: true },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showEmpathyPanel).toBe(true);
+  });
+
+  it('does not show in refining mode before user sends another message when no content is reviewable', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      isRefiningEmpathy: true,
+      messageCountSinceSharedContext: 0,
+      hasEmpathyContent: false,
+      myAttemptContent: false,
       empathyStatus: { hasNewSharedContext: true },
     });
 
@@ -818,6 +847,22 @@ describe('Needs Review Panel Visibility', () => {
 
     const result = computeChatUIState(inputs);
     expect(result.panels.showNeedsReviewPanel).toBe(false);
+    expect(result.panels.showNeedsSharePanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('needs-share');
+  });
+
+  it('shows needs-share even when the local confirm latch is still set after server confirmation', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      needsAvailable: true,
+      allNeedsConfirmed: true,
+      needsShared: false,
+      hasConfirmedNeedsLocal: true,
+    });
+
+    const result = computeChatUIState(inputs);
     expect(result.panels.showNeedsSharePanel).toBe(true);
     expect(result.aboveInputPanel).toBe('needs-share');
   });

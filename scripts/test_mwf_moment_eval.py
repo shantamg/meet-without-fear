@@ -145,6 +145,26 @@ class TestYamlParsing(unittest.TestCase):
                 self.assertIsInstance(entry.get("target_behaviors"), list)
                 self.assertIsInstance(entry.get("required_invariants"), list)
 
+    def test_gold_loop_actor_prompt_allows_realistic_typed_feel_heard_confirmation(self) -> None:
+        actor = gold_loop.Actor("Eve", "http://localhost:8082/session/test?e2e-user-id=eve")
+        partner = gold_loop.Actor("Adam", "http://localhost:8082/session/test?e2e-user-id=adam")
+
+        prompt = gold_loop.build_actor_prompt(
+            actor,
+            partner,
+            "session-test",
+            2,
+            REPO_ROOT / "eval/runs/test-run",
+            "adam-eve",
+        )
+        resume_prompt = gold_loop.build_resume_prompt(actor, partner, "session-test", 2)
+
+        for text in (prompt, resume_prompt):
+            self.assertIn('If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present', text)
+            self.assertIn("either click it or give a clear in-character typed confirmation", text)
+            self.assertIn('"I feel heard" / "Ready"', text)
+            self.assertIn("Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate", text)
+
     def test_gold_loop_uses_profile_initiator_separate_from_registry_order(self) -> None:
         james_catherine = gold_loop.infer_role_shape_from_profile("james-catherine")
         self.assertEqual(james_catherine["initiator"], "Catherine")
@@ -212,6 +232,34 @@ class TestYamlParsing(unittest.TestCase):
         self.assertEqual(result["status"], "fail")
         self.assertIn("<ready-share>", result["evidence"][0])
 
+    def test_visible_control_tag_invariant_catches_needs_ready_payload(self) -> None:
+        transcripts = [
+            (
+                Path("catherine-stage1.md"),
+                "\n".join(
+                    [
+                        "- side: `catherine`",
+                        "- stage: `1`",
+                        "",
+                        "**[2026-05-06 15:00:00] AI:**",
+                        "<needs_ready>",
+                        "{",
+                        '  "core_needs": ["clarity"],',
+                        '  "boundary": "Reacting is not causing"',
+                        "}",
+                        "</needs_ready>",
+                        "Okay. You're clear on what you need.",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_no_visible_control_tags(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("<needs_ready>", result["evidence"][0])
+
     def test_chat_copy_visible_input_invariant_accepts_following_user_turn(self) -> None:
         transcripts = [
             (
@@ -266,6 +314,33 @@ class TestYamlParsing(unittest.TestCase):
         self.assertEqual(result["status"], "fail")
         self.assertIn("adam-stage1.md", result["evidence"][0])
 
+    def test_chat_copy_visible_input_invariant_ignores_shared_context_quotes(self) -> None:
+        transcripts = [
+            (
+                Path("eve-stage2.md"),
+                "\n".join(
+                    [
+                        "# Eve Stage 2 Transcript",
+                        "",
+                        "- side: `eve`",
+                        "- stage: `2`",
+                        "- visible_cta_state: see milestone/system lines when captured",
+                        "",
+                        "---",
+                        "**📤 Adam SHARED WITH YOU:**",
+                        "I'm telling you this because I'm still here and still love you.",
+                        "*2026-05-07 04:03:45*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_chat_copy_has_visible_input(transcripts)
+
+        self.assertEqual(result["status"], "pass")
+
     def test_shared_context_blocks_must_be_labeled_in_stable_transcripts(self) -> None:
         transcripts = [
             (
@@ -315,6 +390,126 @@ class TestYamlParsing(unittest.TestCase):
         ]
 
         result = gold_loop.check_transcript_shared_context_blocks_labeled(transcripts)
+
+        self.assertEqual(result["status"], "pass")
+
+    def test_shared_context_directionality_catches_own_suggestion_labeled_as_partner_shared(self) -> None:
+        transcripts = [
+            (
+                Path("james-stage2.md"),
+                "\n".join(
+                    [
+                        "# James Stage 2 Transcript",
+                        "",
+                        "- side: `james`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "💡 SHARE SUGGESTION (to help Catherine understand you better):",
+                        "I feel convicted before I finish speaking.",
+                        "*2026-05-07 04:15:05*",
+                        "---",
+                        "",
+                        "---",
+                        "**📤 Catherine SHARED WITH YOU:**",
+                        "I feel convicted before I finish speaking.",
+                        "*2026-05-07 04:17:16*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_shared_context_directionality(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("duplicates this side's own share suggestion", result["evidence"][0])
+
+    def test_shared_context_directionality_accepts_distinct_partner_context(self) -> None:
+        transcripts = [
+            (
+                Path("james-stage2.md"),
+                "\n".join(
+                    [
+                        "# James Stage 2 Transcript",
+                        "",
+                        "- side: `james`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "💡 SHARE SUGGESTION (to help Catherine understand you better):",
+                        "I feel convicted before I finish speaking.",
+                        "*2026-05-07 04:15:05*",
+                        "---",
+                        "",
+                        "---",
+                        "**📤 Catherine SHARED WITH YOU:**",
+                        "I need safety before I can keep trying.",
+                        "*2026-05-07 04:17:16*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_shared_context_directionality(transcripts)
+
+        self.assertEqual(result["status"], "pass")
+
+    def test_internal_reconciler_analysis_fails_stable_transcript_invariant(self) -> None:
+        transcripts = [
+            (
+                Path("eve-stage2.md"),
+                "\n".join(
+                    [
+                        "# Eve Stage 2 Transcript",
+                        "",
+                        "- side: `eve`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "**📊 RECONCILER ANALYSIS (Your empathy vs Adam's actual feelings):",
+                        "  Alignment: 75%",
+                        "  Gap Severity: moderate",
+                        "  Action: OFFER_OPTIONAL**",
+                        "*2026-05-07 04:31:15*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_no_internal_reconciler_analysis(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("internal reconciler analysis leaked", result["evidence"][0])
+
+    def test_internal_reconciler_analysis_allows_clean_share_blocks(self) -> None:
+        transcripts = [
+            (
+                Path("eve-stage2.md"),
+                "\n".join(
+                    [
+                        "# Eve Stage 2 Transcript",
+                        "",
+                        "- side: `eve`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "**📤 Adam SHARED WITH YOU:**",
+                        "I feel scared that I am proving your point.",
+                        "*2026-05-07 04:31:15*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_no_internal_reconciler_analysis(transcripts)
 
         self.assertEqual(result["status"], "pass")
 

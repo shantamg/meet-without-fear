@@ -5,14 +5,30 @@
  * - <thinking>...</thinking> - Hidden analysis with flags
  * - <draft>...</draft> - Optional draft content (invitation/empathy)
  * - <needs>...</needs> - Optional structured Stage 3 needs JSON
+ * - <needs_ready>...</needs_ready> - Legacy/errant hidden needs payload, stripped if emitted
  * - <dispatch>...</dispatch> - Optional off-ramp signal
  * - Everything else is the user-facing response
  */
 
 import { extractJsonFromResponse } from './json-extractor';
 import { logger } from '../lib/logger';
-import { NeedCategory, type CapturedNeedInput } from '@meet-without-fear/shared';
+import { NeedCategory, Stage4ProposalKind, type CapturedNeedInput } from '@meet-without-fear/shared';
 import { cleanVisibleAIText } from './visible-text';
+
+export type ParsedStage4ProposalClassification = 'PROPOSAL' | 'REFLECTION' | 'SUCCESS_MARKER' | 'PROCESS';
+export type ParsedStage4ProposalAction = 'ADD' | 'REVISE' | 'REMOVE' | 'IGNORE';
+
+export interface ParsedStage4ProposalInput {
+  action: ParsedStage4ProposalAction;
+  targetProposalId?: string;
+  classification: ParsedStage4ProposalClassification;
+  description: string;
+  kind?: Stage4ProposalKind;
+  ownerUserId?: string;
+  needsAddressed?: string[];
+  duration?: string;
+  measureOfSuccess?: string;
+}
 
 export interface ParsedMicroTagResponse {
   /** The user-facing response text (all tags stripped) */
@@ -28,10 +44,16 @@ export interface ParsedMicroTagResponse {
   dispatchTag: string | null;
   /** Extracted from thinking: FeelHeardCheck:Y */
   offerFeelHeardCheck: boolean;
+  /** Extracted from thinking: FeelHeardConfirmed:Y */
+  feelHeardConfirmed: boolean;
   /** Extracted from thinking: ReadyShare:Y */
   offerReadyToShare: boolean;
   /** Extracted from thinking: ProposedStrategy lines (Stage 4) */
   proposedStrategies: string[];
+  /** Structured typed Stage 4 proposal classifications from a hidden JSON block */
+  stage4Proposals: ParsedStage4ProposalInput[];
+  /** True when the response included a hidden Stage 4 proposal classification block */
+  stage4ProposalBlockPresent: boolean;
   /** Structured needs proposed by Stage 3 in a hidden <needs> JSON block */
   proposedNeeds: CapturedNeedInput[];
 }
@@ -82,6 +104,79 @@ function parseNeedsBlock(rawNeeds: string | null): CapturedNeedInput[] {
     });
   } catch (error) {
     logger.warn('[micro-tag-parser] Failed to parse <needs> block', error);
+    return [];
+  }
+}
+
+function isStage4ProposalClassification(value: unknown): value is ParsedStage4ProposalClassification {
+  return value === 'PROPOSAL' || value === 'REFLECTION' || value === 'SUCCESS_MARKER' || value === 'PROCESS';
+}
+
+function isStage4ProposalAction(value: unknown): value is ParsedStage4ProposalAction {
+  return value === 'ADD' || value === 'REVISE' || value === 'REMOVE' || value === 'IGNORE';
+}
+
+function parseStage4ProposalsBlock(rawProposals: string | null): ParsedStage4ProposalInput[] {
+  if (!rawProposals) return [];
+
+  try {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawProposals);
+    } catch {
+      parsed = extractJsonFromResponse(rawProposals) as unknown;
+    }
+    const items = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === 'object' && Array.isArray((parsed as { proposals?: unknown }).proposals)
+        ? (parsed as { proposals: unknown[] }).proposals
+        : [];
+
+    return items.flatMap((item): ParsedStage4ProposalInput[] => {
+      if (!item || typeof item !== 'object') return [];
+      const candidate = item as Record<string, unknown>;
+      if (!isStage4ProposalClassification(candidate.classification)) return [];
+      const action = isStage4ProposalAction(candidate.action) ? candidate.action : 'ADD';
+      const targetProposalId = typeof candidate.targetProposalId === 'string' && candidate.targetProposalId.trim().length > 0
+        ? candidate.targetProposalId.trim()
+        : undefined;
+
+      const description = typeof candidate.description === 'string'
+        ? cleanVisibleAIText(candidate.description)
+        : '';
+      const kind = typeof candidate.kind === 'string' && Object.values(Stage4ProposalKind).includes(candidate.kind as Stage4ProposalKind)
+        ? candidate.kind as Stage4ProposalKind
+        : undefined;
+      const ownerUserId = typeof candidate.ownerUserId === 'string' && candidate.ownerUserId.trim().length > 0
+        ? candidate.ownerUserId.trim()
+        : undefined;
+      const needsAddressed = Array.isArray(candidate.needsAddressed)
+        ? candidate.needsAddressed
+            .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+            .map((entry) => cleanVisibleAIText(entry))
+            .filter(Boolean)
+        : undefined;
+      const duration = typeof candidate.duration === 'string' ? cleanVisibleAIText(candidate.duration) : undefined;
+      const measureOfSuccess = typeof candidate.measureOfSuccess === 'string'
+        ? cleanVisibleAIText(candidate.measureOfSuccess)
+        : undefined;
+
+      if (!description) return [];
+
+      return [{
+        action,
+        targetProposalId,
+        classification: candidate.classification,
+        description,
+        kind,
+        ownerUserId,
+        needsAddressed,
+        duration,
+        measureOfSuccess,
+      }];
+    });
+  } catch (error) {
+    logger.warn('[micro-tag-parser] Failed to parse <stage4_proposals> block', error);
     return [];
   }
 }
@@ -151,19 +246,25 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
   const thinkingMatch = rawResponse.match(/<thinking>([\s\S]*?)<\/thinking>/i);
   const draftMatch = rawResponse.match(/<draft>([\s\S]*?)<\/draft>/i);
   const needsMatch = rawResponse.match(/<needs>([\s\S]*?)<\/needs>/i);
+  const stage4ProposalsMatch = rawResponse.match(/<stage4_proposals>([\s\S]*?)<\/stage4_proposals>/i);
   const dispatchMatch = rawResponse.match(/<dispatch>([\s\S]*?)<\/dispatch>/i);
 
   const thinking = thinkingMatch?.[1]?.trim() ?? '';
   const draft = draftMatch?.[1]?.trim() ?? null;
   const needsRaw = needsMatch?.[1]?.trim() ?? null;
+  const stage4ProposalsRaw = stage4ProposalsMatch?.[1]?.trim() ?? null;
   const dispatchTag = dispatchMatch?.[1]?.trim() ?? null;
   const proposedNeeds = parseNeedsBlock(needsRaw);
+  const stage4ProposalBlockPresent = Boolean(stage4ProposalsMatch);
+  const stage4Proposals = parseStage4ProposalsBlock(stage4ProposalsRaw);
 
   // 2. Clean response text - remove all tags
   let responseText = rawResponse
     .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
     .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
     .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
+    .replace(/<needs[_-]?ready>[\s\S]*?<\/needs[_-]?ready>/gi, '')
+    .replace(/<stage4_proposals>[\s\S]*?<\/stage4_proposals>/gi, '')
     .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '')
     .trim();
   responseText = stripKnownControlTags(responseText).trim();
@@ -185,6 +286,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
 
   // 3. Extract flags from thinking string (no JSON needed!)
   const offerFeelHeardCheck = feelHeardControlTag ?? /FeelHeardCheck:\s*Y/i.test(thinking);
+  const feelHeardConfirmed = /FeelHeardConfirmed:\s*Y/i.test(thinking);
   const offerReadyToShare = readyShareControlTag ?? /ReadyShare:\s*Y/i.test(thinking);
 
   // 4. Extract proposed strategies from thinking (Stage 4)
@@ -223,8 +325,11 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
         topicFrame: empathy,
         dispatchTag: null,
         offerFeelHeardCheck,
+        feelHeardConfirmed,
         offerReadyToShare,
         proposedStrategies,
+        stage4Proposals,
+        stage4ProposalBlockPresent,
         proposedNeeds,
       };
     } catch {
@@ -239,8 +344,11 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     topicFrame: draft,
     dispatchTag,
     offerFeelHeardCheck,
+    feelHeardConfirmed,
     offerReadyToShare,
     proposedStrategies,
+    stage4Proposals,
+    stage4ProposalBlockPresent,
     proposedNeeds,
   };
 }

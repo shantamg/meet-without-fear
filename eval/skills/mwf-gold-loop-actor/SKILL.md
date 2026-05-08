@@ -27,6 +27,8 @@ agent-browser --session <side-session> snapshot -i
 
 Use a distinct `--session` per participant, for example `mwf-gold-adam-<session-id>` and `mwf-gold-eve-<session-id>`, so both sides keep separate browser state.
 
+Keep browser observations compact. Prefer `snapshot -i` for normal state checks. Do not paste long prior transcript history into the final response; the orchestrator only needs the required status block.
+
 If `agent-browser` reports a stale closed browser context, run `agent-browser --session <side-session> close` once, then reopen the assigned URL.
 
 ## Persona And References
@@ -56,6 +58,8 @@ Before sending user messages, maintain a compact private model:
 - Keep responses realistic and concise enough for chat.
 - Do not become more healed, articulate, collaborative, or repair-oriented than the live MWF exchange has earned.
 - Preserve resistance and ambivalence when the golden persona calls for it. A good actor may push back, qualify, hesitate, or name unfairness.
+- In Stage 2 perspective-taking, high-resistance personas should move through friction before insight. Start from the character's grievance, add caveats, and only name the partner's fear or need after MWF has earned that step. Avoid polished therapeutic summaries that stack several insights at once.
+- For James in the James/Catherine scenario, preserve the no-shared-agreement pressure: he can reluctantly see that Catherine may feel scared, worn down, alone, or unable to relax, but he should keep resisting being reduced to "unsafe," "the whole problem," or a diagnosis. His Stage 2 messages should stay concrete and defensive enough that MWF has to bridge from "my effort got erased" toward any empathy.
 - Do not force the golden outcome. Let the MWF response determine whether the character softens, deepens, resists, or stays guarded.
 - Record important bugs or gold-alignment observations in the normal scratch log path under `docs/product/gold-session-scratch/`.
 - If UI state seems suspicious, inspect DB state using the manual tester skill's DB triage reference.
@@ -84,9 +88,17 @@ Allowed `state` values:
 
 - `needs_partner`: no legitimate action remains for the assigned side until the partner acts.
 - `can_continue`: this Codex turn stopped due to time/tool/context interruption, but the assigned side still has a legitimate action.
-- `stage_limit_reached`: the assigned side reached the requested stage limit.
+- `stage_limit_reached`: the assigned side reached the requested stage limit and has no partner dependency left in the requested gate.
 - `completed`: the requested run completed.
 - `bug_blocked`: a product, state, privacy, or browser issue blocks progress.
 - `error`: the browser/tooling run failed before a reliable state could be established.
 
 Set `blocked_on` to the lowercase partner side when partner action is needed; otherwise use `null`. Keep JSON valid.
+
+For Stage 4, do not use `stage_limit_reached` while waiting for the partner to submit proposals, selections, review, or closure. Report `needs_partner` with `blocked_on` set to the partner instead. A Stage 4 `stage_limit_reached` status must have `"blocked_on": null` and should only appear after this side has submitted selections or the stage is visibly closed for this side.
+
+Stage 4 keeps chat input available while proposals are being shaped. Do not keep adding ideas indefinitely just because input remains visible. Once the assigned side has contributed one or two concrete proposals or individual commitments and made visible willingness selections for the current inventory, stop and report `needs_partner` if closure is still disabled because partner-private proposals, selections, review, or closure are pending.
+
+If Stage 4 asks to hear this assigned side's perspective or what has been going on, answer once in character before voting on partner proposals or closing. Do not skip the assigned side's own Stage 4 turn just because partner proposal controls are visible.
+
+When a facilitator asks what the assigned side would walk away knowing, how they would know it helped, or what would make a proposal feel workable, answer as a success marker or refinement, not as a separate new commitment. If the app later shows those fragments as proposals, use the visible review/done controls or a concise correction instead of treating every fragment as a real new proposal.
