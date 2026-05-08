@@ -204,100 +204,36 @@ function findLooseRevisionProposal(text: string, proposals: ProposalRow[]): { pr
   return { proposal: null, confidence: 0 };
 }
 
+/**
+ * Compatibility fallback for the legacy free-text `ProposedStrategy` capture
+ * path. The authoritative source for proposal kind is the `kind` field on the
+ * typed `<stage4_proposals>` block; this function is only reached when no typed
+ * block was emitted.
+ *
+ * Uses only generic, scenario-agnostic signals (pronouns and common commitment
+ * verbs). Scenario-specific regexes are explicitly avoided per the gold-loop
+ * Stage 4 supplement. When uncertain, defaults to INDIVIDUAL_COMMITMENT — the
+ * safer default, since auto-promoting an ambiguous fragment to a SHARED proposal
+ * pulls the partner into a commitment they did not author.
+ */
 function inferProposalKind(text: string): Stage4ProposalKind {
-  if (
-    /\bmonthly experiment\b/i.test(text) &&
-    /\b(?:adam|eve|they|together|build the details|stays engaged)\b/i.test(text)
-  ) {
-    return Stage4ProposalKind.SHARED_PROPOSAL;
-  }
-  if (
-    /\bone small new thing each month\b/i.test(text) &&
-    /\b(?:adam|eve|they|together|stays engaged|naming when|comes? back)\b/i.test(text)
-  ) {
-    return Stage4ProposalKind.SHARED_PROPOSAL;
-  }
-  if (/\bpause[-\s]and[-\s]return\b/i.test(text) && /\badam\b/i.test(text)) {
-    return Stage4ProposalKind.SHARED_PROPOSAL;
-  }
-  if (
-    /\b(?:mine alone|individual for me|individual commitment|my commitment|just for me|mine to do)\b/i.test(text) ||
-    /\bcommits?\s+individually\b/i.test(text) ||
-    /\b(?:give|giving)\s+(?:myself|herself|himself|themself|themselves)\s+permission\s+to\b/i.test(text) ||
-    /\b(?:name|naming)\s+what\s+is\s+happening\s+once\b/i.test(text) ||
-    /\bleave\s+(?:the\s+)?conversation\s+instead\s+of\s+staying\b/i.test(text) ||
-    /\bstop\s+(?:the\s+)?conversation\s+when\b/i.test(text) ||
-    /\b(?:pause|end)\s+(?:the\s+)?conversation\s+(?:when|if)\b/i.test(text) ||
-    /\bstop\s+treating\s+(?:his|her|their|my)\s+reaction\s+as\b/i.test(text) ||
-    /\b(?:name|naming)\s+what\s+i\s+see\s+once\b/i.test(text) ||
-    /\b(?:not|without)\s+debating\s+(?:my\s+)?reality\b/i.test(text) ||
-    /\bstep\s+away\s+from\s+conversations?\s+that\s+turn\b/i.test(text) ||
-    /\bindividual\s+therapy\b/i.test(text) ||
-    /\b(?:journal|journaling)\s+for\b/i.test(text) ||
-    /\bprivate\s+(?:weekly\s+)?note\b/i.test(text) ||
-    /\bsolo\s+grounding\s+practice\b/i.test(text) ||
-    /\b(?:adam|eve)\s+(?:will\s+|to\s+)?(?:develops?|builds?|has|have|makes?|restarts?|runs?|walks?|exercises?|meets?|signs?\s+up|registers?|creates?)\b/i.test(text) ||
-    /\b(?:adam'?s|eve'?s)\s+individual\s+practice\b/i.test(text) ||
-    /\b(?:individual\s+commitment:\s*)?notice\s+when\s+(?:i am |i'm |he'?s |she'?s |they'?re )?treating\b/i.test(text) &&
-      /\bwanting\s+as\s+a\s+verdict\b/i.test(text) ||
-    /\b(?:adam|eve)\s+takes?\s+a\s+solo\s+walk\b/i.test(text) ||
-    /\bindividual\s+practice\/resource\b/i.test(text) ||
-    /\b(?:therapist|therapy|men'?s group|support group)\b/i.test(text) &&
-      /\b(?:find|look for|research|send|email|schedule|options?)\b/i.test(text) &&
-      /\b(?:adam|eve|i|he|she|they|on (?:his|her|their|my) own|not ask(?:ing)? (?:adam|eve|him|her|them) to manage)\b/i.test(text) ||
-    /\bwhen\s+panic\s+starts\b/i.test(text) && /\btake\s+a\s+walk\b/i.test(text) && /\bwrite\s+down\b/i.test(text) ||
-    /\b(?:run|walk|exercise|therapy\s+appointment)\b/i.test(text) &&
-      /\b(?:adam|eve)\s+practices?\b/i.test(text) ||
-    /\b(?:ceramics?|art|dance|language|beginner[-\s]level)\s+class\b/i.test(text) ||
-    /\bitinerary\b/i.test(text) && /\b(?:book|booking|secret|allowed to want|portugal)\b/i.test(text) ||
-    /\bsolo\s+walk\b/i.test(text) && /\b(?:no phone|writes? down|afraid|threatened|grounding)\b/i.test(text) ||
-    /\b(?:journal|journaling|write\s+things?\s+down)\b/i.test(text) &&
-      /\b(?:self\s*trust|second\s+guessing|outsourcing\s+(?:my|her|his|their)\s+reality)\b/i.test(text) ||
-    /\b(?:return|go(?:ing)?\s+back|pursue|start)\s+(?:to\s+)?individual\s+therapy\b/i.test(text) ||
-    /\bindividual\s+practice\s+for\s+steadiness\b/i.test(text) ||
-    /\bsomething\s+(?:adam|eve|he|she|they)\s+does\s+on\s+(?:his|her|their)\s+own\b/i.test(text) ||
-    /\b(?:running|counseling|therapy|exercise)\b/i.test(text) &&
-      /\b(?:steadiness|steady|prove\s+(?:he|she|they|i)'?s\s+okay|on\s+(?:his|her|their|my)\s+own)\b/i.test(text) ||
-    /\bwrite\s+(?:down\s+)?(?:what\s+i\s+know|things?\s+down)\b/i.test(text) ||
-    /\bwrite\s+down\s+one\s+moment\s+where\s+(?:i|she|he|they)\s+(?:made\s+(?:myself|herself|himself|themself|themselves)\s+smaller|edited\s+(?:myself|herself|himself|themself|themselves))\b/i.test(text) ||
-    /\bnotice\s+when\s+i\s+edit\s+myself\s+before\s+i\s+even\s+speak\b/i.test(text) ||
-    /\bstop\s+outsourcing\s+(?:my|her|his|their)\s+reality\b/i.test(text) ||
-    /\bindividual\s+(?:time\s+)?block\b/i.test(text) ||
-    /\b(?:sign up|register for|make one real)\b/i.test(text) ||
-    /\b(?:outside|other than)\s+(?:of\s+)?(?:adam|eve|partner|him|her|them)\b/i.test(text) &&
-      /\b(?:steady|steadiness|spiral|spiraling|worth|okay)\b/i.test(text) ||
-    /\boutside\s+(?:of\s+)?(?:the\s+)?relationship\b/i.test(text) &&
-      /\b(?:steady|steadiness|spiral|spiraling|worth|self[-\s]?worth|okay)\b/i.test(text) ||
-    /\b(?:talk|talking|speak|speaking)\s+to\s+someone\s+(?:outside|other than)\b/i.test(text) ||
-    /\b(?:run|walk|exercise)\b/i.test(text) &&
-      /\b(?:own time|alone|by myself|for myself|independent|independently)\b/i.test(text) ||
-    /\bsaturday\b/i.test(text) &&
-      /\b(?:morning|mornings)\b/i.test(text) &&
-      /\b(?:protected personal time|own time|walks?|coffee|brother|physical)\b/i.test(text) ||
-    /\b(?:alone|by myself)\b/i.test(text) && /\b(?:saturday|garage|project|build|make|making|hands)\b/i.test(text) ||
-    /\bsaturday\b/i.test(text) &&
-      /\b(?:morning|mornings)\b/i.test(text) &&
-      /\b(?:hands|project|build|make|making|steady|independent|independently)\b/i.test(text) ||
-    /\bclass or trip[-\s]planning block each week\b/i.test(text) &&
-      /\b(?:chooses?|chosen|alone|pre[-\s]approval|pre[-\s]justifying|without asking|without waiting)\b/i.test(text) ||
-    /\b(?:adam|eve)\s+picks?\s+one small thing\b/i.test(text) ||
-    /\bone small (?:yours|mine|hers|his|theirs)[-\s]?only thing\b/i.test(text) ||
-    /\b(?:one small thing|class|morning out|trip idea|itinerary)\b/i.test(text) &&
-      /\b(?:just hers|just his|just theirs|just mine|just yours|just for (?:adam|eve|me|him|her|them)|adam'?s|eve'?s|does because (?:she|he|they|i) wants?|without (?:pre-)?building a case|without turning it into a referendum)\b/i.test(text)
-  ) {
+  // Explicit individual-commitment self-references.
+  if (/\b(?:mine alone|just for me|my commitment|individual commitment|my own)\b/i.test(text)) {
     return Stage4ProposalKind.INDIVIDUAL_COMMITMENT;
   }
+  // Generic shared/joint phrasing.
   if (
-    /\b(?:we|both|together)\b/i.test(text) ||
-    /\b(?:we each|each of us|one thing each)\b/i.test(text) ||
-    /\b(?:adam|eve|partner)'?s\s+first\s+job\b/i.test(text)
+    /\b(?:we|both of us|together|each of us|we each|one thing each)\b/i.test(text) ||
+    /\blet's\b/i.test(text)
   ) {
     return Stage4ProposalKind.SHARED_PROPOSAL;
   }
-  if (/\b(i can|i could|i will|i'll|i would|i want to|i am going to|i'm going to)\b/i.test(text)) {
+  // First-person commitment phrasing.
+  if (/\b(?:i can|i could|i will|i'll|i would|i want to|i am going to|i'm going to)\b/i.test(text)) {
     return Stage4ProposalKind.INDIVIDUAL_COMMITMENT;
   }
-  return Stage4ProposalKind.SHARED_PROPOSAL;
+  // Uncertain — never auto-promote a fragment to SHARED.
+  return Stage4ProposalKind.INDIVIDUAL_COMMITMENT;
 }
 
 function isNonCommitmentFirstPerson(raw: string): boolean {

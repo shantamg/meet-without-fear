@@ -106,10 +106,14 @@ describe('stage4-capture.service', () => {
       })
     );
 
+    // Legacy compatibility fallback defaults to INDIVIDUAL_COMMITMENT when no
+    // generic shared/individual signal is present — never auto-promote an
+    // ambiguous fragment to SHARED. Typed <stage4_proposals> output is the
+    // authoritative source for `kind`.
     expect(prisma.strategyProposal.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         description: '10-minute check-in after dinner each night for one week',
-        kind: Stage4ProposalKind.SHARED_PROPOSAL,
+        kind: Stage4ProposalKind.INDIVIDUAL_COMMITMENT,
       }),
     });
     expect(result.appliedOperationCount).toBe(1);
