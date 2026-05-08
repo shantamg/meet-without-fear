@@ -75,6 +75,30 @@ class ProviderParsingTests(unittest.TestCase):
             self.assertEqual(text, "Claude hello")
             self.assertEqual(usage, {"input_tokens": 12, "output_tokens": 3})
 
+    def test_claude_command_uses_bot_hook_settings(self):
+        with tempfile.TemporaryDirectory() as td:
+            ctx = self.context(Path(td))
+            provider = ClaudeProvider(ctx)
+            provider.prepare_session()
+            cmd = provider.command()
+            self.assertIn("--settings", cmd)
+            self.assertIn("--input-format", cmd)
+            self.assertEqual(cmd[cmd.index("--input-format") + 1], "stream-json")
+            settings_path = Path(cmd[cmd.index("--settings") + 1])
+            self.assertEqual(settings_path, ctx.agent_home / "claude-settings.json")
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+            hook = settings["hooks"]["PostToolUse"][0]["hooks"][0]
+            self.assertEqual(hook["type"], "command")
+            self.assertTrue(hook["command"].endswith("check-pending-messages.sh"))
+
+    def test_claude_stream_user_message_shape(self):
+        with tempfile.TemporaryDirectory() as td:
+            provider = ClaudeProvider(self.context(Path(td)))
+            payload = json.loads(provider.stream_user_message("hello"))
+            self.assertEqual(payload["type"], "user")
+            self.assertEqual(payload["message"]["role"], "user")
+            self.assertEqual(payload["message"]["content"][0]["text"], "hello")
+
     def test_codex_text_usage_and_session_map(self):
         with tempfile.TemporaryDirectory() as td:
             ctx = self.context(Path(td))

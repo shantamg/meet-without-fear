@@ -1,0 +1,18 @@
+[Unit]
+Description=Slam Paws Bot Durable Agent Worker
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/meet-without-fear
+ExecStartPre=+/bin/bash -c "mkdir -p /var/log/slam-bot && touch /var/log/slam-bot/jobs-worker.log && chown ubuntu:ubuntu /var/log/slam-bot/jobs-worker.log"
+ExecStart=/bin/bash -c "source /opt/slam-bot/.env && for i in $(seq 1 ${BOT_WORKER_CONCURRENCY:-5}); do PYTHONPATH=/opt/slam-bot/scripts/lib BOT_SCRIPTS_DIR=/opt/slam-bot/scripts python3 -m bot_harness jobs worker & done; wait"
+Restart=always
+RestartSec=5
+TimeoutStopSec=300
+StandardOutput=append:/var/log/slam-bot/jobs-worker.log
+StandardError=append:/var/log/slam-bot/jobs-worker.log
+
+[Install]
+WantedBy=multi-user.target

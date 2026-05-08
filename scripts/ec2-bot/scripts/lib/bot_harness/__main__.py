@@ -7,7 +7,7 @@ import sys
 
 from pathlib import Path
 
-from . import activity_journal, agent_runtime, dispatcher, github_check, queue, run
+from . import activity_journal, agent_runtime, dispatcher, github_check, jobs, queue, run
 from .processes import count_running_agents, count_running_workspace_agents
 from .shared_state import create_queue_entry
 
@@ -21,7 +21,7 @@ def exec_script(name: str, args: list[str]) -> int:
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("usage: python -m bot_harness <run|dispatch|queue|github-check|command>", file=sys.stderr)
+        print("usage: python -m bot_harness <run|dispatch|jobs|queue|github-check|command>", file=sys.stderr)
         return 2
     command = sys.argv[1]
     args = sys.argv[2:]
@@ -31,6 +31,8 @@ def main() -> int:
         return dispatcher.main(args)
     if command == "queue":
         return queue.main(args)
+    if command == "jobs":
+        return jobs.main(args)
     if command == "github-check":
         return github_check.main(args)
     if command == "activity-write":
