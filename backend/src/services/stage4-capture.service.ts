@@ -387,6 +387,7 @@ function isConcreteProposal(description: string): boolean {
   if (/^think we understood each other\b/.test(normalized)) return false;
   if (/^know it was helping if\b/.test(normalized)) return false;
   if (/^stay more present if\b/.test(normalized)) return false;
+  if (/^stay in that if\b/.test(normalized)) return false;
   if (/^agree to (?:these|this|it|that)\b/.test(normalized)) return false;
   if (/^agree to practice it\b/.test(normalized)) return false;
   if (/^try to treat it as\b/.test(normalized)) return false;
@@ -457,7 +458,7 @@ function proposalFamily(value: string): string | null {
     /\b(?:weekly understanding check|weekly 30 minute conversation|weekly thirty minute conversation|thirty minutes|30 minutes)\b/.test(
       normalized
     ) &&
-    /\b(?:mirror|mirrors|mirroring|yes thats what i meant|understanding|fixing|deciding|four weeks|one thing each|one thing|heard|sunday evening|not decide|nothing is being decided)\b/.test(normalized)
+    /\b(?:mirror|mirrors|mirroring|yes thats what i meant|understanding|fixing|deciding|four weeks|one thing each|one thing|one topic|heard|sunday evening|not decide|no decisions|required|nothing is being decided|ground rules|slow down)\b/.test(normalized)
   ) {
     return 'weekly-understanding-check';
   }
