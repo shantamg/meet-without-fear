@@ -200,7 +200,7 @@ function inferProposalKind(text: string): Stage4ProposalKind {
   }
   if (
     /\bone small new thing each month\b/i.test(text) &&
-    /\b(?:adam|eve|they|together|partner|he|she|stays engaged|naming when|comes? back)\b/i.test(text)
+    /\b(?:adam|eve|they|together|stays engaged|naming when|comes? back)\b/i.test(text)
   ) {
     return Stage4ProposalKind.SHARED_PROPOSAL;
   }
@@ -209,7 +209,6 @@ function inferProposalKind(text: string): Stage4ProposalKind {
   }
   if (
     /\b(?:mine alone|individual for me|individual commitment|my commitment|just for me|mine to do)\b/i.test(text) ||
-    /\b(?:user'?s|my|his|her|their)\s+own\s+commitment\b/i.test(text) ||
     /\bcommits?\s+individually\b/i.test(text) ||
     /\b(?:give|giving)\s+(?:myself|herself|himself|themself|themselves)\s+permission\s+to\b/i.test(text) ||
     /\b(?:name|naming)\s+what\s+is\s+happening\s+once\b/i.test(text) ||
@@ -242,7 +241,7 @@ function inferProposalKind(text: string): Stage4ProposalKind {
     /\b(?:journal|journaling|write\s+things?\s+down)\b/i.test(text) &&
       /\b(?:self\s*trust|second\s+guessing|outsourcing\s+(?:my|her|his|their)\s+reality)\b/i.test(text) ||
     /\b(?:return|go(?:ing)?\s+back|pursue|start)\s+(?:to\s+)?individual\s+therapy\b/i.test(text) ||
-    /\bindividual\s+(?:practice\s+for\s+steadiness|steadiness\s+practice)\b/i.test(text) ||
+    /\bindividual\s+practice\s+for\s+steadiness\b/i.test(text) ||
     /\bsomething\s+(?:adam|eve|he|she|they)\s+does\s+on\s+(?:his|her|their)\s+own\b/i.test(text) ||
     /\b(?:running|counseling|therapy|exercise)\b/i.test(text) &&
       /\b(?:steadiness|steady|prove\s+(?:he|she|they|i)'?s\s+okay|on\s+(?:his|her|their|my)\s+own)\b/i.test(text) ||
@@ -259,9 +258,6 @@ function inferProposalKind(text: string): Stage4ProposalKind {
     /\b(?:talk|talking|speak|speaking)\s+to\s+someone\s+(?:outside|other than)\b/i.test(text) ||
     /\b(?:run|walk|exercise)\b/i.test(text) &&
       /\b(?:own time|alone|by myself|for myself|independent|independently)\b/i.test(text) ||
-    /\bonce a month\b/i.test(text) &&
-      /\b(?:(?:i|adam|eve)\s+(?:also\s+)?(?:do|does|try|tries)\s+)?something unfamiliar\b/i.test(text) &&
-      /\b(?:prove|practice|steady|steadiness|change is not always danger)\b/i.test(text) ||
     /\bsaturday\b/i.test(text) &&
       /\b(?:morning|mornings)\b/i.test(text) &&
       /\b(?:protected personal time|own time|walks?|coffee|brother|physical)\b/i.test(text) ||
@@ -269,7 +265,6 @@ function inferProposalKind(text: string): Stage4ProposalKind {
     /\bsaturday\b/i.test(text) &&
       /\b(?:morning|mornings)\b/i.test(text) &&
       /\b(?:hands|project|build|make|making|steady|independent|independently)\b/i.test(text) ||
-    /\bpersonal\s+(?:(?:creative|building|project|making|make)[\s/-]+)+(?:time|block)\b/i.test(text) ||
     /\bclass or trip[-\s]planning block each week\b/i.test(text) &&
       /\b(?:chooses?|chosen|alone|pre[-\s]approval|pre[-\s]justifying|without asking|without waiting)\b/i.test(text) ||
     /\b(?:adam|eve)\s+picks?\s+one small thing\b/i.test(text) ||
@@ -319,10 +314,7 @@ function isConcreteProposal(description: string): boolean {
   if (/^honestly name right now\b/.test(normalized)) return false;
   if (/^work with\b/.test(normalized)) return false;
   if (/^actually try\b/.test(normalized)) return false;
-  if (/^actually imagine is\b/.test(normalized)) return false;
   if (/^try is\b/.test(normalized)) return false;
-  if (/^try one small new thing each month that (?:she|he|they|partner) chooses\b/.test(normalized)) return false;
-  if (/^ask to slow down without disappearing\b/.test(normalized)) return false;
   if (/^ask (?:(?:a few|some)\s+)?questions?\s+before\b/.test(normalized)) return false;
   if (/^ask what helped\b/.test(normalized)) return false;
   if (/^(?:want to learn|learn whether)\b/.test(normalized)) return false;
@@ -344,10 +336,6 @@ function isConcreteProposal(description: string): boolean {
   if (/^want us to pick one thing each of us is carrying\b/.test(normalized)) return false;
   if (/^want to feel\b/.test(normalized) && /\bless alone\b/.test(normalized)) return false;
   if (/^know if i start saying things before i have edited them down\b/.test(normalized)) return false;
-  if (/^need permission to pause\b/.test(normalized)) return false;
-  if (/^need us to be allowed to slow it down\b/.test(normalized)) return false;
-  if (/^need to ask one real question before\b/.test(normalized)) return false;
-  if (/^already be braced\b/.test(normalized)) return false;
   if (/^say what i am reaching for\b/.test(normalized) && /\bwithout either of us turning it into a verdict\b/.test(normalized)) return false;
   if (/^after one month\b/.test(normalized) && /\bcheck\s*in\b/.test(normalized)) return false;
   if (/^(?:try together|a way to check|and a way to check)\b/.test(normalized)) return false;
@@ -358,17 +346,11 @@ function isConcreteProposal(description: string): boolean {
   if (/^like a weekly walk\b/.test(normalized)) return false;
   if (/^say what we heard\b/.test(normalized)) return false;
   if (/^say if i am anxious\b/.test(normalized)) return false;
-  if (/^say i am scared and ask for\b/.test(normalized)) return false;
-  if (/^say i need five minutes\b/.test(normalized)) return false;
   if (/^start this week\b/.test(normalized)) return false;
-  if (/^add that we try it\b/.test(normalized)) return false;
   if (/^want it to be predictable\b/.test(normalized)) return false;
-  if (/^think of is\b/.test(normalized)) return false;
-  if (/^know the rules before\b/.test(normalized)) return false;
   if (/^keep the (?:sunday|weekly|30 minute|thirty minute).*conversation\b/.test(normalized)) return false;
   if (/^choose (?:myself|for myself)\b/.test(normalized)) return false;
   if (/^choose without waiting\b/.test(normalized)) return false;
-  if (/^choose it and see what it feels like\b/.test(normalized)) return false;
   if (/^start by each saying the thing\b/.test(normalized)) return false;
   if (/^both say we feel less alone\b/.test(normalized)) return false;
   if (/^name when i am scared before i shut down\b/.test(normalized)) return false;
@@ -393,7 +375,6 @@ function isConcreteProposal(description: string): boolean {
   if (/^think we understood each other\b/.test(normalized)) return false;
   if (/^know it was helping if\b/.test(normalized)) return false;
   if (/^stay more present if\b/.test(normalized)) return false;
-  if (/^stay in that if\b/.test(normalized)) return false;
   if (/^agree to (?:these|this|it|that)\b/.test(normalized)) return false;
   if (/^agree to practice it\b/.test(normalized)) return false;
   if (/^try to treat it as\b/.test(normalized)) return false;
@@ -405,18 +386,9 @@ function isConcreteProposal(description: string): boolean {
   if (/^feel myself starting to brace\b/.test(normalized)) return false;
   if (/^feel myself wanting to add more\b/.test(normalized)) return false;
   if (/^stay present better if\b/.test(normalized)) return false;
-  if (/^know i am staying with it if\b/.test(normalized)) return false;
-  if (/^feel steady in myself again\b/.test(normalized)) return false;
-  if (/^feel less scared\b/.test(normalized)) return false;
-  if (/^brace before we even start\b/.test(normalized)) return false;
-  if (/^willingness to try something new together\b/.test(normalized)) return false;
-  if (/^saturday mornings walk without phone\b/.test(normalized)) return false;
-  if (/^once a month do something unfamiliar\b/.test(normalized)) return false;
   if (/^show up better then than after work\b/.test(normalized)) return false;
-  if (/^be open to that too\b/.test(normalized)) return false;
   if (/^restart that twice a week\b/.test(normalized) && /\bmaybe meet\b/.test(normalized)) return false;
   if (/\bdevelop something that is (?:his|her|their|my) own outside\b/.test(normalized)) return false;
-  if (/^find something that is (?:mine|his|hers|theirs|yours) outside\b/.test(normalized)) return false;
   if (/^something that is just mine like\b/.test(normalized)) return false;
   if (/^something that is just (?:mine|his|hers|theirs|yours) outside\b/.test(normalized)) return false;
   if (/^take the pause before\b/.test(normalized)) return false;
@@ -426,7 +398,6 @@ function isConcreteProposal(description: string): boolean {
   if (/^know whether it is opening something\b/.test(normalized)) return false;
   if (/^edit it down before it even starts\b/.test(normalized)) return false;
   if (/^not promising it fixes everything\b/.test(normalized)) return false;
-  if (/^(?:adam|eve|partner) responds?\b/.test(normalized) && /\b(?:gladness|instead of interpreting|rejection|failure)\b/.test(normalized)) return false;
   return true;
 }
 
@@ -464,7 +435,7 @@ function proposalFamily(value: string): string | null {
     /\b(?:weekly understanding check|weekly 30 minute conversation|weekly thirty minute conversation|thirty minutes|30 minutes)\b/.test(
       normalized
     ) &&
-    /\b(?:mirror|mirrors|mirroring|yes thats what i meant|understanding|fixing|deciding|four weeks|one thing each|one thing|one topic|heard|sunday evening|not decide|no decisions|required|nothing is being decided|ground rules|slow down)\b/.test(normalized)
+    /\b(?:mirror|mirrors|mirroring|yes thats what i meant|understanding|fixing|deciding|four weeks|one thing each|one thing|heard|sunday evening|not decide|nothing is being decided)\b/.test(normalized)
   ) {
     return 'weekly-understanding-check';
   }
@@ -500,12 +471,6 @@ function proposalFamily(value: string): string | null {
     return 'protected-conversation';
   }
   if (
-    /\bweekly walk\b/.test(normalized) &&
-    /\b(?:one real thing|one true thing|reflect|reflects|responding|not a decision|decision meeting|four week|freezes|freezing)\b/.test(normalized)
-  ) {
-    return 'weekly-walk-understanding';
-  }
-  if (
     /\b(?:individual practice|individual commitment|notice when)\b/.test(normalized) &&
     /\b(?:treating|treat)\b/.test(normalized) &&
     /\bwanting as a verdict\b/.test(normalized) &&
@@ -529,7 +494,7 @@ function proposalFamily(value: string): string | null {
   }
   if (
     /\b(?:monthly experiment|one small new thing each month|small new thing each month)\b/.test(normalized) &&
-    /\b(?:eve chooses|eve initiates|adam stays engaged|she chooses|he chooses|partner chooses|naming when|scared|shutting down|category|details together|three month|check in)\b/.test(normalized)
+    /\b(?:eve chooses|eve initiates|adam stays engaged|naming when|scared|shutting down|category|details together|three month|check in)\b/.test(normalized)
   ) {
     return 'monthly-experiment';
   }
@@ -605,9 +570,6 @@ function proposalFamily(value: string): string | null {
   ) {
     return 'self-editing-checkin';
   }
-  if (/\bvolunteer\s+shift\b/.test(normalized) && /\b(?:this month|again|outside|useful|relationship)\b/.test(normalized)) {
-    return 'volunteer-shift';
-  }
   if (
     /\bprivate\s+(?:weekly\s+)?note\b/.test(normalized) &&
     /\b(?:edited|edit|speaking|spoke|choice|chose|chosen)\b/.test(normalized)
@@ -636,7 +598,7 @@ function proposalFamily(value: string): string | null {
   if (
     /\bsaturday\b/.test(normalized) &&
     /\bmornings?\b/.test(normalized) &&
-    /\b(?:protected personal time|own time|walks?|coffee|brother|physical|no phone|write down|feelings|practice noticing|builds? steadiness)\b/.test(normalized)
+    /\b(?:protected personal time|own time|walks?|coffee|brother|physical)\b/.test(normalized)
   ) {
     return 'saturday-personal-time';
   }
@@ -646,12 +608,6 @@ function proposalFamily(value: string): string | null {
     /\b(?:alone|garage|project|build|make|making|hands|steady|independent|independently)\b/.test(normalized)
   ) {
     return 'saturday-individual-project';
-  }
-  if (
-    /\b(?:walk without (?:my |his |her |their )?phone|something unfamiliar|change is not always danger|practice noticing)\b/.test(normalized) &&
-    /\b(?:steady|steadiness|settle|settled|feelings|noticing|needing (?:eve|adam|partner) to settle)\b/.test(normalized)
-  ) {
-    return 'saturday-personal-time';
   }
   return null;
 }
