@@ -347,6 +347,7 @@ function isConcreteProposal(description: string): boolean {
   if (/^say what we heard\b/.test(normalized)) return false;
   if (/^say if i am anxious\b/.test(normalized)) return false;
   if (/^start this week\b/.test(normalized)) return false;
+  if (/^add that we try it\b/.test(normalized)) return false;
   if (/^want it to be predictable\b/.test(normalized)) return false;
   if (/^keep the (?:sunday|weekly|30 minute|thirty minute).*conversation\b/.test(normalized)) return false;
   if (/^choose (?:myself|for myself)\b/.test(normalized)) return false;
@@ -386,9 +387,12 @@ function isConcreteProposal(description: string): boolean {
   if (/^feel myself starting to brace\b/.test(normalized)) return false;
   if (/^feel myself wanting to add more\b/.test(normalized)) return false;
   if (/^stay present better if\b/.test(normalized)) return false;
+  if (/^know i am staying with it if\b/.test(normalized)) return false;
+  if (/^feel steady in myself again\b/.test(normalized)) return false;
   if (/^show up better then than after work\b/.test(normalized)) return false;
   if (/^restart that twice a week\b/.test(normalized) && /\bmaybe meet\b/.test(normalized)) return false;
   if (/\bdevelop something that is (?:his|her|their|my) own outside\b/.test(normalized)) return false;
+  if (/^find something that is (?:mine|his|hers|theirs|yours) outside\b/.test(normalized)) return false;
   if (/^something that is just mine like\b/.test(normalized)) return false;
   if (/^something that is just (?:mine|his|hers|theirs|yours) outside\b/.test(normalized)) return false;
   if (/^take the pause before\b/.test(normalized)) return false;
@@ -469,6 +473,12 @@ function proposalFamily(value: string): string | null {
     /\b(?:want|curiosity|fear|quiet|shrinking|blame|verdict|timer|timed|minutes?|thirty|30|pause)\b/.test(normalized)
   ) {
     return 'protected-conversation';
+  }
+  if (
+    /\bweekly walk\b/.test(normalized) &&
+    /\b(?:one real thing|one true thing|reflect|reflects|responding|not a decision|decision meeting|four week|freezes|freezing)\b/.test(normalized)
+  ) {
+    return 'weekly-walk-understanding';
   }
   if (
     /\b(?:individual practice|individual commitment|notice when)\b/.test(normalized) &&
