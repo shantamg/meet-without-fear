@@ -81,7 +81,7 @@ import {
   useSubmitTendingResponse,
   useTendingEntries,
 } from '../hooks/useStages';
-import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
+import { deriveEmpathyValidatedIndicator, deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
 import {
   getPersistedMessageRefreshQueryKeys,
@@ -1719,15 +1719,17 @@ export function UnifiedSessionScreen({
     const allIndicators: ChatIndicatorItem[] = [...baseIndicators, ...sharedContentIndicators];
 
     // --- Empathy validated indicator ---
-    if (empathyStatusData?.myAttempt?.status === 'VALIDATED') {
-      allIndicators.push({
-        type: 'indicator' as const,
-        indicatorType: 'empathy-validated' as const,
-        id: 'empathy-validated',
-        timestamp: empathyStatusData.myAttempt.revealedAt
-          || new Date().toISOString(),
-        metadata: { partnerName: partnerName || 'Partner' },
-      });
+    // Pin to the attempt's revealedAt timestamp (stable, set once when partner saw it).
+    // If revealedAt is missing we intentionally skip the indicator rather than fall back
+    // to `new Date()`, which would re-anchor the divider on every render and cause it to
+    // visually slide just above the most-recent AI message on every turn.
+    const empathyValidatedIndicator = deriveEmpathyValidatedIndicator(
+      empathyStatusData?.myAttempt?.status ?? null,
+      empathyStatusData?.myAttempt?.revealedAt ?? null,
+      partnerName || 'Partner'
+    );
+    if (empathyValidatedIndicator) {
+      allIndicators.push(empathyValidatedIndicator);
     }
 
     // --- Stage chapter markers ---
