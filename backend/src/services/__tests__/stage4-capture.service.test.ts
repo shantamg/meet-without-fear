@@ -1635,6 +1635,7 @@ describe('stage4-capture.service', () => {
           "need permission to pause without it meaning I'm leaving the conversation",
           'need us to be allowed to slow it down',
           'need to ask one real question before I defend anything',
+          'already be braced, and if it is open-ended I will start treating it like we have to solve everything',
           'say I need five minutes, and then I come back',
         ],
       })
