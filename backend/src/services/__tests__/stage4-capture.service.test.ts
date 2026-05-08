@@ -1586,6 +1586,47 @@ describe('stage4-capture.service', () => {
     expect(result.appliedOperationCount).toBe(0);
   });
 
+  it('deduplicates live weekly structured conversation variants', async () => {
+    (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+      proposal({
+        description:
+          'Weekly thirty-minute structured conversation with ground rules set beforehand - one topic, no decisions required, either person can say slow down if it feels like a case is being made, focus on understanding first',
+        kind: Stage4ProposalKind.SHARED_PROPOSAL,
+      }),
+    ]);
+
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'That is the same conversation container.',
+        compatibilityProposedStrategies: [
+          'Weekly thirty-minute conversation with ground rules set beforehand—one topic, nothing decided, goal is mutual understanding; ground rules include choosing topic in advance, no decisions required during conversation, either person can ask to slow down if it feels adversarial',
+        ],
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(prisma.strategyProposal.update).toHaveBeenCalledWith({
+      where: { id: 'proposal-1' },
+      data: expect.objectContaining({
+        kind: Stage4ProposalKind.SHARED_PROPOSAL,
+      }),
+    });
+    expect(result.appliedOperationCount).toBe(1);
+    expect(result.skippedOperationCount).toBe(0);
+  });
+
+  it('skips live verdict-staying fragments', async () => {
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'That is not a standalone commitment.',
+        compatibilityProposedStrategies: ['stay in that if it did not feel like a verdict'],
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(result.appliedOperationCount).toBe(0);
+  });
+
   it('deduplicates pause-and-return variants as one shared proposal', async () => {
     (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
       proposal({
