@@ -53,6 +53,7 @@ import {
   useResubmitEmpathy,
   useSkipRefinement,
 } from './useStages';
+import { shouldFetchShareOffer } from '../utils/shareOfferEligibility';
 
 // ============================================================================
 // Types
@@ -320,9 +321,15 @@ export function useUnifiedSession(
     enabled: !!sessionId && !accessDenied && isStage2Plus,
   });
   const { data: shareOfferData } = useShareOffer(sessionId, {
-    enabled: !!sessionId && !accessDenied && currentStage === Stage.PERSPECTIVE_STRETCH,
+    enabled: shouldFetchShareOffer({
+      sessionId,
+      accessDenied,
+      currentStage,
+      ownEmpathyAlreadyConsented: empathyDraftData?.alreadyConsented,
+      ownEmpathyAttempt: empathyStatusData?.myAttempt,
+    }),
   });
-  const { mutate: respondToShareOffer } = useRespondToShareOffer();
+  const { mutate: respondToShareOffer, isPending: isRespondingToShareOffer } = useRespondToShareOffer();
 
   // -------------------------------------------------------------------------
   // Mutation Hooks
@@ -414,6 +421,7 @@ export function useUnifiedSession(
     sendMessage: streamingSendMessage,
     isSending,
     isStreaming,
+    failedMessageContent,
   } = useStreamingMessage({
     onMetadata: handleStreamMetadata,
     onError: handleStreamError,
@@ -1203,6 +1211,7 @@ export function useUnifiedSession(
     inlineCards,
     isSending,
     isStreaming,
+    failedMessageContent,
     isSigningCompact,
     isConfirmingFeelHeard,
     isConfirmingInvitation,
@@ -1272,6 +1281,7 @@ export function useUnifiedSession(
     isSavingEmpathyDraft,
     isSharingEmpathy,
     isResubmittingEmpathy,
+    isRespondingToShareOffer,
     isProposing,
     isConfirmingNeeds,
 

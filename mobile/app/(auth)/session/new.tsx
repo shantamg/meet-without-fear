@@ -32,8 +32,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCreateSession } from '@/src/hooks/useSessions';
 import { usePeople } from '@/src/hooks/usePerson';
 import { useGenerateContext } from '@/src/hooks/useInnerThoughts';
+import { NotificationPermissionDrawer } from '@/src/components/NotificationPermissionDrawer';
 import { colors } from '@/src/theme';
 import { trackSessionCreated, trackPersonSelected } from '@/src/services/analytics';
+import {
+  getNotificationPermissionStatus,
+  requestAndRegisterForPushNotifications,
+} from '@/src/services/notifications';
 import type { PersonSummaryDTO, GenerateContextResponse } from '@meet-without-fear/shared';
 
 // ============================================================================
@@ -53,6 +58,9 @@ export default function NewSessionScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [innerThoughtsContext, setInnerThoughtsContext] = useState<GenerateContextResponse | null>(null);
+  const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState<(() => Promise<void>) | null>(null);
 
   const { data: people = [], isLoading: peopleLoading } = usePeople();
   const { mutateAsync: createSession, isPending } = useCreateSession();
@@ -94,7 +102,7 @@ export default function NewSessionScreen() {
   // Effective mode: if no people exist, treat as 'new' regardless of state
   const effectiveMode = hasPeople ? mode : 'new';
 
-  const handleSubmit = async () => {
+  const createSessionFromForm = async () => {
     // Build optional context and innerThoughtsId for session creation
     const context = innerThoughtsContext?.contextSummary;
     const linkedInnerThoughtsId = innerThoughtsId;
@@ -167,10 +175,49 @@ export default function NewSessionScreen() {
     }
   };
 
+  const handleSubmit = async () => {
+    try {
+      if ((await getNotificationPermissionStatus()) === 'undetermined') {
+        setPendingSubmit(() => createSessionFromForm);
+        setShowNotificationDrawer(true);
+        return;
+      }
+    } catch (error) {
+      console.warn('Failed to check notification permission:', error);
+    }
+
+    await createSessionFromForm();
+  };
+
+  const continueAfterNotificationChoice = async () => {
+    const submit = pendingSubmit;
+    setPendingSubmit(null);
+    setShowNotificationDrawer(false);
+    if (submit) {
+      await submit();
+    }
+  };
+
+  const handleEnableNotifications = async () => {
+    setNotificationLoading(true);
+    try {
+      await requestAndRegisterForPushNotifications();
+    } finally {
+      setNotificationLoading(false);
+    }
+    await continueAfterNotificationChoice();
+  };
+
   const canSubmit = effectiveMode === 'pick' ? !!selectedPerson : !!firstName.trim();
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      <NotificationPermissionDrawer
+        visible={showNotificationDrawer}
+        loading={notificationLoading}
+        onEnable={handleEnableNotifications}
+        onSkip={continueAfterNotificationChoice}
+      />
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

@@ -1,0 +1,133 @@
+{
+  "checks": [
+    {
+      "details": "Stable transcripts must not expose internal micro-tags or control tags.",
+      "dimension": "visible_text",
+      "evidence": [],
+      "id": "no_visible_internal_control_tags",
+      "owner": "product_code",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "Stable transcript files must exist for every expected side/stage and carry matching metadata.",
+      "dimension": "transcript_extraction",
+      "evidence": [],
+      "id": "transcript_side_stage_complete",
+      "owner": "eval_harness",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "Transcript artifacts must include visible CTA/input state metadata or an explicit captured-state note.",
+      "dimension": "transcript_extraction",
+      "evidence": [],
+      "id": "cta_input_visibility_state_sane",
+      "owner": "eval_harness",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "Fresh invitee Stage 0 transcripts must preserve the visible topic/process handoff card shown before the invitee opener.",
+      "dimension": "transcript_extraction",
+      "evidence": [],
+      "id": "invitee_topic_handoff_transcribed",
+      "owner": "eval_harness",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "Stable transcript separator blocks must carry explicit labels so private suggestions and shared events are not confused.",
+      "dimension": "transcript_extraction",
+      "evidence": [],
+      "id": "transcript_shared_context_blocks_labeled",
+      "owner": "eval_harness",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "A transcript must not label the current user's own share suggestion as incoming partner-shared context.",
+      "dimension": "transcript_extraction",
+      "evidence": [],
+      "id": "shared_context_directionality_consistent",
+      "owner": "eval_harness",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "Stable transcripts must not expose internal reconciler analysis, alignment scores, or action labels.",
+      "dimension": "transcript_extraction",
+      "evidence": [],
+      "id": "no_internal_reconciler_analysis",
+      "owner": "eval_harness",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "First slice checks explicit leak markers; richer structured leakage checks need DB event metadata.",
+      "dimension": "privacy",
+      "evidence": [],
+      "id": "no_partner_private_content_leakage",
+      "owner": "product_code",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "Every scenario side must reach the requested stage limit, a completed state, or a no-action partner wait at the requested stop stage.",
+      "dimension": "actor_orchestration",
+      "evidence": [],
+      "id": "stage_limit_reached_correctly",
+      "owner": "eval_harness",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "Actor status blocks must match the side assigned by the orchestrator.",
+      "dimension": "actor_fidelity",
+      "evidence": [],
+      "id": "actor_operated_correct_side",
+      "owner": "actor_skill",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "Fresh gold-loop sessions should start with the participant identified by the gold profile's Stage 0 initiation evidence.",
+      "dimension": "actor_orchestration",
+      "evidence": [],
+      "id": "fresh_session_starts_with_profile_initiator",
+      "owner": "eval_harness",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "A live Stage 1 felt-heard gate should not appear before any substantive transcript context.",
+      "dimension": "stage_gates",
+      "evidence": [],
+      "id": "felt_heard_gate_after_substantive_witnessing",
+      "owner": "product_code",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "Stable Stage 1 transcripts must make the user's explicit feel-heard confirmation auditable.",
+      "dimension": "transcript_extraction",
+      "evidence": [],
+      "id": "stage1_felt_heard_confirmation_transcribed",
+      "owner": "eval_harness",
+      "severity": "hard",
+      "status": "pass"
+    },
+    {
+      "details": "If visible copy invites the user to keep talking, transcript state must show a visible/enabled textbox.",
+      "dimension": "ui_state",
+      "evidence": [],
+      "id": "chat_copy_promises_visible_input",
+      "owner": "product_code",
+      "severity": "hard",
+      "status": "pass"
+    }
+  ],
+  "hard_failures": [],
+  "schema_version": 1,
+  "status": "pass"
+}

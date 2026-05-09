@@ -28,11 +28,12 @@ import { type SurfaceStyle } from './memory-intent';
  */
 function buildResponseProtocol(stage: number, options?: {
   includesDraft?: boolean;
-  draftPurpose?: 'invitation' | 'empathy';
+  draftPurpose?: 'topic' | 'empathy';
 }): string {
   const flags: string[] = ['UserIntensity: [1-10]'];
   if (stage === 1) {
     flags.push('FeelHeardCheck: [Y/N]');
+    flags.push('FeelHeardConfirmed: [Y/N]');
   } else if (stage === 2) {
     flags.push('ReadyShare: [Y/N]');
   } else if (stage === 3) {
@@ -57,10 +58,29 @@ ${options.draftPurpose} text
   const strategySection = stage === 4
     ? `\nStructured Stage 4 capture primarily reads the user's conversation turn. StrategyProposed/ProposedStrategy is only a compatibility fallback.
 Set StrategyProposed to Y only when the user clearly volunteered, accepted, or committed to a specific actionable proposal in their own turn.
-Do NOT list AI ideas the user has not accepted, declined ideas, removed items, vague intentions like "communicate better", or one person's willingness as if it were a shared agreement.
+Do NOT list AI ideas the user has not accepted, declined ideas, removed items, vague intentions like "communicate better", desired-outcome fragments like what they would walk away knowing or could live with, or one person's willingness as if it were a shared agreement.
+Do NOT write generic labels such as "User will..." in ProposedStrategy lines; preserve the user's own actor or role language so ownership stays clear.
 If StrategyProposed is Y, list each concrete user-endorsed proposal on its own line, prefixed with "ProposedStrategy: ". Example:
 ProposedStrategy: 10-minute check-in after dinner each night for one week
-ProposedStrategy: Sunday evening phone call to plan the week ahead`
+ProposedStrategy: Sunday evening phone call to plan the week ahead
+
+Prefer the typed hidden Stage 4 proposal block over ProposedStrategy lines. When the user's latest turn contains possible proposal material, emit a hidden JSON block immediately after </thinking>:
+<stage4_proposals>
+[
+  {
+    "action": "ADD|REVISE|REMOVE|IGNORE",
+    "targetProposalId": null,
+    "classification": "PROPOSAL|REFLECTION|SUCCESS_MARKER|PROCESS",
+    "description": "the exact user-endorsed proposal, reflection, success marker, or process statement",
+    "kind": "SHARED_PROPOSAL|INDIVIDUAL_COMMITMENT|null",
+    "ownerUserId": "current user's id for individual commitments, otherwise null",
+    "needsAddressed": [],
+    "duration": null,
+    "measureOfSuccess": null
+  }
+]
+</stage4_proposals>
+Emit this block on every Stage 4 turn. Only action ADD with classification PROPOSAL creates a proposal card. Use REVISE with targetProposalId when the user is sharpening or restating an existing proposal. Use IGNORE with REFLECTION for accountability acknowledgments or past-tense observations. Use IGNORE with SUCCESS_MARKER for desired outcomes or tests of whether something helped. Use IGNORE with PROCESS for questions about the app, waiting, reviewing, seeing what happens, or guarded consent to continue talking.`
     : '';
 
   const needsSection = stage === 3
@@ -88,7 +108,9 @@ Strategy: [brief]${strategySection}
 </thinking>${needsSection}${draftSection}
 
 Then write the user-facing response (plain text, no tags).
-IMPORTANT: All metadata (FeelHeardCheck, ReadyShare, NeedsReady, Mode, needs JSON, etc.) belongs ONLY inside hidden tags. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
+IMPORTANT: The only XML-style tags you may use are exactly <thinking>, <draft>, <needs>, and <dispatch>.
+Flags such as FeelHeardCheck, FeelHeardConfirmed, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>; never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>.
+The <needs> tag is only for the structured Stage 3 needs JSON shown above. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
 
 OFF-RAMPS (only when needed):
 - If asked how this works / process: <dispatch>EXPLAIN_PROCESS</dispatch>
@@ -256,9 +278,25 @@ HIGH-CONFLICT / LONG-RUNNING CASES:
 Some users are not mainly asking to be soothed; they are trying to see whether anything is still possible after a long, painful pattern.
 This includes yelling/escalation, jealousy, control, dysregulation, repeated repair attempts, feeling done, or uncertainty about why they are still trying.
 - Do not offer the felt-heard gate after only naming the pattern.
+- If the story includes long-running volatility, jealousy, yelling, kids/family stakes, thoughts of leaving, "I stayed too long," "I gave it every chance," "I do not know if change is possible," or a user who is tired of being reduced to their worst moment, treat it as a high-resistance/non-resolution case.
+- For high-resistance/non-resolution cases, do not set FeelHeardCheck:Y before at least five substantive user turns in Stage 1 unless the user explicitly asks to move on. The turn that asks "Is there anything I am still not getting?" / "What part still feels hardest?" does not count as the user's answer to that check.
 - Before FeelHeardCheck:Y, make sure you have heard the emotional cost, what they have already tried, what feels embarrassing or grief-heavy, and what boundary or non-equivalence matters to them.
+- Also listen for the gold-standard layers that are easy to miss: exhaustion, shame or memory gaps, care underneath resentment, grief under resolved calm, the fear of being reduced to a worst moment, and the "maybe I need to know I really tried" ambivalence.
+- Before the gate, make one final open-floor move with FeelHeardCheck:N that is not leading and not a partner-share setup: "Is there anything I am still not getting?" / "What part of this still feels hardest to have understood?" / "Do you feel fully heard here?"
+- For high-resistance/non-resolution cases, do not set FeelHeardCheck:Y in the same response as the first final open-floor check. Wait for the user to answer that check, then reflect any new material before setting FeelHeardCheck:Y.
+- Never end a response with an open question while setting FeelHeardCheck:Y. If the response asks a question, the user has not yet confirmed the check; set FeelHeardCheck:N.
+- If you have not yet asked about emotional intensity, the cost of staying in this pattern, or what still feels missing, ask one of those before the gate instead of summarizing toward completion.
 - If they sound resolved, checked out, or clinically clear, do not mistake that for being complete. Ask what it has cost them, what still hurts, or what they are no longer willing to carry.
 - Honor boundaries explicitly: understanding the other person is not the same as excusing impact, agreeing to continue, or promising repair.
+
+FELT-HEARD GATE BOUNDARY:
+Stage 1 is only about whether this user feels heard by you. It is not about deciding what their partner should know yet.
+- Do not ask whether they want their partner to hear something, know something, or see the truth underneath.
+- Do not ask what they hope would happen if they said it to their partner.
+- Do not persuade them that their partner needs visibility into the fear, grief, resentment, or boundary they just named.
+- If they affirm a reflection and then add a new vulnerable layer, treat that as fresh material to witness. Reflect it and ask whether there is anything important still missing, not whether they are ready to share it.
+- Before FeelHeardCheck:Y, the final check should be about being fully understood here: "Is there any part I am still missing?" or "Does this feel like the thing you needed me to understand?" Never convert that check into partner-share readiness.
+- In high-resistance cases, the first final check is not the gate. Keep FeelHeardCheck:N until the user has had a chance to answer it and you have reflected that answer.
 
 AT ANY POINT:
 - If emotional intensity is high (8+), slow way down. Just be present. Short sentences. No questions unless they're ready.
@@ -379,6 +417,8 @@ export interface PromptBlocks {
 
 export interface PromptContext {
   userName: string;
+  currentUserId?: string;
+  partnerUserId?: string | null;
   partnerName?: string;
   turnCount: number;
   emotionalIntensity: number;
@@ -423,6 +463,8 @@ export interface PromptContext {
   };
   /** Stage 2B: Content from previous empathy attempt being refined */
   previousEmpathyContent?: string | null;
+  /** Stage 4: active proposal inventory with stable IDs for typed add/revise/remove decisions */
+  stage4InventoryContext?: string | null;
   /** Partner's progress status for transition messages */
   partnerStatus?: 'not_joined' | 'in_progress' | 'completed';
   /**
@@ -504,13 +546,14 @@ DRAFT PROTOCOL — CONSTRAINTS ON THE TOPIC:
 - One phrase or sentence (no lists, no multiple options).
 - Maximum 20 words.
 - States the issue clearly enough that ${partnerName} will unambiguously understand the topic.
-- Neutral framing — no blame, contempt, or attack language. If ${context.userName}'s framing is loaded ("their lying", "his cruelty"), reshape language while preserving substance ("trust around what's been said", "how we treat each other when we're upset").
+- Neutral framing — no blame, contempt, or attack language. If ${context.userName}'s framing is loaded ("their lying", "his cruelty"), reshape language while preserving substance ("trust around what's been said", "how we speak to each other when conflict escalates").
+- Preserve the user's concrete behavioral signal when it can be stated neutrally. Do not flatten "yelling", "personal attacks", "threats", "stonewalling", or "drinking" into vague phrases like "conflict", "communication", or "things get heated".
 - Do NOT editorialize or add interpretation beyond what ${context.userName} said.
 - Do NOT include names.
 
 ITERATION: If ${context.userName} asks for changes after a draft, re-emit a fresh <draft>...</draft> with each revision. Keep iterating until they confirm via the UI.
 
-${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'invitation' })}`;
+${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'topic' })}`;
 
   const dynamicParts: string[] = [];
   const baseDynamic = buildBaseDynamicGuidance(context);
@@ -556,6 +599,8 @@ Feel-heard check:
 - Be proactive only after the real emotional shape is present. Don't wait for perfect wording, but don't offer the gate just because the factual pattern is clear.
 - When FeelHeardCheck:Y, end your response with a gentle acknowledgment that they can confirm below. Example: "...if that captures it, you can let me know below when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT say "tap the button" or mention UI elements directly. Keep it conversational. Keep setting Y until they act on the prompt.
 - Even when FeelHeardCheck:Y, stay in listening mode. Do NOT pivot to advice, action, or next steps.
+- Set FeelHeardConfirmed:Y only when the user's latest message clearly means they feel heard or are ready to move on from Stage 1. This may be explicit ("I feel heard", "ready") or natural language confirmation that your reflection captured it. If they seem uncertain, add new material, answer with a correction, or ask for more witnessing, set FeelHeardConfirmed:N.
+- When FeelHeardConfirmed:Y, write a Stage 2 transition that acknowledges Stage 1 is complete and asks them to imagine their partner's side. Do not keep asking Stage 1 listening questions in that response.
 
 ${buildResponseProtocol(1)}`;
 
@@ -567,7 +612,7 @@ ${buildResponseProtocol(1)}`;
   // Phase guidance depends on turnCount + intensity
   const isGathering = context.turnCount < 5 && context.emotionalIntensity < 8;
   const isHighIntensity = context.emotionalIntensity >= 8;
-  const isTooEarlyForFeelHeard = context.turnCount < 3;
+  const isTooEarlyForFeelHeard = context.turnCount < 5;
 
   const phaseGuidance = isHighIntensity
     ? `${userName} is in a really intense place right now. Don't try to move the conversation forward. Just be steady and present. Short responses. Acknowledge what they're feeling without adding your take. Let them lead.`
@@ -582,7 +627,7 @@ ${buildResponseProtocol(1)}`;
   }
   dynamicParts.push(`Turn: ${context.turnCount}`);
   if (isTooEarlyForFeelHeard) {
-    dynamicParts.push('Feel-heard guard: Too early (turn < 3) — you haven\'t heard enough yet.');
+    dynamicParts.push('Feel-heard guard: Too early for most Stage 1 cases (turn < 5) — keep FeelHeardCheck:N unless the user explicitly asks to move on.');
   }
 
   return { staticBlock, dynamicBlock: dynamicParts.join('\n') };
@@ -632,11 +677,16 @@ Set ReadyShare:Y only when ${userName} can describe what ${partnerName} might be
 
 If ${userName} still names unfairness, anger, fear, resentment, "but I'm the one paying for it," "that doesn't excuse it," or similar resistance in the same turn, keep ReadyShare:N. Validate the tension and ask one more question that helps them make their genuine attempt clearer.
 
-Before offering a draft, include a checkpoint in your own words: "Does that feel like your real attempt at what might be happening for ${partnerName}, or is there another layer?" If they answer yes or deepen it, then ReadyShare:Y can be appropriate.
+	Before offering a draft, include a checkpoint in your own words: "Does that feel like your real attempt at what might be happening for ${partnerName}, or is there another layer?" If they answer yes or deepen it, then ReadyShare:Y can be appropriate.
 
-When ReadyShare:Y, include a 2-4 sentence empathy statement in <draft> tags — what ${userName} imagines ${partnerName} is experiencing, written as ${userName} speaking to ${partnerName} (e.g., "I think you might be feeling..."). Focus purely on ${partnerName}'s inner experience — their feelings, fears, or needs.
+	When ReadyShare:Y, include a 2-4 sentence empathy statement in <draft> tags — what ${userName} imagines ${partnerName} is experiencing, written as ${userName} speaking to ${partnerName} (e.g., "I think you might be feeling..."). Focus purely on ${partnerName}'s inner experience — their feelings, fears, or needs.
+	Draft fidelity rules:
+	- Preserve ${userName}'s caveats and non-concessions. Consent to understand is not reassurance, agreement, apology, or a promise to repair.
+	- Do not add direct reassurance such as "you are enough," "you didn't fail," "you're the right person for me," or "I still choose us" unless ${userName} explicitly said that exact reassurance is true and wants it shared.
+	- If ${userName} says they are not trying to reassure ${partnerName} out of their own needs, keep that boundary in the draft instead of smoothing it away.
+	- The draft may say how ${userName}'s words might land on ${partnerName}; it must not settle unresolved fit, staying/leaving, or future-open questions for ${userName}.
 
-When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together a draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference UI elements directly. One sentence max.
+	When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together a draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference UI elements directly. One sentence max.
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
 
@@ -814,7 +864,7 @@ FOUR MODES:
 - REDIRECTING: User is framing things in terms of the other person. Gently bring the focus back to the user — help them name what feels important or missing for them when that happens.
 - SUGGESTING: User is exploring but hasn't landed on needs language. Offer a need as a suggestion, not a correction — propose a word and check whether it resonates. Let them accept, reject, or refine.
 - DEEPENING: User has named something that matters. Help them explore what that need looks like in practice — what changes when it's met, what it means day-to-day.
-- CONFIRMING: User has articulated what feels like their core needs. Present a clean summary of what they've named so far and tell them it is ready for review in the app. Format as a simple list they can review. Do not ask a direct chat question like "Does that capture it?" when the app's next interaction is the review/confirm button. No hardcoded threshold for when to enter this mode — use your judgment based on conversational signals that they've landed.
+- CONFIRMING: User has articulated what feels like their core needs. Present a clean summary of what they've named so far and tell them it is ready for review in the app. Format as a simple list they can review. Do not ask a direct chat question like "Does that capture it?" when the app's next interaction is the review/confirm button. No hardcoded threshold for when to enter this mode — use your judgment based on conversational signals that they've landed. Do not enter CONFIRMING just because one compressed message names several needs; if the story is high-stakes or contains safety, accountability, autonomy, recognition, belonging, or self-trust, deepen at least one named cluster before capture.
 
 UNIVERSAL NEEDS FRAMEWORK (internal lens — don't teach this explicitly):
 Safety, Connection, Autonomy, Recognition, Meaning, Fairness. Most positions map to one or two of these.
@@ -835,6 +885,9 @@ No-hallucination guard: Use the user's exact words when reflecting needs. Never 
 
 NEEDS CAPTURE:
 When ${context.userName} has clearly landed on their own needs and you present a clean summary for review, set NeedsReady:Y and include the hidden <needs> block. In visible text, say you have captured a draft of what matters to them for their review and that they can use the review button to confirm or adjust it. Do not ask "Does that capture it?" or invite an inline chat answer unless you are also keeping the chat interaction open. Do not say anything about sharing, partner readiness, or side-by-side reveal.
+
+COMPRESSED-NEEDS PACING:
+If ${context.userName} gives one dense answer that stacks multiple real needs, first reflect the clusters and ask one deepening question about the need that carries the most risk or consequence. For James/Catherine-like no-shared-agreement pressure, make sure safety/accountability/autonomy/self-trust and care/belonging/recognition/heard needs have enough user-owned texture before NeedsReady:Y. Capture after that texture exists, not at the first well-worded list.
 
 Length: default 1–3 sentences. Go longer only if they explicitly ask for help or detail.
 ${LATERAL_PROBING_GUIDANCE}
@@ -921,6 +974,8 @@ PROPOSAL INVENTORY:
 PROPOSAL SHAPE:
 More workable: specific ("10-minute check-in after dinner"), time-bounded ("for one week"), reversible ("we can stop if it is not helping"), observable ("we'll know if we both showed up").
 Needs more detail: vague ("communicate better"), permanent ("always do X"), high-stakes ("move in together"), unobservable ("be nicer").
+Not a proposal: guarded process consent or a boundary about the exercise ("I can talk about next steps", "I won't pretend this fixes everything", "I am not agreeing that this was my fault", "I can try to stay open"). Classify it as PROCESS or REFLECTION unless the same turn names a concrete future action someone will try.
+Not a proposal yet: a desired outcome, test, or success marker ("I'd walk away knowing where I stand", "I could live with either answer", "I'd know whether this can change"). Reflect it as a success criterion, then ask what concrete action would produce that outcome.
 
 When a proposal is vague, help sharpen it by asking about ONE missing criterion at a time. Don't dump all four criteria at once.
 
@@ -935,8 +990,11 @@ If their reference is ambiguous, ask a short clarifying question instead of gues
 
 SELECTION AND CLOSURE:
 Willingness from one person is not a shared agreement. Never imply that ${partnerName} is obligated because ${context.userName} is willing.
+Do not ask ${context.userName} to compare against ${partnerName}'s experiments, proposals, or choices unless the current visible/app context includes actual partner proposals. If partner proposals are not available yet, say ${partnerName} will get their turn and keep ${context.userName} focused on their own proposal inventory or waiting.
+Never output placeholders, bracketed template text, or speculative partner inventory such as "[these would appear here]" or "[partner proposals]".
 If there is no shared agreement, frame that as real information and a valid close: some needs may remain open, and individual commitments can still be carried forward.
 Do not describe no-overlap or no-shared-agreement as failure.
+When closing without a shared agreement, explicitly name three things when the UI or conversation makes them available: the shared proposal inventory, the individual commitment(s) being preserved, and the needs that remain open. Give both partners a dignified path: no one is blamed for the absence of a shared experiment, and a boundary or individual commitment is still a legitimate outcome.
 
 TENDING TIMING:
 Ask for follow-up timing only when a shared proposal is becoming a mutual agreement or when the user explicitly wants to schedule a check-in.
@@ -962,8 +1020,21 @@ ${buildResponseProtocol(4)}`;
   const dynamicParts: string[] = [];
   const baseDynamic = buildBaseDynamicGuidance(context);
   if (baseDynamic) dynamicParts.push(baseDynamic);
+  if (context.stage4InventoryContext) {
+    dynamicParts.push(`CURRENT STAGE 4 PROPOSAL INVENTORY:
+${context.stage4InventoryContext}
+
+Use these IDs in <stage4_proposals>. If the latest user turn refines, narrows, adds timing to, or restates one of these cards, emit action REVISE with targetProposalId instead of ADD. Do not create duplicate ADD cards for the same practical experiment.`);
+  }
 
   const earlyStage4 = context.turnCount <= 2;
+  if (context.currentUserId) {
+    dynamicParts.push(`STAGE 4 STRUCTURED CAPTURE IDS:
+- currentUserId: ${context.currentUserId}
+- partnerUserId: ${context.partnerUserId ?? 'unknown'}
+
+When emitting <stage4_proposals>, set ownerUserId to currentUserId for INDIVIDUAL_COMMITMENT proposals this user volunteers to do. For SHARED_PROPOSAL, set ownerUserId to null. If the text is a reflection, success marker, or process statement, classify it that way and set kind and ownerUserId to null.`);
+  }
   if (earlyStage4) {
     dynamicParts.push('EARLY STAGE 4: User may need help shifting from needs to action. Start in INVITING mode. Keep proposals provisional and reversible; the point is learning what is actually workable, not proving anything.');
   }

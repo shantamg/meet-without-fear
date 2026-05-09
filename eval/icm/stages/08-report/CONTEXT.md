@@ -23,4 +23,6 @@ Copy the final report to `cycles/<cycle-id>/cycle-report.md`.
 
 ## Audit
 
-The report must include run dirs, scores, invariant status, fixes, tests, reruns, cleanup status, remaining risks, and human decisions. It must separate product, prompt, and eval-machine changes.
+The report must include run dirs, scores, invariant status, fixes, tests, reruns, cleanup status, remaining risks, and human decisions. It must separate product, prompt, eval-machine, snapshot-registry, and prompt-version changes.
+
+For snapshot replay, include snapshot id/name/path, restored session id, target behavior, why replay was sufficient for the repair, and what still requires a fresh or full-flow gate.

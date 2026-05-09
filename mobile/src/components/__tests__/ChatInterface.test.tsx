@@ -10,6 +10,7 @@ import { Text } from 'react-native';
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { render } from '../../utils/test-utils';
 import { ChatInterface } from '../ChatInterface';
+import { ChatBubble } from '../ChatBubble';
 import { MessageDTO, MessageRole, Stage } from '@meet-without-fear/shared';
 
 // ============================================================================
@@ -41,8 +42,9 @@ jest.mock('../TypewriterText', () => {
   return {
     TypewriterText: ({ text, onComplete }: { text: string; onComplete?: () => void }) => {
       React.useEffect(() => {
+        if (text.includes('[hold-animation]')) return;
         onComplete?.();
-      }, [onComplete]);
+      }, [onComplete, text]);
       return <Text testID="typewriter-text">{text}</Text>;
     },
   };
@@ -341,6 +343,60 @@ describe('ChatBubble', () => {
     expect(bubble).toBeTruthy();
   });
 
+  it('hides queued live AI messages until their typewriter turn', () => {
+    render(
+      <ChatBubble
+        message={{
+          id: 'queued-ai',
+          role: MessageRole.AI,
+          content: 'Queued AI response',
+          timestamp: new Date().toISOString(),
+          skipTypewriter: false,
+        }}
+        enableTypewriter
+      />
+    );
+
+    expect(screen.getByTestId('chat-bubble-queued-ai')).toBeTruthy();
+    expect(screen.queryByText('Queued AI response')).toBeNull();
+    expect(screen.queryByTestId('typewriter-text')).toBeNull();
+  });
+
+  it('hides queued live system messages until their fade-in turn', () => {
+    render(
+      <ChatBubble
+        message={{
+          id: 'queued-system',
+          role: MessageRole.SYSTEM,
+          content: 'Queued system transition',
+          timestamp: new Date().toISOString(),
+          skipTypewriter: false,
+        }}
+        enableTypewriter
+      />
+    );
+
+    expect(screen.getByTestId('chat-bubble-queued-system')).toBeTruthy();
+    expect(screen.queryByText('Queued system transition')).toBeNull();
+  });
+
+  it('renders history messages immediately without animation', () => {
+    render(
+      <ChatBubble
+        message={{
+          id: 'history-ai',
+          role: MessageRole.AI,
+          content: 'Loaded history response',
+          timestamp: new Date().toISOString(),
+          skipTypewriter: true,
+        }}
+        enableTypewriter
+      />
+    );
+
+    expect(screen.getByText('Loaded history response')).toBeTruthy();
+  });
+
   it('displays message content correctly', () => {
     const messages = [
       createMockMessage({ id: '1', content: 'This is a test message with special characters: @#$%' }),
@@ -349,6 +405,100 @@ describe('ChatBubble', () => {
     render(<ChatInterface messages={messages} onSendMessage={jest.fn()} />);
 
     expect(screen.getByText('This is a test message with special characters: @#$%')).toBeTruthy();
+  });
+
+  it('renders an assistant message immediately once the user has replied after it', () => {
+    const baseTime = new Date('2026-05-07T06:58:00Z').getTime();
+    const initialMessages = [
+      createMockMessage({
+        id: 'user-before',
+        role: MessageRole.USER,
+        content: 'First user turn',
+        timestamp: new Date(baseTime).toISOString(),
+      }),
+    ];
+
+    const { rerender } = render(
+      <ChatInterface
+        messages={initialMessages}
+        onSendMessage={jest.fn()}
+        sessionId="answered-assistant-test"
+      />
+    );
+
+    rerender(
+      <ChatInterface
+        messages={[
+          ...initialMessages,
+          createMockMessage({
+            id: 'assistant-answered',
+            role: MessageRole.AI,
+            content: 'Assistant text should stay visible',
+            timestamp: new Date(baseTime + 1000).toISOString(),
+          }),
+          createMockMessage({
+            id: 'user-after',
+            role: MessageRole.USER,
+            content: 'Follow-up user turn',
+            timestamp: new Date(baseTime + 2000).toISOString(),
+          }),
+        ]}
+        onSendMessage={jest.fn()}
+        sessionId="answered-assistant-test"
+      />
+    );
+
+    expect(screen.getByText('Assistant text should stay visible')).toBeTruthy();
+  });
+
+  it('unlocks the animation queue when the user replies before the current assistant animation finishes', async () => {
+    const baseTime = new Date('2026-05-07T07:03:00Z').getTime();
+    const initialMessages = [
+      createMockMessage({
+        id: 'assistant-still-animating',
+        role: MessageRole.AI,
+        content: 'Initial assistant text [hold-animation]',
+        timestamp: new Date(baseTime).toISOString(),
+      }),
+    ];
+
+    const { rerender } = render(
+      <ChatInterface
+        messages={initialMessages}
+        onSendMessage={jest.fn()}
+        sessionId="stale-animation-lock-test"
+        skipInitialHistory
+      />
+    );
+
+    expect(screen.getByText('Initial assistant text [hold-animation]')).toBeTruthy();
+
+    rerender(
+      <ChatInterface
+        messages={[
+          ...initialMessages,
+          createMockMessage({
+            id: 'user-interrupts-animation',
+            role: MessageRole.USER,
+            content: 'User replies before animation completes',
+            timestamp: new Date(baseTime + 1000).toISOString(),
+          }),
+          createMockMessage({
+            id: 'assistant-after-interrupt',
+            role: MessageRole.AI,
+            content: 'Next assistant text should not be hidden',
+            timestamp: new Date(baseTime + 2000).toISOString(),
+          }),
+        ]}
+        onSendMessage={jest.fn()}
+        sessionId="stale-animation-lock-test"
+        skipInitialHistory
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Next assistant text should not be hidden')).toBeTruthy();
+    });
   });
 
   it('handles long messages correctly', () => {

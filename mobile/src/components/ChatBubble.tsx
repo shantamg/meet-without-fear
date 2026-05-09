@@ -110,9 +110,17 @@ export function ChatBubble({
   // Determine if we should use fade-in effect (non-AI, non-USER messages that should animate)
   const shouldUseFadeIn = !isUser && !isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
 
-  // Track whether this message is next to animate (callback is provided)
-  // This allows the effect to re-run when the message becomes "next"
+  // Track whether this message is next to animate (callback is provided).
+  // Animatable live messages that are not next stay hidden so they do not pop
+  // in fully rendered before their queued animation turn.
   const isNextToAnimate = onAnimationStart !== undefined;
+  const isWaitingForAnimationTurn =
+    !isUser &&
+    enableTypewriter &&
+    !message.skipTypewriter &&
+    !hasAnimatedRef.current &&
+    !isNextToAnimate &&
+    !hasStartedRef.current;
 
   // Handle fade-in animation for non-typewriter messages
   // Only starts when this message is next in the animation queue (onAnimationStart is provided)
@@ -237,6 +245,10 @@ export function ChatBubble({
   const isFadeInAnimating = willAnimate && !hasAnimatedRef.current && isNextToAnimate;
 
   const renderContent = () => {
+    if (isWaitingForAnimationTurn) {
+      return null;
+    }
+
     // Empathy statements - use fade-in for new messages
     if (isEmpathyStatement) {
       const deliveryStatus = message.sharedContentDeliveryStatus;
@@ -316,10 +328,6 @@ export function ChatBubble({
     // Use typewriter effect for new AI messages - animates word-by-word at consistent pace
     // This normalizes display speed regardless of how fast streaming arrives
     if (shouldUseTypewriter) {
-      if (!isNextToAnimate && !hasStartedRef.current) {
-        // Not this message's turn and hasn't started yet — render instant text (never hide)
-        return <Text style={getTextStyle()}>{message.content}</Text>;
-      }
       return (
         <TypewriterText
           text={message.content}

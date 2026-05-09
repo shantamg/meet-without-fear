@@ -54,6 +54,9 @@ expo-env.d.ts
 # Testing
 coverage
 eval/alignment-runs/
+eval/runs/
+backend/scripts/transcripts/
+docs/product/gold-session-scratch/*.md
 
 # Prisma
 backend/prisma/*.db
@@ -140,3 +143,5 @@ mobile/test-results/
 
 # Moment evaluator local artifacts (Python cache only — run artifacts go in PRs as evidence)
 scripts/__pycache__/
+scripts/ec2-bot/scripts/**/__pycache__/
+*.pyc

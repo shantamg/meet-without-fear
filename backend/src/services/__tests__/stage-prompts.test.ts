@@ -169,6 +169,17 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('That insight belongs to the users');
     });
 
+    it('Stage 3 prompt slows down compressed high-stakes needs before capture', () => {
+      const context = createContext({ userName: 'Catherine', partnerName: 'James' });
+      const prompt = fullPrompt(buildStagePrompt(3, context));
+
+      expect(prompt).toContain('COMPRESSED-NEEDS PACING');
+      expect(prompt).toContain('one dense answer that stacks multiple real needs');
+      expect(prompt).toContain('safety/accountability/autonomy/self-trust');
+      expect(prompt).toContain('care/belonging/recognition/heard');
+      expect(prompt).toContain('before NeedsReady:Y');
+    });
+
     it('Stage 3 prompt does not contain hardcoded user-facing opening phrase', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(3, context));
@@ -206,6 +217,16 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Willingness from one person is not a shared agreement');
     });
 
+    it('Stage 4 prompt forbids speculative partner placeholders', () => {
+      const context = createContext({ userName: 'Adam', partnerName: 'Eve' });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain("Do not ask Adam to compare against Eve's experiments");
+      expect(prompt).toContain('unless the current visible/app context includes actual partner proposals');
+      expect(prompt).toContain('Never output placeholders');
+      expect(prompt).toContain('[these would appear here]');
+    });
+
     it('Stage 4 prompt covers declined AI ideas and removals', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(4, context));
@@ -225,6 +246,17 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Do not describe no-overlap or no-shared-agreement as failure');
       expect(prompt).toContain('individual commitments can still be carried forward');
       expect(prompt).toContain('Do not ask for scheduled shared check-in timing for individual-only commitments');
+    });
+
+    it('Stage 4 prompt gives both partners a no-shared-agreement closure path', () => {
+      const context = createContext({ userName: 'Catherine', partnerName: 'James' });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('shared proposal inventory');
+      expect(prompt).toContain('individual commitment(s) being preserved');
+      expect(prompt).toContain('needs that remain open');
+      expect(prompt).toContain('Give both partners a dignified path');
+      expect(prompt).toContain('boundary or individual commitment is still a legitimate outcome');
     });
 
     it('Stage 4 no-shared-agreement prompt avoids failure-language tokens', () => {
@@ -290,8 +322,52 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('compatibility fallback');
       expect(prompt).toContain('user clearly volunteered, accepted, or committed');
       expect(prompt).toContain('Do NOT list AI ideas the user has not accepted');
+      expect(prompt).toContain('desired-outcome fragments');
+      expect(prompt).toContain('walk away knowing');
+      expect(prompt).toContain('Do NOT write generic labels such as "User will..."');
+      expect(prompt).toContain('<stage4_proposals>');
+      expect(prompt).toContain('"action": "ADD|REVISE|REMOVE|IGNORE"');
+      expect(prompt).toContain('"classification": "PROPOSAL|REFLECTION|SUCCESS_MARKER|PROCESS"');
+      expect(prompt).toContain('Emit this block on every Stage 4 turn');
+      expect(prompt).toContain('Only action ADD with classification PROPOSAL creates a proposal card');
+      expect(prompt).toContain('guarded consent to continue talking');
+      expect(prompt).toContain('I can talk about next steps');
       expect(prompt).toContain('one person');
       expect(prompt).toContain('as if it were a shared agreement');
+    });
+
+    it('Stage 4 prompt treats success markers as not proposals yet', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('Not a proposal yet');
+      expect(prompt).toContain('Reflect it as a success criterion');
+      expect(prompt).toContain('what concrete action would produce that outcome');
+    });
+
+    it('Stage 4 prompt includes structured capture ids for typed ownership', () => {
+      const context = createContext({
+        currentUserId: 'user-current',
+        partnerUserId: 'user-partner',
+      });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('currentUserId: user-current');
+      expect(prompt).toContain('partnerUserId: user-partner');
+      expect(prompt).toContain('ownerUserId to currentUserId for INDIVIDUAL_COMMITMENT');
+    });
+
+    it('Stage 4 prompt includes proposal ids for typed revisions', () => {
+      const context = createContext({
+        currentUserId: 'user-current',
+        stage4InventoryContext:
+          '- id=proposal-1 | kind=SHARED_PROPOSAL | owner=current user | description="weekly check-in"',
+      });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('CURRENT STAGE 4 PROPOSAL INVENTORY');
+      expect(prompt).toContain('id=proposal-1');
+      expect(prompt).toContain('emit action REVISE with targetProposalId instead of ADD');
     });
 
     it('returns topic-articulation prompt for stage 0 with isInvitationPhase', () => {
@@ -323,6 +399,19 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toMatch(/20 words/);
       expect(prompt.toLowerCase()).toContain('neutral');
       expect(prompt.toLowerCase()).toContain('blame');
+    });
+
+    it('stage 0 topic framing preserves concrete behavioral signals while staying neutral', () => {
+      const context = createContext({ userName: 'Catherine', partnerName: 'James' });
+      const options: BuildStagePromptOptions = { isInvitationPhase: true };
+      const prompt = fullPrompt(buildStagePrompt(0, context, options));
+
+      expect(prompt).toContain('Preserve the user\'s concrete behavioral signal');
+      expect(prompt).toContain('yelling');
+      expect(prompt).toContain('personal attacks');
+      expect(prompt).toContain('Do not flatten');
+      expect(prompt).toContain('vague phrases like "conflict"');
+      expect(prompt).toContain('<draft>\ntopic text\n</draft>');
     });
   });
 
@@ -514,8 +603,26 @@ describe('Stage Prompts Service', () => {
 
       expect(prompt).toContain('HIGH-CONFLICT / LONG-RUNNING CASES');
       expect(prompt).toContain('Do not offer the felt-heard gate after only naming the pattern');
+      expect(prompt).toContain('high-resistance/non-resolution case');
+      expect(prompt).toContain('do not set FeelHeardCheck:Y before at least five substantive user turns');
+      expect(prompt).toContain('does not count as the user\'s answer to that check');
       expect(prompt).toContain('what they have already tried');
+      expect(prompt).toContain('care underneath resentment');
+      expect(prompt).toContain('maybe I need to know I really tried');
+      expect(prompt).toContain('make one final open-floor move');
       expect(prompt).toContain('understanding the other person is not the same as excusing impact');
+    });
+
+    it('Stage 1 prompt separates felt-heard gating from partner-share readiness', () => {
+      const context = createContext({ turnCount: 7, emotionalIntensity: 6 });
+      const prompt = fullPrompt(buildStagePrompt(1, context));
+
+      expect(prompt).toContain('FELT-HEARD GATE BOUNDARY');
+      expect(prompt).toContain('Stage 1 is only about whether this user feels heard by you');
+      expect(prompt).toContain('Do not ask whether they want their partner to hear something');
+      expect(prompt).toContain('Do not ask what they hope would happen if they said it to their partner');
+      expect(prompt).toContain('treat that as fresh material to witness');
+      expect(prompt).toContain('Never convert that check into partner-share readiness');
     });
 
     it('uses regular Stage 2 prompt when not transitioning', () => {
@@ -539,6 +646,17 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('unfairness, anger, fear, resentment');
       expect(prompt).toContain('Does that feel like your real attempt');
       expect(prompt).toContain('ReadyShare guard: TOO EARLY');
+    });
+
+    it('Stage 2 prompt prevents empathy drafts from adding unearned reassurance', () => {
+      const context = createContext({ turnCount: 6, emotionalIntensity: 6 });
+      const prompt = fullPrompt(buildStagePrompt(2, context));
+
+      expect(prompt).toContain("Preserve Test User's caveats and non-concessions");
+      expect(prompt).toContain('Do not add direct reassurance');
+      expect(prompt).toContain('you are enough');
+      expect(prompt).toContain('they are not trying to reassure Partner');
+      expect(prompt).toContain('must not settle unresolved fit');
     });
 
     it('Stage 2 refinement mode can update an existing draft without the early draft guard', () => {
@@ -745,7 +863,9 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('<thinking>');
       // The flag instruction is in format "FeelHeardCheck: [Y if ready..., N otherwise]"
       expect(prompt).toContain('FeelHeardCheck:');
+      expect(prompt).toContain('FeelHeardConfirmed:');
       expect(prompt).toMatch(/FeelHeardCheck.*Y.*N/s);
+      expect(prompt).toMatch(/FeelHeardConfirmed.*Y.*N/s);
       expect(prompt).toContain('Do NOT invite more freeform chat unless the input remains visible');
     });
 
@@ -776,6 +896,16 @@ describe('Stage Prompts Service', () => {
 
       expect(prompt).toContain('<dispatch>');
       expect(prompt).toContain('EXPLAIN_PROCESS');
+    });
+
+    it('protocol keeps control flags as thinking lines, not ad hoc XML tags', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(3, context));
+
+      expect(prompt).toContain('The only XML-style tags you may use are exactly <thinking>, <draft>, <needs>, and <dispatch>.');
+      expect(prompt).toContain('Flags such as FeelHeardCheck, FeelHeardConfirmed, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>');
+      expect(prompt).toContain('never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>');
+      expect(prompt).toContain('The <needs> tag is only for the structured Stage 3 needs JSON shown above');
     });
 
     it('does NOT include old tool call instructions', () => {
@@ -1068,6 +1198,23 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Does NOT greet them by name');
       expect(prompt).toContain('Does NOT say "thanks for accepting"');
       expect(prompt).not.toContain('Hey Jason, thanks for accepting');
+    });
+  });
+
+  describe('buildStagePrompt — Stage 1 witness cadence', () => {
+    it('keeps the first high-resistance final open-floor check separate from the felt-heard gate', () => {
+      const blocks = buildStagePrompt(1, createContext({ turnCount: 5 }));
+
+      expect(blocks.staticBlock).toContain('make one final open-floor move with FeelHeardCheck:N');
+      expect(blocks.staticBlock).toContain('do not set FeelHeardCheck:Y in the same response as the first final open-floor check');
+      expect(blocks.staticBlock).toContain('Never end a response with an open question while setting FeelHeardCheck:Y');
+      expect(blocks.staticBlock).toContain('Keep FeelHeardCheck:N until the user has had a chance to answer it and you have reflected that answer');
+    });
+
+    it('keeps the dynamic feel-heard guard active before turn 5', () => {
+      const blocks = buildStagePrompt(1, createContext({ turnCount: 4 }));
+
+      expect(blocks.dynamicBlock).toContain('Feel-heard guard: Too early for most Stage 1 cases (turn < 5)');
     });
   });
 });

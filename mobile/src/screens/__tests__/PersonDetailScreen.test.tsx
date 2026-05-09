@@ -39,6 +39,14 @@ jest.mock('../../hooks/usePerson', () => ({
   usePastSessions: (personId: string) => mockUsePastSessions(personId),
 }));
 
+const mockResendInvitation = jest.fn();
+jest.mock('../../hooks/useSessions', () => ({
+  useResendInvitation: () => ({
+    mutate: mockResendInvitation,
+    isPending: false,
+  }),
+}));
+
 // Helper types
 interface PersonData {
   id: string;
@@ -102,6 +110,7 @@ describe('PersonDetailScreen', () => {
     mockBack.mockClear();
     mockUsePerson.mockClear();
     mockUsePastSessions.mockClear();
+    mockResendInvitation.mockClear();
   });
 
   describe('Profile Information', () => {

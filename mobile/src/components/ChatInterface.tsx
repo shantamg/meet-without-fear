@@ -20,6 +20,7 @@ import { ChatIndicator, ChatIndicatorType } from './ChatIndicator';
 import { EmpathyValidationCard } from './EmpathyValidationCard';
 import { createStyles } from '../theme/styled';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
+import { isPreRegisteredAnimatedId } from '../utils/animationBridge';
 
 // ============================================================================
 // Types
@@ -153,6 +154,8 @@ interface ChatInterfaceProps {
   partnerName?: string;
   /** Optional voice press handler -- passed through to ChatInput; renders mic button when provided */
   onVoicePress?: () => void;
+  /** Content of a failed message to restore to the input field */
+  failedMessage?: string | null;
   /** ID of the last chat item the user has seen - used to show "New messages" separator */
   lastSeenChatItemId?: string | null;
   /** Server-backed timestamp from before this screen marked the session viewed. */
@@ -231,6 +234,7 @@ export function ChatInterface({
   onValidateAccurate,
   onValidateNotQuite,
   onVoicePress,
+  failedMessage,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -461,6 +465,7 @@ export function ChatInterface({
     if (isIndicator(item) || isValidationCard(item) || isCustomEmptyState(item)) return false;
     if (animatedItemIdsRef.current.has(item.id)) return false;
     if (seenAnimatedItemIdsRef.current.has(item.id)) return false;
+    if (isPreRegisteredAnimatedId(item.id)) return false;
     if (isAtOrBeforeSeenBoundary(item, index)) return false;
 
     if (isCustomCard(item)) {
@@ -471,6 +476,17 @@ export function ChatInterface({
     if (message.role === MessageRole.USER) return false;
     if (message.id.startsWith('optimistic-')) return false;
 
+    // If the user has already replied after this assistant/system message,
+    // the message must be visible immediately. It is no longer a live pending
+    // animation candidate, and hiding it leaves blank transcript gaps.
+    for (let i = index - 1; i >= 0; i--) {
+      const laterItem = listItems[i];
+      if (isIndicator(laterItem) || isValidationCard(laterItem) || isCustomEmptyState(laterItem) || isCustomCard(laterItem)) continue;
+      if ((laterItem as ChatMessage).role === MessageRole.USER) {
+        return false;
+      }
+    }
+
     // If there is no server read boundary yet, fall back to the original
     // mount snapshot so loaded history does not animate on first render.
     if (lastSeenItemIndex < 0 && lastViewedAtTime === null && mountSnapshotIdsRef.current.has(message.id)) {
@@ -478,7 +494,7 @@ export function ChatInterface({
     }
 
     return true;
-  }, [isAtOrBeforeSeenBoundary, lastSeenItemIndex, lastViewedAtTime]);
+  }, [isAtOrBeforeSeenBoundary, lastSeenItemIndex, lastViewedAtTime, listItems]);
 
   // Auto-speech: speak new AI messages when enabled
   useEffect(() => {
@@ -546,6 +562,15 @@ export function ChatInterface({
   // a later typewriter pass. This prevents refetches/status changes after
   // button-only actions from replaying older visible messages one by one.
   useEffect(() => {
+    if (animatingItemId !== null) {
+      const animatingIndex = listItems.findIndex((item) => item.id === animatingItemId);
+      const animatingItem = animatingIndex >= 0 ? listItems[animatingIndex] : null;
+      if (!animatingItem || !shouldAnimateItem(animatingItem, animatingIndex)) {
+        markItemAnimationSeen(animatingItemId);
+        setAnimatingItemId(null);
+      }
+    }
+
     listItems.forEach((item, index) => {
       if (isIndicator(item) || isValidationCard(item) || isCustomEmptyState(item)) return;
       if (item.id === nextAnimatableMessageId || item.id === animatingItemId) return;
@@ -816,7 +841,12 @@ export function ChatInterface({
           styles.messageList,
           listItems.length === 0 && (customEmptyState ? styles.customMessageListEmpty : styles.messageListEmpty),
         ]}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={
+          <>
+            {renderBelowChat?.()}
+            {renderHeader?.()}
+          </>
+        }
         ListFooterComponent={renderFooter}
         ListEmptyComponent={emptyStateElement}
         showsVerticalScrollIndicator={false}
@@ -828,7 +858,6 @@ export function ChatInterface({
         onContentSizeChange={handleContentSizeChange}
       />
       <View style={styles.bottomContainer}>
-        {renderBelowChat?.()}
         {showEmotionSlider && onEmotionChange && (
           <EmotionSlider
             value={emotionValue}
@@ -843,6 +872,7 @@ export function ChatInterface({
             onSend={onSendMessage}
             disabled={disabled || isInputDisabled || isLoading}
             onVoicePress={onVoicePress}
+            failedMessage={failedMessage}
           />
         )}
         {renderAboveInput?.()}
@@ -932,5 +962,6 @@ const useStyles = () =>
       // Container for emotion slider, panels above input, and input
       // This ensures KeyboardAvoidingView adjusts relative to this container's bottom
       // rather than just the input field itself
+      paddingBottom: t.spacing.sm,
     },
   }));

@@ -280,10 +280,16 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
 
   const currentStage = myStage ?? Stage.ONBOARDING;
 
-  // When refining (Stage 2B), show the panel once AI proposes a new draft
-  // (messageCountSinceSharedContext > 0 means user has engaged with Stage 2B)
-  // Otherwise hide — user should use the Activity menu to view partner's shared context first
-  if (isRefiningEmpathy && inputs.messageCountSinceSharedContext === 0) {
+  // When refining (Stage 2B), the reconciler may already have a reviewable
+  // draft/attempt and the AI copy directs the user to "Revisit what you'll
+  // share." Only hold the panel before the user engages if there is no
+  // content to review yet.
+  if (
+    isRefiningEmpathy &&
+    inputs.messageCountSinceSharedContext === 0 &&
+    !hasEmpathyContent &&
+    !myAttemptContent
+  ) {
     return false;
   }
 
@@ -407,7 +413,7 @@ function computeShowNeedsSharePanel(inputs: ChatUIStateInputs): boolean {
   const currentStage = myStage ?? Stage.ONBOARDING;
   if (currentStage !== Stage.NEED_MAPPING) return false;
   if (!needsAvailable || !allNeedsConfirmed) return false;
-  if (needsShared || needsRevealReady || hasConfirmedNeedsLocal) return false;
+  if (needsShared || needsRevealReady) return false;
   return true;
 }
 
@@ -598,7 +604,26 @@ function computeShouldHideInput(
   // This prevents the flash of input on initial load before data arrives.
   // Exception: if there's a share suggestion, user CAN chat to respond.
   const currentStage = inputs.myStage ?? Stage.ONBOARDING;
+  if (
+    currentStage === Stage.NEED_MAPPING &&
+    (
+      aboveInputPanel === 'needs-review' ||
+      aboveInputPanel === 'needs-share' ||
+      aboveInputPanel === 'needs-reveal-validation'
+    )
+  ) {
+    return true;
+  }
+
   const hasShareSuggestion = inputs.shareOffer?.hasSuggestion === true;
+  if (
+    currentStage === Stage.PERSPECTIVE_STRETCH &&
+    inputs.hasPartnerEmpathy &&
+    inputs.myValidation?.validated !== true
+  ) {
+    return true;
+  }
+
   if (
     currentStage === Stage.PERSPECTIVE_STRETCH &&
     inputs.empathyDraft === undefined &&

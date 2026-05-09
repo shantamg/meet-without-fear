@@ -3,7 +3,7 @@ title: Infrastructure
 sidebar_position: 1
 description: Slam bot (EC2), Render hosting, Vercel deploys, GitHub automation.
 created: 2026-03-11
-updated: 2026-04-28
+updated: 2026-05-08
 status: living
 ---
 
@@ -19,6 +19,36 @@ Operational infrastructure for Meet Without Fear.
 - Scripts at `/opt/slam-bot/scripts` (symlink to `~/meet-without-fear/scripts/ec2-bot/scripts` on the box).
 - Workspaces at `~/meet-without-fear/bot-workspaces/` with a router (`CLAUDE.md`) + label registry (`label-registry.json`).
 - Logs at `/var/log/slam-bot/`. Rotated daily via `logrotate`: 7-day retention, compressed, with a 10MB per-file `maxsize` cap. `prune-journal.sh` (daily 04:00) and `prune-claude-projects.sh` (daily 04:05) clean older state.
+
+### Bot harness layout
+
+Slam Paws keeps the public script names used by cron, systemd, Slack Socket Mode, GitHub notification polling, and manual SSH operation, but the core bot harness now lives in Python under `scripts/ec2-bot/scripts/lib/bot_harness/`.
+
+| Public script | Python entrypoint | Role |
+|---|---|---|
+| `run-claude.sh` | `python3 -m bot_harness run` | Compatibility runner for both Claude and Codex providers |
+| `process-queue.sh` | `python3 -m bot_harness queue` | Priority FIFO queue draining, retries, TTL, stale-label checks, Slack reactions |
+| `workspace-dispatcher.sh` | `python3 -m bot_harness dispatch` | Label and scheduled workspace dispatch, claims, cooldowns, state-file fallback |
+| `check-github.sh` | `python3 -m bot_harness github-check` | GitHub notifications, mentions, review requests, and claim dedupe |
+
+The shell files remain as thin shims so existing crontab, systemd, Socket Mode, and operator commands do not need to change.
+
+Provider selection is resolved in this order: explicit `--provider`, `PROVIDER` env, `bot-workspaces/label-registry.json` `provider`, then default `claude`. Registry entries may also set `fallback_provider` and `review_provider`; labels that omit these fields keep the previous Claude behavior. Supported provider values are `claude` and `codex`.
+
+Codex dispatches get runtime context through a generated per-agent `AGENTS.md` in the `_active/agent-<pid>/` directory. The generated file is assembled from Meet Without Fear repo and workspace instructions (`CLAUDE.md`, workspace `CONTEXT.md`, and stage `CONTEXT.md`) so there is no separate hand-maintained Codex prompt copy. Codex Slack replies are posted by the harness from the final `agent_message` event. Claude DM replies are posted only when the CLI did not already post one, which prevents duplicate Slack responses.
+
+Provider session state is stored under `/opt/slam-bot/state/`. Codex session keys map to Codex thread IDs in `codex-session-map.json`; Claude session keys still use deterministic UUIDs for compatibility with the existing Claude session files.
+
+Local validation for bot harness changes:
+
+```bash
+jq empty bot-workspaces/label-registry.json
+python3 -m py_compile scripts/ec2-bot/scripts/lib/invoke_provider.py scripts/ec2-bot/scripts/lib/bot_harness/*.py
+bash -n scripts/ec2-bot/scripts/run-claude.sh scripts/ec2-bot/scripts/process-queue.sh scripts/ec2-bot/scripts/workspace-dispatcher.sh scripts/ec2-bot/scripts/check-github.sh
+PYTHONPATH=scripts/ec2-bot/scripts/lib python3 -m unittest scripts/ec2-bot/scripts/tests/test_bot_harness.py scripts/ec2-bot/scripts/tests/test_invoke_provider.py
+```
+
+Rollback is intentionally simple: revert the bot harness commit and let `git-pull.sh` auto-pull `main`, or manually `ssh slam-bot 'cd ~/meet-without-fear && git pull --ff-only && sudo systemctl restart slam-bot-socket slam-bot-state-scanner'`. The public script names and `/opt/slam-bot/scripts` symlink are stable across the migration.
 
 ### systemd services
 
@@ -123,7 +153,7 @@ See [deployment](../deployment/index.md) for release procedures and env var refe
 ## GitHub workflows
 
 - `.github/workflows/docs-impact.yml` — PR-time check that code changes and their mapped docs are updated together. Mapping rules in `docs/code-to-docs-mapping.json`.
-- `.github/workflows/ci.yml` — PR-time CI: spins up a Postgres 15 service container, installs deps (`npm ci`), generates the Prisma client, runs `npm run check`, migrates the test DB, and runs `npm run test`. Skipped for docs-only changes via `dorny/paths-filter`. A `ci-success` gate job is the single required status check for branch protection.
+- `.github/workflows/ci.yml` — PR-time CI with three conditional jobs gated by `dorny/paths-filter`. `ci`: spins up a Postgres 15 service container, installs deps (`npm ci`), generates the Prisma client, runs `npm run check`, migrates the test DB, and runs `npm run test`. `python-eval`: runs `py_compile` syntax checks across all gold-loop scripts and executes `test_mwf_moment_eval.py` when eval files change (`scripts/mwf_*.py`, `eval/gold-scenarios.json`, `eval/icm/**`, `eval/moments/**`, etc.). `bot-harness`: validates `bot-workspaces/label-registry.json` (JSON lint), Python-compiles the provider harness (`scripts/ec2-bot/scripts/lib/invoke_provider.py` and `bot_harness/*.py`), bash-syntax-checks the five public shell scripts, node-checks the Socket Mode listener, runs the bot harness unit tests, and enforces a stale-name guard when `scripts/ec2-bot/**` or `bot-workspaces/**` change. A `ci-success` gate job (requiring `changes`, `ci`, `python-eval`, and `bot-harness`) is the single required status check for branch protection.
 - `.github/workflows/render-deploy.yml` — Push-to-`main` backend deploy: filters to pushes that touch `backend/`, `shared/`, the lockfile, `render.yaml`, or the workflow itself, then POSTs the Render deploy hook (stored in repo secret `RENDER_DEPLOY_HOOK`). Render's built-in auto-deploy must be **off** — this workflow is the sole deploy trigger.
 - `.github/workflows/vercel-deploy-app.yml` — Push-to-`main` Expo Web deploy: filters to pushes touching `mobile/**` or `shared/**`, builds the Expo Web bundle, and deploys to `app.meetwithoutfear.com` via Vercel (`mwf-app` project). Also supports `workflow_dispatch`.
 - `.github/workflows/vercel-deploy-website.yml` — Push-to-`main` marketing site deploy: filters to pushes touching `website/**`, deploys to Vercel.

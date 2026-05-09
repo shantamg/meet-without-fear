@@ -5,9 +5,7 @@
 ## Steps
 
 1. **Download images** (if `has_images`):
-   ```bash
-   SLACK_MCP_XOXB_TOKEN="$SLACK_MCP_XOXB_TOKEN" node scripts/slack-get-images.mjs C0A3FF86FB7 --ts <message_ts>
-   ```
+   Use the curl-based approach from workspace CLAUDE.md "Image Handling" section (uses `SLACK_BOT_TOKEN`).
    View downloaded images from `/tmp/slack-images/` with the Read tool.
 
 2. **Check for duplicates:**

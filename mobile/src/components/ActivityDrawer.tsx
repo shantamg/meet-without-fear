@@ -14,12 +14,12 @@ import {
   FlatList,
   Animated,
   PanResponder,
-  Dimensions,
   StyleSheet,
   BackHandler,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '@/theme';
+import { appWidthStyle, colors } from '@/theme';
 import { TimelineItemCard, TimelineItem } from './TimelineItemCard';
 import { useSharingStatus } from '../hooks/useSharingStatus';
 import { usePendingActions, PendingAction } from '../hooks/usePendingActions';
@@ -59,8 +59,6 @@ export interface ActivityDrawerProps {
 // Constants
 // ============================================================================
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-const POSITION_3Q = SCREEN_HEIGHT * 0.25; // 3/4 visible = top 25% hidden
 const SNAP_UP_THRESHOLD = 80; // px dragged up to snap to full
 const SNAP_DOWN_THRESHOLD = 100; // px dragged down to dismiss
 
@@ -225,7 +223,13 @@ export function ActivityDrawer({
   testID = 'activity-drawer',
 }: ActivityDrawerProps) {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const position3Q = windowHeight * 0.25; // 3/4 visible = top 25% hidden
+  const windowHeightRef = useRef(windowHeight);
+  const position3QRef = useRef(position3Q);
   const positionFullRef = useRef(insets.top);
+  windowHeightRef.current = windowHeight;
+  position3QRef.current = position3Q;
   positionFullRef.current = insets.top; // Keep in sync (rotation, etc.)
 
   const isSessionActive =
@@ -295,7 +299,7 @@ export function ActivityDrawer({
   // -------------------------------------------------------------------------
   // Animation refs
   // -------------------------------------------------------------------------
-  const drawerTranslate = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const drawerTranslate = useRef(new Animated.Value(windowHeight)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const isDragging = useRef(false);
   const currentSnap = useRef<'3q' | 'full'>('3q');
@@ -307,9 +311,9 @@ export function ActivityDrawer({
 
   // The visible height for the FlatList: screen minus snap offset minus header area
   const listHeight = useMemo(() => {
-    const snapOffset = snapPosition === 'full' ? insets.top : POSITION_3Q;
-    return SCREEN_HEIGHT - snapOffset - headerAreaHeight;
-  }, [snapPosition, headerAreaHeight, insets.top]);
+    const snapOffset = snapPosition === 'full' ? insets.top : position3Q;
+    return windowHeight - snapOffset - headerAreaHeight;
+  }, [snapPosition, headerAreaHeight, insets.top, position3Q, windowHeight]);
 
   // -------------------------------------------------------------------------
   // Open / Close / Snap animations
@@ -333,13 +337,13 @@ export function ActivityDrawer({
   const openDrawer = useCallback(() => {
     currentSnap.current = '3q';
     setSnapPosition('3q');
-    snapTo(POSITION_3Q, 0.4);
+    snapTo(position3QRef.current, 0.4);
   }, [snapTo]);
 
   const closeDrawer = useCallback(() => {
     Animated.parallel([
       Animated.timing(drawerTranslate, {
-        toValue: SCREEN_HEIGHT,
+        toValue: windowHeightRef.current,
         duration: 200,
         useNativeDriver: true,
       }),
@@ -361,6 +365,17 @@ export function ActivityDrawer({
       openDrawer();
     }
   }, [visible, openDrawer]);
+
+  useEffect(() => {
+    if (!visible) {
+      drawerTranslate.setValue(windowHeight);
+      return;
+    }
+
+    const position = currentSnap.current === 'full' ? positionFullRef.current : position3Q;
+    drawerTranslate.setValue(position);
+    setSnapPosition(currentSnap.current);
+  }, [visible, windowHeight, position3Q, drawerTranslate]);
 
   // -------------------------------------------------------------------------
   // Android back button
@@ -387,9 +402,9 @@ export function ActivityDrawer({
       },
       onPanResponderMove: (_, gestureState) => {
         const pFull = positionFullRef.current;
-        const base = currentSnap.current === 'full' ? pFull : POSITION_3Q;
+        const base = currentSnap.current === 'full' ? pFull : position3QRef.current;
         const newPos = base + gestureState.dy;
-        const clamped = Math.max(pFull, Math.min(newPos, SCREEN_HEIGHT));
+        const clamped = Math.max(pFull, Math.min(newPos, windowHeightRef.current));
         drawerTranslate.setValue(clamped);
       },
       onPanResponderRelease: (_, gestureState) => {
@@ -405,13 +420,13 @@ export function ActivityDrawer({
           } else if (dy > SNAP_DOWN_THRESHOLD || vy > 0.5) {
             closeDrawer();
           } else {
-            snapTo(POSITION_3Q, 0.4);
+            snapTo(position3QRef.current, 0.4);
           }
         } else {
           if (dy > SNAP_DOWN_THRESHOLD || vy > 0.5) {
             currentSnap.current = '3q';
             setSnapPosition('3q');
-            snapTo(POSITION_3Q, 0.4);
+            snapTo(position3QRef.current, 0.4);
           } else {
             snapTo(pFull, 0.6);
           }
@@ -474,8 +489,9 @@ export function ActivityDrawer({
       <Animated.View
         style={[
           styles.drawer,
+          appWidthStyle,
           {
-            height: SCREEN_HEIGHT,
+            height: windowHeight,
             transform: [{ translateY: drawerTranslate }],
           },
         ]}

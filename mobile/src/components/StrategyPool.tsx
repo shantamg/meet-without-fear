@@ -26,6 +26,8 @@ interface StrategyPoolProps {
   onRequestMore: () => void;
   /** Callback when user is ready to rank */
   onReady: () => void;
+  /** Label for the readiness action */
+  readyLabel?: string;
   /** Callback to close the overlay */
   onClose?: () => void;
   /** Whether AI is currently generating suggestions */
@@ -48,6 +50,7 @@ export function StrategyPool({
   strategies,
   onRequestMore,
   onReady,
+  readyLabel = 'These look good - rank my choices',
   onClose,
   isGenerating = false,
 }: StrategyPoolProps) {
@@ -98,9 +101,9 @@ export function StrategyPool({
           style={styles.readyButton}
           onPress={onReady}
           accessibilityRole="button"
-          accessibilityLabel="These look good - rank my choices"
+          accessibilityLabel={readyLabel}
         >
-          <Text style={styles.readyText}>These look good - rank my choices</Text>
+          <Text style={styles.readyText}>{readyLabel}</Text>
         </TouchableOpacity>
       </View>
     </View>

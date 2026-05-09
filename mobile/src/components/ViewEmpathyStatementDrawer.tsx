@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { X, Send, MessageCircle } from 'lucide-react-native';
-import { colors } from '@/theme';
+import { appWidthStyle, colors, modalPageStyle } from '@/theme';
 
 export interface ViewEmpathyStatementDrawerProps {
   /** Whether the drawer is visible */
@@ -89,6 +89,7 @@ export function ViewEmpathyStatementDrawer({
       onRequestClose={onClose}
     >
       <SafeAreaProvider>
+        <View style={styles.modalPage}>
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           <KeyboardAvoidingView
             style={styles.keyboardAvoid}
@@ -207,15 +208,20 @@ export function ViewEmpathyStatementDrawer({
           </ScrollView>
           </KeyboardAvoidingView>
         </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalPage: {
+    ...modalPageStyle,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.bgPrimary,
+    ...appWidthStyle,
   },
   keyboardAvoid: {
     flex: 1,

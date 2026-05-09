@@ -1,0 +1,14 @@
+{
+  "backend": {
+    "pid": 43663,
+    "returncode": 0,
+    "started": true,
+    "stopped": true
+  },
+  "web": {
+    "pid": 43758,
+    "returncode": 0,
+    "started": true,
+    "stopped": true
+  }
+}

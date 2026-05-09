@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { X, Check, Minus, XCircle, ChevronLeft } from 'lucide-react-native';
-import { colors } from '@/theme';
+import { appWidthStyle, colors, modalPageStyle } from '@/theme';
 
 export interface AccuracyFeedbackDrawerProps {
   /** Whether the drawer is visible */
@@ -104,6 +104,7 @@ export function AccuracyFeedbackDrawer({
       onRequestClose={onClose}
     >
       <SafeAreaProvider>
+        <View style={styles.modalPage}>
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           {/* Header with close button */}
           <View style={styles.header}>
@@ -252,15 +253,20 @@ export function AccuracyFeedbackDrawer({
             </ScrollView>
           </KeyboardAvoidingView>
         </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalPage: {
+    ...modalPageStyle,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.bgPrimary,
+    ...appWidthStyle,
   },
   header: {
     flexDirection: 'row',
