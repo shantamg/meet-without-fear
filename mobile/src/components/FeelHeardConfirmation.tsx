@@ -29,9 +29,7 @@ export function FeelHeardConfirmation({
   return (
     <GuidedActionPanel
       tone="success"
-      eyebrow="Ready check"
       title="Do you feel heard enough to continue?"
-      subtitle="You can keep talking, or move into the next part when this feels complete."
       secondaryAction={onContinue ? {
         label: 'Not yet',
         onPress: onContinue,
