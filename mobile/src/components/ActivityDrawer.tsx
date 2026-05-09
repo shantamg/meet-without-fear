@@ -502,16 +502,6 @@ export function ActivityDrawer({
             <View style={styles.dragHandle} />
           </View>
 
-          <Pressable
-            style={styles.closeHistoryButton}
-            onPress={closeDrawer}
-            accessibilityRole="button"
-            accessibilityLabel="Close exchange history"
-            testID="activity-drawer-close"
-          >
-            <Text style={styles.closeHistoryText}>Close exchange history</Text>
-          </Pressable>
-
           {/* Header */}
           <Text
             style={styles.header}
@@ -618,7 +608,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: colors.bgSecondary,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     overflow: 'hidden',
@@ -641,19 +631,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     paddingHorizontal: 16,
     paddingBottom: 12,
-  },
-  closeHistoryButton: {
-    marginHorizontal: 16,
-    marginBottom: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderRadius: 8,
-    backgroundColor: colors.bgSecondary,
-  },
-  closeHistoryText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
   },
   sectionHeader: {
     fontSize: 11,
