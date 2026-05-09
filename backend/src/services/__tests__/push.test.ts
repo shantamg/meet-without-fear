@@ -161,6 +161,83 @@ describe('Push Notification Service', () => {
       ]);
     });
 
+    it('uses invitation acceptance copy when the invitee starts their side', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        pushToken: validPushToken,
+      });
+      (prisma.invitation.findFirst as jest.Mock).mockResolvedValue({
+        invitedById: testUserId,
+      });
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        relationship: {
+          members: [
+            {
+              userId: testUserId,
+              nickname: null,
+              user: { firstName: 'Jason', name: 'Jason Person' },
+            },
+            {
+              userId: 'actor-123',
+              nickname: null,
+              user: { firstName: 'Shantam', name: 'Shantam Person' },
+            },
+          ],
+        },
+      });
+      mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
+
+      await sendPushNotification(
+        testUserId,
+        'partner.signed_compact',
+        { signedBy: 'actor-123' },
+        testSessionId,
+      );
+
+      expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+        expect.objectContaining({
+          title: 'Shantam accepted your invitation',
+          body: 'Shantam has started their side of the session. Open it to continue.',
+        }),
+      ]);
+    });
+
+    it('resolves the invitee name for session joined notifications', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        pushToken: validPushToken,
+      });
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        relationship: {
+          members: [
+            {
+              userId: testUserId,
+              nickname: null,
+              user: { firstName: 'Jason', name: 'Jason Person' },
+            },
+            {
+              userId: 'actor-123',
+              nickname: null,
+              user: { firstName: 'Shantam', name: 'Shantam Person' },
+            },
+          ],
+        },
+      });
+      mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
+
+      await sendPushNotification(
+        testUserId,
+        'session.joined',
+        { joinedBy: 'actor-123' },
+        testSessionId,
+      );
+
+      expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+        expect.objectContaining({
+          title: 'Shantam joined',
+          body: 'Shantam accepted your invitation. Open the session to continue together.',
+        }),
+      ]);
+    });
+
     it('returns true on successful send', async () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue({
         pushToken: validPushToken,
