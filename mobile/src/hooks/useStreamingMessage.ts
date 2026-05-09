@@ -19,6 +19,7 @@ import {
 } from '@meet-without-fear/shared';
 import { messageKeys, sessionKeys, stageKeys, timelineKeys } from './queryKeys';
 import { getPersistedMessageRefreshQueryKeys } from '../utils/realtimeInvalidation';
+import { preRegisterAnimatedId } from '../utils/animationBridge';
 
 // ============================================================================
 // Types
@@ -146,6 +147,8 @@ export function useStreamingMessage(
   // Ref to track optimistic user message ID for replacement
   const optimisticUserIdRef = useRef<string>('');
   const activeUserMessageIdRef = useRef<string>('');
+  // Real server ID received from the user_message event, used for ID bridging
+  const realUserIdRef = useRef<string>('');
 
   // Refs for throttled cache updates (reduces stuttering)
   const lastCacheUpdateRef = useRef<number>(0);
@@ -293,6 +296,49 @@ export function useStreamingMessage(
         queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
           messageKeys.infinite(sessionId, stage),
           updateInfiniteCache
+        );
+      }
+    },
+    [queryClient]
+  );
+
+  /**
+   * Replace a message ID in cache. Used to bridge temporary streaming/optimistic
+   * IDs to real server UUIDs before reconciliation, so refetch matches by ID
+   * instead of treating messages as new.
+   */
+  const replaceMessageIdInCache = useCallback(
+    (sessionId: string, oldId: string, newId: string, stage?: Stage) => {
+      const replaceInPage = (page: GetMessagesResponse): GetMessagesResponse => ({
+        ...page,
+        messages: (page.messages || []).map((m) =>
+          m.id === oldId ? { ...m, id: newId } : m
+        ),
+      });
+
+      queryClient.setQueryData<GetMessagesResponse>(
+        messageKeys.list(sessionId),
+        (old) => old ? replaceInPage(old) : old
+      );
+      queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+        messageKeys.infinite(sessionId),
+        (old) => {
+          if (!old) return old;
+          return { ...old, pages: old.pages.map(replaceInPage) };
+        }
+      );
+
+      if (stage !== undefined) {
+        queryClient.setQueryData<GetMessagesResponse>(
+          messageKeys.list(sessionId, stage),
+          (old) => old ? replaceInPage(old) : old
+        );
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.infinite(sessionId, stage),
+          (old) => {
+            if (!old) return old;
+            return { ...old, pages: old.pages.map(replaceInPage) };
+          }
         );
       }
     },
@@ -507,6 +553,7 @@ export function useStreamingMessage(
       aiMessageIdRef.current = `streaming-${Date.now()}`;
       optimisticUserIdRef.current = `optimistic-user-${Date.now()}`;
       activeUserMessageIdRef.current = optimisticUserIdRef.current;
+      realUserIdRef.current = '';
       textCompleteReceivedRef.current = false;
 
       // Create optimistic user message
@@ -600,6 +647,7 @@ export function useStreamingMessage(
           if (!event.data) return;
           try {
             const data = JSON.parse(event.data) as UserMessageEvent;
+            realUserIdRef.current = data.id; // Store for ID bridging at completion
             // Update optimistic message with server timestamp (keep same ID for React key stability)
             if (optimisticUserIdRef.current) {
               activeUserMessageIdRef.current = optimisticUserIdRef.current;
@@ -773,6 +821,20 @@ export function useStreamingMessage(
               if (data.metadata) {
                 handleMetadata(sessionId, data.metadata);
               }
+
+              // Bridge temporary IDs to real server IDs before reconciliation.
+              // This prevents ChatInterface from re-animating messages whose IDs
+              // change from streaming placeholders to real UUIDs during refetch.
+              if (data.messageId && aiMessageIdRef.current.startsWith('streaming-')) {
+                replaceMessageIdInCache(sessionId, aiMessageIdRef.current, data.messageId, currentStage);
+                preRegisterAnimatedId(data.messageId);
+                aiMessageIdRef.current = data.messageId;
+              }
+              if (realUserIdRef.current && activeUserMessageIdRef.current.startsWith('optimistic-user-')) {
+                replaceMessageIdInCache(sessionId, activeUserMessageIdRef.current, realUserIdRef.current, currentStage);
+                activeUserMessageIdRef.current = realUserIdRef.current;
+              }
+
               reconcilePersistedMessages(sessionId);
 
               // If text_complete wasn't received (fallback), handle completion here
