@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { colors } from '@/src/theme';
+import { useAppAppearance } from '@/src/theme';
 
 /**
  * Main navigation layout
@@ -11,12 +11,14 @@ import { colors } from '@/src/theme';
  * - Home screen is the main landing page
  */
 export default function MainLayout() {
+  const { palette } = useAppAppearance();
+
   return (
     <Stack
       screenOptions={{
         headerShown: false,
         contentStyle: {
-          backgroundColor: colors.bgPrimary,
+          backgroundColor: palette.bg,
         },
       }}
     >
@@ -28,9 +30,12 @@ export default function MainLayout() {
           headerShown: true,
           headerTitle: 'My Sessions',
           headerStyle: {
-            backgroundColor: colors.bgSecondary,
+            backgroundColor: palette.bg,
           },
-          headerTintColor: colors.textPrimary,
+          headerTintColor: palette.text,
+          headerTitleStyle: {
+            color: palette.text,
+          },
         }}
       />
     </Stack>

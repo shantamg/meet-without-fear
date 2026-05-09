@@ -3,7 +3,15 @@ import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { notifyPartner, notifyPartnerWithFallback, publishSessionCreated } from '../services/realtime';
 import { z } from 'zod';
-import { ApiResponse, ErrorCode, SessionStatus, StageStatus, Stage } from '@meet-without-fear/shared';
+import {
+  ApiResponse,
+  DEFAULT_PRIVACY_PREFERENCES,
+  ErrorCode,
+  PrivacyPreferencesDTO,
+  SessionStatus,
+  StageStatus,
+  Stage,
+} from '@meet-without-fear/shared';
 import { successResponse, errorResponse } from '../utils/response';
 import { generateSessionStatusSummary } from '../utils/session';
 import { createInvitationUrl } from '../utils/urls';
@@ -597,6 +605,16 @@ export async function acceptInvitation(req: Request, res: Response): Promise<voi
       !invitation.session.topicFrameConfirmedAt
     ) {
       errorResponse(res, 'VALIDATION_ERROR', 'Invitation is not ready to accept', 400);
+      return;
+    }
+
+    const acceptingUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { privacyPreferences: true } as any,
+    });
+    const privacyPreferences = ((acceptingUser as { privacyPreferences?: unknown } | null)?.privacyPreferences as PrivacyPreferencesDTO | null) ?? DEFAULT_PRIVACY_PREFERENCES;
+    if (!privacyPreferences.allowSessionInvites) {
+      errorResponse(res, 'VALIDATION_ERROR', 'You have disabled session invitations in Privacy settings', 403);
       return;
     }
 

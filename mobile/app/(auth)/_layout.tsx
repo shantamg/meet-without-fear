@@ -66,7 +66,13 @@ export default function AuthLayout() {
         />
 
         {/* Inner Work - animation is handled at the screen level */}
-        <Stack.Screen name="inner-work" />
+        <Stack.Screen
+          name="inner-work"
+          options={{
+            animation: 'slide_from_right',
+            gestureEnabled: true,
+          }}
+        />
 
         {/* Settings - slide from right */}
         <Stack.Screen

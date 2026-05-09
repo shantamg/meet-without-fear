@@ -6,7 +6,7 @@
  *
  * Features:
  * - Slide-up animation using the project's Animated.Value spring pattern
- * - Semi-transparent black backdrop
+ * - Transparent backdrop
  * - Real-time transcript display with auto-scroll to bottom
  * - Recording timer (M:SS format) with pulsing red dot indicator
  * - "Connecting..." and "Start speaking..." placeholder states
@@ -144,7 +144,7 @@ export function TranscriptionDrawer({
 
   return (
     <View style={styles.overlay} pointerEvents={visible ? 'box-none' : 'none'}>
-      {/* Semi-transparent backdrop — tap to cancel */}
+      {/* Transparent backdrop — tap to cancel */}
       <Animated.View
         style={[
           styles.backdrop,
@@ -268,7 +268,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: palette.scrim,
+      backgroundColor: 'transparent',
     },
     backdropTouchable: {
       flex: 1,

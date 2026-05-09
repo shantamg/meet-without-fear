@@ -817,7 +817,9 @@ export function UnifiedSessionScreen({
       if (event === 'partner.session_viewed' && data.empathyStatuses && user?.id) {
         // Partner viewed the session - update delivery status
         console.log('[UnifiedSessionScreen] Partner viewed session, updating cache');
-        updatePartnerLastActiveAt(data.activeAt, data.viewedAt);
+        if (data.presenceVisible !== false) {
+          updatePartnerLastActiveAt(data.activeAt, data.viewedAt);
+        }
         const statuses = data.empathyStatuses as Record<string, unknown>;
         if (statuses[user.id]) {
           queryClient.setQueryData(stageKeys.empathyStatus(sessionId), statuses[user.id]);
@@ -827,7 +829,9 @@ export function UnifiedSessionScreen({
       if (event === 'partner.share_tab_viewed' && data.empathyStatuses && user?.id) {
         // Partner viewed the Share tab - update delivery status
         console.log('[UnifiedSessionScreen] Partner viewed Share tab, updating cache');
-        updatePartnerLastActiveAt(data.activeAt, data.viewedAt);
+        if (data.presenceVisible !== false) {
+          updatePartnerLastActiveAt(data.activeAt, data.viewedAt);
+        }
         const statuses = data.empathyStatuses as Record<string, unknown>;
         if (statuses[user.id]) {
           queryClient.setQueryData(stageKeys.empathyStatus(sessionId), statuses[user.id]);
@@ -3125,6 +3129,7 @@ export function UnifiedSessionScreen({
         visible={true}
         fullScreen={true}
         initialValue={user?.lastMoodIntensity ?? 4}
+        onBack={onNavigateBack}
         onComplete={(intensity) => {
           // Save to user profile (persists across sessions)
           updateMood({ intensity });

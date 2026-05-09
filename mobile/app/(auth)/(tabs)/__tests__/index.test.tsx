@@ -21,6 +21,7 @@ jest.mock('expo-router', () => ({
 // Mock lucide-react-native
 jest.mock('lucide-react-native', () => ({
   ArrowRight: () => 'ArrowRightIcon',
+  ArrowUp: () => 'ArrowUpIcon',
   Plus: () => 'PlusIcon',
   Heart: () => 'HeartIcon',
   UserPlus: () => 'UserPlusIcon',
@@ -182,6 +183,15 @@ function renderWithProviders(component: React.ReactElement) {
 }
 
 describe('HomeScreen', () => {
+  beforeAll(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-05-09T09:00:00-07:00'));
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(() => {
     mockPush.mockClear();
     mockUseSessions.mockClear();
@@ -250,7 +260,7 @@ describe('HomeScreen', () => {
 
     renderWithProviders(<HomeScreen />);
 
-    expect(screen.getByText('Hello, Test')).toBeTruthy();
+    expect(screen.getByText('Good morning, Test')).toBeTruthy();
   });
 
   it('shows main question', () => {
@@ -264,7 +274,7 @@ describe('HomeScreen', () => {
     expect(screen.getByText('What would you like to work through?')).toBeTruthy();
   });
 
-  it('shows New Conversation and Inner Work buttons', () => {
+  it('shows New Conversation and hides Inner Work while unavailable', () => {
     mockUseSessions.mockReturnValue({
       data: { items: [], hasMore: false },
       isLoading: false,
@@ -273,7 +283,7 @@ describe('HomeScreen', () => {
     renderWithProviders(<HomeScreen />);
 
     expect(screen.getByText('New conversation')).toBeTruthy();
-    expect(screen.getByText('Inner work')).toBeTruthy();
+    expect(screen.queryByText('Inner work')).toBeNull();
   });
 
   it('shows Continue button when there is a recent session with partner nickname', () => {
@@ -332,19 +342,6 @@ describe('HomeScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/session/new');
   });
 
-  it('navigates to inner thoughts when Inner Thoughts pressed', () => {
-    mockUseSessions.mockReturnValue({
-      data: { items: [], hasMore: false },
-      isLoading: false,
-    });
-
-    renderWithProviders(<HomeScreen />);
-
-    fireEvent.press(screen.getByLabelText('Inner Work'));
-
-    expect(mockPush).toHaveBeenCalledWith('/inner-work');
-  });
-
   it('navigates to session when Continue pressed', () => {
     const session = createMockSession({
       id: 'recent-session',
@@ -361,6 +358,32 @@ describe('HomeScreen', () => {
     fireEvent.press(screen.getByLabelText('Continue with Jane'));
 
     expect(mockPush).toHaveBeenCalledWith('/session/recent-session');
+  });
+
+  it('routes home composer to the inner work coming-soon chat', () => {
+    const session = createMockSession({
+      id: 'recent-session',
+      partner: { id: 'user-2', name: 'Jane', nickname: 'Jane' },
+    });
+
+    mockUseSessions.mockReturnValue({
+      data: { items: [session], hasMore: false },
+      isLoading: false,
+    });
+
+    renderWithProviders(<HomeScreen />);
+
+    fireEvent.changeText(screen.getByPlaceholderText("What's on your mind?"), 'I feel stuck');
+    fireEvent.press(screen.getByLabelText('Send'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/inner-work/self-reflection/[id]',
+      params: {
+        id: 'new',
+        comingSoon: '1',
+        initialMessage: 'Doing inner work by yourself is a feature coming soon.',
+      },
+    });
   });
 
   it('shows the most recently updated session for Continue button', () => {

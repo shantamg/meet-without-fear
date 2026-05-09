@@ -25,15 +25,24 @@ const FADE_DURATION = 300; // Match the fade animation duration
 
 export default function SelfReflectionChatScreen() {
   const router = useRouter();
-  const { id, partnerSessionId, partnerName, linkedTrigger, initialMessage } = useLocalSearchParams<{
+  const {
+    id,
+    partnerSessionId,
+    partnerName,
+    linkedTrigger,
+    initialMessage,
+    comingSoon,
+  } = useLocalSearchParams<{
     id: string;
     partnerSessionId?: string;
     partnerName?: string;
     linkedTrigger?: string;
     initialMessage?: string;
+    comingSoon?: string;
   }>();
 
   const isNewSession = id === 'new';
+  const isComingSoon = comingSoon === '1';
 
   // Track the created session ID in state to avoid route replacement remounting
   const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
@@ -56,7 +65,7 @@ export default function SelfReflectionChatScreen() {
 
   // Handle creating a new session when id="new"
   useEffect(() => {
-    if (id === 'new' && !hasStartedCreation.current) {
+    if (id === 'new' && !isComingSoon && !hasStartedCreation.current) {
       hasStartedCreation.current = true;
       createSession.mutate(
         {
@@ -89,11 +98,13 @@ export default function SelfReflectionChatScreen() {
         }
       );
     }
-  }, [id, partnerSessionId, linkedTrigger, initialMessage, createSession, router]);
+  }, [id, isComingSoon, partnerSessionId, linkedTrigger, initialMessage, createSession, router]);
 
   // Use created session ID if available, otherwise use URL id
-  const effectiveSessionId = createdSessionId || (id === 'new' ? '' : (id || ''));
-  const isCreating = id === 'new' && !createdSessionId;
+  const effectiveSessionId = isComingSoon
+    ? 'inner-work-coming-soon'
+    : createdSessionId || (id === 'new' ? '' : (id || ''));
+  const isCreating = id === 'new' && !isComingSoon && !createdSessionId;
 
   return (
     <>
@@ -101,7 +112,7 @@ export default function SelfReflectionChatScreen() {
         options={{
           headerShown: false,
           // Use fade for new sessions, slide for existing
-          animation: isNewSession ? 'fade' : 'slide_from_right',
+          animation: isComingSoon ? 'slide_from_right' : isNewSession ? 'fade' : 'slide_from_right',
           // Ensure swipe back works
           gestureEnabled: true,
         }}
@@ -118,7 +129,8 @@ export default function SelfReflectionChatScreen() {
         isCreating={isCreating}
         initialMessage={initialMessage}
         initialSuggestedActions={initialSuggestedActions}
-        hideContentUntilReady={!transitionComplete}
+        hideContentUntilReady={!isComingSoon && !transitionComplete}
+        comingSoonMode={isComingSoon}
       />
     </>
   );

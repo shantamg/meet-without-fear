@@ -21,16 +21,21 @@ import {
   UpdateMemoryPreferencesResponse,
   GetNotificationPreferencesResponse,
   UpdateNotificationPreferencesResponse,
+  GetPrivacyPreferencesResponse,
+  UpdatePrivacyPreferencesResponse,
   DeleteAccountResponse,
   MemoryPreferencesDTO,
   NotificationPreferencesDTO,
+  PrivacyPreferencesDTO,
   DEFAULT_MEMORY_PREFERENCES,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  DEFAULT_PRIVACY_PREFERENCES,
   updateProfileRequestSchema,
   updatePushTokenRequestSchema,
   updateBiometricPreferenceRequestSchema,
   updateMemoryPreferencesRequestSchema,
   updateNotificationPreferencesRequestSchema,
+  updatePrivacyPreferencesRequestSchema,
 } from '@meet-without-fear/shared';
 import { deleteAccountWithNotifications } from '../services/account-deletion';
 
@@ -532,6 +537,68 @@ export const updateNotificationPreferences = asyncHandler(async (req: Request, r
     data: {
       preferences: newPreferences,
     },
+  };
+
+  res.json(response);
+});
+
+// ============================================================================
+// GET /auth/me/privacy-preferences
+// ============================================================================
+
+export const getPrivacyPreferences = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const user = getUser(req);
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { privacyPreferences: true } as any,
+  });
+
+  const storedPrefs = (dbUser as { privacyPreferences?: unknown } | null)?.privacyPreferences as PrivacyPreferencesDTO | null;
+  const preferences: PrivacyPreferencesDTO = storedPrefs ?? DEFAULT_PRIVACY_PREFERENCES;
+
+  const response: ApiResponse<GetPrivacyPreferencesResponse> = {
+    success: true,
+    data: { preferences },
+  };
+
+  res.json(response);
+});
+
+// ============================================================================
+// PATCH /auth/me/privacy-preferences
+// ============================================================================
+
+export const updatePrivacyPreferences = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const user = getUser(req);
+
+  const parseResult = updatePrivacyPreferencesRequestSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    throw new ValidationError('Invalid privacy preferences data', {
+      errors: parseResult.error.flatten().fieldErrors,
+    });
+  }
+
+  const updates = parseResult.data;
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { privacyPreferences: true } as any,
+  });
+
+  const currentPrefs = ((dbUser as { privacyPreferences?: unknown } | null)?.privacyPreferences as PrivacyPreferencesDTO | null) ?? DEFAULT_PRIVACY_PREFERENCES;
+  const newPreferences: PrivacyPreferencesDTO = {
+    showActivityStatus: updates.showActivityStatus ?? currentPrefs.showActivityStatus,
+    allowSessionInvites: updates.allowSessionInvites ?? currentPrefs.allowSessionInvites,
+  };
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { privacyPreferences: newPreferences as object } as any,
+  });
+
+  const response: ApiResponse<UpdatePrivacyPreferencesResponse> = {
+    success: true,
+    data: { preferences: newPreferences },
   };
 
   res.json(response);

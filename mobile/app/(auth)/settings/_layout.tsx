@@ -11,23 +11,12 @@
  */
 
 import { Stack, useRouter } from 'expo-router';
-import { StyleSheet, TouchableOpacity } from 'react-native';
-import { ChevronLeft } from 'lucide-react-native';
 import { designFonts, useAppAppearance } from '@/theme';
+import { HeaderBackButton } from '@/src/components/HeaderBackButton';
 
 function BackButton() {
   const router = useRouter();
-  const { palette } = useAppAppearance();
-  return (
-    <TouchableOpacity
-      onPress={() => router.back()}
-      style={[styles.backButton, { backgroundColor: palette.chipBg }]}
-      accessibilityRole="button"
-      accessibilityLabel="Go back"
-    >
-      <ChevronLeft color={palette.text} size={24} strokeWidth={2.4} />
-    </TouchableOpacity>
-  );
+  return <HeaderBackButton onPress={() => router.back()} />;
 }
 
 export default function SettingsLayout() {
@@ -93,14 +82,3 @@ export default function SettingsLayout() {
     </Stack>
   );
 }
-
-const styles = StyleSheet.create({
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: -4,
-  },
-});

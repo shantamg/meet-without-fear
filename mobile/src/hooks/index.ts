@@ -94,6 +94,8 @@ export {
   // Hooks
   useProfile,
   useUpdateProfile,
+  usePrivacyPreferences,
+  useUpdatePrivacyPreferences,
   useUpdatePushToken,
   useUnregisterPushToken,
   useAblyToken,

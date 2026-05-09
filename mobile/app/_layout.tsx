@@ -120,14 +120,20 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
 
   return (
     <View style={[styles.webBackdrop, { backgroundColor: palette.bg }]}>
-      <View style={styles.webFrame}>
+      <View style={[styles.webFrame, { backgroundColor: palette.bg }]}>
         <NativeAppBanner />
-        <GestureHandlerRootView style={styles.container}>
+        <GestureHandlerRootView style={[styles.container, { backgroundColor: palette.bg }]}>
           <SafeAreaProvider>
             <SessionDrawerProvider>
               <ToastProvider>
                 {includeMixpanel && <MixpanelInitializer />}
-                <Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    gestureEnabled: false,
+                    contentStyle: { backgroundColor: palette.bg },
+                  }}
+                >
                   <Stack.Screen name="(public)" />
                   <Stack.Screen name="(auth)" />
                   <Stack.Screen name="+not-found" options={{ headerShown: true }} />

@@ -22,6 +22,8 @@ import {
   feelHeardRequestSchema,
   getMessagesQuerySchema,
   MessageRole,
+  DEFAULT_PRIVACY_PREFERENCES,
+  PrivacyPreferencesDTO,
 } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent, notifySessionMembers, publishMessageAIResponse, publishMessageError, publishTopicFrameUpdated } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
@@ -46,6 +48,15 @@ import { applyStage4AutoClosureFromSignal } from '../services/stage4-auto-closur
 // ============================================================================
 // Helpers
 // ============================================================================
+
+async function getShowActivityStatus(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { privacyPreferences: true } as any,
+  });
+  const preferences = ((user as { privacyPreferences?: unknown } | null)?.privacyPreferences as PrivacyPreferencesDTO | null) ?? DEFAULT_PRIVACY_PREFERENCES;
+  return preferences.showActivityStatus;
+}
 
 /**
  * Check if partner has completed stage 1 "feel heard"
@@ -1289,11 +1300,16 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       },
     });
     await touchUserSessionActivity(sessionId, user.id, userMessage.timestamp);
-    publishSessionEvent(sessionId, 'partner.activity', {
-      activeAt: userMessage.timestamp.toISOString(),
-    }, user.id).catch((err) =>
-      logger.warn(`[sendMessageStream:${requestId}] Failed to publish partner activity:`, err)
-    );
+    getShowActivityStatus(user.id)
+      .then((showActivityStatus) => {
+        if (!showActivityStatus) return;
+        return publishSessionEvent(sessionId, 'partner.activity', {
+          activeAt: userMessage.timestamp.toISOString(),
+        }, user.id);
+      })
+      .catch((err) =>
+        logger.warn(`[sendMessageStream:${requestId}] Failed to publish partner activity:`, err)
+      );
     logger.info(`[sendMessageStream:${requestId}] User message created: ${userMessage.id}`);
 
     // Broadcast to Status Site

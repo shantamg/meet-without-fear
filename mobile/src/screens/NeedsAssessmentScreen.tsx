@@ -9,7 +9,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ArrowLeft,
   Brain,
   ChevronRight,
   RefreshCw,
@@ -32,6 +31,7 @@ import {
   useSpeech,
 } from '../hooks';
 import { NeedWithScoreDTO } from '@meet-without-fear/shared';
+import { HeaderBackButton } from '../components/HeaderBackButton';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 
@@ -280,9 +280,7 @@ export function NeedsAssessmentScreen({
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <ArrowLeft size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <HeaderBackButton onPress={handleBack} />
           <Text style={styles.headerTitle}>Baseline Assessment</Text>
           <Text style={styles.headerProgress}>{currentNeedIndex + 1}/{needs.length}</Text>
         </View>
@@ -348,9 +346,7 @@ export function NeedsAssessmentScreen({
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <ArrowLeft size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <HeaderBackButton onPress={handleBack} />
           <Text style={styles.headerTitle}>Check In</Text>
           <View style={{ width: 32 }} />
         </View>
@@ -477,9 +473,7 @@ export function NeedsAssessmentScreen({
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <ArrowLeft size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <HeaderBackButton onPress={handleBack} />
         <Text style={styles.headerTitle}>Am I OK?</Text>
         <TouchableOpacity onPress={() => refetch()} style={styles.backButton}>
           <RefreshCw size={20} color={colors.textSecondary} />

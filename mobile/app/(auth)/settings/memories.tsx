@@ -6,7 +6,7 @@
  * Direct editing is not allowed - all changes go through AI validation.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -22,10 +22,10 @@ import {
   Platform,
   RefreshControl,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { Plus, Trash2, Edit3, X, Star, User, Check, MessageSquare } from 'lucide-react-native';
+import { Stack } from 'expo-router';
+import { Plus, Trash2, X, Star, Check, MessageSquare } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { colors, spacing, radius } from '@/src/theme';
+import { designFonts, spacing, radius, useAppAppearance } from '@/src/theme';
 import {
   useMemories,
   useDeleteMemory,
@@ -49,6 +49,9 @@ const CATEGORY_LABELS: Record<MemoryCategory, string> = {
   PREFERENCE: 'Preference',
 };
 
+type AppPalette = ReturnType<typeof useAppAppearance>['palette'];
+type MemoriesStyles = ReturnType<typeof makeStyles>;
+
 // ============================================================================
 // Memory Item Component
 // ============================================================================
@@ -58,9 +61,11 @@ interface MemoryItemProps {
   onRequestEdit: (memory: UserMemoryDTO) => void;
   onDelete: (memory: UserMemoryDTO) => void;
   swipeableRef: (ref: Swipeable | null) => void;
+  palette: AppPalette;
+  styles: MemoriesStyles;
 }
 
-function MemoryItem({ memory, onRequestEdit, onDelete, swipeableRef }: MemoryItemProps) {
+function MemoryItem({ memory, onRequestEdit, onDelete, swipeableRef, palette, styles }: MemoryItemProps) {
   const renderRightActions = useCallback(
     (
       _progress: Animated.AnimatedInterpolation<number>,
@@ -109,7 +114,7 @@ function MemoryItem({ memory, onRequestEdit, onDelete, swipeableRef }: MemoryIte
             {CATEGORY_LABELS[memory.category]}
           </Text>
         </View>
-        <MessageSquare color={colors.textMuted} size={18} />
+        <MessageSquare color={palette.textMuted} size={18} />
       </TouchableOpacity>
     </Swipeable>
   );
@@ -122,9 +127,11 @@ function MemoryItem({ memory, onRequestEdit, onDelete, swipeableRef }: MemoryIte
 interface CreateModalProps {
   visible: boolean;
   onClose: () => void;
+  palette: AppPalette;
+  styles: MemoriesStyles;
 }
 
-function CreateMemoryModal({ visible, onClose }: CreateModalProps) {
+function CreateMemoryModal({ visible, onClose, palette, styles }: CreateModalProps) {
   const [input, setInput] = useState('');
   const [suggestion, setSuggestion] = useState<FormattedMemorySuggestion | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -184,7 +191,7 @@ function CreateMemoryModal({ visible, onClose }: CreateModalProps) {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Add Memory</Text>
             <TouchableOpacity onPress={handleClose} style={styles.modalCloseButton}>
-              <X color={colors.textSecondary} size={24} />
+              <X color={palette.textMuted} size={24} />
             </TouchableOpacity>
           </View>
 
@@ -201,7 +208,7 @@ function CreateMemoryModal({ visible, onClose }: CreateModalProps) {
               setError(null);
             }}
             placeholder="e.g., Talk to me like a surfer would"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={palette.textFaint}
             multiline
             autoFocus
             editable={!isProcessing}
@@ -245,7 +252,7 @@ function CreateMemoryModal({ visible, onClose }: CreateModalProps) {
                   disabled={!input.trim() || isProcessing}
                 >
                   {formatMemory.isPending ? (
-                    <ActivityIndicator color={colors.textOnAccent} size="small" />
+                    <ActivityIndicator color={palette.bg} size="small" />
                   ) : (
                     <Text style={styles.modalSaveButtonText}>Preview</Text>
                   )}
@@ -269,10 +276,10 @@ function CreateMemoryModal({ visible, onClose }: CreateModalProps) {
                   disabled={isProcessing}
                 >
                   {confirmMemory.isPending ? (
-                    <ActivityIndicator color={colors.textOnAccent} size="small" />
+                    <ActivityIndicator color={palette.bg} size="small" />
                   ) : (
                     <>
-                      <Check color={colors.textOnAccent} size={18} />
+                      <Check color={palette.bg} size={18} />
                       <Text style={styles.modalSaveButtonText}>Save</Text>
                     </>
                   )}
@@ -294,9 +301,11 @@ interface EditModalProps {
   visible: boolean;
   memory: UserMemoryDTO | null;
   onClose: () => void;
+  palette: AppPalette;
+  styles: MemoriesStyles;
 }
 
-function EditMemoryModal({ visible, memory, onClose }: EditModalProps) {
+function EditMemoryModal({ visible, memory, onClose, palette, styles }: EditModalProps) {
   const [changeRequest, setChangeRequest] = useState('');
   const [suggestion, setSuggestion] = useState<UpdateMemoryAIResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -362,7 +371,7 @@ function EditMemoryModal({ visible, memory, onClose }: EditModalProps) {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Edit Memory</Text>
             <TouchableOpacity onPress={handleClose} style={styles.modalCloseButton}>
-              <X color={colors.textSecondary} size={24} />
+              <X color={palette.textMuted} size={24} />
             </TouchableOpacity>
           </View>
 
@@ -387,7 +396,7 @@ function EditMemoryModal({ visible, memory, onClose }: EditModalProps) {
               setError(null);
             }}
             placeholder="e.g., Make it more casual"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={palette.textFaint}
             multiline
             editable={!isProcessing}
           />
@@ -427,7 +436,7 @@ function EditMemoryModal({ visible, memory, onClose }: EditModalProps) {
                   disabled={!changeRequest.trim() || isProcessing}
                 >
                   {updateMemoryAI.isPending ? (
-                    <ActivityIndicator color={colors.textOnAccent} size="small" />
+                    <ActivityIndicator color={palette.bg} size="small" />
                   ) : (
                     <Text style={styles.modalSaveButtonText}>Preview</Text>
                   )}
@@ -451,10 +460,10 @@ function EditMemoryModal({ visible, memory, onClose }: EditModalProps) {
                   disabled={isProcessing}
                 >
                   {confirmMemoryUpdate.isPending ? (
-                    <ActivityIndicator color={colors.textOnAccent} size="small" />
+                    <ActivityIndicator color={palette.bg} size="small" />
                   ) : (
                     <>
-                      <Check color={colors.textOnAccent} size={18} />
+                      <Check color={palette.bg} size={18} />
                       <Text style={styles.modalSaveButtonText}>Save</Text>
                     </>
                   )}
@@ -473,7 +482,8 @@ function EditMemoryModal({ visible, memory, onClose }: EditModalProps) {
 // ============================================================================
 
 export default function MemoriesScreen() {
-  const router = useRouter();
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const { data: memories, isLoading, refetch, isRefetching } = useMemories();
   const deleteMemory = useDeleteMemory();
 
@@ -528,17 +538,18 @@ export default function MemoriesScreen() {
             headerShown: true,
             headerBackTitle: 'Back',
             headerStyle: {
-              backgroundColor: colors.bgPrimary,
+              backgroundColor: palette.bg,
             },
-            headerTintColor: colors.textPrimary,
+            headerTintColor: palette.text,
             headerTitleStyle: {
               fontWeight: '600',
-              color: colors.textPrimary,
+              color: palette.text,
+              fontFamily: designFonts.sans,
             },
           }}
         />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.accent} />
+          <ActivityIndicator size="large" color={palette.accent} />
           <Text style={styles.loadingText}>Loading memories...</Text>
         </View>
       </>
@@ -553,12 +564,13 @@ export default function MemoriesScreen() {
           headerShown: true,
           headerBackTitle: 'Back',
           headerStyle: {
-            backgroundColor: colors.bgPrimary,
+            backgroundColor: palette.bg,
           },
-          headerTintColor: colors.textPrimary,
+          headerTintColor: palette.text,
           headerTitleStyle: {
             fontWeight: '600',
-            color: colors.textPrimary,
+            color: palette.text,
+            fontFamily: designFonts.sans,
           },
         }}
       />
@@ -571,14 +583,14 @@ export default function MemoriesScreen() {
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={() => refetch()}
-              tintColor={colors.accent}
+              tintColor={palette.accent}
             />
           }
         >
           {!hasAnyMemories ? (
             // Empty state
             <View style={styles.emptyState}>
-              <Star color={colors.accent} size={48} />
+              <Star color={palette.accent} size={48} />
               <Text style={styles.emptyTitle}>No Memories Yet</Text>
               <Text style={styles.emptyDescription}>
                 Tap the + button to add things you'd like me to remember, like your
@@ -593,6 +605,8 @@ export default function MemoriesScreen() {
                   memory={memory}
                   onRequestEdit={handleRequestEdit}
                   onDelete={handleDelete}
+                  palette={palette}
+                  styles={styles}
                   swipeableRef={(ref) => {
                     if (ref) {
                       swipeableRefs.current.set(memory.id, ref);
@@ -613,7 +627,7 @@ export default function MemoriesScreen() {
           accessibilityRole="button"
           accessibilityLabel="Add new memory"
         >
-          <Plus color={colors.textOnAccent} size={28} />
+          <Plus color={palette.bg} size={28} />
         </TouchableOpacity>
       </View>
 
@@ -621,6 +635,8 @@ export default function MemoriesScreen() {
       <CreateMemoryModal
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
+        palette={palette}
+        styles={styles}
       />
 
       {/* Edit Memory Modal */}
@@ -628,6 +644,8 @@ export default function MemoriesScreen() {
         visible={editingMemory !== null}
         memory={editingMemory}
         onClose={() => setEditingMemory(null)}
+        palette={palette}
+        styles={styles}
       />
     </>
   );
@@ -637,10 +655,10 @@ export default function MemoriesScreen() {
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: AppPalette) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bgPage,
+    backgroundColor: palette.bg,
   },
   scrollView: {
     flex: 1,
@@ -651,14 +669,15 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: colors.bgPage,
+    backgroundColor: palette.bg,
     justifyContent: 'center',
     alignItems: 'center',
     gap: spacing.md,
   },
   loadingText: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 16,
+    fontFamily: designFonts.sans,
   },
 
   // Empty state
@@ -671,13 +690,15 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: palette.text,
+    fontFamily: designFonts.sans,
   },
   emptyDescription: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textAlign: 'center',
     lineHeight: 24,
+    fontFamily: designFonts.sans,
   },
 
   // Section
@@ -693,13 +714,15 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
+    fontFamily: designFonts.sans,
   },
   sectionSubtitle: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginBottom: spacing.md,
     marginLeft: 26,
+    fontFamily: designFonts.sans,
   },
   memoryList: {
     gap: spacing.sm,
@@ -709,10 +732,12 @@ const styles = StyleSheet.create({
   memoryItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: radius.md,
     padding: spacing.lg,
     gap: spacing.md,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   memoryContent: {
     flex: 1,
@@ -720,17 +745,19 @@ const styles = StyleSheet.create({
   },
   memoryText: {
     fontSize: 16,
-    color: colors.textPrimary,
+    color: palette.text,
     lineHeight: 22,
+    fontFamily: designFonts.sans,
   },
   memoryCategoryLabel: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: palette.textMuted,
+    fontFamily: designFonts.sans,
   },
 
   // Delete action
   deleteAction: {
-    backgroundColor: colors.error,
+    backgroundColor: palette.danger,
     justifyContent: 'center',
     alignItems: 'center',
     width: 80,
@@ -752,7 +779,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -765,18 +792,20 @@ const styles = StyleSheet.create({
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: palette.scrim,
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.xl,
   },
   modalContainer: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: radius.lg,
     padding: spacing.xl,
     width: '100%',
     maxWidth: 400,
     maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -787,93 +816,105 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
+    fontFamily: designFonts.sans,
   },
   modalCloseButton: {
     padding: spacing.xs,
   },
   modalDescription: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginBottom: spacing.md,
     lineHeight: 20,
+    fontFamily: designFonts.sans,
   },
   modalInput: {
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.bgPane,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.borderStrong,
     padding: spacing.md,
     fontSize: 16,
-    color: colors.textPrimary,
+    color: palette.text,
     minHeight: 80,
     textAlignVertical: 'top',
     marginBottom: spacing.md,
+    fontFamily: designFonts.sans,
   },
 
   // Current memory (in edit modal)
   currentMemoryContainer: {
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.bgPane,
     borderRadius: radius.sm,
     padding: spacing.md,
     marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   currentMemoryLabel: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: palette.textMuted,
     marginBottom: spacing.xs,
+    fontFamily: designFonts.sans,
   },
   currentMemoryContent: {
     fontSize: 15,
-    color: colors.textPrimary,
+    color: palette.text,
     fontStyle: 'italic',
     lineHeight: 22,
+    fontFamily: designFonts.sans,
   },
 
   // Error
   errorContainer: {
-    backgroundColor: colors.error + '20',
+    backgroundColor: palette.dangerSoft,
     borderRadius: radius.sm,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
   errorText: {
     fontSize: 14,
-    color: colors.error,
+    color: palette.danger,
     textAlign: 'center',
+    fontFamily: designFonts.sans,
   },
 
   // Suggestion preview
   suggestionContainer: {
-    backgroundColor: colors.accent + '15',
+    backgroundColor: palette.accentSoft,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: colors.accent + '40',
+    borderColor: palette.borderStrong,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
   suggestionLabel: {
     fontSize: 12,
-    color: colors.accent,
+    color: palette.accentText,
     fontWeight: '600',
     marginBottom: spacing.xs,
+    fontFamily: designFonts.sans,
   },
   suggestionContent: {
     fontSize: 15,
-    color: colors.textPrimary,
+    color: palette.text,
     fontStyle: 'italic',
     lineHeight: 22,
+    fontFamily: designFonts.sans,
   },
   suggestionCategory: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: palette.textMuted,
     marginTop: spacing.xs,
+    fontFamily: designFonts.sans,
   },
   suggestionReasoning: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginTop: spacing.sm,
     fontStyle: 'italic',
+    fontFamily: designFonts.sans,
   },
 
   // Modal buttons
@@ -883,19 +924,22 @@ const styles = StyleSheet.create({
   },
   modalCancelButton: {
     flex: 1,
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.bgPane,
     borderRadius: radius.sm,
     paddingVertical: spacing.md,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   modalCancelButtonText: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontWeight: '600',
+    fontFamily: designFonts.sans,
   },
   modalSaveButton: {
     flex: 1,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     borderRadius: radius.sm,
     paddingVertical: spacing.md,
     alignItems: 'center',
@@ -908,7 +952,8 @@ const styles = StyleSheet.create({
   },
   modalSaveButtonText: {
     fontSize: 16,
-    color: colors.textOnAccent,
+    color: palette.bg,
     fontWeight: '600',
+    fontFamily: designFonts.sans,
   },
 });

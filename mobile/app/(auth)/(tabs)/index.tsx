@@ -21,12 +21,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  Modal,
   Pressable,
   StyleSheet,
   TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowRight, ArrowUp, Plus, Layers, UserPlus, Menu, Settings } from 'lucide-react-native';
+import { ArrowRight, ArrowUp, Plus, Layers, UserPlus, Menu, Settings, X } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/src/hooks/useAuth';
@@ -36,6 +37,8 @@ import { useSessions, useAcceptInvitation } from '../../../src/hooks/useSessions
 import { useUnreadSessionCount } from '@/src/hooks/useUnreadSessionCount';
 import { BiometricPrompt, SessionDrawer } from '../../../src/components';
 import { designFonts, useAppAppearance } from '@/src/theme';
+
+const SHOW_INNER_WORK_BUTTON = false;
 
 // ============================================================================
 // Component
@@ -51,6 +54,7 @@ export default function HomeScreen() {
   const { openDrawer } = useSessionDrawer();
   const { count: unreadCount } = useUnreadSessionCount();
   const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const [showProcessDrawer, setShowProcessDrawer] = useState(false);
   const composerExtrasOpacity = useRef(new Animated.Value(1)).current;
 
   const dismissHomeComposer = useCallback(() => {
@@ -73,16 +77,6 @@ export default function HomeScreen() {
       await clearInvitation();
     },
   });
-
-  // Handle sending a message from home page chat input
-  // Navigate to inner thoughts - Expo Router handles the fade transition
-  const handleHomeChat = useCallback((message: string) => {
-    Keyboard.dismiss();
-    router.push({
-      pathname: '/inner-work/self-reflection/[id]',
-      params: { id: 'new', initialMessage: message },
-    });
-  }, [router]);
 
   // Wait for auth, sessions, and pending invitation check to load
   const isLoading = isAuthLoading || isSessionsLoading || isPendingLoading;
@@ -139,6 +133,27 @@ export default function HomeScreen() {
   // Get the partner's nickname or name for the continue button
   const partnerDisplayName = mostRecentSession?.partner?.nickname || mostRecentSession?.partner?.name;
 
+  // Handle sending a message from home page chat input.
+  // Inner work is temporarily unavailable, but we still route into the chat shell
+  // so the transition and layout stay familiar.
+  const handleHomeChat = useCallback(() => {
+    Keyboard.dismiss();
+    const params: {
+      id: string;
+      comingSoon: string;
+      initialMessage: string;
+    } = {
+      id: 'new',
+      comingSoon: '1',
+      initialMessage: 'Doing inner work by yourself is a feature coming soon.',
+    };
+
+    router.push({
+      pathname: '/inner-work/self-reflection/[id]',
+      params,
+    });
+  }, [router]);
+
   // Get inviter's name for pending invitation
   const inviterName = invitation?.invitedBy?.name || 'Someone';
   const hasPendingInvitation = pendingInvitation && invitation && invitation.status === 'PENDING';
@@ -167,6 +182,14 @@ export default function HomeScreen() {
   const handleSettings = useCallback(() => {
     router.push('/settings');
   }, [router]);
+
+  const handleOpenProcessDrawer = useCallback(() => {
+    setShowProcessDrawer(true);
+  }, []);
+
+  const handleCloseProcessDrawer = useCallback(() => {
+    setShowProcessDrawer(false);
+  }, []);
 
   // Get the user's display name
   const userName = user?.firstName || user?.name?.split(' ')[0] || 'there';
@@ -224,9 +247,8 @@ export default function HomeScreen() {
           >
             <Pressable style={styles.content} onPress={dismissHomeComposer}>
               <View style={styles.greetingSection}>
-                <Text style={styles.timeGreet}>{getGreetingLabel()}</Text>
                 <Text style={styles.greeting}>
-                  Hello, <Text style={styles.greetingEm}>{userName}</Text>
+                  {getGreetingLabel()}, <Text style={styles.greetingEm}>{userName}</Text>
                 </Text>
                 <Text style={styles.question}>
                   What would you like to work through?
@@ -299,22 +321,23 @@ export default function HomeScreen() {
                     <ArrowRight color={palette.textFaint} size={16} />
                   </TouchableOpacity>
 
-                  {/* Inner Work */}
-                  <TouchableOpacity
-                    style={styles.actionCard}
-                    onPress={handleInnerWork}
-                    accessibilityRole="button"
-                    accessibilityLabel="Inner Work"
-                  >
-                    <View style={styles.actionIcon}>
-                      <Layers color={palette.textMuted} size={18} />
-                    </View>
-                    <View style={styles.actionTextBlock}>
-                      <Text style={styles.actionTitle}>Inner work</Text>
-                      <Text style={styles.actionSub}>Sit with what came up, just for you</Text>
-                    </View>
-                    <ArrowRight color={palette.textFaint} size={16} />
-                  </TouchableOpacity>
+                  {SHOW_INNER_WORK_BUTTON && (
+                    <TouchableOpacity
+                      style={styles.actionCard}
+                      onPress={handleInnerWork}
+                      accessibilityRole="button"
+                      accessibilityLabel="Inner Work"
+                    >
+                      <View style={styles.actionIcon}>
+                        <Layers color={palette.textMuted} size={18} />
+                      </View>
+                      <View style={styles.actionTextBlock}>
+                        <Text style={styles.actionTitle}>Inner work</Text>
+                        <Text style={styles.actionSub}>Sit with what came up, just for you</Text>
+                      </View>
+                      <ArrowRight color={palette.textFaint} size={16} />
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 <View style={styles.whisper}>
@@ -327,6 +350,15 @@ export default function HomeScreen() {
                     It is okay to take your time getting to the words. The right ones usually arrive after the rough ones.
                   </Text>
                 </View>
+
+                <TouchableOpacity
+                  style={styles.processLink}
+                  onPress={handleOpenProcessDrawer}
+                  accessibilityRole="button"
+                  accessibilityLabel="How does this work?"
+                >
+                  <Text style={styles.processLinkText}>How does this work?</Text>
+                </TouchableOpacity>
                 </Animated.View>
               )}
             </Pressable>
@@ -346,6 +378,12 @@ export default function HomeScreen() {
           onDismiss={() => setShowBiometricPrompt(false)}
           testID="biometric-prompt"
         />
+
+        <ProcessDrawer
+          visible={showProcessDrawer}
+          onClose={handleCloseProcessDrawer}
+          palette={palette}
+        />
       </SafeAreaView>
     </SessionDrawer>
   );
@@ -353,8 +391,9 @@ export default function HomeScreen() {
 
 function getGreetingLabel() {
   const hour = new Date().getHours();
-  const part = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
-  return `This ${part}`;
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
 }
 
 function HomeComposer({
@@ -409,6 +448,90 @@ function HomeComposer({
         <ArrowUp color={canSend ? palette.bg : palette.textFaint} size={18} />
       </TouchableOpacity>
     </View>
+  );
+}
+
+const PROCESS_STEPS = [
+  {
+    title: 'Start in private',
+    body: 'Each person works with the AI separately. The app slows things down before anyone is asked to respond directly.',
+  },
+  {
+    title: 'Be fully heard',
+    body: 'You first tell your side without interruption. The AI reflects it back until you feel accurately understood.',
+  },
+  {
+    title: 'Practice understanding',
+    body: 'When both people are ready, the process helps each of you understand the other person without excusing or debating what happened.',
+  },
+  {
+    title: 'Name what matters',
+    body: 'You clarify the needs underneath the conflict, choose what to share, and only reveal it when both people have consented.',
+  },
+  {
+    title: 'Try a small repair',
+    body: 'The final step looks for small, reversible experiments both people are willing to try, then turns overlap into a clear next step.',
+  },
+];
+
+function ProcessDrawer({
+  visible,
+  onClose,
+  palette,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  palette: ReturnType<typeof useAppAppearance>['palette'];
+}) {
+  const styles = useMemo(() => makeProcessDrawerStyles(palette), [palette]);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
+          <View style={styles.handle} />
+          <View style={styles.drawerHeader}>
+            <View style={styles.drawerTitleBlock}>
+              <Text style={styles.drawerEyebrow}>A guided conversation</Text>
+              <Text style={styles.drawerTitle}>How it works</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <X color={palette.textMuted} size={18} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.intro}>
+            Meet Without Fear works like a buffer between two people. It helps
+            each side settle, be heard, and move toward a next step without
+            rushing into a reactive conversation.
+          </Text>
+
+          <View style={styles.steps}>
+            {PROCESS_STEPS.map((step, index) => (
+              <View key={step.title} style={styles.stepRow}>
+                <View style={styles.stepNumber}>
+                  <Text style={styles.stepNumberText}>{index + 1}</Text>
+                </View>
+                <View style={styles.stepTextBlock}>
+                  <Text style={styles.stepTitle}>{step.title}</Text>
+                  <Text style={styles.stepBody}>{step.body}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -520,6 +643,18 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) =>
     content: {
       flex: 1,
       paddingHorizontal: 16,
+    },
+    processLink: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      marginTop: 18,
+      marginLeft: 0,
+    },
+    processLinkText: {
+      color: palette.accentText,
+      fontSize: 15,
+      fontFamily: designFonts.serifItalic,
     },
     greetingSection: {
       paddingTop: 36,
@@ -673,5 +808,118 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) =>
       fontSize: 17,
       lineHeight: 24,
       fontFamily: designFonts.serifItalic,
+    },
+  });
+
+const makeProcessDrawerStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) =>
+  StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      backgroundColor: 'transparent',
+    },
+    sheet: {
+      backgroundColor: palette.bg,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      borderWidth: 1,
+      borderBottomWidth: 0,
+      borderColor: palette.border,
+      paddingHorizontal: 22,
+      paddingTop: 10,
+      paddingBottom: 28,
+    },
+    handle: {
+      alignSelf: 'center',
+      width: 44,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: palette.divider,
+      marginBottom: 22,
+    },
+    drawerHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 16,
+      marginBottom: 16,
+    },
+    drawerTitleBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+    drawerEyebrow: {
+      color: palette.accentText,
+      fontSize: 10,
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+      fontWeight: '700',
+      fontFamily: designFonts.mono,
+      marginBottom: 8,
+    },
+    drawerTitle: {
+      color: palette.text,
+      fontSize: 32,
+      lineHeight: 36,
+      fontFamily: designFonts.serif,
+    },
+    closeButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.chipBg,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    intro: {
+      color: palette.textMuted,
+      fontSize: 15,
+      lineHeight: 22,
+      fontFamily: designFonts.sans,
+      marginBottom: 22,
+    },
+    steps: {
+      gap: 16,
+    },
+    stepRow: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    stepNumber: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.chipBg,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    stepNumberText: {
+      color: palette.accentText,
+      fontSize: 11,
+      fontWeight: '700',
+      fontFamily: designFonts.mono,
+    },
+    stepTextBlock: {
+      flex: 1,
+      minWidth: 0,
+      paddingBottom: 2,
+    },
+    stepTitle: {
+      color: palette.text,
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: '700',
+      fontFamily: designFonts.sans,
+      marginBottom: 4,
+    },
+    stepBody: {
+      color: palette.textMuted,
+      fontSize: 14,
+      lineHeight: 20,
+      fontFamily: designFonts.sans,
     },
   });
