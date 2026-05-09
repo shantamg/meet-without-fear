@@ -62,7 +62,10 @@ Work in loops. Do not stop after a static audit. Seed data, load concrete situat
 2. Build or improve deterministic visual fixtures.
    Seed the database so each important real product situation can be loaded directly by URL with a known E2E user.
    Prefer one seeded session per major case, using the existing `seed-session`/StateFactory pattern and adding target stages as needed.
+   Keep the seed script as the main fixture manifest: as new visual cases are found, add or update a target stage there, create a session for that case, and navigate to the resulting session URL to verify the real app surface.
+   A visual audit case should normally be represented by a named seed target plus its returned `/session/:id` URL, not by a pile of manual setup steps.
    The primary visual fixtures for chat, drawers, CTAs, waiting, completed, blocked, and stage-specific states should be real `/session/:id` URLs created from the seed script, not manually clicked states and not only design-system mockups.
+   Use direct session URLs to prove the real route, header, sidebar, chat body, drawers, CTA panels, and state transitions all compose correctly around the target element.
    Use the design-system page as a live inventory for shared primitives, component variants, palette/type tokens, and representative props; do not treat it as a substitute for session-route verification when a real seeded state can cover the surface.
    If a state is hard to seed, first extend the seed script/StateFactory with a narrow target stage. Only add a fixture route or design-system-only preview when the state is genuinely not representable as persisted session state.
    Do not leave important states requiring private knowledge or fragile manual setup.
@@ -79,7 +82,7 @@ Work in loops. Do not stop after a static audit. Seed data, load concrete situat
    - `settings-light.png`
    - `share-topic-drawer-dark.png`
    Seed session fixtures before capture and navigate directly to each returned session URL for the user side that should see the state.
-   Keep an index file describing what each screenshot represents, the target stage or seed command used to create it, the exact URL loaded, and which user side was captured.
+   Keep an index file describing what each screenshot represents, the target stage or seed command used to create it, the exact URL loaded, which user side was captured, and whether the screenshot came from a real session route or the design-system inventory.
 
 4. Compare against the handoff direction and the in-app design-system page.
    For every screenshot, judge:
@@ -130,9 +133,10 @@ Work in loops. Do not stop after a static audit. Seed data, load concrete situat
 You are done only when all of these are true:
 
 - Every inventoried surface has a deterministic way to load it.
-- Every session-specific surface is backed by a seeded session target stage where feasible, with a direct `/session/:id` URL for the relevant E2E user side.
+- Every session-specific surface is backed by a named seeded session target stage where feasible, with a direct `/session/:id` URL for the relevant E2E user side.
+- The seed script is current enough that future visual review can regenerate one session per case without rediscovering manual setup.
 - Every inventoried surface has a current screenshot artifact in light and dark mode where applicable.
-- The screenshot index documents URL, seed command or target stage, user side, and notes for each surface.
+- The screenshot index documents URL, seed command or target stage, user side, route type, and notes for each surface.
 - The handoff zip has been inspected and its relevant visual traits have been reflected without copying fabricated content.
 - The design-system page exposes the core palette, typography, components, CTAs, drawers, sheets, and mode toggles.
 - The app has a clearer design architecture than before, with shared tokens/primitives and less duplicated styling.
