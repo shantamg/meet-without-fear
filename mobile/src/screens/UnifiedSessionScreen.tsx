@@ -62,6 +62,7 @@ import { TypewriterText } from '../components/TypewriterText';
 import { GuidedActionPanel } from '../components/GuidedActionPanel';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
+import { useSessionDrawer } from '../hooks/useSessionDrawer';
 import { useConfirmTopicFrame } from '../hooks/useSessions';
 import { useValidationFeedbackCoachChat } from '../hooks/useRefinementChat';
 import { useChatUIState } from '../hooks/useChatUIState';
@@ -508,6 +509,7 @@ export function UnifiedSessionScreen({
   const insets = useSafeAreaInsets();
   const { user, updateUser } = useAuth();
   const { mutate: updateMood } = useUpdateMood();
+  const { openDrawer } = useSessionDrawer();
   const queryClient = useQueryClient();
   const { showError } = useToast();
 
@@ -3117,7 +3119,8 @@ export function UnifiedSessionScreen({
             partnerOnline={partnerOnline}
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-            onBackPress={onNavigateBack}
+            onBackPress={openDrawer}
+            leftActionIcon="menu"
             onPress={() => setShowPartnerInfo(true)}
             stageName="Closed"
             testID="session-chat-header"
@@ -3153,7 +3156,8 @@ export function UnifiedSessionScreen({
           partnerOnline={partnerOnline}
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-          onBackPress={onNavigateBack}
+          onBackPress={openDrawer}
+          leftActionIcon="menu"
           onPress={() => setShowPartnerInfo(true)}
           stageName="Closed"
           testID="session-chat-header"
@@ -3192,7 +3196,8 @@ export function UnifiedSessionScreen({
             partnerOnline={partnerOnline}
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-            onBackPress={onNavigateBack}
+            onBackPress={openDrawer}
+            leftActionIcon="menu"
             onPress={() => setShowPartnerInfo(true)}
             stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
             testID="session-chat-header"
@@ -3229,7 +3234,8 @@ export function UnifiedSessionScreen({
             partnerOnline={partnerOnline}
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-            onBackPress={onNavigateBack}
+            onBackPress={openDrawer}
+            leftActionIcon="menu"
             onPress={() => setShowPartnerInfo(true)}
             stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
             testID="session-chat-header"
@@ -3260,7 +3266,8 @@ export function UnifiedSessionScreen({
           partnerOnline={partnerOnline}
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-          onBackPress={onNavigateBack}
+          onBackPress={openDrawer}
+          leftActionIcon="menu"
           onPress={() => setShowPartnerInfo(true)}
           stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
           testID="session-chat-header"
@@ -3297,7 +3304,8 @@ export function UnifiedSessionScreen({
           partnerOnline={partnerOnline}
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-          onBackPress={onNavigateBack}
+          onBackPress={openDrawer}
+          leftActionIcon="menu"
           onPress={() => setShowPartnerInfo(true)}
           stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
           testID="session-chat-header"
@@ -3341,7 +3349,8 @@ export function UnifiedSessionScreen({
         connectionStatus={connectionStatus}
         briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
         hideOnlineStatus={isInvitationPhase}
-        onBackPress={onNavigateBack}
+        onBackPress={openDrawer}
+        leftActionIcon="menu"
         onBriefStatusPress={
           session?.status === SessionStatus.INVITED && invitation?.isInviter
             ? () => {

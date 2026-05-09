@@ -33,6 +33,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { useSessionDrawer } from '../../hooks/useSessionDrawer';
 import { useSessions, useDeleteSession } from '../../hooks/useSessions';
 import { SessionCard } from '../SessionCard';
+import { Logo } from '../Logo';
 import { createStyles } from '../../theme/styled';
 import { colors } from '../../theme';
 import type { SessionSummaryDTO } from '@meet-without-fear/shared';
@@ -439,11 +440,23 @@ export function SessionDrawer({ children }: SessionDrawerProps) {
     router.push('/session/new');
   }, [closeDrawer, router]);
 
+  const handleHomePress = useCallback(() => {
+    closeDrawer();
+    router.replace('/(auth)/(tabs)');
+  }, [closeDrawer, router]);
+
   const renderDrawerContent = () => (
     <View style={[styles.drawerContent, { paddingTop: insets.top + 16, paddingBottom: insets.bottom }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Conversations</Text>
+        <TouchableOpacity
+          style={styles.logoButton}
+          onPress={handleHomePress}
+          accessibilityRole="button"
+          accessibilityLabel="Go to home"
+        >
+          <Logo size={96} />
+        </TouchableOpacity>
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.headerButton}
@@ -512,6 +525,10 @@ const useStyles = () =>
       fontSize: 22,
       fontWeight: '700',
       color: t.colors.textPrimary,
+    },
+    logoButton: {
+      paddingVertical: t.spacing.xs,
+      paddingRight: t.spacing.md,
     },
     headerActions: {
       flexDirection: 'row',

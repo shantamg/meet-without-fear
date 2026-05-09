@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import { ArrowLeft, BookOpen } from 'lucide-react-native';
+import { ArrowLeft, BookOpen, Menu } from 'lucide-react-native';
 import { ConnectionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
@@ -38,6 +38,8 @@ export interface SessionChatHeaderProps {
   hideOnlineStatus?: boolean;
   /** Callback when back button is pressed */
   onBackPress?: () => void;
+  /** Icon to use for the left navigation action */
+  leftActionIcon?: 'back' | 'menu';
   /** Optional callback when header center is pressed (e.g., to show session info) */
   onPress?: () => void;
   /** Optional callback when brief status is pressed (e.g., to show invitation options) */
@@ -93,6 +95,7 @@ export function SessionChatHeader({
   briefStatus,
   hideOnlineStatus = false,
   onBackPress,
+  leftActionIcon = 'back',
   onPress,
   onBriefStatusPress,
   hasNewActivity = false,
@@ -118,12 +121,14 @@ export function SessionChatHeader({
   };
 
   const displayName = partnerName || 'Meet Without Fear';
+  const LeftActionIcon = leftActionIcon === 'menu' ? Menu : ArrowLeft;
+  const leftActionLabel = leftActionIcon === 'menu' ? 'Open session drawer' : 'Go back';
 
   // Center content - always partner name + status (whether tabs or not)
   const centerContent = (
     <View style={styles.centerSection}>
       <View style={styles.nameRow}>
-        {!hideOnlineStatus && <StatusDot isOnline={isOnline} />}
+        {!hideOnlineStatus && stageName && <StatusDot isOnline={isOnline} />}
         <Text
           style={styles.partnerName}
           numberOfLines={1}
@@ -163,10 +168,10 @@ export function SessionChatHeader({
             style={styles.backButton}
             onPress={onBackPress}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={leftActionLabel}
             testID={`${testID}-back-button`}
           >
-            <ArrowLeft color={colors.textPrimary} size={24} />
+            <LeftActionIcon color={colors.textPrimary} size={24} />
           </TouchableOpacity>
         ) : (
           <View style={styles.backButtonSpacer} />
