@@ -33,6 +33,17 @@ interface CompactGates {
   signedAt?: string;
 }
 
+function latestDate(...values: Array<Date | null | undefined>): Date | null {
+  let latest: Date | null = null;
+  for (const value of values) {
+    if (!value) continue;
+    if (!latest || value > latest) {
+      latest = value;
+    }
+  }
+  return latest;
+}
+
 async function acceptPendingInvitationForE2ESession(sessionId: string, userId: string): Promise<boolean> {
   if (process.env.E2E_AUTH_BYPASS !== 'true' || process.env.NODE_ENV === 'production') {
     return false;
@@ -192,6 +203,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
         },
         select: {
           lastViewedAt: true,
+          lastActiveAt: true,
           lastSeenChatItemId: true,
         },
       }),
@@ -273,9 +285,40 @@ export async function getSessionState(req: Request, res: Response): Promise<void
           },
           select: {
             lastViewedAt: true,
+            lastActiveAt: true,
           },
         })
       : null;
+    const partnerLastMessage = partnerId
+      ? await prisma.message.findFirst({
+          where: {
+            sessionId,
+            senderId: partnerId,
+            role: 'USER',
+          },
+          orderBy: { timestamp: 'desc' },
+          select: { timestamp: true },
+        })
+      : null;
+    const partnerLastStageProgress = partnerId
+      ? await prisma.stageProgress.findFirst({
+          where: { sessionId, userId: partnerId },
+          orderBy: [
+            { completedAt: 'desc' },
+            { startedAt: 'desc' },
+          ],
+          select: {
+            startedAt: true,
+            completedAt: true,
+          },
+        })
+      : null;
+    const partnerLastActiveAt = latestDate(
+      partnerVessel?.lastActiveAt,
+      partnerLastMessage?.timestamp,
+      partnerLastStageProgress?.completedAt,
+      partnerLastStageProgress?.startedAt
+    );
 
     // Build messages response (reverse to chronological order)
     const hasMoreMessages = messages.length > 25;
@@ -368,6 +411,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
         resolvedAt: session.resolvedAt?.toISOString() ?? null,
         lastViewedAt: userVessel?.lastViewedAt?.toISOString() ?? null,
         partnerLastViewedAt: partnerVessel?.lastViewedAt?.toISOString() ?? null,
+        partnerLastActiveAt: partnerLastActiveAt?.toISOString() ?? null,
         lastSeenChatItemId: userVessel?.lastSeenChatItemId ?? null,
       },
 

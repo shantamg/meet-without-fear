@@ -50,9 +50,39 @@ type SessionWithIncludes = {
   userVessels?: Array<{
     userId: string;
     lastViewedAt: Date | null;
+    lastActiveAt?: Date | null;
     lastSeenChatItemId: string | null;
   }>;
 };
+
+/**
+ * Records that a user actively did something in a session.
+ *
+ * This is intentionally separate from lastViewedAt, which is read-state used
+ * for unread indicators and chat animation boundaries.
+ */
+export async function touchUserSessionActivity(
+  sessionId: string,
+  userId: string,
+  at: Date = new Date()
+): Promise<void> {
+  await prisma.userVessel.upsert({
+    where: {
+      userId_sessionId: {
+        userId,
+        sessionId,
+      },
+    },
+    update: {
+      lastActiveAt: at,
+    },
+    create: {
+      userId,
+      sessionId,
+      lastActiveAt: at,
+    },
+  });
+}
 
 /**
  * Gets the partner's user ID from a session

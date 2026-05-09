@@ -1091,12 +1091,14 @@ export async function markSessionViewed(req: Request, res: Response): Promise<vo
       },
       update: {
         lastViewedAt: now,
+        lastActiveAt: now,
         lastSeenChatItemId: lastSeenChatItemId ?? null,
       },
       create: {
         userId: user.id,
         sessionId,
         lastViewedAt: now,
+        lastActiveAt: now,
         lastSeenChatItemId: lastSeenChatItemId ?? null,
       },
     });
@@ -1109,6 +1111,7 @@ export async function markSessionViewed(req: Request, res: Response): Promise<vo
         const allStatuses = await buildEmpathyExchangeStatusForBothUsers(sessionId);
         await publishSessionEvent(sessionId, 'partner.session_viewed', {
           viewedAt: now.toISOString(),
+          activeAt: now.toISOString(),
           empathyStatuses: allStatuses,
         }, user.id);
       } catch (err) {
@@ -1156,11 +1159,13 @@ export async function markShareTabViewed(req: Request, res: Response): Promise<v
       },
       update: {
         lastViewedShareTabAt: now,
+        lastActiveAt: now,
       },
       create: {
         userId: user.id,
         sessionId,
         lastViewedShareTabAt: now,
+        lastActiveAt: now,
       },
     });
 
@@ -1172,6 +1177,7 @@ export async function markShareTabViewed(req: Request, res: Response): Promise<v
         const allStatuses = await buildEmpathyExchangeStatusForBothUsers(sessionId);
         await publishSessionEvent(sessionId, 'partner.share_tab_viewed', {
           viewedAt: now.toISOString(),
+          activeAt: now.toISOString(),
           empathyStatuses: allStatuses,
         }, user.id);
       } catch (err) {
