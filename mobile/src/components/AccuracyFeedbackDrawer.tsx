@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { X, Check, Minus, XCircle, ChevronLeft } from 'lucide-react-native';
-import { appWidthStyle, colors, modalPageStyle } from '@/theme';
+import { appWidthStyle, modalPageStyle, useAppAppearance } from '@/theme';
 
 export interface AccuracyFeedbackDrawerProps {
   /** Whether the drawer is visible */
@@ -51,6 +51,8 @@ export function AccuracyFeedbackDrawer({
   onClose,
   initialStep = 'accuracy',
 }: AccuracyFeedbackDrawerProps) {
+  const { palette } = useAppAppearance();
+  const styles = makeStyles(palette);
   const [isFeedbackStep, setIsFeedbackStep] = useState(initialStep === 'feedback');
   const [roughFeedback, setRoughFeedback] = useState('');
   const [showFeedbackError, setShowFeedbackError] = useState(false);
@@ -116,7 +118,7 @@ export function AccuracyFeedbackDrawer({
                 accessibilityLabel="Back"
                 hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               >
-                <ChevronLeft color={colors.textSecondary} size={24} />
+                <ChevronLeft color={palette.textMuted} size={24} />
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -126,7 +128,7 @@ export function AccuracyFeedbackDrawer({
               accessibilityLabel="Close"
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
             >
-              <X color={colors.textSecondary} size={24} />
+              <X color={palette.textMuted} size={24} />
             </TouchableOpacity>
           </View>
 
@@ -169,7 +171,7 @@ export function AccuracyFeedbackDrawer({
                       if (text.trim()) setShowFeedbackError(false);
                     }}
                     placeholder="For example: It misses that I felt dismissed, not just frustrated."
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor={palette.textFaint}
                     multiline
                     textAlignVertical="top"
                     testID="accuracy-rough-feedback-input"
@@ -211,7 +213,7 @@ export function AccuracyFeedbackDrawer({
                     activeOpacity={0.8}
                   >
                     <View style={[styles.feedbackIcon, styles.accurateIcon]}>
-                      <Check color="white" size={18} />
+                      <Check color={palette.bg} size={18} />
                     </View>
                     <View style={styles.feedbackTextContainer}>
                       <Text style={styles.feedbackButtonTitle}>Accurate</Text>
@@ -226,7 +228,7 @@ export function AccuracyFeedbackDrawer({
                     activeOpacity={0.8}
                   >
                     <View style={[styles.feedbackIcon, styles.partialIcon]}>
-                      <Minus color="white" size={18} />
+                      <Minus color={palette.bg} size={18} />
                     </View>
                     <View style={styles.feedbackTextContainer}>
                       <Text style={styles.feedbackButtonTitle}>Partially accurate</Text>
@@ -241,7 +243,7 @@ export function AccuracyFeedbackDrawer({
                     activeOpacity={0.8}
                   >
                     <View style={[styles.feedbackIcon, styles.inaccurateIcon]}>
-                      <XCircle color="white" size={18} />
+                      <XCircle color={palette.bg} size={18} />
                     </View>
                     <View style={styles.feedbackTextContainer}>
                       <Text style={styles.feedbackButtonTitle}>Not quite</Text>
@@ -259,13 +261,13 @@ export function AccuracyFeedbackDrawer({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   modalPage: {
     ...modalPageStyle,
   },
   container: {
     flex: 1,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bg,
     ...appWidthStyle,
   },
   header: {
@@ -277,12 +279,12 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 12,
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 20,
   },
   closeButton: {
     padding: 12,
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 20,
     marginLeft: 'auto',
   },
@@ -300,30 +302,30 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: palette.text,
     textAlign: 'center',
     marginBottom: 16,
     lineHeight: 36,
   },
   subtitle: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 24,
   },
   messageContainer: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     borderLeftWidth: 3,
-    borderLeftColor: colors.brandBlue,
+    borderLeftColor: palette.info,
     padding: 20,
     marginBottom: 32,
   },
   messageText: {
     fontSize: 17,
     fontStyle: 'italic',
-    color: colors.textPrimary,
+    color: palette.text,
     lineHeight: 26,
   },
   feedbackSection: {
@@ -332,13 +334,13 @@ const styles = StyleSheet.create({
   feedbackQuestion: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
     marginBottom: 4,
   },
   feedbackButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
     gap: 14,
@@ -351,13 +353,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   accurateIcon: {
-    backgroundColor: colors.success,
+    backgroundColor: palette.success,
   },
   partialIcon: {
-    backgroundColor: colors.warning,
+    backgroundColor: palette.warning,
   },
   inaccurateIcon: {
-    backgroundColor: colors.error,
+    backgroundColor: palette.danger,
   },
   feedbackTextContainer: {
     flex: 1,
@@ -365,36 +367,36 @@ const styles = StyleSheet.create({
   feedbackButtonTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
     marginBottom: 2,
   },
   feedbackButtonDesc: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     lineHeight: 20,
   },
   feedbackPrompt: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     lineHeight: 20,
   },
   feedbackInput: {
     minHeight: 140,
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     padding: 14,
     fontSize: 16,
     lineHeight: 22,
-    color: colors.textPrimary,
+    color: palette.text,
   },
   feedbackInputError: {
-    borderColor: colors.error,
+    borderColor: palette.danger,
   },
   feedbackError: {
     fontSize: 13,
-    color: colors.error,
+    color: palette.danger,
   },
   inputActions: {
     flexDirection: 'row',
@@ -406,20 +408,20 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: palette.textMuted,
   },
   continueButton: {
     flex: 1,
     minHeight: 48,
     borderRadius: 10,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -429,7 +431,7 @@ const styles = StyleSheet.create({
   continueButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.bg,
   },
 });
 

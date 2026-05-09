@@ -11,9 +11,10 @@ import { Stage } from '@meet-without-fear/shared';
  * Uses AI and Partner tabs to separate private coaching from shared content.
  */
 export default function SessionScreen() {
-  const { id, tendingEntryId } = useLocalSearchParams<{
+  const { id, tendingEntryId, auditFixture } = useLocalSearchParams<{
     id: string;
     tendingEntryId?: string;
+    auditFixture?: string;
   }>();
   const router = useRouter();
 
@@ -47,6 +48,7 @@ export default function SessionScreen() {
         <UnifiedSessionScreen
           sessionId={id}
           initialTendingEntryId={typeof tendingEntryId === 'string' ? tendingEntryId : null}
+          auditFixture={typeof auditFixture === 'string' ? auditFixture : null}
           onNavigateBack={handleNavigateBack}
           onStageComplete={handleStageComplete}
         />

@@ -113,6 +113,7 @@ import { shouldShowSessionEntryMoodCheck } from '../utils/sessionEntryMoodCheck'
 interface UnifiedSessionScreenProps {
   sessionId: string;
   initialTendingEntryId?: string | null;
+  auditFixture?: string | null;
   onNavigateBack?: () => void;
   onStageComplete?: (stage: Stage) => void;
 }
@@ -502,6 +503,7 @@ function MeasuredAnimatedPanel({
 export function UnifiedSessionScreen({
   sessionId,
   initialTendingEntryId = null,
+  auditFixture = null,
   onNavigateBack,
   onStageComplete,
 }: UnifiedSessionScreenProps) {
@@ -1232,6 +1234,7 @@ export function UnifiedSessionScreen({
   const [showFeedbackCoachChat, setShowFeedbackCoachChat] = useState(false);
   const [feedbackCoachRoughFeedback, setFeedbackCoachRoughFeedback] = useState('');
   const feedbackCoachInitializedRef = useRef(false);
+  const appliedAuditFixtureRef = useRef<string | null>(null);
   const [isAwaitingInvitationFollowUp, setIsAwaitingInvitationFollowUp] = useState(false);
 
   const hasInvitationTransitionResponse = useMemo(() => {
@@ -1360,6 +1363,47 @@ export function UnifiedSessionScreen({
   );
   const shouldUseRevealedNeeds =
     needsDrawerMode !== 'needs' && (needsComparisonData?.myNeeds?.length ?? 0) > 0;
+
+  useEffect(() => {
+    if (!auditFixture || appliedAuditFixtureRef.current === auditFixture) return;
+
+    if (
+      auditFixture === 'empathy-drawer' &&
+      (liveProposedEmpathyStatement || empathyDraftData?.draft?.content || empathyStatusData?.myAttempt?.content)
+    ) {
+      setShowEmpathyDrawer(true);
+      appliedAuditFixtureRef.current = auditFixture;
+      return;
+    }
+
+    if (auditFixture === 'accuracy-feedback' && partnerEmpathyData?.attempt?.content) {
+      setShowAccuracyFeedbackDrawer(true);
+      appliedAuditFixtureRef.current = auditFixture;
+      return;
+    }
+
+    if (auditFixture === 'guided-draft' && partnerEmpathyData?.attempt?.content) {
+      setFeedbackCoachRoughFeedback('I want to say what missed the mark without escalating.');
+      feedbackCoachInitializedRef.current = false;
+      setShowFeedbackCoachChat(true);
+      appliedAuditFixtureRef.current = auditFixture;
+      return;
+    }
+
+    if (auditFixture === 'needs-drawer' && needs && needs.length > 0) {
+      setNeedsDrawerMode(allNeedsConfirmed ? 'reveal' : 'needs');
+      setShowNeedsDrawer(true);
+      appliedAuditFixtureRef.current = auditFixture;
+    }
+  }, [
+    allNeedsConfirmed,
+    auditFixture,
+    empathyDraftData?.draft?.content,
+    empathyStatusData?.myAttempt?.content,
+    liveProposedEmpathyStatement,
+    needs,
+    partnerEmpathyData?.attempt?.content,
+  ]);
 
   const stage4Query = useStage4State(sessionId, {
     enabled:
@@ -3708,7 +3752,7 @@ export function UnifiedSessionScreen({
           pointing at the book icon. */}
       <Modal
         visible={
-          shouldShowInvitationPanel &&
+          (shouldShowInvitationPanel || auditFixture === 'invitation-ready') &&
           !!topicFrame &&
           !!invitationUrl &&
           !partnerAccepted

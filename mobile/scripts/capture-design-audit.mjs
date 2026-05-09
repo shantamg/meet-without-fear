@@ -54,6 +54,13 @@ const scrolledSessionFixtures = [
   ['session-stage4-inventory-a', 'STAGE4_REDESIGN_INVENTORY', 'userA', 'Scrolled viewport for Stage 4 proposal inventory and bottom action behavior.'],
 ];
 
+const sessionAuditFixtureOverlays = [
+  ['empathy-statement-drawer-real', 'session-empathy-shared-a', 'EMPATHY_SHARED_A', 'userA', 'empathy-drawer', 'Real empathy statement drawer opened from the seeded session route by audit fixture query.'],
+  ['accuracy-feedback-drawer-real', 'session-empathy-revealed-a', 'EMPATHY_REVEALED', 'userA', 'accuracy-feedback', 'Real accuracy feedback drawer opened from the seeded session route by audit fixture query.'],
+  ['guided-draft-modal-real', 'session-empathy-revealed-a', 'EMPATHY_REVEALED', 'userA', 'guided-draft', 'Real guided feedback draft modal opened from the seeded session route by audit fixture query.'],
+  ['needs-drawer-real', 'session-needs-complete-a', 'NEED_MAPPING_COMPLETE', 'userA', 'needs-drawer', 'Real needs drawer opened from the seeded session route by audit fixture query.'],
+];
+
 function withParams(route, mode) {
   const sep = route.includes('?') ? '&' : '?';
   return `${BASE_URL}${route}${sep}${baseParams}&mode=${mode}`;
@@ -62,6 +69,11 @@ function withParams(route, mode) {
 function withMode(url, mode) {
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}mode=${mode}`;
+}
+
+function withAuditFixture(url, auditFixture) {
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}auditFixture=${encodeURIComponent(auditFixture)}`;
 }
 
 async function seedSession(page, fixtureName, targetStage) {
@@ -214,6 +226,23 @@ async function main() {
     }
   }
 
+  for (const [filePrefix, seedName, targetStage, side, auditFixture, notes] of sessionAuditFixtureOverlays) {
+    const seed = seededSessions.get(seedName);
+    if (!seed) {
+      throw new Error(`Expected seed for session audit fixture ${seedName}`);
+    }
+    const seededUrl = (side === 'userB' ? seed.pageUrls.userB : seed.pageUrls.userA).replace('http://localhost:8081', BASE_URL);
+    const seedCommand = `POST ${API_BASE_URL}/api/e2e/seed-session targetStage=${targetStage}`;
+    for (const mode of ['light', 'dark']) {
+      const url = withAuditFixture(withMode(seededUrl, mode), auditFixture);
+      const fileName = `${filePrefix}-${mode}.png`;
+      await gotoFixture(page, url, mode);
+      await waitForApp(page);
+      await page.screenshot({ path: path.join(OUT_DIR, fileName), fullPage: true });
+      index.push(`| ${fileName} | ${mode} | session route audit fixture | \`${seedCommand}\` | \`${url}\` | ${notes} Session \`${seed.session.id}\`, side \`${side}\`. |`);
+    }
+  }
+
   const sidebarSeed = seededSessions.get('session-created-a');
   if (!sidebarSeed) {
     throw new Error('Expected session-created-a seed for sidebar interaction captures');
@@ -315,7 +344,7 @@ async function main() {
 
   await browser.close();
   await fs.writeFile(path.join(OUT_DIR, 'index.md'), `${index.join('\n')}\n`);
-  const screenshotCount = (sessionFixtures.length + scrolledSessionFixtures.length + routeFixtures.length) * 2 + 10;
+  const screenshotCount = (sessionFixtures.length + scrolledSessionFixtures.length + sessionAuditFixtureOverlays.length + routeFixtures.length) * 2 + 10;
   console.log(`Wrote ${screenshotCount} screenshots and index to ${OUT_DIR}`);
 }
 

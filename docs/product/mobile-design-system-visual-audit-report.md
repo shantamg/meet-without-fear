@@ -13,6 +13,7 @@ Last updated: 2026-05-09
   - Session sidebar open state and conversation row overflow menu
   - Real activity drawer opened from a seeded session header
   - Real partner info drawer opened from a seeded session header
+  - Real session-route audit fixtures for empathy statement, accuracy feedback, guided feedback draft, and needs drawers
   - Design-system inventory, palette, chat, CTAs, states, overlays
   - Session route states: created, empathy shared, reconciler shown, context shared, empathy revealed, needs complete, and Stage 4 variants
   - Scrolled viewport states for shared context, needs complete, and Stage 4 proposal inventory
@@ -23,16 +24,17 @@ Last updated: 2026-05-09
 
 Current run:
 
-`mobile/test-results/design-audit/2026-05-09T08-54-07-971Z/`
+`mobile/test-results/design-audit/2026-05-09T09-14-13-018Z/`
 
 Index:
 
-`mobile/test-results/design-audit/2026-05-09T08-54-07-971Z/index.md`
+`mobile/test-results/design-audit/2026-05-09T09-14-13-018Z/index.md`
 
-The index records each screenshot, light/dark mode, route type, seed target stage where applicable, exact URL, and user side. The run contains 68 screenshots:
+The index records each screenshot, light/dark mode, route type, seed target stage where applicable, exact URL, and user side. The run contains 76 screenshots:
 
 - 20 seeded session-route screenshots across 10 target stages in light/dark mode
 - 6 scrolled real-session screenshots across 3 long states in light/dark mode
+- 8 session-route audit-fixture screenshots in light/dark mode: empathy statement drawer, accuracy feedback drawer, guided feedback draft modal, and needs drawer
 - 10 real session interaction screenshots in light/dark mode: sidebar open, conversation row overflow menu, activity drawer, partner info drawer, and real share-topic drawer
 - 32 route/component inventory screenshots in light/dark mode, including settings subpages
 
@@ -49,11 +51,14 @@ The index records each screenshot, light/dark mode, route type, seed target stag
 - Added real browser interaction captures for the session sidebar open state and the conversation row overflow menu.
 - Added real browser interaction captures for the activity drawer from a seeded session header.
 - Added real browser interaction captures for partner info and share-topic drawers from seeded session routes.
+- Added `auditFixture` query support for real session routes so seeded sessions can deterministically open otherwise hard-to-reach session-owned drawers and modals for visual review.
+- Added real session-route audit-fixture captures for empathy statement, accuracy feedback, guided feedback draft, and needs surfaces.
 - Added scrolled real-session viewport captures for long chat/stage screens.
 - Fixed the capture harness so session-route dark screenshots persist the app appearance preference before navigation instead of relying on a design-system-only query param.
 - Anchored audit artifacts to `mobile/test-results/design-audit` regardless of the current working directory.
 - Moved `ActivityDrawer` and `TimelineItemCard` off static dark-only colors and onto the shared appearance palette.
 - Moved `PartnerInfoDrawer` off static dark-only colors and onto the shared appearance palette.
+- Moved `ViewEmpathyStatementDrawer`, `AccuracyFeedbackDrawer`, `GuidedDraftChatModal`, and `NeedsDrawer` off static dark-only colors and onto the shared appearance palette.
 - Added settings subpage screenshot coverage for account, voice, memories, privacy, and help.
 
 ## Tokens And Primitives Now Owning The Design
@@ -64,6 +69,7 @@ The index records each screenshot, light/dark mode, route type, seed target stag
 - `ChatBubble` and `ChatIndicator`: chat message and timeline-state primitives using semantic appearance tokens.
 - `ActivityDrawer` and `TimelineItemCard`: exchange-history drawer and timeline card surfaces using semantic appearance tokens.
 - `PartnerInfoDrawer`: partner detail sheet using semantic appearance tokens and shared scrim color.
+- `ViewEmpathyStatementDrawer`, `AccuracyFeedbackDrawer`, `GuidedDraftChatModal`, and `NeedsDrawer`: session-owned review, feedback, draft, and needs overlays using semantic appearance tokens.
 - `ShareTopicDrawer`, `SupportOptionsModal`, and design-system sheet preview: representative overlay/sheet/modal surfaces using shared palette logic.
 - `/design-system`: live inventory for palette, type, chat, CTAs, states, overlays, and conversation-list direction.
 
@@ -77,5 +83,5 @@ The index records each screenshot, light/dark mode, route type, seed target stag
 
 ## Known Issues And Follow-Ups
 
-- Activity drawer, partner info drawer, and share-topic drawer now have direct seeded-session interaction coverage; needs, empathy statement, accuracy feedback, transcription, invitation ready, edit suggestion, guided draft, and takeaway review still need direct seeded-session or URL-controllable fixture openings.
+- Activity drawer, partner info drawer, share-topic drawer, empathy statement drawer, accuracy feedback drawer, guided draft modal, and needs drawer now have direct seeded-session or URL-controllable session-route coverage. Transcription, invitation ready, edit suggestion, and takeaway review still need direct fixture openings.
 - The artifacts are ignored by git; durable review depends on the local `mobile/test-results/design-audit/...` directory unless artifact upload is added.

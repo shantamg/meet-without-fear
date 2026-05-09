@@ -22,7 +22,7 @@ import {
   LayoutChangeEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { appWidthStyle, colors } from '@/theme';
+import { appWidthStyle, useAppAppearance } from '@/theme';
 import { NeedCard } from './NeedCard';
 
 // ============================================================================
@@ -85,6 +85,8 @@ export function NeedsDrawer({
   testID = 'needs-drawer',
 }: NeedsDrawerProps) {
   const insets = useSafeAreaInsets();
+  const { palette } = useAppAppearance();
+  const styles = makeStyles(palette);
   const { height: windowHeight } = useWindowDimensions();
   const [drawerHostHeight, setDrawerHostHeight] = useState(windowHeight);
   const position3Q = drawerHostHeight * 0.25;
@@ -458,19 +460,21 @@ export function NeedsDrawer({
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   backdropPressable: {
     ...StyleSheet.absoluteFillObject,
   },
   backdrop: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: palette.scrim,
   },
   drawer: {
     position: 'absolute',
     left: 0,
     right: 0,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bgPane,
+    borderWidth: 1,
+    borderColor: palette.border,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     overflow: 'hidden',
@@ -485,12 +489,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.borderStrong,
   },
   header: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
@@ -506,20 +510,20 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: palette.text,
     marginBottom: 4,
     marginHorizontal: 16,
   },
   sectionSubtitle: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginBottom: 16,
     marginHorizontal: 16,
     lineHeight: 20,
   },
   emptyText: {
     fontSize: 14,
-    color: colors.textMuted,
+    color: palette.textFaint,
     textAlign: 'center',
     paddingVertical: 24,
     fontStyle: 'italic',
@@ -529,8 +533,8 @@ const styles = StyleSheet.create({
   // Fixed button area at bottom of drawer
   fixedButtonArea: {
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: colors.bgPrimary,
+    borderTopColor: palette.border,
+    backgroundColor: palette.bgPane,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 16,
@@ -543,7 +547,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     flex: 1,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -552,19 +556,19 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   primaryButtonText: {
-    color: colors.textOnAccent,
+    color: palette.bg,
     fontSize: 15,
     fontWeight: '600',
   },
   secondaryButton: {
     flex: 1,
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
   },
   secondaryButtonText: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -584,39 +588,39 @@ const styles = StyleSheet.create({
   columnHeader: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.textMuted,
+    color: palette.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 10,
     paddingHorizontal: 4,
   },
   revealCard: {
-    backgroundColor: 'rgba(147, 197, 253, 0.15)',
+    backgroundColor: palette.infoSoft,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(147, 197, 253, 0.3)',
+    borderColor: palette.info,
     padding: 10,
     marginBottom: 8,
     position: 'relative',
   },
   partnerRevealCard: {
-    backgroundColor: 'rgba(251, 191, 36, 0.12)',
-    borderColor: 'rgba(251, 191, 36, 0.3)',
+    backgroundColor: palette.warningSoft,
+    borderColor: palette.warning,
   },
   revealCategory: {
     fontSize: 11,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginBottom: 2,
   },
   revealNeed: {
     fontSize: 13,
-    color: colors.textPrimary,
+    color: palette.text,
     lineHeight: 18,
   },
   emptyColumnText: {
     fontSize: 13,
-    color: colors.textMuted,
+    color: palette.textFaint,
     fontStyle: 'italic',
     textAlign: 'center',
     paddingVertical: 12,
