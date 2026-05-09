@@ -11,25 +11,28 @@ Last updated: 2026-05-09
   - Home
   - Settings main page and settings subpages
   - Session sidebar open state and conversation row overflow menu
+  - Real activity drawer opened from a seeded session header
   - Design-system inventory, palette, chat, CTAs, states, overlays
   - Session route states: created, empathy shared, reconciler shown, context shared, empathy revealed, needs complete, and Stage 4 variants
+  - Scrolled viewport states for shared context, needs complete, and Stage 4 proposal inventory
   - Share topic drawer, support modal, and bottom-sheet-like decision surface
 
 ## Screenshot Artifacts
 
 Current run:
 
-`mobile/test-results/design-audit/2026-05-09T08-26-52-415Z/`
+`mobile/test-results/design-audit/2026-05-09T08-45-14-057Z/`
 
 Index:
 
-`mobile/test-results/design-audit/2026-05-09T08-26-52-415Z/index.md`
+`mobile/test-results/design-audit/2026-05-09T08-45-14-057Z/index.md`
 
-The index records each screenshot, light/dark mode, seed target stage where applicable, exact URL, and user side. The run contains 52 screenshots:
+The index records each screenshot, light/dark mode, route type, seed target stage where applicable, exact URL, and user side. The run contains 64 screenshots:
 
 - 20 seeded session-route screenshots across 10 target stages in light/dark mode
-- 4 real sidebar interaction screenshots in light/dark mode
-- 28 route/component inventory screenshots in light/dark mode, including settings subpages
+- 6 scrolled real-session screenshots across 3 long states in light/dark mode
+- 6 real session interaction screenshots in light/dark mode: sidebar open, conversation row overflow menu, and activity drawer
+- 32 route/component inventory screenshots in light/dark mode, including settings subpages
 
 ## What Was Refactored
 
@@ -42,6 +45,11 @@ The index records each screenshot, light/dark mode, seed target stage where appl
 - Added `mobile/scripts/capture-design-audit.mjs` to seed real sessions, capture light/dark screenshots, remove the Expo web app banner, and write a durable screenshot index.
 - Updated the `RECONCILER_SHOWN_B` seed target so the partner side satisfies mobile share-offer fetch eligibility and renders the real `ShareTopicPanel` in the session route.
 - Added real browser interaction captures for the session sidebar open state and the conversation row overflow menu.
+- Added real browser interaction captures for the activity drawer from a seeded session header.
+- Added scrolled real-session viewport captures for long chat/stage screens.
+- Fixed the capture harness so session-route dark screenshots persist the app appearance preference before navigation instead of relying on a design-system-only query param.
+- Anchored audit artifacts to `mobile/test-results/design-audit` regardless of the current working directory.
+- Moved `ActivityDrawer` and `TimelineItemCard` off static dark-only colors and onto the shared appearance palette.
 - Added settings subpage screenshot coverage for account, voice, memories, privacy, and help.
 
 ## Tokens And Primitives Now Owning The Design
@@ -50,6 +58,7 @@ The index records each screenshot, light/dark mode, seed target stage where appl
 - `mobile/src/theme/fonts.ts`: handoff font roles for Geist, Geist Mono, and Instrument Serif.
 - `GuidedActionPanel`: shared bottom CTA structure for topic, review, share, success, and needs states.
 - `ChatBubble` and `ChatIndicator`: chat message and timeline-state primitives using semantic appearance tokens.
+- `ActivityDrawer` and `TimelineItemCard`: exchange-history drawer and timeline card surfaces using semantic appearance tokens.
 - `ShareTopicDrawer`, `SupportOptionsModal`, and design-system sheet preview: representative overlay/sheet/modal surfaces using shared palette logic.
 - `/design-system`: live inventory for palette, type, chat, CTAs, states, overlays, and conversation-list direction.
 
@@ -63,6 +72,5 @@ The index records each screenshot, light/dark mode, seed target stage where appl
 
 ## Known Issues And Follow-Ups
 
-- Several drawer/sheet states are still covered through design-system representatives rather than direct seeded session interactions. The next pass should add narrow seed targets or URL-controllable fixture openings for activity, needs, partner info, empathy statement, accuracy feedback, transcription, invitation ready, edit suggestion, guided draft, and takeaway review surfaces.
-- The screenshot run captures first viewport states. Some long chat/stage screens need additional scrolled screenshots to verify lower content and sticky CTA behavior.
+- Activity drawer now has direct seeded-session interaction coverage; needs, partner info, empathy statement, accuracy feedback, transcription, invitation ready, edit suggestion, guided draft, and takeaway review still need direct seeded-session or URL-controllable fixture openings.
 - The artifacts are ignored by git; durable review depends on the local `mobile/test-results/design-audit/...` directory unless artifact upload is added.

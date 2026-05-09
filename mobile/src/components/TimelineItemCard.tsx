@@ -9,7 +9,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Share2 } from 'lucide-react-native';
-import { colors } from '@/theme';
+import { useAppAppearance } from '@/theme/appearance';
 
 // ============================================================================
 // Types
@@ -106,6 +106,8 @@ export function TimelineItemCard({
   onViewInChat,
   testID,
 }: TimelineItemCardProps) {
+  const { palette } = useAppAppearance();
+  const styles = makeStyles(palette);
   const resolvedTestID = testID || `timeline-item-${item.id}`;
   const isSent = item.direction === 'sent';
   const bubbleStyle = centered
@@ -152,7 +154,7 @@ export function TimelineItemCard({
       {/* Content */}
       {isInvitationTile ? (
         <View style={styles.invitationRow}>
-          <Share2 color={colors.textPrimary} size={20} />
+          <Share2 color={palette.text} size={20} />
           <Text style={styles.invitationTapText}>Tap to share</Text>
         </View>
       ) : (
@@ -244,24 +246,26 @@ export function TimelineItemCard({
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   card: {
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   bubbleSent: {
-    backgroundColor: '#1c3a5c', // dark brandBlue — "sent out"
+    backgroundColor: palette.infoSoft,
     marginLeft: 48,
     marginRight: 0,
   },
   bubbleReceived: {
-    backgroundColor: '#1a1f2e', // near-black dark grey
+    backgroundColor: palette.bgElev,
     marginLeft: 0,
     marginRight: 48,
   },
   bubbleCentered: {
-    backgroundColor: '#1e2d40',
+    backgroundColor: palette.accentSoft,
     marginLeft: 0,
     marginRight: 0,
   },
@@ -274,28 +278,28 @@ const styles = StyleSheet.create({
   typeLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
   timestamp: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: palette.textMuted,
   },
   content: {
     fontSize: 15,
     lineHeight: 22,
-    color: colors.textPrimary,
+    color: palette.text,
   },
   statusText: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginTop: 6,
     fontStyle: 'italic',
   },
   revisionNote: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginTop: 6,
     fontStyle: 'italic',
   },
@@ -309,28 +313,28 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.bgPane,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.borderStrong,
     alignItems: 'center',
   },
   secondaryButtonText: {
     fontSize: 14,
     fontWeight: '500',
-    color: colors.textPrimary,
+    color: palette.text,
   },
   primaryButton: {
     flex: 1,
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     alignItems: 'center',
   },
   primaryButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.textOnAccent,
+    color: palette.bg,
   },
   viewInChatButton: {
     marginTop: 12,
@@ -340,7 +344,7 @@ const styles = StyleSheet.create({
   viewInChatText: {
     fontSize: 14,
     fontWeight: '500',
-    color: colors.brandBlue,
+    color: palette.info,
   },
   invitationRow: {
     flexDirection: 'row',
@@ -351,7 +355,7 @@ const styles = StyleSheet.create({
   invitationTapText: {
     fontSize: 15,
     fontWeight: '500',
-    color: colors.textPrimary,
+    color: palette.text,
   },
 });
 

@@ -2,12 +2,15 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 
 const BASE_URL = process.env.MWF_AUDIT_BASE_URL || 'http://localhost:8082';
 const API_BASE_URL = process.env.MWF_AUDIT_API_URL || 'http://localhost:3000';
 const RUN_ID = process.env.MWF_AUDIT_RUN_ID || new Date().toISOString().replace(/[:.]/g, '-');
-const OUT_DIR = path.resolve('test-results/design-audit', RUN_ID);
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const MOBILE_DIR = path.resolve(SCRIPT_DIR, '..');
+const OUT_DIR = path.join(MOBILE_DIR, 'test-results/design-audit', RUN_ID);
 const E2E_USER_ID = 'cmoxzkzzy009kpx4vbaobcrg4';
 const E2E_USER_EMAIL = 'visual-a@e2e.test';
 
@@ -43,6 +46,12 @@ const sessionFixtures = [
   ['session-stage4-shared-a', 'STAGE4_REDESIGN_SHARED_SELECTIONS', 'userA', 'Stage 4 shared-selection CTA and overlap state.'],
   ['session-stage4-no-overlap-a', 'STAGE4_REDESIGN_NO_OVERLAP_SELECTIONS', 'userA', 'Stage 4 no-overlap state and guidance.'],
   ['session-stage4-inactive-a', 'STAGE4_REDESIGN_PARTNER_INACTIVE', 'userA', 'Stage 4 waiting/partner-inactive state.'],
+];
+
+const scrolledSessionFixtures = [
+  ['session-context-shared-a', 'CONTEXT_SHARED_B', 'userA', 'Scrolled viewport for shared-context chat history and sticky CTA behavior.'],
+  ['session-needs-complete-a', 'NEED_MAPPING_COMPLETE', 'userA', 'Scrolled viewport for needs/common-ground content and sticky CTA behavior.'],
+  ['session-stage4-inventory-a', 'STAGE4_REDESIGN_INVENTORY', 'userA', 'Scrolled viewport for Stage 4 proposal inventory and bottom action behavior.'],
 ];
 
 function withParams(route, mode) {
@@ -99,6 +108,40 @@ async function waitForApp(page) {
   await page.waitForTimeout(150);
 }
 
+async function setAppearanceMode(page, mode) {
+  if (!page.url().startsWith(BASE_URL)) {
+    await page.goto(`${BASE_URL}/?${baseParams}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  }
+  await page.evaluate((nextMode) => {
+    window.localStorage.setItem('mwf.appearancePreference', nextMode);
+  }, mode);
+}
+
+async function gotoFixture(page, url, mode) {
+  await setAppearanceMode(page, mode);
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+}
+
+async function scrollPrimarySurface(page) {
+  await page.evaluate(() => {
+    window.scrollTo(0, document.body.scrollHeight);
+
+    const scrollableNodes = Array.from(document.querySelectorAll('div, main, section, article'))
+      .filter((node) => node.scrollHeight - node.clientHeight > 80)
+      .sort((a, b) => {
+        const aRect = a.getBoundingClientRect();
+        const bRect = b.getBoundingClientRect();
+        return (bRect.width * bRect.height) - (aRect.width * aRect.height);
+      });
+
+    for (const node of scrollableNodes.slice(0, 3)) {
+      node.scrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
+    }
+  }).catch(() => {});
+  await page.mouse.wheel(0, 900).catch(() => {});
+  await page.waitForTimeout(300);
+}
+
 async function clickAndCapture(page, index, {
   baseUrl,
   click,
@@ -108,12 +151,12 @@ async function clickAndCapture(page, index, {
   seedCommand,
   urlForIndex,
 }) {
-  await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await gotoFixture(page, baseUrl, mode);
   await waitForApp(page);
   await click(page);
   await waitForApp(page);
   await page.screenshot({ path: path.join(OUT_DIR, fileName), fullPage: true });
-  index.push(`| ${fileName} | ${mode} | \`${seedCommand}\` | \`${urlForIndex || baseUrl}\` | ${notes} |`);
+  index.push(`| ${fileName} | ${mode} | session interaction | \`${seedCommand}\` | \`${urlForIndex || baseUrl}\` | ${notes} |`);
 }
 
 async function main() {
@@ -133,8 +176,8 @@ async function main() {
     `API URL: ${API_BASE_URL}`,
     `Design-system E2E user: ${E2E_USER_ID} / ${E2E_USER_EMAIL}`,
     '',
-    '| Screenshot | Mode | Seed command | URL | Notes |',
-    '| --- | --- | --- | --- | --- |',
+    '| Screenshot | Mode | Route type | Seed command | URL | Notes |',
+    '| --- | --- | --- | --- | --- | --- |',
   ];
   const seededSessions = new Map();
 
@@ -146,10 +189,28 @@ async function main() {
     for (const mode of ['light', 'dark']) {
       const url = withMode(seededUrl, mode);
       const fileName = `${name}-${mode}.png`;
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await gotoFixture(page, url, mode);
       await waitForApp(page);
       await page.screenshot({ path: path.join(OUT_DIR, fileName), fullPage: true });
-      index.push(`| ${fileName} | ${mode} | \`${seedCommand}\` | \`${url}\` | ${notes} Session \`${seed.session.id}\`, side \`${side}\`. |`);
+      index.push(`| ${fileName} | ${mode} | session route | \`${seedCommand}\` | \`${url}\` | ${notes} Session \`${seed.session.id}\`, side \`${side}\`. |`);
+    }
+  }
+
+  for (const [name, targetStage, side, notes] of scrolledSessionFixtures) {
+    const seed = seededSessions.get(name);
+    if (!seed) {
+      throw new Error(`Expected seed for scrolled capture ${name}`);
+    }
+    const seededUrl = (side === 'userB' ? seed.pageUrls.userB : seed.pageUrls.userA).replace('http://localhost:8081', BASE_URL);
+    const seedCommand = `POST ${API_BASE_URL}/api/e2e/seed-session targetStage=${targetStage}`;
+    for (const mode of ['light', 'dark']) {
+      const url = withMode(seededUrl, mode);
+      const fileName = `${name}-scrolled-${mode}.png`;
+      await gotoFixture(page, url, mode);
+      await waitForApp(page);
+      await scrollPrimarySurface(page);
+      await page.screenshot({ path: path.join(OUT_DIR, fileName), fullPage: false });
+      index.push(`| ${fileName} | ${mode} | session route scrolled viewport | \`${seedCommand}\` | \`${url}\` | ${notes} Session \`${seed.session.id}\`, side \`${side}\`. |`);
     }
   }
 
@@ -184,22 +245,46 @@ async function main() {
         await pageForClick.getByLabel(/More actions for /).first().click({ timeout: 10000 });
       },
     });
+
+  }
+
+  const activitySeed = seededSessions.get('session-context-shared-a');
+  if (!activitySeed) {
+    throw new Error('Expected session-context-shared-a seed for activity drawer interaction captures');
+  }
+  const activitySeedCommand = `POST ${API_BASE_URL}/api/e2e/seed-session targetStage=CONTEXT_SHARED_B`;
+  const activityBaseUrl = activitySeed.pageUrls.userA.replace('http://localhost:8081', BASE_URL);
+
+  for (const mode of ['light', 'dark']) {
+    const baseUrl = withMode(activityBaseUrl, mode);
+    await clickAndCapture(page, index, {
+      baseUrl,
+      mode,
+      seedCommand: activitySeedCommand,
+      fileName: `activity-drawer-${mode}.png`,
+      notes: `Real activity drawer opened from the session header. Session \`${activitySeed.session.id}\`, side \`userA\`.`,
+      click: async (pageForClick) => {
+        await pageForClick.getByLabel(/Open exchange history/).first().click({ timeout: 10000 });
+      },
+    });
   }
 
   for (const [name, route, notes] of routeFixtures) {
     for (const mode of ['light', 'dark']) {
       const url = withParams(route, mode);
       const fileName = `${name}-${mode}.png`;
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await gotoFixture(page, url, mode);
       await waitForApp(page);
       await page.screenshot({ path: path.join(OUT_DIR, fileName), fullPage: true });
-      index.push(`| ${fileName} | ${mode} | n/a | \`${url}\` | ${notes} |`);
+      const routeType = route.startsWith('/design-system') ? 'design-system inventory' : 'real route';
+      index.push(`| ${fileName} | ${mode} | ${routeType} | n/a | \`${url}\` | ${notes} |`);
     }
   }
 
   await browser.close();
   await fs.writeFile(path.join(OUT_DIR, 'index.md'), `${index.join('\n')}\n`);
-  console.log(`Wrote ${(sessionFixtures.length + routeFixtures.length) * 2} screenshots and index to ${OUT_DIR}`);
+  const screenshotCount = (sessionFixtures.length + scrolledSessionFixtures.length + routeFixtures.length) * 2 + 6;
+  console.log(`Wrote ${screenshotCount} screenshots and index to ${OUT_DIR}`);
 }
 
 main().catch((error) => {
