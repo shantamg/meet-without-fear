@@ -35,6 +35,19 @@ interface PushMessageContext {
   stageName: string;
 }
 
+interface StageProgressSnapshot {
+  stage: number;
+  status: string;
+}
+
+interface PushMessageSelectionContext {
+  userId: string;
+  event: SessionEvent;
+  data: Record<string, unknown>;
+  sessionId: string;
+  actorUserId: string | null;
+}
+
 /**
  * Push notification message templates for each session event type.
  * Use {actor} for the other person's display name. The send path resolves it
@@ -43,11 +56,11 @@ interface PushMessageContext {
 export const PUSH_MESSAGES: Record<SessionEvent, PushMessageTemplate> = {
   'partner.signed_compact': {
     title: '{actor} is ready',
-    body: 'You can begin the session when you are ready.',
+    body: 'You can start the session when you are ready.',
   },
   'partner.stage_completed': {
-    title: '{actor} finished {stageName}',
-    body: 'It is your turn to continue.',
+    title: '{actor} is progressing',
+    body: '{actor} moved forward. Come back and keep going when you are ready.',
   },
   'partner.advanced': {
     title: 'Next step is ready',
@@ -63,27 +76,27 @@ export const PUSH_MESSAGES: Record<SessionEvent, PushMessageTemplate> = {
   },
   'partner.needs_confirmed': {
     title: '{actor} confirmed needs',
-    body: 'You can continue the needs step.',
+    body: '{actor} confirmed their needs. Keep going when you are ready.',
   },
   'partner.needs_validated': {
     title: '{actor} checked the needs list',
-    body: 'Open the session to continue the repair process.',
+    body: 'Check the needs list when you are ready.',
   },
   'partner.needs_shared': {
     title: '{actorPossessive} needs are ready',
-    body: 'Open the session to review the needs list.',
+    body: 'Review the needs list when you are ready.',
   },
   'session.strategies_updated': {
-    title: 'Repair ideas are ready',
-    body: 'There are new repair ideas to review together.',
+    title: '{actor} reviewed repair ideas',
+    body: '{actor} made progress on repair ideas. Come back when you are ready.',
   },
   'partner.ranking_submitted': {
     title: '{actor} ranked repair ideas',
-    body: 'Open the session to compare rankings.',
+    body: 'Open the session to compare rankings when you are ready.',
   },
   'partner.ready_to_rank': {
     title: '{actor} is ready to rank',
-    body: 'You can start ranking repair ideas.',
+    body: 'Finish your review, then start ranking repair ideas when you are ready.',
   },
   'partner.consent_granted': {
     title: 'Content shared',
@@ -94,8 +107,8 @@ export const PUSH_MESSAGES: Record<SessionEvent, PushMessageTemplate> = {
     body: '{actor} withdrew shared content from this session.',
   },
   'agreement.proposed': {
-    title: 'Agreement ready to review',
-    body: '{actor} proposed a new agreement.',
+    title: '{actor} proposed an agreement',
+    body: 'Review the agreement and decide whether it works for you.',
   },
   'agreement.confirmed': {
     title: '{actor} confirmed an agreement',
@@ -107,7 +120,7 @@ export const PUSH_MESSAGES: Record<SessionEvent, PushMessageTemplate> = {
   },
   'session.resumed': {
     title: 'Session resumed',
-    body: '{actor} is back. Ready to continue?',
+    body: '{actor} resumed the session. Come back when you are ready.',
   },
   'session.resolved': {
     title: 'Session complete',
@@ -136,7 +149,7 @@ export const PUSH_MESSAGES: Record<SessionEvent, PushMessageTemplate> = {
   },
   'partner.skipped_refinement': {
     title: '{actor} accepted the current understanding',
-    body: 'You can move to the next step.',
+    body: '{actor} is ready to keep moving. Come back when you are ready.',
   },
   'empathy.share_suggestion': {
     title: 'Help {actor} understand',
@@ -144,7 +157,7 @@ export const PUSH_MESSAGES: Record<SessionEvent, PushMessageTemplate> = {
   },
   'empathy.context_shared': {
     title: '{actor} shared more context',
-    body: 'It is your turn to refine your empathy.',
+    body: 'Use the new context to refine your empathy when you are ready.',
   },
   'empathy.revealed': {
     title: 'Your empathy is revealed',
@@ -159,7 +172,7 @@ export const PUSH_MESSAGES: Record<SessionEvent, PushMessageTemplate> = {
     body: 'Open the session to see what is ready now.',
   },
   'notification.pending_action': {
-    title: 'Action needed',
+    title: 'Review needed',
     body: 'You have a new item to review in your activity menu.',
   },
   'empathy.resubmitted': {
@@ -213,15 +226,114 @@ function getStageName(data: Record<string, unknown>): string {
   }
 }
 
+function latestProgressForUser(
+  progress: StageProgressSnapshot[],
+  userId: string,
+): StageProgressSnapshot | null {
+  const userProgress = progress
+    .filter((entry) => (entry as StageProgressSnapshot & { userId?: string }).userId === userId)
+    .sort((a, b) => b.stage - a.stage);
+
+  return userProgress[0] ?? null;
+}
+
+async function getSessionProgressContext(
+  userId: string,
+  actorUserId: string | null,
+  sessionId: string,
+): Promise<{ recipient: StageProgressSnapshot | null; actor: StageProgressSnapshot | null }> {
+  if (!actorUserId || actorUserId === userId) {
+    return { recipient: null, actor: null };
+  }
+
+  try {
+    const progress = await prisma.stageProgress.findMany({
+      where: {
+        sessionId,
+        userId: { in: [userId, actorUserId] },
+      },
+      select: {
+        userId: true,
+        stage: true,
+        status: true,
+      },
+      orderBy: { stage: 'desc' },
+    }) as Array<StageProgressSnapshot & { userId: string }>;
+
+    return {
+      recipient: latestProgressForUser(progress, userId),
+      actor: latestProgressForUser(progress, actorUserId),
+    };
+  } catch (error) {
+    logger.warn(`[Push] Failed to resolve progress context for session ${sessionId}:`, error);
+    return { recipient: null, actor: null };
+  }
+}
+
+function isWaitingAt(progress: StageProgressSnapshot | null, stage: number): boolean {
+  return progress?.stage === stage && (progress.status === 'GATE_PENDING' || progress.status === 'COMPLETED');
+}
+
+function isStillWorkingAtOrPast(progress: StageProgressSnapshot | null, stage: number): boolean {
+  return !!progress && progress.stage >= stage && progress.status === 'IN_PROGRESS';
+}
+
+async function getStageCompletedTemplate(
+  context: PushMessageSelectionContext,
+): Promise<PushMessageTemplate> {
+  const completedStage = typeof context.data.stage === 'number' ? context.data.stage : null;
+  const progress = await getSessionProgressContext(context.userId, context.actorUserId, context.sessionId);
+
+  if (completedStage === Stage.WITNESS) {
+    if (isWaitingAt(progress.recipient, Stage.WITNESS)) {
+      return {
+        title: 'Ready to continue',
+        body: '{actor} felt heard, so the next step is ready when you are.',
+      };
+    }
+
+    if (isStillWorkingAtOrPast(progress.recipient, Stage.PERSPECTIVE_STRETCH)) {
+      return {
+        title: '{actor} is progressing',
+        body: '{actor} felt heard and moved forward. Come back and keep going when you are ready.',
+      };
+    }
+
+    return {
+      title: '{actor} moved forward',
+      body: '{actor} felt heard. Keep going at your own pace.',
+    };
+  }
+
+  if (completedStage === Stage.PERSPECTIVE_STRETCH) {
+    if (isWaitingAt(progress.recipient, Stage.PERSPECTIVE_STRETCH)) {
+      return {
+        title: 'Ready to continue',
+        body: '{actor} finished the empathy step. The next step is ready when you are.',
+      };
+    }
+
+    return {
+      title: '{actor} is progressing',
+      body: '{actor} finished the empathy step. Come back and keep going when you are ready.',
+    };
+  }
+
+  return {
+    title: '{actor} is progressing',
+    body: '{actor} moved forward. Come back and keep going when you are ready.',
+  };
+}
+
 async function getPushMessageTemplate(
   userId: string,
   event: SessionEvent,
   data: Record<string, unknown>,
   sessionId: string,
 ): Promise<PushMessageTemplate> {
-  if (event === 'partner.signed_compact') {
-    const actorUserId = getActorUserId(data);
+  const actorUserId = getActorUserId(data);
 
+  if (event === 'partner.signed_compact') {
     if (actorUserId && actorUserId !== userId) {
       const invitation = await prisma.invitation.findFirst({
         where: {
@@ -237,9 +349,40 @@ async function getPushMessageTemplate(
       if (invitation) {
         return {
           title: '{actor} accepted your invitation',
-          body: '{actor} has started their side of the session. Open it to continue.',
+          body: '{actor} accepted your invitation and started the session. Come back when you are ready.',
         };
       }
+    }
+  }
+
+  if (event === 'partner.stage_completed') {
+    return getStageCompletedTemplate({ userId, event, data, sessionId, actorUserId });
+  }
+
+  if (event === 'partner.advanced') {
+    return {
+      title: 'Next step is ready',
+      body: 'You are both ready for the next part of the session.',
+    };
+  }
+
+  if (event === 'partner.ready_to_rank') {
+    const progress = await getSessionProgressContext(userId, actorUserId, sessionId);
+    if (isWaitingAt(progress.recipient, Stage.STRATEGIC_REPAIR)) {
+      return {
+        title: '{actor} is ready to rank',
+        body: 'You can start ranking repair ideas when you are ready.',
+      };
+    }
+  }
+
+  if (event === 'empathy.context_shared') {
+    const progress = await getSessionProgressContext(userId, actorUserId, sessionId);
+    if (isWaitingAt(progress.recipient, Stage.PERSPECTIVE_STRETCH)) {
+      return {
+        title: '{actor} shared more context',
+        body: 'Use the new context to refine your empathy when you are ready.',
+      };
     }
   }
 
