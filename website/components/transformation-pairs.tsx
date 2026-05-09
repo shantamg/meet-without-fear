@@ -8,13 +8,16 @@ const PAIRS: Pair[] = [
   { from: "Heated", to: "Heard" },
   { from: "Enemy", to: "Human" },
   { from: "Blame", to: "Needs" },
-  { from: "Opposition", to: "Win–Win" },
+  { from: "Opposition", to: "Win-win" },
 ];
 
-const CYCLE_MS = 3600;
+const CYCLE_MS = 2600;
+const FADE_OUT_MS = 300;
+const FADE_IN_MS = 460;
 
 export function TransformationPairs() {
   const [index, setIndex] = useState(0);
+  const [visible, setVisible] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
 
   useEffect(() => {
@@ -28,10 +31,22 @@ export function TransformationPairs() {
 
   useEffect(() => {
     if (reducedMotion) return;
+    let swapTimeout: number | undefined;
+
     const id = window.setInterval(() => {
-      setIndex((i) => (i + 1) % PAIRS.length);
+      setVisible(false);
+      swapTimeout = window.setTimeout(() => {
+        setIndex((i) => (i + 1) % PAIRS.length);
+        setVisible(true);
+      }, FADE_OUT_MS);
     }, CYCLE_MS);
-    return () => window.clearInterval(id);
+
+    return () => {
+      window.clearInterval(id);
+      if (swapTimeout !== undefined) {
+        window.clearTimeout(swapTimeout);
+      }
+    };
   }, [reducedMotion]);
 
   // Reduced-motion fallback: stack all pairs as a quiet static list so the
@@ -60,36 +75,33 @@ export function TransformationPairs() {
       aria-live="polite"
       aria-label={`${PAIRS[index].from} to ${PAIRS[index].to}`}
     >
-      {PAIRS.map((p, i) => {
-        const isActive = i === index;
-        return (
-          <div
-            key={p.from}
-            aria-hidden={!isActive}
-            className={[
-              // whitespace-nowrap guarantees the pair stays on one line; the
-              // fluid clamp() font-size below ensures the longest pair
-              // ("Opposition → Win–Win") still fits at ~320px viewport up to
-              // desktop without ever wrapping or overflowing the column.
-              "absolute inset-0 flex items-center justify-center whitespace-nowrap transition-all duration-700 ease-out",
-              isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none",
-            ].join(" ")}
-          >
-            <span className="font-display text-[clamp(1.375rem,7.2vw,4.5rem)] leading-none text-muted-foreground">
-              {p.from}
-            </span>
-            <span
-              className="mx-3 text-[clamp(1rem,4vw,2rem)] text-brand-blue sm:mx-5 md:mx-7"
-              aria-hidden
-            >
-              →
-            </span>
-            <span className="font-display text-[clamp(1.375rem,7.2vw,4.5rem)] leading-none text-foreground">
-              {p.to}
-            </span>
-          </div>
-        );
-      })}
+      <div
+        className={[
+          // A single rendered phrase matches the app animation: fade out,
+          // swap while invisible, then fade in so phrases never collide.
+          "absolute inset-0 flex items-center justify-center whitespace-nowrap transition-all",
+          visible ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0",
+        ].join(" ")}
+        style={{
+          transitionDuration: `${visible ? FADE_IN_MS : FADE_OUT_MS}ms`,
+          transitionTimingFunction: visible
+            ? "cubic-bezier(0.215, 0.61, 0.355, 1)"
+            : "cubic-bezier(0.55, 0.055, 0.675, 0.19)",
+        }}
+      >
+        <span className="font-display text-[clamp(1.375rem,7.2vw,4.5rem)] leading-none text-muted-foreground">
+          {PAIRS[index].from}
+        </span>
+        <span
+          className="mx-3 text-[clamp(1rem,4vw,2rem)] text-brand-blue sm:mx-5 md:mx-7"
+          aria-hidden
+        >
+          →
+        </span>
+        <span className="font-display text-[clamp(1.375rem,7.2vw,4.5rem)] leading-none text-foreground">
+          {PAIRS[index].to}
+        </span>
+      </div>
       {/* Progress pips — tell the reader there's a rhythm, let them count. */}
       <div className="absolute -bottom-6 left-1/2 flex -translate-x-1/2 gap-2 sm:-bottom-8">
         {PAIRS.map((p, i) => (
