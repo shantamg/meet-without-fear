@@ -25,7 +25,7 @@ import {
 } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent, notifySessionMembers, publishMessageAIResponse, publishMessageError, publishTopicFrameUpdated } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
-import { getPartnerUserId, isSessionCreator } from '../utils/session';
+import { getPartnerUserId, isSessionCreator, touchUserSessionActivity } from '../utils/session';
 import { embedSessionContent } from '../services/embedding';
 import { updateSessionSummary, getSessionSummary } from '../services/conversation-summarizer';
 import { runReconcilerForDirection, getSharedContextForGuesser } from '../services/reconciler';
@@ -1288,6 +1288,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         stage: currentStage,
       },
     });
+    await touchUserSessionActivity(sessionId, user.id, userMessage.timestamp);
+    publishSessionEvent(sessionId, 'partner.activity', {
+      activeAt: userMessage.timestamp.toISOString(),
+    }, user.id).catch((err) =>
+      logger.warn(`[sendMessageStream:${requestId}] Failed to publish partner activity:`, err)
+    );
     logger.info(`[sendMessageStream:${requestId}] User message created: ${userMessage.id}`);
 
     // Broadcast to Status Site

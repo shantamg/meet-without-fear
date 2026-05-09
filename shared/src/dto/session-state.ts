@@ -44,6 +44,8 @@ export interface SessionStateResponse {
     lastViewedAt: string | null;
     // When the other person last viewed this session (for presence details)
     partnerLastViewedAt: string | null;
+    // When the other person last actively did something in this session
+    partnerLastActiveAt: string | null;
     // ID of last chat item seen (for "new messages" line placement)
     lastSeenChatItemId: string | null;
   };

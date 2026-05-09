@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   InteractionManager,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -77,58 +78,67 @@ export function BiometricLockOverlay() {
   const isFailed = lockState === 'failed';
 
   return (
-    <Animated.View
-      style={[styles.overlay, { opacity: fadeAnim }]}
-      pointerEvents={isLocked ? 'auto' : 'none'}
+    <Modal
+      visible
+      transparent={false}
+      animationType="none"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      onRequestClose={() => {}}
     >
-      <View style={styles.content}>
-        <View style={styles.mark}>
-          {isFailed ? (
-            <Lock size={52} color={colors.brandOrange} strokeWidth={1.6} />
+      <Animated.View
+        style={[styles.overlay, { opacity: fadeAnim }]}
+        pointerEvents={isLocked ? 'auto' : 'none'}
+      >
+        <View style={styles.content}>
+          <View style={styles.mark}>
+            {isFailed ? (
+              <Lock size={52} color={colors.brandOrange} strokeWidth={1.6} />
+            ) : (
+              <ShieldCheck size={58} color={colors.brandBlue} strokeWidth={1.5} />
+            )}
+          </View>
+
+          <Text style={styles.title}>
+            {isFailed ? 'Authentication failed' : 'Meet Without Fear is locked'}
+          </Text>
+          <Text style={styles.subtitle}>
+            {isFailed
+              ? error
+              : `Use ${biometricName} or your device passcode to continue.`}
+          </Text>
+
+          {isBusy ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={colors.textPrimary} />
+              <Text style={styles.loadingText}>Authenticating...</Text>
+            </View>
           ) : (
-            <ShieldCheck size={58} color={colors.brandBlue} strokeWidth={1.5} />
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleBiometricAuth}
+              accessibilityRole="button"
+            >
+              <RefreshCw size={18} color={colors.textOnAccent} />
+              <Text style={styles.primaryButtonText}>
+                {isFailed ? `Try ${biometricName} again` : `Unlock with ${biometricName}`}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {isFailed && (
+            <TouchableOpacity
+              style={styles.signOutButton}
+              onPress={handleSignOut}
+              accessibilityRole="button"
+            >
+              <LogOut size={17} color={colors.error} />
+              <Text style={styles.signOutText}>Sign out</Text>
+            </TouchableOpacity>
           )}
         </View>
-
-        <Text style={styles.title}>
-          {isFailed ? 'Authentication failed' : 'Meet Without Fear is locked'}
-        </Text>
-        <Text style={styles.subtitle}>
-          {isFailed
-            ? error
-            : `Use ${biometricName} or your device passcode to continue.`}
-        </Text>
-
-        {isBusy ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={colors.textPrimary} />
-            <Text style={styles.loadingText}>Authenticating...</Text>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={handleBiometricAuth}
-            accessibilityRole="button"
-          >
-            <RefreshCw size={18} color={colors.textOnAccent} />
-            <Text style={styles.primaryButtonText}>
-              {isFailed ? `Try ${biometricName} again` : `Unlock with ${biometricName}`}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {isFailed && (
-          <TouchableOpacity
-            style={styles.signOutButton}
-            onPress={handleSignOut}
-            accessibilityRole="button"
-          >
-            <LogOut size={17} color={colors.error} />
-            <Text style={styles.signOutText}>Sign out</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </Animated.View>
+      </Animated.View>
+    </Modal>
   );
 }
 

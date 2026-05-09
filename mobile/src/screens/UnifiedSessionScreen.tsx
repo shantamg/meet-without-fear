@@ -686,6 +686,27 @@ export function UnifiedSessionScreen({
     }
   }, [queryClient, refetchPersistedMessages, sessionId]);
 
+  const updatePartnerLastActiveAt = useCallback((activeAt: unknown, viewedAt?: unknown) => {
+    const activeAtString = typeof activeAt === 'string'
+      ? activeAt
+      : typeof viewedAt === 'string'
+        ? viewedAt
+        : null;
+    if (!activeAtString) return;
+
+    queryClient.setQueryData(sessionKeys.state(sessionId), (old: any) => {
+      if (!old?.session) return old;
+      return {
+        ...old,
+        session: {
+          ...old.session,
+          partnerLastActiveAt: activeAtString,
+          ...(typeof viewedAt === 'string' ? { partnerLastViewedAt: viewedAt } : {}),
+        },
+      };
+    });
+  }, [queryClient, sessionId]);
+
   useEffect(() => {
     const latestMessage = messages[messages.length - 1];
     if (
@@ -781,6 +802,7 @@ export function UnifiedSessionScreen({
       if (event === 'partner.session_viewed' && data.empathyStatuses && user?.id) {
         // Partner viewed the session - update delivery status
         console.log('[UnifiedSessionScreen] Partner viewed session, updating cache');
+        updatePartnerLastActiveAt(data.activeAt, data.viewedAt);
         const statuses = data.empathyStatuses as Record<string, unknown>;
         if (statuses[user.id]) {
           queryClient.setQueryData(stageKeys.empathyStatus(sessionId), statuses[user.id]);
@@ -790,10 +812,15 @@ export function UnifiedSessionScreen({
       if (event === 'partner.share_tab_viewed' && data.empathyStatuses && user?.id) {
         // Partner viewed the Share tab - update delivery status
         console.log('[UnifiedSessionScreen] Partner viewed Share tab, updating cache');
+        updatePartnerLastActiveAt(data.activeAt, data.viewedAt);
         const statuses = data.empathyStatuses as Record<string, unknown>;
         if (statuses[user.id]) {
           queryClient.setQueryData(stageKeys.empathyStatus(sessionId), statuses[user.id]);
         }
+      }
+
+      if (event === 'partner.activity') {
+        updatePartnerLastActiveAt(data.activeAt);
       }
 
       // Notification events - invalidate pending actions for activity menu badges
@@ -1248,13 +1275,19 @@ export function UnifiedSessionScreen({
     partnerProgress,
     session?.status
   );
-  const partnerLastViewedAt = (session as { partnerLastViewedAt?: string | null } | undefined)?.partnerLastViewedAt ?? null;
+  const partnerActivitySession = session as
+    | { partnerLastActiveAt?: string | null; partnerLastViewedAt?: string | null }
+    | undefined;
+  const partnerLastSeenAt =
+    partnerActivitySession?.partnerLastActiveAt ??
+    partnerActivitySession?.partnerLastViewedAt ??
+    null;
   const partnerInfoDrawer = (
     <PartnerInfoDrawer
       visible={showPartnerInfo}
       name={partnerInfoName}
       isOnline={partnerOnline}
-      lastSeenAt={partnerLastViewedAt}
+      lastSeenAt={partnerLastSeenAt}
       stageDescription={partnerStageDescription}
       topic={topicFrame}
       onClose={() => setShowPartnerInfo(false)}

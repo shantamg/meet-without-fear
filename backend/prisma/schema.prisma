@@ -366,6 +366,9 @@ model UserVessel {
   // When the user last viewed the Share/Partner tab
   // Used to determine "seen" status for shared content (empathy, context)
   lastViewedShareTabAt DateTime?
+  // When the user last actively did something in this session.
+  // Used for partner-facing presence details; distinct from read/view state.
+  lastActiveAt         DateTime?
   // When this user removed the session from their own conversation list.
   // The partner may still retain their own vessel and access.
   archivedAt           DateTime?
