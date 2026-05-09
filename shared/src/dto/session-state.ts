@@ -42,6 +42,8 @@ export interface SessionStateResponse {
     resolvedAt: string | null;
     // When the user last viewed this session (for cross-device animation/read boundaries)
     lastViewedAt: string | null;
+    // When the other person last viewed this session (for presence details)
+    partnerLastViewedAt: string | null;
     // ID of last chat item seen (for "new messages" line placement)
     lastSeenChatItemId: string | null;
   };
