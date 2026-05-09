@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#f6f3ec"/>
+  <g transform="translate(4, 13) scale(0.215)">
+    <!-- Right ellipse bottom half with gap for tail (back layer) -->
+    <path d="M 105,70 A 60,45 0 0,0 185,112"
+          fill="none"
+          stroke="#b7742f"
+          stroke-width="10"
+          stroke-linecap="round" />
+    <path d="M 207,102 A 60,45 0 0,0 225,70"
+          fill="none"
+          stroke="#b7742f"
+          stroke-width="10"
+          stroke-linecap="round" />
+
+    <!-- Right speech bubble tail (back layer) -->
+    <path d="M 207,102 Q 220,118 215,128 Q 198,115 185,112"
+          fill="none"
+          stroke="#b7742f"
+          stroke-width="10"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+
+    <!-- Left ellipse with gap for tail (middle layer) -->
+    <path d="M 53,102 A 60,45 0 1,1 75,112"
+          fill="none"
+          stroke="#517884"
+          stroke-width="10"
+          stroke-linecap="round" />
+
+    <!-- Speech bubble tail connecting the gap -->
+    <path d="M 53,102 Q 40,118 45,128 Q 62,115 75,112"
+          fill="none"
+          stroke="#517884"
+          stroke-width="10"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+
+    <!-- Right ellipse top half (front layer) -->
+    <path d="M 105,70 A 60,45 0 0,1 225,70"
+          fill="none"
+          stroke="#b7742f"
+          stroke-width="10" />
+  </g>
+</svg>
