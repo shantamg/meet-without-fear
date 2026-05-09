@@ -267,6 +267,38 @@ async function main() {
         await pageForClick.getByLabel(/Open exchange history/).first().click({ timeout: 10000 });
       },
     });
+
+    await clickAndCapture(page, index, {
+      baseUrl,
+      mode,
+      seedCommand: activitySeedCommand,
+      fileName: `partner-info-drawer-${mode}.png`,
+      notes: `Real partner info drawer opened from the session header. Session \`${activitySeed.session.id}\`, side \`userA\`.`,
+      click: async (pageForClick) => {
+        await pageForClick.getByTestId('session-chat-header-center-touchable').click({ timeout: 10000 });
+      },
+    });
+  }
+
+  const shareOfferSeed = seededSessions.get('session-reconciler-offer-b');
+  if (!shareOfferSeed) {
+    throw new Error('Expected session-reconciler-offer-b seed for share-topic drawer interaction captures');
+  }
+  const shareOfferSeedCommand = `POST ${API_BASE_URL}/api/e2e/seed-session targetStage=RECONCILER_SHOWN_B`;
+  const shareOfferBaseUrl = shareOfferSeed.pageUrls.userB.replace('http://localhost:8081', BASE_URL);
+
+  for (const mode of ['light', 'dark']) {
+    const baseUrl = withMode(shareOfferBaseUrl, mode);
+    await clickAndCapture(page, index, {
+      baseUrl,
+      mode,
+      seedCommand: shareOfferSeedCommand,
+      fileName: `share-topic-drawer-real-${mode}.png`,
+      notes: `Real share-topic drawer opened from the seeded partner offer panel. Session \`${shareOfferSeed.session.id}\`, side \`userB\`.`,
+      click: async (pageForClick) => {
+        await pageForClick.getByText('Review', { exact: true }).first().click({ timeout: 10000 });
+      },
+    });
   }
 
   for (const [name, route, notes] of routeFixtures) {
@@ -283,7 +315,7 @@ async function main() {
 
   await browser.close();
   await fs.writeFile(path.join(OUT_DIR, 'index.md'), `${index.join('\n')}\n`);
-  const screenshotCount = (sessionFixtures.length + scrolledSessionFixtures.length + routeFixtures.length) * 2 + 6;
+  const screenshotCount = (sessionFixtures.length + scrolledSessionFixtures.length + routeFixtures.length) * 2 + 10;
   console.log(`Wrote ${screenshotCount} screenshots and index to ${OUT_DIR}`);
 }
 
