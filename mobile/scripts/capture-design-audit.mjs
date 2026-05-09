@@ -16,6 +16,11 @@ const baseParams = `e2e-user-id=${encodeURIComponent(E2E_USER_ID)}&e2e-user-emai
 const routeFixtures = [
   ['home', '/', 'Real home route after audit sessions are seeded; validates app chrome, current-session cards, and list entry points.'],
   ['settings', '/settings', 'Real settings route; validates list rows, appearance controls, and settings header.'],
+  ['settings-account', '/settings/account', 'Settings account subpage; validates nested settings header and account rows.'],
+  ['settings-voice', '/settings/voice', 'Settings voice subpage; validates voice controls and nested page chrome.'],
+  ['settings-memories', '/settings/memories', 'Settings memories subpage; validates remembered-context settings surface.'],
+  ['settings-privacy', '/settings/privacy', 'Settings privacy subpage; validates privacy copy, rows, and nested settings chrome.'],
+  ['settings-help', '/settings/help', 'Settings help subpage; validates support rows and nested settings chrome.'],
   ['design-inventory', '/design-system?section=inventory', 'Component inventory of audited surfaces and conversation-list direction.'],
   ['design-palette', '/design-system?section=palette', 'Core palette, typography, and semantic token inventory.'],
   ['design-chat', '/design-system?section=chat', 'Component inventory for chat header, messages, indicators, input, and slider.'],
@@ -94,6 +99,23 @@ async function waitForApp(page) {
   await page.waitForTimeout(150);
 }
 
+async function clickAndCapture(page, index, {
+  baseUrl,
+  click,
+  fileName,
+  mode,
+  notes,
+  seedCommand,
+  urlForIndex,
+}) {
+  await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await waitForApp(page);
+  await click(page);
+  await waitForApp(page);
+  await page.screenshot({ path: path.join(OUT_DIR, fileName), fullPage: true });
+  index.push(`| ${fileName} | ${mode} | \`${seedCommand}\` | \`${urlForIndex || baseUrl}\` | ${notes} |`);
+}
+
 async function main() {
   await fs.mkdir(OUT_DIR, { recursive: true });
 
@@ -114,9 +136,11 @@ async function main() {
     '| Screenshot | Mode | Seed command | URL | Notes |',
     '| --- | --- | --- | --- | --- |',
   ];
+  const seededSessions = new Map();
 
   for (const [name, targetStage, side, notes] of sessionFixtures) {
     const seed = await seedSession(page, name, targetStage);
+    seededSessions.set(name, seed);
     const seededUrl = (side === 'userB' ? seed.pageUrls.userB : seed.pageUrls.userA).replace('http://localhost:8081', BASE_URL);
     const seedCommand = `POST ${API_BASE_URL}/api/e2e/seed-session targetStage=${targetStage}`;
     for (const mode of ['light', 'dark']) {
@@ -127,6 +151,39 @@ async function main() {
       await page.screenshot({ path: path.join(OUT_DIR, fileName), fullPage: true });
       index.push(`| ${fileName} | ${mode} | \`${seedCommand}\` | \`${url}\` | ${notes} Session \`${seed.session.id}\`, side \`${side}\`. |`);
     }
+  }
+
+  const sidebarSeed = seededSessions.get('session-created-a');
+  if (!sidebarSeed) {
+    throw new Error('Expected session-created-a seed for sidebar interaction captures');
+  }
+  const sidebarSeedCommand = `POST ${API_BASE_URL}/api/e2e/seed-session targetStage=CREATED`;
+  const sidebarBaseUrl = sidebarSeed.pageUrls.userA.replace('http://localhost:8081', BASE_URL);
+
+  for (const mode of ['light', 'dark']) {
+    const baseUrl = withMode(sidebarBaseUrl, mode);
+    await clickAndCapture(page, index, {
+      baseUrl,
+      mode,
+      seedCommand: sidebarSeedCommand,
+      fileName: `sidebar-open-${mode}.png`,
+      notes: `Real session drawer opened from session chrome. Session \`${sidebarSeed.session.id}\`, side \`userA\`.`,
+      click: async (pageForClick) => {
+        await pageForClick.getByLabel('Open session drawer').first().click({ timeout: 10000 });
+      },
+    });
+
+    await clickAndCapture(page, index, {
+      baseUrl,
+      mode,
+      seedCommand: sidebarSeedCommand,
+      fileName: `sidebar-row-menu-${mode}.png`,
+      notes: `Real session drawer row overflow menu opened from a seeded conversation row. Session \`${sidebarSeed.session.id}\`, side \`userA\`.`,
+      click: async (pageForClick) => {
+        await pageForClick.getByLabel('Open session drawer').first().click({ timeout: 10000 });
+        await pageForClick.getByLabel(/More actions for /).first().click({ timeout: 10000 });
+      },
+    });
   }
 
   for (const [name, route, notes] of routeFixtures) {
