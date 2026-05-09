@@ -21,6 +21,8 @@ import {
   Platform,
   Keyboard,
   Pressable,
+  StyleSheet,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowRight, Plus, Layers, UserPlus, Menu, Settings } from 'lucide-react-native';
@@ -31,16 +33,16 @@ import { useBiometricAuth, usePendingInvitation, useSessionDrawer } from '@/src/
 import { useInvitationDetails } from '@/src/hooks/useInvitation';
 import { useSessions, useAcceptInvitation } from '../../../src/hooks/useSessions';
 import { useUnreadSessionCount } from '@/src/hooks/useUnreadSessionCount';
-import { BiometricPrompt, Logo, ChatInput, SessionDrawer } from '../../../src/components';
-import { createStyles } from '@/src/theme/styled';
-import { colors } from '@/src/theme';
+import { BiometricPrompt, SessionDrawer } from '../../../src/components';
+import { designFonts, useAppAppearance } from '@/src/theme';
 
 // ============================================================================
 // Component
 // ============================================================================
 
 export default function HomeScreen() {
-  const styles = useStyles();
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const router = useRouter();
   const { user, isLoading: isAuthLoading } = useAuth();
   const { data, isLoading: isSessionsLoading } = useSessions();
@@ -143,7 +145,7 @@ export default function HomeScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.accent} />
+          <ActivityIndicator size="large" color={palette.accent} />
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
@@ -161,7 +163,7 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="Open session drawer"
             >
-              <Menu color={colors.textPrimary} size={24} />
+              <Menu color={palette.textMuted} size={22} />
               {unreadCount > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>
@@ -170,13 +172,17 @@ export default function HomeScreen() {
                 </View>
               )}
             </TouchableOpacity>
+            <View style={styles.brandMark}>
+              <View style={styles.brandDot} />
+              <Text style={styles.brandText}>meet without fear</Text>
+            </View>
             <TouchableOpacity
               style={styles.headerIconButton}
               onPress={handleSettings}
               accessibilityRole="button"
               accessibilityLabel="Open settings"
             >
-              <Settings color={colors.textPrimary} size={24} />
+              <Settings color={palette.textMuted} size={22} />
             </TouchableOpacity>
           </View>
 
@@ -186,82 +192,112 @@ export default function HomeScreen() {
             keyboardVerticalOffset={90}
           >
             <Pressable style={styles.content} onPress={Keyboard.dismiss}>
-              {/* Main greeting section - centered */}
               <View style={styles.greetingSection}>
-                <Logo size={120} />
-                <Text style={styles.greeting}>Hi {userName}</Text>
+                <Text style={styles.timeGreet}>{getGreetingLabel()}</Text>
+                <Text style={styles.greeting}>
+                  Hello, <Text style={styles.greetingEm}>{userName}</Text>
+                </Text>
                 <Text style={styles.question}>
-                  What can I help you work through today?
+                  What would you like to work through?
                 </Text>
               </View>
 
-              {/* Low-profile action buttons */}
               <View style={styles.actionsSection}>
                 {/* Accept pending invitation - shown first if there's a pending invitation */}
                 {hasPendingInvitation && (
                   <TouchableOpacity
-                    style={[styles.actionButton, styles.invitationButton]}
+                    style={[styles.actionCard, styles.primaryActionCard]}
                     onPress={handleAcceptInvitation}
                     accessibilityRole="button"
                     accessibilityLabel={`Accept ${inviterName}'s invitation`}
                     disabled={acceptInvitation.isPending}
                   >
                     {acceptInvitation.isPending ? (
-                      <ActivityIndicator size="small" color={colors.accent} />
+                      <ActivityIndicator size="small" color={palette.accent} />
                     ) : (
-                      <UserPlus color={colors.accent} size={18} />
+                      <View style={styles.actionIcon}>
+                        <UserPlus color={palette.textMuted} size={18} />
+                      </View>
                     )}
-                    <Text style={[styles.actionText, styles.invitationText]}>
-                      Accept {inviterName}&apos;s invitation
-                    </Text>
+                    <View style={styles.actionTextBlock}>
+                      <Text style={styles.actionEyebrow}>Invitation waiting</Text>
+                      <Text style={styles.actionTitle}>Accept {inviterName}&apos;s invitation</Text>
+                      <Text style={styles.actionSub}>Join the conversation when you are ready</Text>
+                    </View>
+                    <ArrowRight color={palette.textFaint} size={16} />
                   </TouchableOpacity>
                 )}
 
                 {/* Continue with partner - only show if there's a recent session and no pending invitation */}
                 {!hasPendingInvitation && mostRecentSession && partnerDisplayName && (
                   <TouchableOpacity
-                    style={styles.actionButton}
+                    style={[styles.actionCard, styles.primaryActionCard]}
                     onPress={handleContinueSession}
                     accessibilityRole="button"
                     accessibilityLabel={`Continue with ${partnerDisplayName}`}
                   >
-                    <ArrowRight color="#888" size={18} />
-                    <Text style={styles.actionText}>
-                      Continue with {partnerDisplayName}
-                    </Text>
+                    <View style={styles.actionAvatar}>
+                      <Text style={styles.actionAvatarText}>{partnerDisplayName.charAt(0).toUpperCase()}</Text>
+                      <View style={styles.actionPing} />
+                    </View>
+                    <View style={styles.actionTextBlock}>
+                      <Text style={styles.actionEyebrow}>Continue</Text>
+                      <Text style={styles.actionTitle}>A note for {partnerDisplayName}</Text>
+                      <Text style={styles.actionSub}>Pick up where you left off</Text>
+                    </View>
+                    <ArrowRight color={palette.textFaint} size={16} />
                   </TouchableOpacity>
                 )}
 
                 {/* New Session */}
                 <TouchableOpacity
-                  style={styles.actionButton}
+                  style={styles.actionCard}
                   onPress={handleNewSession}
                   accessibilityRole="button"
                   accessibilityLabel="Start new session"
                 >
-                  <Plus color="#888" size={18} />
-                  <Text style={styles.actionText}>New Session</Text>
+                  <View style={styles.actionIcon}>
+                    <Plus color={palette.textMuted} size={18} />
+                  </View>
+                  <View style={styles.actionTextBlock}>
+                    <Text style={styles.actionTitle}>New conversation</Text>
+                    <Text style={styles.actionSub}>Start with someone close to you</Text>
+                  </View>
+                  <ArrowRight color={palette.textFaint} size={16} />
                 </TouchableOpacity>
 
                 {/* Inner Work */}
                 <TouchableOpacity
-                  style={styles.actionButton}
+                  style={styles.actionCard}
                   onPress={handleInnerWork}
                   accessibilityRole="button"
                   accessibilityLabel="Inner Work"
                 >
-                  <Layers color="#888" size={18} />
-                  <Text style={styles.actionText}>Inner Work</Text>
+                  <View style={styles.actionIcon}>
+                    <Layers color={palette.textMuted} size={18} />
+                  </View>
+                  <View style={styles.actionTextBlock}>
+                    <Text style={styles.actionTitle}>Inner work</Text>
+                    <Text style={styles.actionSub}>Sit with what came up, just for you</Text>
+                  </View>
+                  <ArrowRight color={palette.textFaint} size={16} />
                 </TouchableOpacity>
+              </View>
+
+              <View style={styles.whisper}>
+                <View style={styles.whisperRule}>
+                  <View style={styles.whisperDot} />
+                  <Text style={styles.whisperLabel}>Today</Text>
+                  <View style={styles.whisperLine} />
+                </View>
+                <Text style={styles.whisperQuote}>
+                  It is okay to take your time getting to the words. The right ones usually arrive after the rough ones.
+                </Text>
               </View>
             </Pressable>
 
-            {/* Chat input - full width at bottom */}
             <View style={styles.chatInputSection}>
-              <ChatInput
-                onSend={handleHomeChat}
-                placeholder="What's on your mind?"
-              />
+              <HomeComposer onSend={handleHomeChat} palette={palette} />
             </View>
         </KeyboardAvoidingView>
 
@@ -276,43 +312,152 @@ export default function HomeScreen() {
   );
 }
 
+function getGreetingLabel() {
+  const hour = new Date().getHours();
+  const part = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+  return `Today ${part}`;
+}
+
+function HomeComposer({
+  onSend,
+  palette,
+}: {
+  onSend: (message: string) => void;
+  palette: ReturnType<typeof useAppAppearance>['palette'];
+}) {
+  const [value, setValue] = useState('');
+  const canSend = value.trim().length > 0;
+
+  const handleSend = () => {
+    if (!canSend) return;
+    const message = value.trim();
+    setValue('');
+    onSend(message);
+  };
+
+  return (
+    <View style={[composerStyles.container, { backgroundColor: palette.bg }]}>
+      <TextInput
+        value={value}
+        onChangeText={setValue}
+        placeholder="What's on your mind?"
+        placeholderTextColor={palette.textFaint}
+        style={[
+          composerStyles.input,
+          {
+            backgroundColor: palette.bgElev,
+            borderColor: palette.border,
+            color: palette.text,
+          },
+        ]}
+        onSubmitEditing={handleSend}
+        returnKeyType="send"
+      />
+      <TouchableOpacity
+        style={[
+          composerStyles.sendButton,
+          { backgroundColor: canSend ? palette.accent : palette.chipBg },
+        ]}
+        onPress={handleSend}
+        disabled={!canSend}
+        accessibilityRole="button"
+        accessibilityLabel="Send"
+      >
+        <ArrowRight color={canSend ? palette.bg : palette.textFaint} size={18} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // ============================================================================
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const composerStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 18,
+  },
+    input: {
+    flex: 1,
+    minHeight: 46,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    fontSize: 14,
+    fontFamily: designFonts.sans,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
+
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) =>
+  StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
     },
     headerBar: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.sm,
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 4,
     },
     headerIconButton: {
-      padding: t.spacing.sm,
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
       position: 'relative',
+    },
+    brandMark: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    brandDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: palette.accent,
+    },
+    brandText: {
+      color: palette.text,
+      fontSize: 18,
+      fontFamily: designFonts.serif,
+      letterSpacing: -0.1,
     },
     badge: {
       position: 'absolute',
-      top: 0,
+      top: 3,
       right: 0,
-      backgroundColor: t.colors.error,
-      borderRadius: 10,
-      minWidth: 18,
-      height: 18,
+      backgroundColor: palette.accent,
+      borderRadius: 999,
+      minWidth: 15,
+      height: 15,
       justifyContent: 'center',
       alignItems: 'center',
-      paddingHorizontal: 4,
+      paddingHorizontal: 3,
+      borderWidth: 2,
+      borderColor: palette.bg,
     },
     badgeText: {
-      color: '#FFFFFF',
-      fontSize: 11,
+      color: palette.bg,
+      fontSize: 9,
       fontWeight: '700',
+      fontFamily: designFonts.mono,
     },
     keyboardAvoid: {
       flex: 1,
@@ -326,61 +471,164 @@ const useStyles = () =>
     loadingText: {
       marginTop: 12,
       fontSize: 16,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
+      fontFamily: designFonts.sans,
     },
     content: {
       flex: 1,
-      paddingHorizontal: t.spacing.xl,
+      paddingHorizontal: 16,
     },
     greetingSection: {
-      alignItems: 'center',
-      paddingTop: t.spacing.xl,
-      paddingBottom: t.spacing.lg,
+      paddingTop: 36,
+      paddingHorizontal: 12,
+      paddingBottom: 28,
+    },
+    timeGreet: {
+      color: palette.textFaint,
+      fontSize: 10.5,
+      letterSpacing: 1.1,
+      textTransform: 'uppercase',
+      marginBottom: 16,
+      fontWeight: '600',
+      fontFamily: designFonts.mono,
     },
     greeting: {
-      fontSize: 36,
-      fontWeight: '700',
-      color: t.colors.textPrimary,
-      marginTop: t.spacing.xl,
-      marginBottom: t.spacing.lg,
-      textAlign: 'center',
+      fontSize: 44,
+      color: palette.text,
+      marginBottom: 12,
+      letterSpacing: -0.8,
+      lineHeight: 46,
+      fontFamily: designFonts.serif,
+    },
+    greetingEm: {
+      fontFamily: designFonts.serifItalic,
     },
     question: {
-      fontSize: 20,
-      color: t.colors.textSecondary,
-      textAlign: 'center',
-      lineHeight: 28,
+      fontSize: 15,
+      color: palette.textMuted,
+      lineHeight: 22,
       maxWidth: 280,
+      fontFamily: designFonts.sans,
     },
     actionsSection: {
-      flex: 1,
-      justifyContent: 'center',
-      gap: t.spacing.sm,
+      gap: 8,
     },
     chatInputSection: {
       borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-      backgroundColor: t.colors.bgPrimary,
+      borderTopColor: palette.divider,
+      backgroundColor: palette.bg,
     },
-    actionButton: {
+    actionCard: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 14,
+      padding: 14,
+      gap: 10,
+    },
+    primaryActionCard: {
+      borderLeftWidth: 3,
+      borderLeftColor: palette.accent,
+    },
+    actionIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 10,
+      alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: t.spacing.md,
-      paddingHorizontal: t.spacing.lg,
-      gap: t.spacing.sm,
+      backgroundColor: palette.chipBg,
+      borderWidth: 1,
+      borderColor: palette.border,
     },
-    actionText: {
-      fontSize: 15,
-      color: t.colors.textMuted,
+    actionAvatar: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.chipBg,
+      borderWidth: 1,
+      borderColor: palette.border,
+      position: 'relative',
     },
-    invitationButton: {
-      backgroundColor: `${t.colors.accent}15`,
-      borderRadius: 12,
-      marginBottom: t.spacing.sm,
+    actionAvatarText: {
+      color: palette.text,
+      fontWeight: '500',
+      fontSize: 14,
+      fontFamily: designFonts.sans,
     },
-    invitationText: {
-      color: t.colors.accent,
+    actionPing: {
+      position: 'absolute',
+      top: -1,
+      right: -1,
+      width: 9,
+      height: 9,
+      borderRadius: 5,
+      backgroundColor: palette.accent,
+      borderWidth: 2,
+      borderColor: palette.bg,
+    },
+    actionTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+    actionEyebrow: {
+      color: palette.accentText,
+      fontSize: 9.5,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      fontWeight: '700',
+      marginBottom: 4,
+      fontFamily: designFonts.mono,
+    },
+    actionTitle: {
+      color: palette.text,
+      fontSize: 14.5,
       fontWeight: '600',
+      marginBottom: 2,
+      fontFamily: designFonts.sans,
     },
-  }));
+    actionSub: {
+      color: palette.textMuted,
+      fontSize: 12.5,
+      fontFamily: designFonts.sans,
+    },
+    whisper: {
+      marginTop: 24,
+      paddingHorizontal: 12,
+    },
+    whisperRule: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 10,
+    },
+    whisperDot: {
+      width: 4,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: palette.textFaint,
+    },
+    whisperLabel: {
+      color: palette.textFaint,
+      fontSize: 10,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      fontWeight: '700',
+      fontFamily: designFonts.mono,
+    },
+    whisperLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: palette.divider,
+    },
+    whisperQuote: {
+      color: palette.textMuted,
+      fontSize: 17,
+      lineHeight: 24,
+      fontFamily: designFonts.serifItalic,
+    },
+  });

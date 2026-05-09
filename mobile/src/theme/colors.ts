@@ -1,37 +1,37 @@
 export const colors = {
-  // Background - dark navy theme
-  bgPrimary: '#1e293b',
-  bgSecondary: '#334155',
-  bgTertiary: '#475569',
-  bgPage: '#0f172a',
+  // Background - warm handoff theme
+  bgPrimary: '#0d0f12',
+  bgSecondary: '#14171c',
+  bgTertiary: '#1b1f25',
+  bgPage: '#090b0d',
 
   // Text
-  textPrimary: '#f1f5f9',
-  textSecondary: '#94a3b8',
-  textMuted: '#64748b',
-  textOnAccent: '#000000', // Black text for orange/accent buttons
+  textPrimary: '#ece9e1',
+  textSecondary: '#9b988e',
+  textMuted: '#65635c',
+  textOnAccent: '#0d0f12',
 
   // Brand colors
-  brandBlue: '#5ba4d9',
-  brandOrange: '#f5a623',
+  brandBlue: '#7bc6a0',
+  brandOrange: '#b8824a',
   brandPurple: '#9b7ddb',
-  brandNavy: '#2d4a7c',
-  brandCream: '#f5e6d3',
+  brandNavy: '#11141a',
+  brandCream: '#ece9e1',
 
   // Accent - primary is amber orange
-  accent: '#f5a623',
-  accentHover: '#d4922a',
+  accent: '#b8824a',
+  accentHover: '#d0a06d',
 
   // Semantic
-  userBg: '#334155',
-  border: '#475569',
-  success: '#10a37f',
-  successBg: '#1a3a30',
-  warning: '#f5a623',
+  userBg: 'rgba(255, 250, 240, 0.06)',
+  border: 'rgba(255, 250, 240, 0.08)',
+  success: '#b6aa79',
+  successBg: 'rgba(182, 170, 121, 0.16)',
+  warning: '#b8824a',
   error: '#ef4444',
 
   // Emotion gradient
-  calm: '#10a37f',
-  elevated: '#f5a623',
+  calm: '#b6aa79',
+  elevated: '#b8824a',
   intense: '#ef4444',
 } as const;

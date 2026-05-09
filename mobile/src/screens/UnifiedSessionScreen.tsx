@@ -93,7 +93,7 @@ import {
 } from '../utils/realtimeInvalidation';
 import { useToast } from '../contexts/ToastContext';
 import { createStyles } from '../theme/styled';
-import { appWidthStyle } from '../theme';
+import { appWidthStyle, useAppAppearance } from '../theme';
 import { WaitingBanner } from '../components/WaitingBanner';
 import {
   trackInvitationSent,
@@ -3874,11 +3874,12 @@ export function UnifiedSessionScreen({
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+  return createStyles((t) => ({
     container: {
       flex: 1,
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
       ...appWidthStyle,
     },
     content: {
@@ -3888,25 +3889,25 @@ const useStyles = () =>
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
       padding: 20,
     },
     loadingText: {
       marginTop: 12,
       fontSize: 16,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
     },
     accentColor: {
-      color: t.colors.accent,
+      color: palette.accent,
     },
 
     // Invitation Draft
     invitationDraftContainer: {
       paddingHorizontal: t.spacing.lg,
       paddingVertical: t.spacing.md,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bg,
       borderTopWidth: 1,
-      borderTopColor: t.colors.border,
+      borderTopColor: palette.border,
     },
     invitationDraftMessage: {
       fontSize: t.typography.fontSize.md,
@@ -4546,5 +4547,6 @@ const useStyles = () =>
       fontWeight: '600',
     },
   }));
+};
 
 export default UnifiedSessionScreen;

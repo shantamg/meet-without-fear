@@ -250,7 +250,7 @@ describe('HomeScreen', () => {
 
     renderWithProviders(<HomeScreen />);
 
-    expect(screen.getByText('Hi Test')).toBeTruthy();
+    expect(screen.getByText('Hello, Test')).toBeTruthy();
   });
 
   it('shows main question', () => {
@@ -261,10 +261,10 @@ describe('HomeScreen', () => {
 
     renderWithProviders(<HomeScreen />);
 
-    expect(screen.getByText('What can I help you work through today?')).toBeTruthy();
+    expect(screen.getByText('What would you like to work through?')).toBeTruthy();
   });
 
-  it('shows New Session and Inner Thoughts buttons', () => {
+  it('shows New Conversation and Inner Work buttons', () => {
     mockUseSessions.mockReturnValue({
       data: { items: [], hasMore: false },
       isLoading: false,
@@ -272,8 +272,8 @@ describe('HomeScreen', () => {
 
     renderWithProviders(<HomeScreen />);
 
-    expect(screen.getByText('New Session')).toBeTruthy();
-    expect(screen.getByText('Inner Work')).toBeTruthy();
+    expect(screen.getByText('New conversation')).toBeTruthy();
+    expect(screen.getByText('Inner work')).toBeTruthy();
   });
 
   it('shows Continue button when there is a recent session with partner nickname', () => {
@@ -289,7 +289,7 @@ describe('HomeScreen', () => {
 
     renderWithProviders(<HomeScreen />);
 
-    expect(screen.getByText('Continue with Jane')).toBeTruthy();
+    expect(screen.getByLabelText('Continue with Jane')).toBeTruthy();
   });
 
   it('uses partner name when nickname is not available', () => {
@@ -305,7 +305,7 @@ describe('HomeScreen', () => {
 
     renderWithProviders(<HomeScreen />);
 
-    expect(screen.getByText('Continue with Jane Doe')).toBeTruthy();
+    expect(screen.getByLabelText('Continue with Jane Doe')).toBeTruthy();
   });
 
   it('does not show Continue button when no sessions exist', () => {
@@ -327,7 +327,7 @@ describe('HomeScreen', () => {
 
     renderWithProviders(<HomeScreen />);
 
-    fireEvent.press(screen.getByText('New Session'));
+    fireEvent.press(screen.getByLabelText('Start new session'));
 
     expect(mockPush).toHaveBeenCalledWith('/session/new');
   });
@@ -340,7 +340,7 @@ describe('HomeScreen', () => {
 
     renderWithProviders(<HomeScreen />);
 
-    fireEvent.press(screen.getByText('Inner Work'));
+    fireEvent.press(screen.getByLabelText('Inner Work'));
 
     expect(mockPush).toHaveBeenCalledWith('/inner-work');
   });
@@ -358,7 +358,7 @@ describe('HomeScreen', () => {
 
     renderWithProviders(<HomeScreen />);
 
-    fireEvent.press(screen.getByText('Continue with Jane'));
+    fireEvent.press(screen.getByLabelText('Continue with Jane'));
 
     expect(mockPush).toHaveBeenCalledWith('/session/recent-session');
   });
@@ -383,8 +383,8 @@ describe('HomeScreen', () => {
     renderWithProviders(<HomeScreen />);
 
     // Should show the newer session's partner
-    expect(screen.getByText('Continue with New')).toBeTruthy();
-    expect(screen.queryByText('Continue with Old')).toBeNull();
+    expect(screen.getByLabelText('Continue with New')).toBeTruthy();
+    expect(screen.queryByLabelText('Continue with Old')).toBeNull();
   });
 
   it('does not show biometric prompt when already prompted', () => {

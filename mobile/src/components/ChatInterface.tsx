@@ -19,6 +19,7 @@ import { EmotionSlider } from './EmotionSlider';
 import { ChatIndicator, ChatIndicatorType } from './ChatIndicator';
 import { EmpathyValidationCard } from './EmpathyValidationCard';
 import { createStyles } from '../theme/styled';
+import { designFonts, useAppAppearance } from '../theme';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 import { isPreRegisteredAnimatedId } from '../utils/animationBridge';
 
@@ -886,19 +887,20 @@ export function ChatInterface({
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+  return createStyles((t) => ({
     container: {
       flex: 1,
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
     },
     flatList: {
       flex: 1,
     },
     messageList: {
-      paddingVertical: t.spacing.lg,
+      paddingVertical: 18,
       flexGrow: 1,
-      gap: t.spacing.xs,
+      gap: 2,
     },
     messageListEmpty: {
       flexGrow: 1,
@@ -918,7 +920,7 @@ const useStyles = () =>
       // Reserve space for typing indicator to prevent layout shift
       // when it disappears and AI message appears
       // Height: padding (12*2) + dot (8) + border (2) + margin (4*2) = 42
-      minHeight: 42,
+      minHeight: 36,
     },
     customEmptyStateItem: {
       // Add padding to separate it from the input or the item above it
@@ -926,7 +928,7 @@ const useStyles = () =>
       paddingBottom: t.spacing.md,
     },
     loadingSpinner: {
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
     },
     emptyState: {
       flex: 1,
@@ -945,18 +947,19 @@ const useStyles = () =>
       justifyContent: 'flex-start',
     },
     emptyStateTitle: {
-      fontSize: 28,
-      fontWeight: '600',
-      color: t.colors.textPrimary,
+      fontSize: 32,
+      color: palette.text,
       textAlign: 'center',
       lineHeight: 36,
+      fontFamily: designFonts.serif,
     },
     emptyStateMessage: {
       fontSize: t.typography.fontSize.lg,
       lineHeight: 24,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       textAlign: 'center',
       marginTop: t.spacing.md,
+      fontFamily: designFonts.sans,
     },
     bottomContainer: {
       // Container for emotion slider, panels above input, and input
@@ -965,3 +968,4 @@ const useStyles = () =>
       paddingBottom: t.spacing.sm,
     },
   }));
+};

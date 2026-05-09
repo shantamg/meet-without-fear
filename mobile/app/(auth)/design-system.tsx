@@ -1,0 +1,826 @@
+import { useMemo, useState } from 'react';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { MessageRole } from '@meet-without-fear/shared';
+import {
+  ArrowLeft,
+  Check,
+  ChevronRight,
+  Moon,
+  PanelBottom,
+  PanelRight,
+  Sun,
+  X,
+} from 'lucide-react-native';
+
+import { ChatBubble } from '@/src/components/ChatBubble';
+import { ChatIndicator } from '@/src/components/ChatIndicator';
+import { ChatInput } from '@/src/components/ChatInput';
+import { CompactAgreementBar } from '@/src/components/CompactAgreementBar';
+import { EmotionSlider } from '@/src/components/EmotionSlider';
+import { FeelHeardConfirmation } from '@/src/components/FeelHeardConfirmation';
+import { GuidedActionPanel } from '@/src/components/GuidedActionPanel';
+import { SessionChatHeader } from '@/src/components/SessionChatHeader';
+import { ShareTopicDrawer } from '@/src/components/ShareTopicDrawer';
+import { ShareTopicPanel } from '@/src/components/ShareTopicPanel';
+import { SupportOptionsModal } from '@/src/components/SupportOptionsModal';
+import { WaitingBanner } from '@/src/components/WaitingBanner';
+import { designFonts, useAppAppearance } from '@/src/theme';
+
+type Section = 'palette' | 'chat' | 'ctas' | 'overlays';
+type Palette = ReturnType<typeof useAppAppearance>['palette'];
+
+const sections: Array<{ id: Section; label: string }> = [
+  { id: 'palette', label: 'Palette' },
+  { id: 'chat', label: 'Chat' },
+  { id: 'ctas', label: 'CTAs' },
+  { id: 'overlays', label: 'Overlays' },
+];
+
+export default function DesignSystemScreen() {
+  const router = useRouter();
+  const appearance = useAppAppearance();
+  const { palette, preference, setPreference } = appearance;
+  const styles = useMemo(() => makeStyles(palette), [palette]);
+  const [section, setSection] = useState<Section>('palette');
+  const [shareDrawerOpen, setShareDrawerOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [bottomSheetOpen, setBottomSheetOpen] = useState(false);
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <ArrowLeft color={palette.textMuted} size={22} />
+        </TouchableOpacity>
+        <View style={styles.headerCopy}>
+          <Text style={styles.title}>Design review</Text>
+          <Text style={styles.subtitle}>Color, type, chat, CTAs, drawers</Text>
+        </View>
+      </View>
+
+      <View style={styles.modeRow}>
+        {(['light', 'dark', 'system'] as const).map((mode) => (
+          <TouchableOpacity
+            key={mode}
+            style={[styles.modeButton, preference === mode && styles.modeButtonActive]}
+            onPress={() => setPreference(mode)}
+            accessibilityRole="button"
+            accessibilityLabel={`Use ${mode} appearance`}
+          >
+            {mode === 'dark' ? (
+              <Moon color={preference === mode ? palette.bg : palette.textMuted} size={14} />
+            ) : (
+              <Sun color={preference === mode ? palette.bg : palette.textMuted} size={14} />
+            )}
+            <Text style={[styles.modeText, preference === mode && styles.modeTextActive]}>
+              {mode}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={styles.segmentRow}>
+        {sections.map((item) => (
+          <TouchableOpacity
+            key={item.id}
+            style={[styles.segmentButton, section === item.id && styles.segmentButtonActive]}
+            onPress={() => setSection(item.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`Show ${item.label}`}
+          >
+            <Text style={[styles.segmentText, section === item.id && styles.segmentTextActive]}>
+              {item.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {section === 'palette' && <PaletteSection styles={styles} palette={palette} />}
+        {section === 'chat' && <ChatSection styles={styles} palette={palette} />}
+        {section === 'ctas' && <CtaSection styles={styles} onOpenShareDrawer={() => setShareDrawerOpen(true)} />}
+        {section === 'overlays' && (
+          <OverlaySection
+            styles={styles}
+            palette={palette}
+            onOpenBottomSheet={() => setBottomSheetOpen(true)}
+            onOpenShareDrawer={() => setShareDrawerOpen(true)}
+            onOpenSupport={() => setSupportOpen(true)}
+          />
+        )}
+      </ScrollView>
+
+      <ShareTopicDrawer
+        visible={shareDrawerOpen}
+        action="OFFER_SHARING"
+        partnerName="Sam"
+        suggestedShareFocus="How much effort it takes to keep everything moving when you are already depleted."
+        onAccept={() => setShareDrawerOpen(false)}
+        onDecline={() => setShareDrawerOpen(false)}
+        onClose={() => setShareDrawerOpen(false)}
+      />
+      <SupportOptionsModal
+        visible={supportOpen}
+        onSelectOption={() => setSupportOpen(false)}
+        onClose={() => setSupportOpen(false)}
+      />
+      <BottomSheetPreview
+        visible={bottomSheetOpen}
+        palette={palette}
+        styles={styles}
+        onClose={() => setBottomSheetOpen(false)}
+      />
+    </SafeAreaView>
+  );
+}
+
+function PaletteSection({ styles, palette }: { styles: ReturnType<typeof makeStyles>; palette: Palette }) {
+  const swatches: Array<[string, string]> = [
+    ['bg', palette.bg],
+    ['bgElev', palette.bgElev],
+    ['bgPane', palette.bgPane],
+    ['border', palette.border],
+    ['text', palette.text],
+    ['muted', palette.textMuted],
+    ['faint', palette.textFaint],
+    ['accent', palette.accent],
+    ['accentSoft', palette.accentSoft],
+    ['success', palette.success],
+    ['danger', palette.danger],
+  ];
+
+  return (
+    <View style={styles.sectionStack}>
+      <SectionTitle styles={styles} eyebrow="Tokens" title="Theme colors" />
+      <View style={styles.swatchGrid}>
+        {swatches.map(([name, value]) => (
+          <View key={name} style={styles.swatchCard}>
+            <View style={[styles.swatch, { backgroundColor: value }]} />
+            <Text style={styles.swatchName}>{name}</Text>
+            <Text style={styles.swatchValue}>{value}</Text>
+          </View>
+        ))}
+      </View>
+
+      <SectionTitle styles={styles} eyebrow="Type" title="Font scale" />
+      <View style={styles.previewPanel}>
+        <Text style={styles.serifSample}>A calmer place to have a hard conversation.</Text>
+        <Text style={styles.bodySample}>
+          Body copy should feel grounded, readable, and consistent across cards, rows, chat, and drawers.
+        </Text>
+        <Text style={styles.monoSample}>MONO LABEL / CURRENT STATE</Text>
+      </View>
+    </View>
+  );
+}
+
+function ChatSection({ styles, palette }: { styles: ReturnType<typeof makeStyles>; palette: Palette }) {
+  return (
+    <View style={styles.sectionStack}>
+      <SectionTitle styles={styles} eyebrow="Header" title="Chat chrome" />
+      <View style={styles.devicePanel}>
+        <SessionChatHeader
+          partnerName="Sam"
+          partnerOnline
+          stageName="Walking in Their Shoes"
+          leftActionIcon="menu"
+          onBackPress={() => {}}
+          onPress={() => {}}
+          hasNewActivity
+        />
+        <View style={styles.chatPreview}>
+          <ChatIndicator type="stage-chapter" metadata={{ stageName: 'Your Story' }} />
+          <ChatBubble
+            message={{
+              id: 'ai-1',
+              role: MessageRole.AI,
+              content: "I'm glad you reached out. Tell me more about what's happening.",
+              timestamp: new Date().toISOString(),
+              skipTypewriter: true,
+            }}
+            enableTypewriter={false}
+          />
+          <ChatBubble
+            message={{
+              id: 'user-1',
+              role: MessageRole.USER,
+              content: "I feel like I do most of the work and they don't notice.",
+              timestamp: new Date().toISOString(),
+              skipTypewriter: true,
+              status: 'read',
+            }}
+            enableTypewriter={false}
+          />
+          <ChatBubble
+            message={{
+              id: 'context-1',
+              role: MessageRole.SHARED_CONTEXT,
+              content: "I feel like I'm running on empty and I need someone to see how hard I'm trying.",
+              timestamp: new Date().toISOString(),
+              skipTypewriter: true,
+            }}
+            enableTypewriter={false}
+            partnerName="Sam"
+          />
+          <ChatIndicator type="empathy-validated" metadata={{ partnerName: 'Sam' }} />
+        </View>
+        <EmotionSlider value={5} onChange={() => {}} compact />
+        <ChatInput onSend={() => {}} />
+      </View>
+      <View style={styles.noteRow}>
+        <Check color={palette.accent} size={16} />
+        <Text style={styles.noteText}>User messages, context cards, indicators, slider, and input on one surface.</Text>
+      </View>
+    </View>
+  );
+}
+
+function CtaSection({
+  styles,
+  onOpenShareDrawer,
+}: {
+  styles: ReturnType<typeof makeStyles>;
+  onOpenShareDrawer: () => void;
+}) {
+  return (
+    <View style={styles.sectionStack}>
+      <SectionTitle styles={styles} eyebrow="Bottom CTAs" title="Guided action panels" />
+      <View style={styles.ctaStack}>
+        <GuidedActionPanel
+          tone="review"
+          eyebrow="Revision"
+          title="Revisit what you’ll share"
+          subtitle="Sam shared more context. Check whether your understanding should change."
+          primaryAction={{ label: 'Review', onPress: () => {} }}
+        />
+        <GuidedActionPanel
+          tone="topic"
+          eyebrow="Topic frame"
+          title="Household chores and feeling unseen"
+          subtitle="This stays above the input until you confirm it."
+          primaryAction={{ label: 'Use this topic', onPress: () => {} }}
+        />
+        <ShareTopicPanel
+          visible
+          action="OFFER_SHARING"
+          partnerName="Sam"
+          onPress={onOpenShareDrawer}
+        />
+        <FeelHeardConfirmation onConfirm={() => {}} onContinue={() => {}} />
+        <CompactAgreementBar onSign={() => {}} buttonLabel="Ready" />
+        <GuidedActionPanel
+          tone="needs"
+          eyebrow="Needs review"
+          title="Review needs together"
+          subtitle="Open both needs lists side by side before continuing."
+          primaryAction={{ label: 'Review', onPress: () => {} }}
+        />
+        <WaitingBanner status="partner-validating-empathy" partnerName="Sam" onExercisePress={() => {}} />
+      </View>
+    </View>
+  );
+}
+
+function OverlaySection({
+  styles,
+  palette,
+  onOpenBottomSheet,
+  onOpenShareDrawer,
+  onOpenSupport,
+}: {
+  styles: ReturnType<typeof makeStyles>;
+  palette: Palette;
+  onOpenBottomSheet: () => void;
+  onOpenShareDrawer: () => void;
+  onOpenSupport: () => void;
+}) {
+  return (
+    <View style={styles.sectionStack}>
+      <SectionTitle styles={styles} eyebrow="Tap targets" title="Drawers and sheets" />
+      <ActionRow
+        styles={styles}
+        icon={<PanelRight color={palette.accent} size={18} />}
+        title="Share topic drawer"
+        subtitle="Full-screen drawer with bottom action stack"
+        onPress={onOpenShareDrawer}
+      />
+      <ActionRow
+        styles={styles}
+        icon={<PanelBottom color={palette.accent} size={18} />}
+        title="Bottom sheet sample"
+        subtitle="Scrim, handle, compact content, CTA row"
+        onPress={onOpenBottomSheet}
+      />
+      <ActionRow
+        styles={styles}
+        icon={<Moon color={palette.accent} size={18} />}
+        title="Support options modal"
+        subtitle="Stress-state modal and option rows"
+        onPress={onOpenSupport}
+      />
+
+      <SectionTitle styles={styles} eyebrow="Drawer row" title="Inline drawer preview" />
+      <View style={styles.drawerPreview}>
+        {['Sent', 'Received', 'Pending'].map((label, index) => (
+          <View key={label} style={styles.drawerPreviewRow}>
+            <View style={styles.avatarMini}>
+              <Text style={styles.avatarMiniText}>{label[0]}</Text>
+            </View>
+            <View style={styles.drawerPreviewCopy}>
+              <Text style={styles.drawerPreviewTitle}>{label} item</Text>
+              <Text style={styles.drawerPreviewSubtitle}>
+                {index === 0 ? 'Shared empathy statement' : index === 1 ? 'New context from Sam' : 'Review requested'}
+              </Text>
+            </View>
+            <ChevronRight color={palette.textFaint} size={18} />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function ActionRow({
+  styles,
+  icon,
+  title,
+  subtitle,
+  onPress,
+}: {
+  styles: ReturnType<typeof makeStyles>;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.actionRow} onPress={onPress} accessibilityRole="button">
+      <View style={styles.actionIcon}>{icon}</View>
+      <View style={styles.actionCopy}>
+        <Text style={styles.actionTitle}>{title}</Text>
+        <Text style={styles.actionSubtitle}>{subtitle}</Text>
+      </View>
+      <ChevronRight color={styles.chevronColor.color} size={18} />
+    </TouchableOpacity>
+  );
+}
+
+function BottomSheetPreview({
+  visible,
+  palette,
+  styles,
+  onClose,
+}: {
+  visible: boolean;
+  palette: Palette;
+  styles: ReturnType<typeof makeStyles>;
+  onClose: () => void;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={styles.sheetScrim} onPress={onClose}>
+        <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeader}>
+            <View>
+              <Text style={styles.sheetTitle}>Review drawer</Text>
+              <Text style={styles.sheetSubtitle}>A compact bottom surface for decisions.</Text>
+            </View>
+            <TouchableOpacity style={styles.sheetClose} onPress={onClose} accessibilityLabel="Close sheet">
+              <X color={palette.textMuted} size={20} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.previewPanel}>
+            <Text style={styles.monoSample}>WHAT YOU'LL SHARE</Text>
+            <Text style={styles.bodySample}>
+              I can see that you are carrying a lot and still trying to show up.
+            </Text>
+          </View>
+          <View style={styles.sheetActions}>
+            <TouchableOpacity style={styles.secondaryButton} onPress={onClose}>
+              <Text style={styles.secondaryButtonText}>Refine</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.primaryButton} onPress={onClose}>
+              <Text style={styles.primaryButtonText}>Share</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function SectionTitle({
+  styles,
+  eyebrow,
+  title,
+}: {
+  styles: ReturnType<typeof makeStyles>;
+  eyebrow: string;
+  title: string;
+}) {
+  return (
+    <View style={styles.sectionTitle}>
+      <Text style={styles.eyebrow}>{eyebrow}</Text>
+      <Text style={styles.sectionHeading}>{title}</Text>
+    </View>
+  );
+}
+
+const makeStyles = (palette: Palette) =>
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: palette.bg,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: palette.border,
+    },
+    iconButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.chipBg,
+    },
+    headerCopy: {
+      flex: 1,
+    },
+    title: {
+      fontSize: 24,
+      lineHeight: 28,
+      color: palette.text,
+      fontFamily: designFonts.serif,
+    },
+    subtitle: {
+      marginTop: 2,
+      fontSize: 12,
+      color: palette.textMuted,
+      fontFamily: designFonts.sans,
+    },
+    modeRow: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingTop: 12,
+    },
+    modeButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      minHeight: 32,
+      borderRadius: 999,
+      backgroundColor: palette.chipBg,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    modeButtonActive: {
+      backgroundColor: palette.accent,
+      borderColor: palette.accent,
+    },
+    modeText: {
+      textTransform: 'capitalize',
+      fontSize: 12,
+      color: palette.textMuted,
+      fontFamily: designFonts.sans,
+      fontWeight: '700',
+    },
+    modeTextActive: {
+      color: palette.bg,
+    },
+    segmentRow: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    segmentButton: {
+      flex: 1,
+      minHeight: 38,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 10,
+      backgroundColor: palette.chipBg,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    segmentButtonActive: {
+      backgroundColor: palette.bgElev,
+      borderColor: palette.borderStrong,
+    },
+    segmentText: {
+      fontSize: 12,
+      color: palette.textMuted,
+      fontFamily: designFonts.sans,
+      fontWeight: '700',
+    },
+    segmentTextActive: {
+      color: palette.text,
+    },
+    scroll: {
+      flex: 1,
+    },
+    scrollContent: {
+      padding: 16,
+      paddingBottom: 36,
+    },
+    sectionStack: {
+      gap: 16,
+    },
+    sectionTitle: {
+      gap: 4,
+    },
+    eyebrow: {
+      fontSize: 10,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      color: palette.accent,
+      fontFamily: designFonts.mono,
+      fontWeight: '700',
+    },
+    sectionHeading: {
+      fontSize: 20,
+      lineHeight: 24,
+      color: palette.text,
+      fontFamily: designFonts.serif,
+    },
+    swatchGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+    },
+    swatchCard: {
+      width: '31%',
+      minWidth: 96,
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 8,
+      padding: 8,
+      gap: 6,
+    },
+    swatch: {
+      height: 42,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    swatchName: {
+      fontSize: 12,
+      color: palette.text,
+      fontFamily: designFonts.sans,
+      fontWeight: '700',
+    },
+    swatchValue: {
+      fontSize: 10,
+      color: palette.textMuted,
+      fontFamily: designFonts.mono,
+    },
+    previewPanel: {
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 8,
+      padding: 16,
+      gap: 8,
+    },
+    serifSample: {
+      fontSize: 28,
+      lineHeight: 32,
+      color: palette.text,
+      fontFamily: designFonts.serif,
+    },
+    bodySample: {
+      fontSize: 14,
+      lineHeight: 21,
+      color: palette.text,
+      fontFamily: designFonts.sans,
+    },
+    monoSample: {
+      fontSize: 10,
+      letterSpacing: 0.8,
+      color: palette.textMuted,
+      fontFamily: designFonts.mono,
+      fontWeight: '700',
+    },
+    devicePanel: {
+      overflow: 'hidden',
+      borderRadius: 8,
+      backgroundColor: palette.bg,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    chatPreview: {
+      paddingVertical: 10,
+    },
+    noteRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      padding: 12,
+      backgroundColor: palette.chipBg,
+      borderRadius: 8,
+    },
+    noteText: {
+      flex: 1,
+      color: palette.textMuted,
+      fontSize: 13,
+      lineHeight: 18,
+      fontFamily: designFonts.sans,
+    },
+    ctaStack: {
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 8,
+      backgroundColor: palette.bg,
+    },
+    actionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      minHeight: 72,
+      paddingHorizontal: 14,
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 8,
+    },
+    actionIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.chipBg,
+    },
+    actionCopy: {
+      flex: 1,
+    },
+    actionTitle: {
+      fontSize: 15,
+      color: palette.text,
+      fontFamily: designFonts.sans,
+      fontWeight: '700',
+    },
+    actionSubtitle: {
+      marginTop: 3,
+      fontSize: 12,
+      lineHeight: 17,
+      color: palette.textMuted,
+      fontFamily: designFonts.sans,
+    },
+    chevronColor: {
+      color: palette.textFaint,
+    },
+    drawerPreview: {
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 8,
+      backgroundColor: palette.bgElev,
+    },
+    drawerPreviewRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: palette.divider,
+    },
+    avatarMini: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.accentSoft,
+    },
+    avatarMiniText: {
+      color: palette.accentText,
+      fontWeight: '800',
+      fontFamily: designFonts.sans,
+    },
+    drawerPreviewCopy: {
+      flex: 1,
+    },
+    drawerPreviewTitle: {
+      fontSize: 14,
+      color: palette.text,
+      fontFamily: designFonts.sans,
+      fontWeight: '700',
+    },
+    drawerPreviewSubtitle: {
+      marginTop: 2,
+      fontSize: 12,
+      color: palette.textMuted,
+      fontFamily: designFonts.sans,
+    },
+    sheetScrim: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      backgroundColor: 'rgba(0,0,0,0.58)',
+    },
+    sheet: {
+      backgroundColor: palette.bg,
+      borderTopLeftRadius: 18,
+      borderTopRightRadius: 18,
+      padding: 16,
+      gap: 14,
+      borderTopWidth: 1,
+      borderColor: palette.borderStrong,
+    },
+    sheetHandle: {
+      alignSelf: 'center',
+      width: 42,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: palette.borderStrong,
+    },
+    sheetHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    sheetTitle: {
+      fontSize: 22,
+      color: palette.text,
+      fontFamily: designFonts.serif,
+    },
+    sheetSubtitle: {
+      marginTop: 3,
+      fontSize: 13,
+      color: palette.textMuted,
+      fontFamily: designFonts.sans,
+    },
+    sheetClose: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.chipBg,
+    },
+    sheetActions: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    secondaryButton: {
+      flex: 1,
+      minHeight: 46,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    secondaryButtonText: {
+      color: palette.text,
+      fontSize: 14,
+      fontWeight: '700',
+      fontFamily: designFonts.sans,
+    },
+    primaryButton: {
+      flex: 1,
+      minHeight: 46,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.accent,
+    },
+    primaryButtonText: {
+      color: palette.bg,
+      fontSize: 14,
+      fontWeight: '800',
+      fontFamily: designFonts.sans,
+    },
+  });

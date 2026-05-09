@@ -70,6 +70,7 @@ export default function AuthLayout() {
         />
 
         {/* Session flow screens */}
+        <Stack.Screen name="design-system" />
         <Stack.Screen
           name="session/new"
           options={{

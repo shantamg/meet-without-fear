@@ -8,7 +8,7 @@
 import { TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { Volume2, VolumeX } from 'lucide-react-native';
 import { useRef, useEffect } from 'react';
-import { colors } from '../theme';
+import { useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -35,6 +35,7 @@ export function SpeakerButton({
   size = 18,
   testID = 'speaker-button',
 }: SpeakerButtonProps) {
+  const { palette } = useAppAppearance();
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   // Pulse animation when speaking
@@ -63,7 +64,7 @@ export function SpeakerButton({
   }, [isSpeaking, scaleAnim]);
 
   const Icon = isSpeaking ? VolumeX : Volume2;
-  const iconColor = isSpeaking ? colors.accent : colors.textMuted;
+  const iconColor = isSpeaking ? palette.accent : palette.textMuted;
 
   return (
     <TouchableOpacity

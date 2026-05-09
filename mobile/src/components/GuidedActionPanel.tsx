@@ -13,7 +13,7 @@ import {
   Pencil,
   Target,
 } from 'lucide-react-native';
-import { colors } from '@/theme';
+import { colors, designFonts, useAppAppearance } from '@/theme';
 
 type GuidedActionTone = 'topic' | 'review' | 'share' | 'success' | 'needs';
 
@@ -35,14 +35,6 @@ export interface GuidedActionPanelProps {
   compact?: boolean;
   testID?: string;
 }
-
-const toneColors: Record<GuidedActionTone, string> = {
-  topic: colors.accent,
-  review: colors.brandBlue,
-  share: colors.warning,
-  success: 'rgb(20, 184, 166)',
-  needs: colors.brandPurple,
-};
 
 function ToneIcon({ tone, color }: { tone: GuidedActionTone; color: string }) {
   const iconProps = { color, size: 17, strokeWidth: 2.4 };
@@ -72,7 +64,8 @@ export function GuidedActionPanel({
   compact = false,
   testID,
 }: GuidedActionPanelProps) {
-  const accent = toneColors[tone];
+  const { palette } = useAppAppearance();
+  const accent = tone === 'success' ? palette.success : palette.accent;
   const actions = [secondaryAction, primaryAction].filter(Boolean) as GuidedActionButton[];
 
   return (
@@ -80,12 +73,12 @@ export function GuidedActionPanel({
       style={[
         styles.container,
         compact && styles.containerCompact,
-        { borderLeftColor: accent },
+        { borderLeftColor: accent, backgroundColor: palette.bg, borderTopColor: palette.border },
       ]}
       testID={testID}
     >
       <View style={styles.iconWrap}>
-        <View style={styles.icon}>
+        <View style={[styles.icon, { backgroundColor: palette.chipBg }]}>
           <ToneIcon tone={tone} color={accent} />
         </View>
       </View>
@@ -93,8 +86,8 @@ export function GuidedActionPanel({
         {eyebrow ? (
           <Text style={[styles.eyebrow, { color: accent }]}>{eyebrow}</Text>
         ) : null}
-        <Text style={styles.title}>{title}</Text>
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        <Text style={[styles.title, { color: palette.text }]}>{title}</Text>
+        {subtitle ? <Text style={[styles.subtitle, { color: palette.textMuted }]}>{subtitle}</Text> : null}
         {actions.length > 0 ? (
           <View style={[styles.actions, actions.length === 1 && styles.actionsSingle]}>
             {actions.map((action) => {
@@ -104,7 +97,9 @@ export function GuidedActionPanel({
                   key={action.label}
                   style={[
                     styles.button,
-                    isPrimary ? [styles.primaryButton, { backgroundColor: accent, borderColor: accent }] : styles.secondaryButton,
+                    isPrimary
+                      ? [styles.primaryButton, { backgroundColor: accent, borderColor: accent }]
+                      : [styles.secondaryButton, { backgroundColor: palette.bgElev, borderColor: palette.border }],
                     action.disabled && styles.buttonDisabled,
                   ]}
                   onPress={action.onPress}
@@ -113,11 +108,11 @@ export function GuidedActionPanel({
                   testID={action.testID}
                 >
                   {action.loading ? (
-                    <ActivityIndicator size="small" color={isPrimary ? colors.textOnAccent : accent} />
+                    <ActivityIndicator size="small" color={isPrimary ? palette.bg : accent} />
                   ) : (
                     <Text style={[
                       styles.buttonText,
-                      isPrimary ? styles.primaryButtonText : [styles.secondaryButtonText, { color: accent }],
+                      isPrimary ? [styles.primaryButtonText, { color: palette.bg }] : [styles.secondaryButtonText, { color: accent }],
                     ]}>
                       {action.label}
                     </Text>
@@ -138,7 +133,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 14,
     paddingVertical: 13,
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: colors.bgPrimary,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     borderLeftWidth: 3,
@@ -155,7 +150,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.32)',
+    backgroundColor: colors.userBg,
   },
   body: {
     flex: 1,
@@ -167,18 +162,21 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 3,
+    fontFamily: designFonts.mono,
   },
   title: {
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 20,
     color: colors.textPrimary,
+    fontFamily: designFonts.sans,
   },
   subtitle: {
     marginTop: 4,
     fontSize: 13,
     lineHeight: 18,
     color: colors.textSecondary,
+    fontFamily: designFonts.sans,
   },
   actions: {
     flexDirection: 'row',
@@ -191,7 +189,7 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     minHeight: 38,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -199,7 +197,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {},
   secondaryButton: {
-    backgroundColor: 'rgba(15, 23, 42, 0.24)',
+    backgroundColor: colors.bgSecondary,
     borderColor: colors.border,
   },
   buttonDisabled: {
@@ -208,6 +206,7 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 14,
     fontWeight: '700',
+    fontFamily: designFonts.sans,
   },
   primaryButtonText: {
     color: colors.textOnAccent,

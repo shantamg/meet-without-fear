@@ -17,7 +17,7 @@ import {
 import { ArrowLeft, BookOpen, Menu } from 'lucide-react-native';
 import { ConnectionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
-import { colors } from '../theme';
+import { designFonts, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -70,13 +70,14 @@ function StatusDot({
   isOnline: boolean;
   size?: number;
 }) {
+  const { palette } = useAppAppearance();
   return (
     <View
       style={{
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: isOnline ? colors.success : colors.textMuted,
+        backgroundColor: isOnline ? palette.success : palette.textFaint,
       }}
       testID="status-dot"
     />
@@ -105,6 +106,7 @@ export function SessionChatHeader({
   testID = 'session-chat-header',
 }: SessionChatHeaderProps) {
   const styles = useStyles();
+  const { palette } = useAppAppearance();
 
   // Determine if partner is effectively online
   // If no partner (AI mode), always show as "online"
@@ -171,7 +173,7 @@ export function SessionChatHeader({
             accessibilityLabel={leftActionLabel}
             testID={`${testID}-back-button`}
           >
-            <LeftActionIcon color={colors.textPrimary} size={24} />
+            <LeftActionIcon color={palette.textMuted} size={24} />
           </TouchableOpacity>
         ) : (
           <View style={styles.backButtonSpacer} />
@@ -202,7 +204,7 @@ export function SessionChatHeader({
             accessibilityLabel={hasNewActivity ? "Open exchange history, new activity" : "Open exchange history"}
             testID={`${testID}-menu-button`}
           >
-            <BookOpen color={colors.textPrimary} size={20} />
+            <BookOpen color={palette.textMuted} size={20} />
             {hasNewActivity && (
               <View
                 style={styles.activityDot}
@@ -249,24 +251,29 @@ export function SessionChatHeader({
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+  return createStyles((t) => ({
     container: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: t.spacing.sm,
-      paddingVertical: t.spacing.sm,
-      backgroundColor: t.colors.bgSecondary,
+      paddingHorizontal: t.spacing.md,
+      paddingVertical: 10,
+      backgroundColor: palette.bg,
       borderBottomWidth: 1,
-      borderBottomColor: t.colors.border,
-      minHeight: 56,
+      borderBottomColor: palette.border,
+      minHeight: 60,
     },
     leftSection: {
       minWidth: 44,
       alignItems: 'flex-start',
     },
     backButton: {
-      padding: t.spacing.xs,
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     backButtonSpacer: {
       width: 32,
@@ -293,7 +300,11 @@ const useStyles = () =>
     },
     // Activity menu button
     menuButton: {
-      padding: t.spacing.xs,
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
       position: 'relative',
     },
     activityDot: {
@@ -303,15 +314,15 @@ const useStyles = () =>
       width: 8,
       height: 8,
       borderRadius: 4,
-      backgroundColor: t.colors.accent,
+      backgroundColor: palette.accent,
     },
     partnerName: {
-      fontSize: t.typography.fontSize.lg,
-      fontWeight: '600',
-      color: t.colors.textPrimary,
+      fontSize: 20,
+      color: palette.text,
       textAlign: 'center',
       flexShrink: 1,
       minWidth: 0,
+      fontFamily: designFonts.serif,
     },
     nameRow: {
       flexDirection: 'row',
@@ -328,20 +339,21 @@ const useStyles = () =>
     },
     onlineText: {
       fontSize: t.typography.fontSize.sm,
-      color: t.colors.textMuted,
+      color: palette.textMuted,
     },
     onlineTextActive: {
-      color: t.colors.success,
+      color: palette.success,
     },
     stageNameText: {
-      fontSize: t.typography.fontSize.xs,
-      color: t.colors.textMuted,
+      fontSize: 10.5,
+      color: palette.textMuted,
       textAlign: 'center' as const,
       marginTop: 1,
+      fontFamily: designFonts.sans,
     },
     briefStatus: {
       fontSize: t.typography.fontSize.sm,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       fontStyle: 'italic',
     },
     // Tappable pill style for brief status when it has an onPress handler
@@ -350,22 +362,23 @@ const useStyles = () =>
       alignItems: 'center',
       paddingHorizontal: t.spacing.sm,
       paddingVertical: t.spacing.xs,
-      backgroundColor: t.colors.bgTertiary,
+      backgroundColor: palette.chipBg,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: t.colors.border,
+      borderColor: palette.border,
       gap: 4,
     },
     briefStatusText: {
       fontSize: t.typography.fontSize.sm,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
     },
     briefStatusChevron: {
       fontSize: 14,
-      color: t.colors.textMuted,
+      color: palette.textFaint,
       fontWeight: '600',
     },
   }));
+};
 
 // ============================================================================
 // Exports

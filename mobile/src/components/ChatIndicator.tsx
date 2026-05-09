@@ -7,14 +7,15 @@
 
 import { View, Text, TouchableOpacity } from 'react-native';
 import { createStyles } from '../theme/styled';
+import { designFonts, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Semantic Color System
 // ============================================================================
 
 const INDICATOR_COLORS = {
-  informational: { text: 'rgba(100, 149, 237, 0.9)', line: 'rgba(100, 149, 237, 0.2)' },
-  success: { text: 'rgba(34, 197, 94, 0.9)', line: 'rgba(34, 197, 94, 0.2)' },
+  informational: { text: 'rgba(184, 130, 74, 0.9)', line: 'rgba(184, 130, 74, 0.24)' },
+  success: { text: 'rgba(182, 170, 121, 0.9)', line: 'rgba(182, 170, 121, 0.24)' },
 };
 
 function getSemanticCategory(type: ChatIndicatorType): 'informational' | 'success' {
@@ -235,8 +236,9 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
       fontSize: 15,
       textTransform: 'none' as const,
       letterSpacing: 0,
-      fontWeight: '500' as const,
+      fontWeight: '400' as const,
       color: INDICATOR_COLORS.informational.text,
+      fontFamily: designFonts.serif,
     };
 
     const chapterContent = (
@@ -296,8 +298,9 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+  return createStyles((t) => ({
     container: {
       paddingVertical: t.spacing.md,
       paddingHorizontal: t.spacing.lg,
@@ -311,7 +314,7 @@ const useStyles = () =>
     line: {
       flex: 1,
       height: 1,
-      backgroundColor: t.colors.border,
+      backgroundColor: palette.border,
     },
     textContainer: {
       flexDirection: 'row',
@@ -320,8 +323,8 @@ const useStyles = () =>
     },
     text: {
       fontSize: t.typography.fontSize.sm,
-      fontFamily: t.typography.fontFamily.regular,
-      color: t.colors.textMuted,
+      fontFamily: designFonts.mono,
+      color: palette.textMuted,
       textTransform: 'uppercase',
       letterSpacing: 1,
     },
@@ -331,37 +334,37 @@ const useStyles = () =>
     },
     // Invitation sent: yellow/amber tint - separate line and text styles
     invitationSentLine: {
-      backgroundColor: 'rgba(245, 158, 11, 0.3)',
+      backgroundColor: 'rgba(184, 130, 74, 0.28)',
     },
     invitationSentText: {
-      color: 'rgba(245, 158, 11, 0.9)',
+      color: 'rgba(184, 130, 74, 0.92)',
     },
     // Feel heard: teal/green tint for completion feeling
     feelHeardLine: {
-      backgroundColor: 'rgba(20, 184, 166, 0.3)',
+      backgroundColor: 'rgba(99, 180, 134, 0.28)',
     },
     feelHeardText: {
-      color: 'rgba(20, 184, 166, 0.9)',
+      color: 'rgba(99, 180, 134, 0.9)',
     },
     // Compact signed: dark blue tint for commitment
     compactSignedLine: {
-      backgroundColor: 'rgba(59, 130, 246, 0.3)',
+      backgroundColor: 'rgba(184, 130, 74, 0.24)',
     },
     compactSignedText: {
-      color: 'rgba(59, 130, 246, 0.9)',
+      color: 'rgba(184, 130, 74, 0.9)',
     },
     // Context shared: purple/accent tint for shared content
     contextSharedLine: {
-      backgroundColor: 'rgba(139, 92, 246, 0.3)',
+      backgroundColor: 'rgba(184, 130, 74, 0.24)',
     },
     contextSharedText: {
-      color: 'rgba(139, 92, 246, 0.9)',
+      color: 'rgba(184, 130, 74, 0.9)',
     },
     defaultLine: {
-      backgroundColor: t.colors.border,
+      backgroundColor: palette.border,
     },
     defaultText: {
-      color: t.colors.textMuted,
+      color: palette.textMuted,
     },
     // Reconciler analyzing: blue tint for in-progress
     reconcilerAnalyzingLine: {
@@ -424,3 +427,4 @@ const useStyles = () =>
       color: 'rgba(34, 197, 94, 0.9)',
     },
   }));
+};
