@@ -18,6 +18,18 @@ By the end, the app should feel like one coherent product:
 - One-off colors, one-off typography, and duplicated component styling should be reduced or eliminated unless there is a documented reason.
 - The implementation should pass typecheck, lint, relevant tests, and visual verification.
 
+## Progress Snapshot
+
+Last updated: 2026-05-09
+
+- Current screenshot run: `mobile/test-results/design-audit/2026-05-09T09-28-05-276Z/`
+- Current screenshot count: 80, with an index at `mobile/test-results/design-audit/2026-05-09T09-28-05-276Z/index.md`.
+- The capture script now seeds real session URLs for major chat/stage cases and uses URL-controllable session audit fixtures for hard-to-reach session-owned drawers and modals.
+- Real session coverage now includes created, empathy shared, reconciler offer, context shared, empathy revealed, needs complete, Stage 4 inventory/shared/no-overlap/inactive states, scrolled long-state viewports, sidebar open, row menu, activity drawer, partner info drawer, share topic drawer, empathy statement drawer, accuracy feedback drawer, guided feedback draft modal, and needs drawer.
+- Design-system fixture coverage now includes shared primitives plus support options, bottom-sheet decision, transcription drawer, and edit suggestion modal.
+- Recent light-mode fixture checks found and fixed stale dark-only styling in `TranscriptionDrawer` and `EditSuggestionModal`.
+- Remaining fixture gaps before this goal can be considered complete: invitation-ready modal and takeaway review.
+
 ## Current Design Direction
 
 Start by studying the existing implementation and the handoff assets:

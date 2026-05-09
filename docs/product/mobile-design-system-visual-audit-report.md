@@ -18,25 +18,25 @@ Last updated: 2026-05-09
   - Session route states: created, empathy shared, reconciler shown, context shared, empathy revealed, needs complete, and Stage 4 variants
   - Scrolled viewport states for shared context, needs complete, and Stage 4 proposal inventory
   - Share topic drawer from both a seeded session offer and the design-system inventory
-  - Support modal and bottom-sheet-like decision surface
+  - Support modal, transcription drawer, edit suggestion modal, and bottom-sheet-like decision surface
 
 ## Screenshot Artifacts
 
 Current run:
 
-`mobile/test-results/design-audit/2026-05-09T09-14-13-018Z/`
+`mobile/test-results/design-audit/2026-05-09T09-28-05-276Z/`
 
 Index:
 
-`mobile/test-results/design-audit/2026-05-09T09-14-13-018Z/index.md`
+`mobile/test-results/design-audit/2026-05-09T09-28-05-276Z/index.md`
 
-The index records each screenshot, light/dark mode, route type, seed target stage where applicable, exact URL, and user side. The run contains 76 screenshots:
+The index records each screenshot, light/dark mode, route type, seed target stage where applicable, exact URL, and user side. The run contains 80 screenshots:
 
 - 20 seeded session-route screenshots across 10 target stages in light/dark mode
 - 6 scrolled real-session screenshots across 3 long states in light/dark mode
 - 8 session-route audit-fixture screenshots in light/dark mode: empathy statement drawer, accuracy feedback drawer, guided feedback draft modal, and needs drawer
 - 10 real session interaction screenshots in light/dark mode: sidebar open, conversation row overflow menu, activity drawer, partner info drawer, and real share-topic drawer
-- 32 route/component inventory screenshots in light/dark mode, including settings subpages
+- 36 route/component inventory screenshots in light/dark mode, including settings subpages, transcription drawer, and edit suggestion modal
 
 ## What Was Refactored
 
@@ -59,6 +59,7 @@ The index records each screenshot, light/dark mode, route type, seed target stag
 - Moved `ActivityDrawer` and `TimelineItemCard` off static dark-only colors and onto the shared appearance palette.
 - Moved `PartnerInfoDrawer` off static dark-only colors and onto the shared appearance palette.
 - Moved `ViewEmpathyStatementDrawer`, `AccuracyFeedbackDrawer`, `GuidedDraftChatModal`, and `NeedsDrawer` off static dark-only colors and onto the shared appearance palette.
+- Moved `TranscriptionDrawer` and `EditSuggestionModal` off static dark-only colors and onto the shared appearance palette after fixture screenshots exposed light-mode dark surfaces.
 - Added settings subpage screenshot coverage for account, voice, memories, privacy, and help.
 
 ## Tokens And Primitives Now Owning The Design
@@ -70,7 +71,7 @@ The index records each screenshot, light/dark mode, route type, seed target stag
 - `ActivityDrawer` and `TimelineItemCard`: exchange-history drawer and timeline card surfaces using semantic appearance tokens.
 - `PartnerInfoDrawer`: partner detail sheet using semantic appearance tokens and shared scrim color.
 - `ViewEmpathyStatementDrawer`, `AccuracyFeedbackDrawer`, `GuidedDraftChatModal`, and `NeedsDrawer`: session-owned review, feedback, draft, and needs overlays using semantic appearance tokens.
-- `ShareTopicDrawer`, `SupportOptionsModal`, and design-system sheet preview: representative overlay/sheet/modal surfaces using shared palette logic.
+- `TranscriptionDrawer`, `EditSuggestionModal`, `ShareTopicDrawer`, `SupportOptionsModal`, and design-system sheet preview: representative overlay/sheet/modal surfaces using shared palette logic.
 - `/design-system`: live inventory for palette, type, chat, CTAs, states, overlays, and conversation-list direction.
 
 ## Verification
@@ -80,8 +81,10 @@ The index records each screenshot, light/dark mode, route type, seed target stag
 - `cd backend && npm run check` passed.
 - `node --check mobile/scripts/capture-design-audit.mjs` passed.
 - `node mobile/scripts/capture-design-audit.mjs` passed against localhost backend/mobile servers and wrote the current screenshot run.
+- `cd mobile && npm test -- src/components/__tests__/ChatInterface.test.tsx --runInBand` passed.
+- `cd mobile && npm test -- --runTestsByPath 'app/(auth)/(tabs)/__tests__/index.test.tsx' --runInBand` passed.
 
 ## Known Issues And Follow-Ups
 
-- Activity drawer, partner info drawer, share-topic drawer, empathy statement drawer, accuracy feedback drawer, guided draft modal, and needs drawer now have direct seeded-session or URL-controllable session-route coverage. Transcription, invitation ready, edit suggestion, and takeaway review still need direct fixture openings.
+- Activity drawer, partner info drawer, share-topic drawer, empathy statement drawer, accuracy feedback drawer, guided draft modal, and needs drawer now have direct seeded-session or URL-controllable session-route coverage. Transcription drawer and edit suggestion modal now have direct design-system fixture openings because they are component overlays not currently represented as persisted session state. Invitation ready and takeaway review still need direct fixture openings.
 - The artifacts are ignored by git; durable review depends on the local `mobile/test-results/design-audit/...` directory unless artifact upload is added.

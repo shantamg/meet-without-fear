@@ -33,6 +33,8 @@ const routeFixtures = [
   ['share-topic-drawer', '/design-system?section=overlays&overlay=share-topic', 'Real ShareTopicDrawer opened with representative props.'],
   ['support-options-modal', '/design-system?section=overlays&overlay=support', 'Real SupportOptionsModal opened with representative props.'],
   ['bottom-sheet', '/design-system?section=overlays&overlay=sheet', 'Bottom-sheet-like decision surface with scrim and CTA row.'],
+  ['transcription-drawer', '/design-system?section=overlays&overlay=transcription', 'Real TranscriptionDrawer opened with representative voice transcript props.'],
+  ['edit-suggestion-modal', '/design-system?section=overlays&overlay=edit-suggestion', 'Real EditSuggestionModal opened with representative memory suggestion props.'],
 ];
 
 const sessionFixtures = [

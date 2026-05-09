@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { MessageRole } from '@meet-without-fear/shared';
+import { MemorySuggestion, MessageRole } from '@meet-without-fear/shared';
 import {
   ArrowLeft,
   Check,
@@ -35,6 +35,8 @@ import { SessionChatHeader } from '@/src/components/SessionChatHeader';
 import { ShareTopicDrawer } from '@/src/components/ShareTopicDrawer';
 import { ShareTopicPanel } from '@/src/components/ShareTopicPanel';
 import { SupportOptionsModal } from '@/src/components/SupportOptionsModal';
+import { EditSuggestionModal } from '@/src/components/EditSuggestionModal';
+import { TranscriptionDrawer } from '@/src/components/TranscriptionDrawer';
 import { WaitingBanner } from '@/src/components/WaitingBanner';
 import { designFonts, useAppAppearance } from '@/src/theme';
 
@@ -64,6 +66,15 @@ export default function DesignSystemScreen() {
   const [shareDrawerOpen, setShareDrawerOpen] = useState(params.overlay === 'share-topic');
   const [supportOpen, setSupportOpen] = useState(params.overlay === 'support');
   const [bottomSheetOpen, setBottomSheetOpen] = useState(params.overlay === 'sheet');
+  const [transcriptionOpen, setTranscriptionOpen] = useState(params.overlay === 'transcription');
+  const [editSuggestionOpen, setEditSuggestionOpen] = useState(params.overlay === 'edit-suggestion');
+  const memorySuggestion = useMemo<MemorySuggestion>(() => ({
+    id: 'design-memory-suggestion',
+    suggestedContent: 'Sam prefers direct repair conversations after both people have had a little time to cool down.',
+    category: 'RELATIONSHIP',
+    confidence: 'high',
+    evidence: 'Mentioned during a previous reflection about repair timing.',
+  }), []);
 
   useEffect(() => {
     setSection(requestedSection);
@@ -79,6 +90,8 @@ export default function DesignSystemScreen() {
     setShareDrawerOpen(params.overlay === 'share-topic');
     setSupportOpen(params.overlay === 'support');
     setBottomSheetOpen(params.overlay === 'sheet');
+    setTranscriptionOpen(params.overlay === 'transcription');
+    setEditSuggestionOpen(params.overlay === 'edit-suggestion');
   }, [params.overlay]);
 
   return (
@@ -150,8 +163,10 @@ export default function DesignSystemScreen() {
             styles={styles}
             palette={palette}
             onOpenBottomSheet={() => setBottomSheetOpen(true)}
+            onOpenEditSuggestion={() => setEditSuggestionOpen(true)}
             onOpenShareDrawer={() => setShareDrawerOpen(true)}
             onOpenSupport={() => setSupportOpen(true)}
+            onOpenTranscription={() => setTranscriptionOpen(true)}
           />
         )}
       </ScrollView>
@@ -175,6 +190,21 @@ export default function DesignSystemScreen() {
         palette={palette}
         styles={styles}
         onClose={() => setBottomSheetOpen(false)}
+      />
+      <TranscriptionDrawer
+        visible={transcriptionOpen}
+        displayTranscript="I am realizing I need to say this more clearly before it turns into another argument."
+        phase="recording"
+        elapsedSeconds={42}
+        error={null}
+        onStopAndSend={() => setTranscriptionOpen(false)}
+        onCancel={() => setTranscriptionOpen(false)}
+      />
+      <EditSuggestionModal
+        visible={editSuggestionOpen}
+        suggestion={memorySuggestion}
+        onClose={() => setEditSuggestionOpen(false)}
+        onSave={() => setEditSuggestionOpen(false)}
       />
     </SafeAreaView>
   );
@@ -468,14 +498,18 @@ function OverlaySection({
   styles,
   palette,
   onOpenBottomSheet,
+  onOpenEditSuggestion,
   onOpenShareDrawer,
   onOpenSupport,
+  onOpenTranscription,
 }: {
   styles: ReturnType<typeof makeStyles>;
   palette: Palette;
   onOpenBottomSheet: () => void;
+  onOpenEditSuggestion: () => void;
   onOpenShareDrawer: () => void;
   onOpenSupport: () => void;
+  onOpenTranscription: () => void;
 }) {
   return (
     <View style={styles.sectionStack}>
@@ -500,6 +534,20 @@ function OverlaySection({
         title="Support options modal"
         subtitle="Stress-state modal and option rows"
         onPress={onOpenSupport}
+      />
+      <ActionRow
+        styles={styles}
+        icon={<PanelBottom color={palette.accent} size={18} />}
+        title="Transcription drawer"
+        subtitle="Voice transcript sheet with recording controls"
+        onPress={onOpenTranscription}
+      />
+      <ActionRow
+        styles={styles}
+        icon={<PanelRight color={palette.accent} size={18} />}
+        title="Edit suggestion modal"
+        subtitle="Memory suggestion edit and preview flow"
+        onPress={onOpenEditSuggestion}
       />
 
       <SectionTitle styles={styles} eyebrow="Drawer row" title="Inline drawer preview" />
