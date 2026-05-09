@@ -60,7 +60,7 @@ describe('Push Notification Service', () => {
     });
 
     it('has appropriate messages for agreement events', () => {
-      expect(PUSH_MESSAGES['agreement.proposed'].title).toContain('review');
+      expect(PUSH_MESSAGES['agreement.proposed'].title).toContain('agreement');
       expect(PUSH_MESSAGES['agreement.confirmed'].title).toContain('confirmed');
     });
 
@@ -155,8 +155,90 @@ describe('Push Notification Service', () => {
 
       expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
         expect.objectContaining({
-          title: 'Sammy finished Your Story',
-          body: 'It is your turn to continue.',
+          title: 'Sammy moved forward',
+          body: 'Sammy felt heard. Keep going at your own pace.',
+        }),
+      ]);
+    });
+
+    it('uses progress nudge copy when Stage 1 completion reaches someone already in empathy', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        pushToken: validPushToken,
+      });
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: testUserId, stage: 2, status: 'IN_PROGRESS' },
+        { userId: 'actor-123', stage: 2, status: 'IN_PROGRESS' },
+      ]);
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        relationship: {
+          members: [
+            {
+              userId: testUserId,
+              nickname: null,
+              user: { firstName: 'Jason', name: 'Jason Person' },
+            },
+            {
+              userId: 'actor-123',
+              nickname: null,
+              user: { firstName: 'Shantam', name: 'Shantam Person' },
+            },
+          ],
+        },
+      });
+      mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
+
+      await sendPushNotification(
+        testUserId,
+        'partner.stage_completed',
+        { completedBy: 'actor-123', stage: 1 },
+        testSessionId,
+      );
+
+      expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+        expect.objectContaining({
+          title: 'Shantam is progressing',
+          body: 'Shantam felt heard and moved forward. Come back and keep going when you are ready.',
+        }),
+      ]);
+    });
+
+    it('uses ready-to-continue copy when Stage 1 completion reaches someone waiting', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        pushToken: validPushToken,
+      });
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: testUserId, stage: 1, status: 'GATE_PENDING' },
+        { userId: 'actor-123', stage: 2, status: 'IN_PROGRESS' },
+      ]);
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        relationship: {
+          members: [
+            {
+              userId: testUserId,
+              nickname: null,
+              user: { firstName: 'Jason', name: 'Jason Person' },
+            },
+            {
+              userId: 'actor-123',
+              nickname: null,
+              user: { firstName: 'Shantam', name: 'Shantam Person' },
+            },
+          ],
+        },
+      });
+      mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
+
+      await sendPushNotification(
+        testUserId,
+        'partner.stage_completed',
+        { completedBy: 'actor-123', stage: 1 },
+        testSessionId,
+      );
+
+      expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+        expect.objectContaining({
+          title: 'Ready to continue',
+          body: 'Shantam felt heard, so the next step is ready when you are.',
         }),
       ]);
     });
@@ -196,7 +278,7 @@ describe('Push Notification Service', () => {
       expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
         expect.objectContaining({
           title: 'Shantam accepted your invitation',
-          body: 'Shantam has started their side of the session. Open it to continue.',
+          body: 'Shantam accepted your invitation and started the session. Come back when you are ready.',
         }),
       ]);
     });
