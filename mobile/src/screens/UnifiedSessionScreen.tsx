@@ -534,6 +534,7 @@ export function UnifiedSessionScreen({
     messages,
     inlineCards,
     isSending,
+    failedMessageContent,
     isSigningCompact,
     isConfirmingFeelHeard,
     isConfirmingInvitation,
@@ -3335,6 +3336,7 @@ export function UnifiedSessionScreen({
           messages={displayMessages}
           indicators={indicators}
           onSendMessage={sendMessageWithTracking}
+          failedMessage={failedMessageContent}
           // Cache-First: Ghost dots are derived from last message role in ChatInterface
           // isSending is still needed for brief moment during API call before optimistic message appears
           // isFetchingInitialMessage shows dots while fetching first AI message

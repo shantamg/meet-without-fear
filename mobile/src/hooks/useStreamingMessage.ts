@@ -94,6 +94,8 @@ export interface UseStreamingMessageResult {
   cancel: () => void;
   /** Error message if status is 'error' */
   errorMessage: string | null;
+  /** The content of the last failed message (for restoring to the input field) */
+  failedMessageContent: string | null;
   /** Retry the last failed message */
   retry: () => void;
 }
@@ -893,6 +895,8 @@ export function useStreamingMessage(
     }
   }, [sendMessage]);
 
+  const failedMessageContent = status === 'error' ? lastParamsRef.current?.content ?? null : null;
+
   return {
     status,
     isStreaming: status === 'streaming',
@@ -900,6 +904,7 @@ export function useStreamingMessage(
     sendMessage,
     cancel,
     errorMessage,
+    failedMessageContent,
     retry,
   };
 }
