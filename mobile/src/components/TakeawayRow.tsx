@@ -9,10 +9,10 @@
  * Saving on blur calls onUpdate only if the trimmed text is non-empty and different.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { TakeawayDTO } from '@meet-without-fear/shared';
-import { createStyles } from '../theme/styled';
+import { useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -30,7 +30,8 @@ interface TakeawayRowProps {
 // ============================================================================
 
 export function TakeawayRow({ takeaway, onUpdate, onStartEdit }: TakeawayRowProps) {
-  const styles = useStyles();
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(takeaway.content);
 
@@ -69,6 +70,7 @@ export function TakeawayRow({ takeaway, onUpdate, onStartEdit }: TakeawayRowProp
           autoFocus
           autoCorrect
           accessibilityLabel="Edit takeaway text"
+          placeholderTextColor={palette.textFaint}
         />
       </View>
     );
@@ -94,36 +96,37 @@ export function TakeawayRow({ takeaway, onUpdate, onStartEdit }: TakeawayRowProp
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+type Palette = ReturnType<typeof useAppAppearance>['palette'];
+
+const makeStyles = (palette: Palette) => StyleSheet.create({
     row: {
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.md,
+      paddingHorizontal: 24,
+      paddingVertical: 16,
       borderBottomWidth: 1,
-      borderBottomColor: t.colors.border,
-      backgroundColor: t.colors.bgPrimary,
+      borderBottomColor: palette.divider,
+      backgroundColor: palette.bg,
     },
     rowEditing: {
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgElev,
     },
     themeLabel: {
       fontSize: 11,
-      color: t.colors.textMuted,
+      color: palette.textFaint,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
       marginBottom: 4,
     },
     contentText: {
       fontSize: 15,
-      color: t.colors.textPrimary,
+      color: palette.text,
       lineHeight: 22,
     },
     editInput: {
       fontSize: 15,
-      color: t.colors.textPrimary,
+      color: palette.text,
       lineHeight: 22,
       minHeight: 44,
       // Remove default TextInput outline on web
       outlineWidth: 0,
     } as any,
-  }));
+  });

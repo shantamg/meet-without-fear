@@ -4036,7 +4036,7 @@ const useStyles = () => {
     // Invitation Ready Modal (replaces inline 'invitation' panel)
     invitationModalBackdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      backgroundColor: palette.scrim,
       justifyContent: 'center' as const,
       alignItems: 'center' as const,
       paddingHorizontal: t.spacing.lg,
@@ -4044,10 +4044,12 @@ const useStyles = () => {
     invitationModalCard: {
       width: '100%' as const,
       maxWidth: 420,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderRadius: t.radius.lg,
       padding: t.spacing.lg,
       paddingTop: t.spacing.xl + t.spacing.lg,
+      borderWidth: 1,
+      borderColor: palette.border,
     },
     invitationModalCloseButton: {
       position: 'absolute' as const,
@@ -4060,14 +4062,14 @@ const useStyles = () => {
       zIndex: 1,
     },
     invitationModalCloseText: {
-      color: t.colors.textPrimary,
+      color: palette.text,
       fontSize: 24,
       lineHeight: 24,
       fontWeight: '400' as const,
     },
     invitationModalText: {
       fontSize: t.typography.fontSize.md,
-      color: t.colors.textPrimary,
+      color: palette.text,
       lineHeight: 22,
       marginBottom: t.spacing.lg,
     },
@@ -4084,20 +4086,20 @@ const useStyles = () => {
       paddingHorizontal: t.spacing.md,
     },
     invitationModalButtonPrimary: {
-      backgroundColor: t.colors.accent,
+      backgroundColor: palette.accent,
     },
     invitationModalButtonSecondary: {
       backgroundColor: 'transparent' as const,
       borderWidth: 1,
-      borderColor: t.colors.accent,
+      borderColor: palette.accent,
     },
     invitationModalButtonPrimaryText: {
-      color: t.colors.textOnAccent,
+      color: '#0d0f12',
       fontSize: t.typography.fontSize.md,
       fontWeight: '600' as const,
     },
     invitationModalButtonSecondaryText: {
-      color: t.colors.accent,
+      color: palette.accentText,
       fontSize: t.typography.fontSize.md,
       fontWeight: '600' as const,
     },

@@ -42,6 +42,8 @@ interface InnerThoughtsScreenProps {
   initialSuggestedActions?: SuggestedAction[];
   /** Hide chat content until transition completes (for fade-in effect) */
   hideContentUntilReady?: boolean;
+  /** Narrow URL-controlled fixture for visual audit surfaces. */
+  auditFixture?: string | null;
 }
 
 // ============================================================================
@@ -57,6 +59,7 @@ export function InnerThoughtsScreen({
   initialMessage,
   initialSuggestedActions,
   hideContentUntilReady = false,
+  auditFixture = null,
 }: InnerThoughtsScreenProps) {
   const styles = useStyles();
   const router = useRouter();
@@ -90,6 +93,12 @@ export function InnerThoughtsScreen({
   const sendMessage = useSendInnerThoughtsMessage(sessionId);
 
   const session = data?.session;
+
+  useEffect(() => {
+    if (auditFixture === 'takeaway-review' && session?.distilledAt) {
+      setShowTakeaways(true);
+    }
+  }, [auditFixture, session?.distilledAt]);
 
   // Convert inner thoughts messages to ChatMessage format
   // When creating with an initial message, show it optimistically

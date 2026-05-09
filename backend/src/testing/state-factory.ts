@@ -25,6 +25,9 @@ export enum TargetStage {
   /** Session just created, compact not signed */
   CREATED = 'CREATED',
 
+  /** Topic has been confirmed and the invitation-ready modal can be opened */
+  INVITATION_READY = 'INVITATION_READY',
+
   /** User A completed Stage 1 (witnessed, felt heard) and shared empathy */
   EMPATHY_SHARED_A = 'EMPATHY_SHARED_A',
 
@@ -193,7 +196,11 @@ export class StateFactory {
       // EMPATHY_SHARED_A: User A has completed, invitation is pending for User B
       // Session stays INVITED until User B accepts (which changes it to ACTIVE)
       let sessionStatus: 'CREATED' | 'INVITED' | 'ACTIVE' = 'CREATED';
-      if (targetStage === TargetStage.EMPATHY_SHARED_A) {
+      if (targetStage === TargetStage.INVITATION_READY) {
+        // Topic is confirmed and the invitation link is ready, but partner has
+        // not accepted yet.
+        sessionStatus = 'INVITED';
+      } else if (targetStage === TargetStage.EMPATHY_SHARED_A) {
         // Session is INVITED - waiting for User B to accept
         // Will become ACTIVE when User B accepts the invitation
         sessionStatus = 'INVITED';
@@ -207,6 +214,12 @@ export class StateFactory {
         data: {
           relationshipId: relationship.id,
           status: sessionStatus,
+          ...(targetStage === TargetStage.INVITATION_READY
+            ? {
+                topicFrame: 'How we repair after a tense dinner conversation',
+                topicFrameConfirmedAt: new Date(),
+              }
+            : {}),
         },
       });
 
@@ -252,7 +265,7 @@ export class StateFactory {
       }
 
       // 9. Create stage-specific data
-      if (targetStage === TargetStage.CREATED) {
+      if (targetStage === TargetStage.CREATED || targetStage === TargetStage.INVITATION_READY) {
         // Just Stage 0 IN_PROGRESS for User A
         await tx.stageProgress.create({
           data: {

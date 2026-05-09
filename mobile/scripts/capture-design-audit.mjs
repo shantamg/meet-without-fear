@@ -39,6 +39,7 @@ const routeFixtures = [
 
 const sessionFixtures = [
   ['session-created-a', 'CREATED', 'userA', 'Fresh created session with compact/start CTA, initial empty-ish chat, header, and input.'],
+  ['session-invitation-ready-a', 'INVITATION_READY', 'userA', 'Topic confirmed and invitation-ready modal eligible in the real session route.'],
   ['session-empathy-shared-a', 'EMPATHY_SHARED_A', 'userA', 'Initiator waiting after sharing empathy; validates held empathy statement and waiting CTA.'],
   ['session-reconciler-offer-b', 'RECONCILER_SHOWN_B', 'userB', 'Partner sees share-topic/revision offer in the real session route.'],
   ['session-context-shared-a', 'CONTEXT_SHARED_B', 'userA', 'Initiator receives shared context and refinement/review affordances.'],
@@ -57,10 +58,15 @@ const scrolledSessionFixtures = [
 ];
 
 const sessionAuditFixtureOverlays = [
+  ['invitation-ready-modal-real', 'session-invitation-ready-a', 'INVITATION_READY', 'userA', 'invitation-ready', 'Real invitation-ready modal opened from the seeded session route by audit fixture query.'],
   ['empathy-statement-drawer-real', 'session-empathy-shared-a', 'EMPATHY_SHARED_A', 'userA', 'empathy-drawer', 'Real empathy statement drawer opened from the seeded session route by audit fixture query.'],
   ['accuracy-feedback-drawer-real', 'session-empathy-revealed-a', 'EMPATHY_REVEALED', 'userA', 'accuracy-feedback', 'Real accuracy feedback drawer opened from the seeded session route by audit fixture query.'],
   ['guided-draft-modal-real', 'session-empathy-revealed-a', 'EMPATHY_REVEALED', 'userA', 'guided-draft', 'Real guided feedback draft modal opened from the seeded session route by audit fixture query.'],
   ['needs-drawer-real', 'session-needs-complete-a', 'NEED_MAPPING_COMPLETE', 'userA', 'needs-drawer', 'Real needs drawer opened from the seeded session route by audit fixture query.'],
+];
+
+const innerThoughtsAuditFixtureOverlays = [
+  ['takeaway-review-sheet-real', 'takeaway-review', 'Real takeaway review sheet opened from a seeded distilled Inner Thoughts session.'],
 ];
 
 function withParams(route, mode) {
@@ -94,6 +100,24 @@ async function seedSession(page, fixtureName, targetStage) {
   const json = await response.json();
   if (!json.success) {
     throw new Error(`Failed to seed ${fixtureName} (${targetStage}): ${JSON.stringify(json)}`);
+  }
+  return json.data;
+}
+
+async function seedInnerThoughts(page, fixtureName) {
+  const userSuffix = `${fixtureName}-${RUN_ID}`.replace(/[^a-zA-Z0-9-]/g, '-').slice(0, 52);
+  const response = await page.request.post(`${API_BASE_URL}/api/e2e/seed-inner-thoughts`, {
+    headers: { 'Content-Type': 'application/json' },
+    data: {
+      user: { email: `${userSuffix}@e2e.test`, name: 'Riley' },
+    },
+  });
+  if (!response.ok()) {
+    throw new Error(`Failed to seed ${fixtureName}: ${response.status()} ${await response.text()}`);
+  }
+  const json = await response.json();
+  if (!json.success) {
+    throw new Error(`Failed to seed ${fixtureName}: ${JSON.stringify(json)}`);
   }
   return json.data;
 }
@@ -245,6 +269,20 @@ async function main() {
     }
   }
 
+  for (const [filePrefix, auditFixture, notes] of innerThoughtsAuditFixtureOverlays) {
+    const seed = await seedInnerThoughts(page, filePrefix);
+    const baseUrl = seed.pageUrl.replace('http://localhost:8081', BASE_URL);
+    const seedCommand = `POST ${API_BASE_URL}/api/e2e/seed-inner-thoughts`;
+    for (const mode of ['light', 'dark']) {
+      const url = withAuditFixture(withMode(baseUrl, mode), auditFixture);
+      const fileName = `${filePrefix}-${mode}.png`;
+      await gotoFixture(page, url, mode);
+      await waitForApp(page);
+      await page.screenshot({ path: path.join(OUT_DIR, fileName), fullPage: true });
+      index.push(`| ${fileName} | ${mode} | inner-thoughts route audit fixture | \`${seedCommand}\` | \`${url}\` | ${notes} Inner Thoughts session \`${seed.session.id}\`. |`);
+    }
+  }
+
   const sidebarSeed = seededSessions.get('session-created-a');
   if (!sidebarSeed) {
     throw new Error('Expected session-created-a seed for sidebar interaction captures');
@@ -346,7 +384,7 @@ async function main() {
 
   await browser.close();
   await fs.writeFile(path.join(OUT_DIR, 'index.md'), `${index.join('\n')}\n`);
-  const screenshotCount = (sessionFixtures.length + scrolledSessionFixtures.length + sessionAuditFixtureOverlays.length + routeFixtures.length) * 2 + 10;
+  const screenshotCount = (sessionFixtures.length + scrolledSessionFixtures.length + sessionAuditFixtureOverlays.length + innerThoughtsAuditFixtureOverlays.length + routeFixtures.length) * 2 + 10;
   console.log(`Wrote ${screenshotCount} screenshots and index to ${OUT_DIR}`);
 }
 

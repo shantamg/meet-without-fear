@@ -22,13 +22,14 @@ By the end, the app should feel like one coherent product:
 
 Last updated: 2026-05-09
 
-- Current screenshot run: `mobile/test-results/design-audit/2026-05-09T09-28-05-276Z/`
-- Current screenshot count: 80, with an index at `mobile/test-results/design-audit/2026-05-09T09-28-05-276Z/index.md`.
+- Current screenshot run: `mobile/test-results/design-audit/2026-05-09T09-37-55-333Z/`
+- Current screenshot count: 86, with an index at `mobile/test-results/design-audit/2026-05-09T09-37-55-333Z/index.md`.
 - The capture script now seeds real session URLs for major chat/stage cases and uses URL-controllable session audit fixtures for hard-to-reach session-owned drawers and modals.
-- Real session coverage now includes created, empathy shared, reconciler offer, context shared, empathy revealed, needs complete, Stage 4 inventory/shared/no-overlap/inactive states, scrolled long-state viewports, sidebar open, row menu, activity drawer, partner info drawer, share topic drawer, empathy statement drawer, accuracy feedback drawer, guided feedback draft modal, and needs drawer.
+- Real session coverage now includes created, invitation ready, empathy shared, reconciler offer, context shared, empathy revealed, needs complete, Stage 4 inventory/shared/no-overlap/inactive states, scrolled long-state viewports, sidebar open, row menu, activity drawer, partner info drawer, share topic drawer, empathy statement drawer, accuracy feedback drawer, guided feedback draft modal, and needs drawer.
+- Inner Thoughts coverage now includes a seeded distilled session with the takeaway review sheet opened directly.
 - Design-system fixture coverage now includes shared primitives plus support options, bottom-sheet decision, transcription drawer, and edit suggestion modal.
-- Recent light-mode fixture checks found and fixed stale dark-only styling in `TranscriptionDrawer` and `EditSuggestionModal`.
-- Remaining fixture gaps before this goal can be considered complete: invitation-ready modal and takeaway review.
+- Recent light-mode fixture checks found and fixed stale dark-only styling in `TranscriptionDrawer`, `EditSuggestionModal`, the invitation-ready modal, `TakeawayReviewSheet`, and `TakeawayRow`.
+- No remaining direct fixture gaps are known in the current inventory; artifacts remain local under `mobile/test-results/design-audit`.
 
 ## Current Design Direction
 

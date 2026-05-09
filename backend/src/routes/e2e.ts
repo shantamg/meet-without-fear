@@ -306,6 +306,135 @@ export async function seedE2ESession(
 router.post('/seed-session', seedE2ESession);
 
 /**
+ * Seed an Inner Thoughts session with distilled takeaways for visual testing.
+ *
+ * Body:
+ * {
+ *   user: { email: string, name: string }
+ * }
+ */
+export async function seedE2EInnerThoughts(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  if (process.env.E2E_AUTH_BYPASS !== 'true') {
+    res.status(403).json({
+      success: false,
+      error: 'E2E seed-inner-thoughts only available when E2E_AUTH_BYPASS is enabled',
+    });
+    return;
+  }
+
+  try {
+    const { user } = req.body;
+
+    if (!user || !user.email || !user.name) {
+      res.status(400).json({
+        success: false,
+        error: 'user with email and name is required',
+      });
+      return;
+    }
+
+    if (!user.email.endsWith('@e2e.test')) {
+      res.status(400).json({
+        success: false,
+        error: 'user.email must end with @e2e.test',
+      });
+      return;
+    }
+
+    const baseUrl = process.env.E2E_APP_BASE_URL || 'http://localhost:8081';
+
+    const result = await prisma.$transaction(async (tx) => {
+      const userRecord = await tx.user.upsert({
+        where: { email: user.email },
+        update: { name: user.name },
+        create: {
+          email: user.email,
+          name: user.name,
+          clerkId: `e2e_inner_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          lastMoodIntensity: 5,
+        },
+      });
+
+      const session = await tx.innerWorkSession.create({
+        data: {
+          userId: userRecord.id,
+          title: 'Repair patterns after conflict',
+          theme: 'Relationship repair',
+          summary: 'The reflection identified a need for a short pause before repair conversations and a clearer opening sentence.',
+          status: 'COMPLETED',
+          distilledAt: new Date(),
+          messages: {
+            create: [
+              {
+                role: 'USER',
+                content: 'I keep trying to repair too quickly after dinner arguments.',
+              },
+              {
+                role: 'AI',
+                content: 'It sounds like timing matters. Let us capture the patterns you want to remember.',
+              },
+            ],
+          },
+          takeaways: {
+            create: [
+              {
+                content: 'A short pause before repair helps me speak with less urgency.',
+                theme: 'Repair timing',
+                source: 'AI',
+                type: 'INSIGHT',
+                position: 0,
+              },
+              {
+                content: 'Open with what I want to understand, not what I want to prove.',
+                theme: 'Communication',
+                source: 'AI',
+                type: 'INTENTION',
+                position: 1,
+              },
+              {
+                content: 'Ask whether now is a good time before starting a serious repair conversation.',
+                theme: 'Action',
+                source: 'AI',
+                type: 'ACTION_ITEM',
+                position: 2,
+              },
+            ],
+          },
+        },
+      });
+
+      return {
+        session: {
+          id: session.id,
+          status: session.status,
+          distilledAt: session.distilledAt?.toISOString() ?? null,
+        },
+        user: {
+          id: userRecord.id,
+          email: userRecord.email,
+          name: userRecord.name || user.name,
+        },
+        pageUrl: `${baseUrl}/inner-thoughts/${session.id}?e2e-user-id=${userRecord.id}&e2e-user-email=${encodeURIComponent(userRecord.email)}`,
+      };
+    });
+
+    res.status(201).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    logger.error('[seedE2EInnerThoughts] Error:', error);
+    next(error);
+  }
+}
+
+router.post('/seed-inner-thoughts', seedE2EInnerThoughts);
+
+/**
  * Trigger the reconciler for a specific direction in a session.
  * This allows E2E tests seeded at FEEL_HEARD_B to run the reconciler
  * via API call instead of navigating through the UI.
