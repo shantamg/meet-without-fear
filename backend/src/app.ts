@@ -5,6 +5,7 @@ import compression from 'compression';
 import routes from './routes';
 import { requestContextMiddleware } from './middleware/request-context';
 import { errorHandler, notFoundHandler } from './middleware/errors';
+import { scannerFilter } from './middleware/scanner-filter';
 import { logger } from './lib/logger';
 
 const app = express();
@@ -66,6 +67,9 @@ app.use(express.urlencoded({ extended: true }));
 // Request context - establishes AsyncLocalStorage context for turnId propagation
 // Must be before routes but after body parsing
 app.use(requestContextMiddleware);
+
+// Scanner filter - reject known vulnerability scanner probes before they hit the logger
+app.use(scannerFilter);
 
 // Request logging
 app.use((req, res, next) => {
