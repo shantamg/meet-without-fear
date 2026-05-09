@@ -172,7 +172,7 @@ interface SessionDetailDTO {
 | Code | When |
 |------|------|
 | `UNAUTHORIZED` (401) | No auth token |
-| `NOT_FOUND` (404) | Session doesn't exist, or the authenticated user isn't a participant (non-participants see 404, not 403, to avoid disclosing session IDs) |
+| `NOT_FOUND` (404) | Session doesn't exist, or the authenticated user isn't a participant (non-participants see 404, not 403, to avoid disclosing session IDs). The mobile client implements a circuit-breaker on 404: child queries wait for `/sessions/:id` state to resolve, pending-actions polling stops when access is denied, and Ably subscriptions tear down — preventing cascading error bursts. |
 
 ---
 

@@ -3,7 +3,7 @@ title: Codebase Structure
 sidebar_position: 8
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-05-07
+updated: 2026-05-09
 status: living
 ---
 # Codebase Structure
@@ -151,6 +151,9 @@ project-root/
   - Stage 2 components are integrated into UnifiedSessionScreen.tsx and its sub-components in `components/sharing/`, `components/SessionDrawer/`, `AccuracyFeedbackDrawer.tsx`, `ViewEmpathyStatementDrawer.tsx`, and reusable guided chat modals like `GuidedDraftChatModal.tsx`
   - `NeedCard.tsx`, `StrategyCard.tsx` - Stage 3-4 components
   - `Stage4RedesignPanel.tsx` - Stage 4 redesign UI: proposal inventory, needs coverage audit, willingness selection, outcome display (678 lines)
+  - `BiometricLockOverlay.tsx` - Full-screen modal that locks the app after 5 s in background; requires biometric or device passcode to unlock. Context provided by `contexts/BiometricLockContext.tsx` (platform-specific: `.web.tsx` variant is a no-op).
+  - `NotificationPermissionDrawer.tsx` - Full-screen modal requesting push notification permissions ("Know when it is your turn again"). Paired with `hooks/useNotifications.ts`.
+  - `SessionChatHeader.tsx` - Chat header with configurable left action: `'back'` (navigate up) or `'menu'` (open SessionDrawer via `onMenuPress` callback)
   - `TendingPanel.tsx` - Post-resolution check-in UI: scheduled agreement check-ins and passive re-entry (490 lines)
   - `WaitingRoom.tsx`, `WaitingBanner.tsx` - Waiting state UI
   - Subdirectories: `chat/`, `sharing/`, `SessionDrawer/` for organized subsets
@@ -187,6 +190,7 @@ project-root/
   - `useSessionDrawer.tsx` - Provides `SessionDrawerContext` for the hamburger drawer (open/close state, selected tab between Inner Thoughts and Partner Sessions).
   - Inner Work feature hooks: `useGratitude.ts`, `useMeditation.ts`, `useNeedsAssessment.ts`. Hooks exist in-code but the matching product pathways are deferred per v1.2 scope (see note on `InnerWorkHubScreen.tsx`).
   - Auth: `useAuth.ts` (user auth + `useUpdateMood` for persisting the user's default mood intensity), `useAuthProviderClerk.ts`, `useBiometricAuth.ts`
+  - `useNotifications.ts` - Push notification helpers: `shouldAskForSessionNotifications()` determines prompt timing; `requestSessionNotifications()` triggers the OS permission dialog and registers the Expo push token
   - Timeline: `useTimeline.ts` (13KB)
 
 **`services/`**

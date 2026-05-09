@@ -2,7 +2,7 @@
 title: Chat Interface
 sidebar_position: 3
 description: The primary conversation interface where users interact with the AI.
-updated: 2026-05-07
+updated: 2026-05-09
 status: living
 ---
 # Chat Interface
@@ -206,6 +206,16 @@ flowchart TB
 ## Session entry flow
 
 Before the chat list renders, `UnifiedSessionScreen` can swap in a full-screen mood check (`SessionEntryMoodCheck`) — this is the default entry when `shouldShowMoodCheck` is true. Only after the user submits (or dismisses) the mood reading does the usual chat layout show.
+
+## App-level overlays
+
+### Biometric Lock (`BiometricLockOverlay`)
+
+When the app returns from background after ≥5 seconds, `BiometricLockOverlay` covers the entire screen and prompts the user for biometric or device passcode authentication. On success the overlay dismisses. The context (`BiometricLockContext`) tracks lock state; the web variant is a no-op.
+
+### Notification Permission (`NotificationPermissionDrawer`)
+
+After a session turn completes, `useNotifications.ts` evaluates `shouldAskForSessionNotifications()`. When conditions are met the app shows a full-screen `NotificationPermissionDrawer` with the copy: *"Know when it is your turn again"* and a preview of the notification ("Your partner is ready"). Accepting calls `requestSessionNotifications()` which triggers the OS permission dialog and registers the Expo push token.
 
 ## Empty States
 
