@@ -1,0 +1,4 @@
+interface:
+  display_name: "MWF Gold Prompt Improver"
+  short_description: "Propose versioned prompt improvements from MWF gold-run scores."
+  default_prompt: "Use the MWF Gold Prompt Improver skill to inspect gold-session run artifacts, compare scores across iterations, and write versioned prompt improvement recommendations."

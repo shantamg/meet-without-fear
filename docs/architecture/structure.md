@@ -3,7 +3,7 @@ title: Codebase Structure
 sidebar_position: 8
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-05-07
 status: living
 ---
 # Codebase Structure
@@ -145,10 +145,13 @@ project-root/
 - Contains: 90 component files organized by feature
 - Key components:
   - `ChatInterface.tsx` - Main chat UI (29KB; messages, input, streaming)
-  - `ChatBubble.tsx` - Single message bubble (20KB, handles AI streaming animation)
+  - `ChatBubble.tsx` - Single message bubble (20KB, handles AI streaming animation with queue-based hiding: bubbles return `null` until their animation turn to prevent premature rendering)
+  - `GuidedActionPanel.tsx` - Unified action surface component (added #446); replaces six separate inline panels with a single `tone`-driven pattern (tones: `topic`, `review`, `share`, `success`, `needs`)
   - `EmotionalBarometer.tsx` - Emotion slider UI
   - Stage 2 components are integrated into UnifiedSessionScreen.tsx and its sub-components in `components/sharing/`, `components/SessionDrawer/`, `AccuracyFeedbackDrawer.tsx`, `ViewEmpathyStatementDrawer.tsx`, and reusable guided chat modals like `GuidedDraftChatModal.tsx`
   - `NeedCard.tsx`, `StrategyCard.tsx` - Stage 3-4 components
+  - `Stage4RedesignPanel.tsx` - Stage 4 redesign UI: proposal inventory, needs coverage audit, willingness selection, outcome display (678 lines)
+  - `TendingPanel.tsx` - Post-resolution check-in UI: scheduled agreement check-ins and passive re-entry (490 lines)
   - `WaitingRoom.tsx`, `WaitingBanner.tsx` - Waiting state UI
   - Subdirectories: `chat/`, `sharing/`, `SessionDrawer/` for organized subsets
 
@@ -163,7 +166,7 @@ project-root/
   - `cacheHelpers.ts` - Type-safe React Query cache mutation helpers (`typedSetQueryData`, `typedGetQueryData`)
   - `useMessages.ts` - Message querying + mutations (30KB); optimistic updates + streaming. Also hosts emotion tracking for messages (`useEmotionalHistory`, `useRecordEmotion`) alongside `useEmotions.ts`. `useInfiniteMessages` here is still the pagination source (wrapped by `useUnifiedSession`); `useTimeline.ts` is a newer companion hook that does not yet fully replace it.
   - `useSessions.ts` - Session CRUD + list (32KB). Uses the cache-first pattern: `useConfirmInvitationMessage` optimistically updates the cache in `onMutate` before the server confirms. It also owns Stage 0 topic-frame mutations (`useGenerateTopicFrame`, `useConfirmTopicFrame`) so invite sharing waits on a finalized AI topic anchor. `useArchiveSession` is deprecated in favor of `useDeleteSession`, which handles proper data cleanup.
-  - `useStages.ts` - Stage mutations + gate validation (64KB), including Stage 2 Feedback Coach draft/refine and skip-refinement endpoints
+  - `useStages.ts` - Stage mutations + gate validation (64KB), including Stage 2 Feedback Coach draft/refine, skip-refinement, Stage 4 redesign hooks (`useStage4State`, `useSubmitStage4ProposalSelection`, `useSubmitStage4Selections`, `useCloseStage4`), and Tending hooks (`useTendingEntries`, `useSubmitTendingResponse`, `useCreateTendingReentry`)
   - `useRealtime.ts` - Ably subscription setup (29KB); session-scoped realtime events + fire-and-forget AI messages with stale-closure defense via `userIdRef`. Exports convenience hooks: `usePartnerTyping()`, `usePartnerPresence()`, `useSessionEvents()`, `useUserSessionUpdates()`. Handles app foreground/background state (re-enters/leaves presence, reconnects on resume).
   - `useStreamingMessage.ts` - SSE streaming setup + metadata handling (27KB)
   - `useChatUIState.ts` - Derives UI state from cache values (9KB wrapper around `utils/chatUIState.ts`)

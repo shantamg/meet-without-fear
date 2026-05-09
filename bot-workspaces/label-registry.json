@@ -1,5 +1,5 @@
 {
-  "description": "Maps bot:* GitHub labels to workspace paths. When a label is applied to an issue, the bot routes to the corresponding workspace. Optional 'model' field overrides the default Claude model (e.g., 'sonnet' for lighter tasks). Optional 'effort' field overrides the default effort level (low, medium, high, max). Default effort is 'high' when unset.",
+  "description": "Maps bot:* GitHub labels to workspace paths. When a label is applied to an issue, the bot routes to the corresponding workspace. Optional 'model' field overrides the provider model. Optional 'effort' field overrides the effort level (low, medium, high, max). Optional 'provider', 'fallback_provider', and 'review_provider' fields select Claude/Codex routing through the Python harness. Provider defaults to 'claude' when unset, preserving legacy behavior.",
   "labels": {
     "bot:slack-triage": {
       "workspace": "slack-triage/",

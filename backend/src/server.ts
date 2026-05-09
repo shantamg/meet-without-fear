@@ -44,6 +44,7 @@ Sentry.init({
 import { createServer } from 'http';
 import app from './app';
 import { logger } from './lib/logger';
+import { prisma } from './lib/prisma';
 import { attachRealtimeWebSocket } from './services/realtime-transcription';
 
 // Fail fast: E2E_AUTH_BYPASS must never be enabled in production
@@ -66,3 +67,22 @@ attachRealtimeWebSocket(server);
 server.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
 });
+
+function shutdown(signal: string) {
+  logger.info(`${signal} received — shutting down gracefully`);
+  server.close(async () => {
+    logger.info('HTTP server closed');
+    await prisma.$disconnect();
+    await Sentry.close(2000);
+    process.exit(0);
+  });
+
+  // Force exit after 10 s if connections don't drain
+  setTimeout(() => {
+    logger.warn('Graceful shutdown timed out — forcing exit');
+    process.exit(1);
+  }, 10_000);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

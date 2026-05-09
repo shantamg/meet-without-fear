@@ -172,8 +172,9 @@ export class StateFactory {
         },
       ];
 
-      // Add User B as member for stages where both users are active
-      if (TWO_USER_ACTIVE_TARGETS.has(targetStage) && userBRecord) {
+      // Add User B whenever provided. Some E2E fresh-session callers need
+      // both URLs to be authorized before the real invitation UI is driven.
+      if (userBRecord) {
         memberData.push({
           userId: userBRecord.id,
           nickname: userA.name, // What B calls A
@@ -239,8 +240,9 @@ export class StateFactory {
         },
       });
 
-      // 8b. Create UserVessel for User B (if both users are active)
-      if (TWO_USER_ACTIVE_TARGETS.has(targetStage) && userBRecord) {
+      // 8b. Create UserVessel for User B whenever they were attached to the
+      // relationship so both E2E URLs resolve to a complete per-user shell.
+      if (userBRecord) {
         await tx.userVessel.create({
           data: {
             sessionId: session.id,

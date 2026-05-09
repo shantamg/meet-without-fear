@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { X, Lightbulb } from 'lucide-react-native';
-import { colors } from '@/theme';
+import { appWidthStyle, colors, modalPageStyle } from '@/theme';
 
 // ============================================================================
 // Types
@@ -93,6 +93,7 @@ export function ShareTopicDrawer({
       onRequestClose={onClose}
     >
       <SafeAreaProvider>
+        <View style={styles.modalPage}>
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           {/* Header with close button */}
           <View style={styles.header}>
@@ -159,6 +160,7 @@ export function ShareTopicDrawer({
             </TouchableOpacity>
           </View>
         </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     </Modal>
   );
@@ -169,9 +171,13 @@ export function ShareTopicDrawer({
 // ============================================================================
 
 const styles = StyleSheet.create({
+  modalPage: {
+    ...modalPageStyle,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.bgPrimary,
+    ...appWidthStyle,
   },
   header: {
     flexDirection: 'row',

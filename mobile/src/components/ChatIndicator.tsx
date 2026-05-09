@@ -140,6 +140,8 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
     || type === 'strategies-ready'
     || type === 'overlap-revealed'
     || type === 'agreement-reached';
+  const hasLeadingArrow = (type === 'context-shared' || type === 'empathy-shared')
+    && metadata?.isFromMe === false;
 
   const getLineStyle = () => {
     switch (type) {
@@ -258,8 +260,11 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
     <View style={styles.lineContainer}>
       <View style={[styles.line, getLineStyle()]} />
       <View style={styles.textContainer}>
+        {hasArrow && hasLeadingArrow && (
+          <Text style={[styles.arrow, getTextStyle()]}>→</Text>
+        )}
         <Text style={[styles.text, getTextStyle()]}>{getIndicatorText()}</Text>
-        {hasArrow && (
+        {hasArrow && !hasLeadingArrow && (
           <Text style={[styles.arrow, getTextStyle()]}>→</Text>
         )}
       </View>

@@ -34,6 +34,31 @@ I hear you. That sounds really difficult.`;
       expect(result.offerFeelHeardCheck).toBe(true);
     });
 
+    it('extracts and strips visible XML feel-heard control tags', () => {
+      const raw = `<feel_heard_check>Y</feel_heard_check>
+
+That sounds exhausting to keep carrying.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.offerFeelHeardCheck).toBe(true);
+      expect(result.response).toBe('That sounds exhausting to keep carrying.');
+      expect(result.response).not.toContain('feel_heard_check');
+    });
+
+    it('extracts and strips dashed XML ready-share control tags', () => {
+      const raw = `<ready-share>Y</ready-share>
+<draft>I think you might feel alone here.</draft>
+I've prepared a draft for you to review.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.offerReadyToShare).toBe(true);
+      expect(result.draft).toBe('I think you might feel alone here.');
+      expect(result.response).toBe("I've prepared a draft for you to review.");
+      expect(result.response).not.toContain('ready-share');
+    });
+
     it('extracts FeelHeardCheck:N as false', () => {
       const raw = `<thinking>FeelHeardCheck:N</thinking>Response text`;
       const result = parseMicroTagResponse(raw);
@@ -226,6 +251,24 @@ Visible response.`;
       expect(result.response).not.toContain('<needs>');
     });
 
+    it('strips legacy needs_ready payloads from visible response text', () => {
+      const raw = `<thinking>Mode: WITNESS</thinking>
+<needs_ready>
+{
+  "core_needs": ["To know whether change is possible"],
+  "boundary": "Reacting to volatility is not the same as causing it"
+}
+</needs_ready>
+Okay. You're clear on what you need.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.response).toBe("Okay. You're clear on what you need.");
+      expect(result.response).not.toContain('<needs_ready>');
+      expect(result.response).not.toContain('core_needs');
+      expect(result.proposedNeeds).toEqual([]);
+    });
+
     it('handles whitespace variations in flag extraction', () => {
       const raw = `<thinking>FeelHeardCheck: Y</thinking>Response`;
       const result = parseMicroTagResponse(raw);
@@ -275,11 +318,77 @@ That gives you a concrete experiment and a time to revisit it.`;
       ]);
     });
 
+    it('extracts typed Stage 4 proposal classifications from a hidden block', () => {
+      const raw = `<thinking>Mode:REPAIR | StrategyProposed:N</thinking>
+<stage4_proposals>
+[
+  {
+    "action": "ADD",
+    "targetProposalId": null,
+    "classification": "PROPOSAL",
+    "description": "This Friday, one quiet conversation without the kids in the room",
+    "kind": "SHARED_PROPOSAL",
+    "ownerUserId": null,
+    "needsAddressed": ["clarity"],
+    "duration": "Friday evening",
+    "measureOfSuccess": "They leave with an actual answer"
+  },
+  {
+    "action": "IGNORE",
+    "targetProposalId": null,
+    "classification": "SUCCESS_MARKER",
+    "description": "I would walk away knowing where I stand",
+    "kind": null,
+    "ownerUserId": null
+  }
+]
+</stage4_proposals>
+That gives this a clearer shape.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.response).toBe('That gives this a clearer shape.');
+      expect(result.response).not.toContain('stage4_proposals');
+      expect(result.stage4ProposalBlockPresent).toBe(true);
+      expect(result.stage4Proposals).toEqual([
+        {
+          action: 'ADD',
+          classification: 'PROPOSAL',
+          description: 'This Friday, one quiet conversation without the kids in the room',
+          kind: 'SHARED_PROPOSAL',
+          needsAddressed: ['clarity'],
+          duration: 'Friday evening',
+          measureOfSuccess: 'They leave with an actual answer',
+        },
+        {
+          action: 'IGNORE',
+          classification: 'SUCCESS_MARKER',
+          description: 'I would walk away knowing where I stand',
+        },
+      ]);
+    });
+
     it('defaults flags to false when not present', () => {
       const raw = `<thinking>Just some analysis</thinking>Response`;
       const result = parseMicroTagResponse(raw);
       expect(result.offerFeelHeardCheck).toBe(false);
+      expect(result.feelHeardConfirmed).toBe(false);
       expect(result.offerReadyToShare).toBe(false);
+      expect(result.stage4ProposalBlockPresent).toBe(false);
+    });
+
+    it('extracts FeelHeardConfirmed:Y as true', () => {
+      const raw = `<thinking>
+Mode: WITNESS
+FeelHeardCheck:Y
+FeelHeardConfirmed:Y
+</thinking>
+Let's move into the next part.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.offerFeelHeardCheck).toBe(true);
+      expect(result.feelHeardConfirmed).toBe(true);
     });
 
     it('trims whitespace from draft content', () => {

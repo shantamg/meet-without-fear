@@ -106,6 +106,24 @@ export async function generatePostShareContinuation(
   });
   const currentStage = stageProgress?.stage ?? 2; // Default to 2 if not found
 
+  if (currentStage === 2) {
+    const ownAttempt = await prisma.empathyAttempt.findFirst({
+      where: {
+        sessionId,
+        sourceUserId: subjectId,
+      },
+      select: {
+        status: true,
+      },
+    });
+
+    if (ownAttempt?.status === EmpathyStatus.REFINING) {
+      return `Thank you for sharing that with ${partnerName}. They'll have the chance to sit with it and refine their understanding. You also have an updated draft of your own empathy statement to review. When you're ready, use "Revisit what you'll share" and resubmit it so ${partnerName} can see your updated understanding.`;
+    }
+
+    return `Thank you for sharing that with ${partnerName}. They'll have the chance to sit with it and refine their understanding. If your own empathy draft asks for review, use "Revisit what you'll share" before waiting. Otherwise, you don't need to do anything more on their behalf.`;
+  }
+
   // Get recent conversation history for context
   const recentMessages = await prisma.message.findMany({
     where: {
@@ -236,7 +254,7 @@ export function getFallbackContinuation(stage: number, partnerName: string): str
       continuation = `Is there anything else about how this situation has affected you that feels important to express?`;
       break;
     case 2:
-      continuation = `Let's continue exploring ${partnerName}'s perspective. What do you imagine might be going on for ${partnerName} in all of this?`;
+      continuation = `If your own empathy draft asks for review, use "Revisit what you'll share" before waiting. Otherwise, you don't need to do anything more on their behalf.`;
       break;
     case 3:
       continuation = `Let's continue identifying what you truly need here. What feels most important to you?`;

@@ -697,7 +697,7 @@ get_channel_tone() {
 # Build a single prompt with all threads for one batched invocation
 
 build_prompt() {
-  local prompt="You are LovelyBot, a helpful assistant. Draft short follow-up messages for Slack threads. Each message should:
+  local prompt="You are Slam Paws, the Meet Without Fear bot. Draft short follow-up messages for Slack threads. Each message should:
 - Be 1-2 sentences max
 - Match the channel tone specified
 - Output ONLY the JSON array, no markdown fences

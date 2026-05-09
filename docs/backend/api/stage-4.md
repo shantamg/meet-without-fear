@@ -1,33 +1,216 @@
 ---
 title: "Stage 4 API: Strategic Repair"
 sidebar_position: 11
-description: Endpoints for collaborative strategy generation, ranking, and agreement documentation.
+description: Endpoints for collaborative strategy proposal, willingness selection, agreement documentation, and Tending check-ins.
 slug: /backend/api/stage-4
+updated: 2026-05-06
 ---
 # Stage 4 API: Strategic Repair
 
-Endpoints for collaborative strategy generation, ranking, and agreement documentation.
+Endpoints for collaborative strategy proposal, willingness selection, agreement documentation, and Tending check-ins.
 
 ## Overview
 
 Stage 4 is **sequential** (unlike stages 1-3 which are parallel). Both users must complete Stage 3 before either can enter Stage 4.
 
-Key design:
-- Both users propose strategies independently
-- During collection, each user only sees their own proposed strategies
-- The shared pool is presented as **unlabeled options** only after both users are ready and the current user has contributed at least one strategy
-- Users **privately rank** their preferences
-- Overlap is revealed together
+> **Two flows coexist in the codebase.**
+>
+> The **redesigned flow** (primary) uses a willingness-selection model: proposals are AI-captured, both users indicate willingness (WILLING / NOT_WILLING / NEEDS_DISCUSSION) per proposal, then stage 4 closes explicitly via `POST /stage4/close`. See [Stage 4 Redesign endpoints](#stage-4-redesign-primary-flow) below.
+>
+> The **legacy flow** (vestigial) used private ranking followed by overlap reveal. Its endpoints (`/strategies/rank`, `/strategies/overlap`, `/strategies/ready`) remain in the router for backward compatibility but are not the primary resolution path.
 
 ### Data persistence
-- Strategies → `StrategyProposal` (source tracked for audit; not exposed to partner). Strategy pool is shuffled server-side before returning to avoid revealing order-of-proposal.
-- Rankings → `StrategyRanking` (ordered array of proposal ids)
-- Winning micro-experiment → `Agreement` with `type = MICRO_EXPERIMENT` and `proposalId` reference. `duration` and `measureOfSuccess` are returned for shape compatibility but are currently `null` — fields not yet added to the Prisma model.
-- `ConsentRecord` rows are **not** created for Stage 4 proposals today — the feature is designed but not wired in the controllers yet.
+- Proposals → `StrategyProposal` with `kind` (SHARED_PROPOSAL | INDIVIDUAL_COMMITMENT) and `status` (ACTIVE | REVISED | REMOVED | CONVERTED_TO_AGREEMENT). Source tracked for audit; not exposed to partner. Pool is shuffled server-side before returning.
+- Willingness selections → `Stage4ProposalSelection` per user per proposal
+- Coverage audit → `Stage4NeedCoverage` tracks which confirmed needs are addressed by proposals
+- Closure → `Stage4Closure` records the final outcome kind (SHARED_AGREEMENT | NO_SHARED_AGREEMENT)
+- Agreements → `Agreement` rows linked to proposals via `proposalId`
+- Follow-up check-ins → `TendingEntry` rows scheduled from `Agreement.followUpDate`
+- Legacy rankings → `StrategyRanking` (ordered array of proposal IDs; used by legacy flow only)
 
 ---
 
-## Get Strategy Pool
+## Stage 4 Redesign (Primary Flow)
+
+The redesigned endpoints replace the ranking model with a willingness-selection model. They are the canonical path to Stage 4 resolution.
+
+### Get Stage 4 State
+
+Returns the consolidated Stage 4 state: proposal inventory, needs coverage audit, selections, and closure outcome.
+
+```
+GET /api/v1/sessions/:id/stage4
+```
+
+#### Response
+
+```typescript
+interface GetStage4StateResponse {
+  phase: Stage4Phase;
+  proposals: ProposalCardDTO[];
+  coverageAudit: Stage4CoverageAuditDTO;
+  mySelections: Stage4SelectionDTO[];
+  partnerSelectionsSubmitted: boolean;
+  closure: Stage4ClosureDTO | null;
+  agreements: AgreementDTO[];
+  tendingPreview: TendingPreviewDTO | null;
+}
+
+enum Stage4Phase {
+  INVENTORY_BUILDING         = 'INVENTORY_BUILDING',
+  COVERAGE_REVIEW            = 'COVERAGE_REVIEW',
+  SELECTION                  = 'SELECTION',
+  OUTCOME_REVIEW             = 'OUTCOME_REVIEW',
+  CLOSING                    = 'CLOSING',
+  CLOSED_SHARED_AGREEMENT    = 'CLOSED_SHARED_AGREEMENT',
+  CLOSED_NO_SHARED_AGREEMENT = 'CLOSED_NO_SHARED_AGREEMENT',
+}
+
+interface ProposalCardDTO {
+  id: string;
+  description: string;
+  needsAddressed: string[];
+  duration: string | null;
+  kind: Stage4ProposalKind;   // SHARED_PROPOSAL | INDIVIDUAL_COMMITMENT
+  status: Stage4ProposalStatus; // ACTIVE | REVISED | REMOVED | CONVERTED_TO_AGREEMENT
+  mySelection: Stage4SelectionDecision | null;
+}
+
+enum Stage4SelectionDecision {
+  WILLING          = 'WILLING',
+  NOT_WILLING      = 'NOT_WILLING',
+  NEEDS_DISCUSSION = 'NEEDS_DISCUSSION',
+}
+```
+
+---
+
+### Submit Single Willingness Decision
+
+```
+POST /api/v1/sessions/:id/stage4/proposals/:proposalId/selection
+```
+
+#### Request Body
+
+```typescript
+interface SubmitStage4ProposalSelectionRequest {
+  decision: Stage4SelectionDecision;
+  note?: string;    // max 1000 chars
+}
+```
+
+#### Response
+
+```typescript
+interface SubmitStage4ProposalSelectionResponse {
+  proposalId: string;
+  decision: Stage4SelectionDecision;
+  note: string | null;
+}
+```
+
+Gate link: sets `selectionSubmitted` on `StageProgress.gatesSatisfied` after the caller submits decisions.
+
+---
+
+### Submit Batch Willingness Decisions
+
+```
+POST /api/v1/sessions/:id/stage4/selections
+```
+
+#### Request Body
+
+```typescript
+interface SubmitStage4SelectionsRequest {
+  selections: Array<{
+    proposalId: string;
+    decision: Stage4SelectionDecision;
+    note?: string;    // max 1000 chars
+  }>;  // min 1 item
+}
+```
+
+#### Response
+
+```typescript
+interface SubmitStage4SelectionsResponse {
+  submitted: boolean;
+  count: number;
+}
+```
+
+Gate link: sets `selectionSubmitted`.
+
+---
+
+### Close Stage 4
+
+Closes the stage and resolves the session. Determines closure kind from selection overlap: if both partners selected WILLING on at least one SHARED_PROPOSAL, the kind is SHARED_AGREEMENT; otherwise NO_SHARED_AGREEMENT. Creates `Agreement` rows for shared proposals both partners accepted. Schedules `TendingEntry` rows for agreements with `followUpDate`.
+
+```
+POST /api/v1/sessions/:id/stage4/close
+```
+
+#### Request Body
+
+```typescript
+interface CloseStage4Request {
+  kind?: Stage4ClosureKind;          // Overrides computed kind if provided
+  reason?: Stage4ClosureReason;
+  summary?: string;                  // max 2000 chars
+  followUpDatesByProposalId?: Record<string, string>;  // proposalId → ISO 8601 date
+}
+
+enum Stage4ClosureKind {
+  SHARED_AGREEMENT    = 'SHARED_AGREEMENT',
+  NO_SHARED_AGREEMENT = 'NO_SHARED_AGREEMENT',
+}
+
+enum Stage4ClosureReason {
+  MUTUAL_SELECTION  = 'MUTUAL_SELECTION',
+  NO_OVERLAP        = 'NO_OVERLAP',
+  BOUNDARY_HONORED  = 'BOUNDARY_HONORED',
+  USER_STOPPED      = 'USER_STOPPED',
+}
+```
+
+#### Response
+
+```typescript
+interface CloseStage4Response {
+  closure: Stage4ClosureDTO;
+  agreements: AgreementDTO[];
+  sessionResolved: boolean;
+}
+```
+
+---
+
+### Get Agreements
+
+```
+GET /api/v1/sessions/:id/agreements
+```
+
+Returns all agreement rows for the session.
+
+#### Response
+
+```typescript
+interface GetAgreementsResponse {
+  agreements: AgreementDTO[];
+}
+```
+
+---
+
+## Legacy Strategy Endpoints
+
+> These endpoints are not the primary resolution path in the redesigned Stage 4. `readyToRank` and `rankingSubmitted` gates are still set by these endpoints but are not checked by the redesign's closure flow.
+
+### Get Strategy Pool
 
 Get the strategies currently visible to the caller.
 
@@ -60,13 +243,13 @@ interface StrategyDTO {
   // Note: NO source attribution
 }
 
+// Legacy StrategyPhase (used by getStrategies response in the legacy flow):
 enum StrategyPhase {
   COLLECTING = 'COLLECTING',     // Users still adding strategies
   RANKING    = 'RANKING',        // Both have marked ready; ranking in progress
   REVEALING  = 'REVEALING',      // Both rankings submitted; overlap revealed
 }
-// There is no NEGOTIATING or AGREED phase — the code uses only the three above.
-// Overlap with no shared items just returns an empty `overlap` array while staying in REVEALING.
+// The redesigned flow uses Stage4Phase (see Stage 4 Redesign section above) instead.
 ```
 
 ### Example Response
@@ -417,44 +600,51 @@ Each session is capped at **two `Agreement` rows**. `createAgreement` returns `V
 
 Stage 4 uses these caller-side gate markers on `StageProgress.gatesSatisfied`:
 
-| Gate | Requirement |
-|------|-------------|
-| `readyToRank` | Caller posted `/strategies/ready` after contributing at least one strategy |
-| `rankingSubmitted` | Caller posted `/strategies/rank` after both users were ready and the caller had contributed at least one strategy |
-| `agreementCreated` | Required by the generic `/stages/advance` gate table, but Stage 4 normally resolves through agreement confirmation rather than manual advancement |
+| Gate | Flow | Requirement |
+|------|------|-------------|
+| `selectionSubmitted` | Redesign (primary) | Caller posted `/stage4/proposals/:id/selection` or `/stage4/selections` |
+| `readyToRank` | Legacy | Caller posted `/strategies/ready` after contributing at least one strategy |
+| `rankingSubmitted` | Legacy | Caller posted `/strategies/rank` after both users were ready |
+| `agreementCreated` | Legacy | Set by generic `/stages/advance` gate table; not used by redesign closure |
 
-`readyToRank` and `rankingSubmitted` are actively set by the Stage 4 controller. Agreement confirmation updates `Agreement` rows and may resolve the session directly; it does not currently set a StageProgress `agreementConfirmed` gate.
+In the redesigned flow, session resolution is driven by `POST /stage4/close`. The `selectionSubmitted` gate is the primary prerequisite checked before closure is allowed. `readyToRank` and `rankingSubmitted` are set but not consulted by `closeStage4`.
 
-Session resolves when every `Agreement` row in the session is fully signed by both partners. If two agreements exist and only one is agreed, the session remains active until the other is also agreed.
+In the legacy flow, session resolves when every `Agreement` row is fully confirmed by both partners.
 
 ---
 
-## Stage 4 Flow
+## Stage 4 Flow (Redesigned — Primary)
+
+```mermaid
+flowchart TD
+    Enter[Enter Stage 4] --> Inventory[AI captures proposals from conversation]
+    Inventory --> Coverage[Coverage audit: which needs are addressed?]
+    Coverage --> Select[Each user submits willingness per proposal]
+    Select --> BothSelected{Both submitted selections?}
+    BothSelected -->|No| Wait[Wait for partner]
+    BothSelected -->|Yes| Review[Outcome review: shared willing proposals visible]
+    Review --> Close[POST /stage4/close]
+    Close --> SharedAgree{Mutual WILLING overlap?}
+    SharedAgree -->|Yes| CLOSED_SHARED[CLOSED_SHARED_AGREEMENT: Agreements created, Tending scheduled]
+    SharedAgree -->|No| CLOSED_NO[CLOSED_NO_SHARED_AGREEMENT: Individual paths honored]
+```
+
+## Stage 4 Flow (Legacy — Vestigial)
 
 ```mermaid
 flowchart TD
     Enter[Enter Stage 4] --> Collect[Both propose strategies]
-    Collect --> LocalPool[Each user sees only their own ideas]
-    LocalPool --> MoreIdeas{Want more ideas?}
-    MoreIdeas -->|Yes| AISuggest[AI generates suggestions]
-    AISuggest --> LocalPool
-    MoreIdeas -->|No| Done[Each marks done adding ideas]
-    Done --> Ready{Both ready and each contributed?}
-    Ready -->|No| WaitReady[Wait for partner readiness or contribution]
-    Ready -->|Yes| SharedPool[Show full unlabeled shared pool]
-    SharedPool --> Rank[Private ranking]
+    Collect --> Ready{Both ready and each contributed?}
+    Ready -->|No| WaitReady[Wait for partner]
+    Ready -->|Yes| Rank[Private ranking]
     Rank --> BothRanked{Both ranked?}
     BothRanked -->|No| Wait[Wait for partner]
     BothRanked -->|Yes| Reveal[Reveal overlap]
-    Reveal --> HasOverlap{Top-three overlap exists?}
-    HasOverlap -->|Yes| Discuss[Discuss overlapping options]
-    HasOverlap -->|No| Candidates[Show each user's top choice as agreement candidates]
-    Candidates --> MoreIdeas
-    Discuss --> Agree[Create agreement]
-    Agree --> PartnerConfirm{Partner confirms?}
-    PartnerConfirm -->|No| Modify[Modify and re-propose]
+    Reveal --> Agree[Create agreement]
+    Agree --> Confirm{Partner confirms?}
+    Confirm -->|Yes| Resolve[Resolve session]
+    Confirm -->|No| Modify[Modify and re-propose]
     Modify --> Agree
-    PartnerConfirm -->|Yes| Resolve[Resolve session]
 ```
 
 ---
@@ -479,6 +669,7 @@ See [Retrieval Contracts: Stage 4](../state-machine/retrieval-contracts.md#stage
 - [Stage 4: Strategic Repair](../../stages/stage-4-strategic-repair.md)
 - [Stage 4 Prompt](../prompts/stage-4-repair.md)
 - [Global Library](../data-model/prisma-schema.md#global-library-stage-4-suggestions)
+- [Tending API](./tending.md) — Post-resolution check-in and re-entry
 
 ---
 

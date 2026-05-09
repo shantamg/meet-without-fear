@@ -15,6 +15,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import mwf_extract_moments as extractor  # noqa: E402
+import mwf_gold_profile as gold_profile  # noqa: E402
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,7 @@ TRANSCRIPTS_ROOT = REPO_ROOT / "docs/product/source-material/golden-transcripts"
 MOMENTS_ROOT = REPO_ROOT / "eval/moments"
 INDEX_PATH = MOMENTS_ROOT / "README.md"
 ALIGNMENT_CONFIG = REPO_ROOT / "eval/alignment-loop-config.yaml"
+SCENARIOS_PATH = REPO_ROOT / "eval/gold-scenarios.json"
 
 
 class GoldExampleError(RuntimeError):
@@ -60,6 +62,50 @@ def validate_transcript(path: Path) -> str:
     if not re.search(r"^##\s*Stage\s+[0-9]+", text, flags=re.MULTILINE | re.IGNORECASE):
         raise GoldExampleError("Gold transcript must include markdown stage markers such as '## Stage 1'")
     return text
+
+
+def infer_participants(text: str) -> list[str]:
+    participants: list[str] = []
+    seen: set[str] = set()
+    for match in re.finditer(r"^(?:\*\*)?([^:*#\n]+):(?:\*\*)?\s+", text, flags=re.MULTILINE):
+        speaker = match.group(1).strip()
+        if speaker.lower() in {"mwf", "meet without fear"}:
+            continue
+        if speaker not in seen:
+            participants.append(speaker)
+            seen.add(speaker)
+    return participants[:2]
+
+
+def load_scenario_registry() -> dict[str, Any]:
+    if SCENARIOS_PATH.exists():
+        return json.loads(SCENARIOS_PATH.read_text(encoding="utf-8"))
+    return {"scenarios": []}
+
+
+def update_scenario_registry(slug: str, dest: Path, text: str) -> dict[str, Any]:
+    payload = load_scenario_registry()
+    scenarios = payload.setdefault("scenarios", [])
+    existing = next((item for item in scenarios if item.get("id") == slug), None)
+    participants = infer_participants(text)
+    entry = {
+        "id": slug,
+        "participants": participants,
+        "reference_transcript": display_path(dest),
+        "gold_profile": display_path(gold_profile.PROFILES_ROOT / f"{slug}.json"),
+        "live_enabled": len(participants) == 2,
+    }
+    if existing is None:
+        scenarios.append(entry)
+    else:
+        existing.setdefault("participants", participants)
+        existing.setdefault("reference_transcript", display_path(dest))
+        existing.setdefault("gold_profile", display_path(gold_profile.PROFILES_ROOT / f"{slug}.json"))
+        existing.setdefault("live_enabled", len(existing.get("participants", [])) == 2)
+        entry = existing
+    scenarios.sort(key=lambda item: str(item.get("id", "")))
+    SCENARIOS_PATH.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return entry
 
 
 def find_stage_sections(text: str) -> list[StageSection]:
@@ -187,6 +233,8 @@ def onboard(
         raise GoldExampleError(f"Refusing to overwrite existing transcript: {dest}")
     if source != dest.resolve():
         shutil.copyfile(source, dest)
+    profile_path = gold_profile.write_profile_for_transcript(dest, slug)
+    scenario = update_scenario_registry(slug, dest, text)
     if auto:
         extraction = extractor.extract_moments(dest, max_moments=max_moments, use_llm_rubrics=llm_rubrics)
         written = extractor.write_extracted_moments(extraction, overwrite=overwrite_generated)
@@ -209,6 +257,8 @@ def onboard(
         "drafts": [display_path(path) for path in drafts],
         "moments": [display_path(path) for path in written if path.suffix == ".yaml"],
         "judge_prompts": [display_path(path) for path in written if path.suffix == ".md"],
+        "gold_profile": display_path(profile_path),
+        "scenario": scenario,
         "index": display_path(INDEX_PATH),
         "tests": None if test_result is None else test_result.returncode,
     }

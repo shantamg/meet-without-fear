@@ -17,7 +17,8 @@ describe('ShareTopicDrawer copy', () => {
       'utf8'
     );
 
-    expect(source).toContain('There may be context that would help');
+    expect(source).toContain('there may be');
+    expect(source).toContain('something important {partnerName} still needs understood');
     expect(source).not.toContain('what {partnerName} is imagining');
   });
 });

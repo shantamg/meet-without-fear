@@ -1,0 +1,31 @@
+{
+  "service_dir": "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-024640-james-catherine-services",
+  "services": [
+    {
+      "command": [
+        "npm",
+        "run",
+        "dev:api"
+      ],
+      "cwd": "/Users/shantam/Software/meet-without-fear",
+      "log_path": "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-024640-james-catherine-services/backend.log",
+      "name": "backend",
+      "pid": 27189,
+      "started": true
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "dev:mobile:e2e"
+      ],
+      "cwd": "/Users/shantam/Software/meet-without-fear",
+      "log_path": "/Users/shantam/Software/meet-without-fear/eval/runs/20260507-024640-james-catherine-services/web.log",
+      "name": "web",
+      "pid": 27285,
+      "started": true
+    }
+  ],
+  "started_backend": true,
+  "status": "pass"
+}

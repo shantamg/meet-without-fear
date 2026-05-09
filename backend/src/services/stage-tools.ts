@@ -7,6 +7,7 @@
 
 import type { Tool } from '@aws-sdk/client-bedrock-runtime';
 import type { CapturedNeedInput } from '@meet-without-fear/shared';
+import type { ParsedStage4ProposalInput } from '../utils/micro-tag-parser';
 
 /**
  * Session state tool for delivering stage metadata via Tool Use.
@@ -63,15 +64,21 @@ export const SESSION_STATE_TOOL_NAME = 'update_session_state';
  */
 export interface SessionStateToolInput {
   offerFeelHeardCheck?: boolean;
+  feelHeardConfirmed?: boolean;
+  feelHeardConfirmedAt?: string;
+  advancedToStage?: number;
   offerReadyToShare?: boolean;
   proposedEmpathyStatement?: string;
   proposedStrategies?: string[];
+  stage4Proposals?: ParsedStage4ProposalInput[];
   proposedNeeds?: CapturedNeedInput[];
   needsCaptured?: boolean;
   stage4Capture?: {
     appliedOperationCount: number;
     skippedOperationCount: number;
     selectionCaptured: boolean;
+    closureSignalCaptured?: boolean;
+    autoClosed?: boolean;
     confidence: number;
   };
   /** Stage 0: AI's proposed topic frame extracted from <draft> tag */
@@ -91,6 +98,9 @@ export function parseSessionStateToolInput(
       : false,
     offerReadyToShare: typeof input.offerReadyToShare === 'boolean'
       ? input.offerReadyToShare
+      : false,
+    feelHeardConfirmed: typeof input.feelHeardConfirmed === 'boolean'
+      ? input.feelHeardConfirmed
       : false,
     proposedEmpathyStatement: typeof input.proposedEmpathyStatement === 'string'
       ? input.proposedEmpathyStatement

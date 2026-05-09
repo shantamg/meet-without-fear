@@ -7,7 +7,7 @@
 | Prompt | The specific message to handle (provided by socket-listener) | Contains channel context + message text |
 | `.claude/config/services.json` | Bot user ID `U0ALQHDUVSM` | Filter self |
 | `references/classification-guide.md` | Classification criteria and examples | Accurate message typing |
-| `scripts/slack-get-images.mjs` | Image scanner | Detect file attachments MCP cannot see |
+| Slack API via `curl` + `SLACK_BOT_TOKEN` | Image downloader | Fetch file attachments MCP cannot see |
 
 ## Process
 
@@ -21,10 +21,7 @@ The socket-listener provides the message in the prompt under "## Message to hand
 - Message text
 - Whether the message has file attachments (check `[Attached files: ...]` in the formatted message)
 
-If the message mentions attached files, scan for images:
-```bash
-SLACK_MCP_XOXB_TOKEN="$SLACK_MCP_XOXB_TOKEN" node scripts/slack-get-images.mjs <CHANNEL_ID> --ts <message_ts>
-```
+If the message mentions attached files, download images via Slack API (see workspace CLAUDE.md "Image Handling" section for the curl commands using `SLACK_BOT_TOKEN`).
 
 ### Step 2: Filter non-actionable messages
 

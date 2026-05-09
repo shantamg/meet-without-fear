@@ -77,17 +77,24 @@ Adapt tone based on the source channel:
 
 ## Image Handling
 
-The Slack MCP server cannot see file attachments at all. Always scan for them in parallel with message fetch:
+The Slack MCP server cannot see file attachments at all. When a message has `[Attached files: ...]`, download the images directly via the Slack API using `SLACK_BOT_TOKEN` (NOT `SLACK_MCP_XOXB_TOKEN` which is not set):
 
 ```bash
-# Scan (fast, no download -- always run alongside MCP fetch)
-SLACK_MCP_XOXB_TOKEN="$SLACK_MCP_XOXB_TOKEN" node scripts/slack-get-images.mjs C0A3FF86FB7 --scan
+# 1. Fetch the message to get file URLs
+FILE_INFO=$(curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+  "https://slack.com/api/conversations.history?channel=CHANNEL_ID&latest=MSG_TS_PLUS_ONE&oldest=MSG_TS_MINUS_ONE&inclusive=true&limit=1" \
+  | jq -r '.messages[0].files[0].url_private')
 
-# Download specific message's images
-SLACK_MCP_XOXB_TOKEN="$SLACK_MCP_XOXB_TOKEN" node scripts/slack-get-images.mjs C0A3FF86FB7 --ts <message_ts>
+# 2. Download the image
+mkdir -p /tmp/slack-images
+curl -s -o /tmp/slack-images/image.png \
+  -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+  "$FILE_INFO"
 ```
 
 Images save to `/tmp/slack-images/`. View with the Read tool.
+
+**Important:** The old `scripts/slack-get-images.mjs` script does not exist. Always use the curl approach above.
 
 ## GitHub API Budget (Policy #1649)
 

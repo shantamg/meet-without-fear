@@ -22,6 +22,8 @@ import mwf_alignment_loop as loop  # noqa: E402
 import mwf_add_gold_example as add_gold  # noqa: E402
 import mwf_alignment_status as status  # noqa: E402
 import mwf_extract_moments as extract  # noqa: E402
+import mwf_gold_loop as gold_loop  # noqa: E402
+import mwf_gold_profile as gold_profile  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOMENT_ID = "stage-4-no-shared-agreement-closure"
@@ -87,6 +89,457 @@ class TestYamlParsing(unittest.TestCase):
         moment_ids = set(mme.list_moments())
         for moment_id in PHASE1_MOMENT_IDS:
             self.assertIn(moment_id, moment_ids)
+
+    def test_gold_loop_scenarios_come_from_registry(self) -> None:
+        self.assertEqual(gold_loop.SCENARIOS["adam-eve"], ("Adam", "Eve"))
+        self.assertEqual(gold_loop.SCENARIOS["james-catherine"], ("James", "Catherine"))
+        self.assertEqual(gold_loop.scenario_sides("james-catherine"), ["james", "catherine"])
+        self.assertEqual(
+            gold_loop.scenario_gold_profile_path("james-catherine"),
+            REPO_ROOT / "eval/gold-profiles/james-catherine.json",
+        )
+
+    def test_gold_scenario_gates_are_valid(self) -> None:
+        payload = json.loads((REPO_ROOT / "eval/gold-scenarios.json").read_text())
+        allowed_modes = {"fresh_gold_loop", "snapshot_replay", "seed_target_stage", "full_flow_gate"}
+        scenario_ids = {item["id"] for item in payload["scenarios"]}
+
+        for scenario in payload["scenarios"]:
+            with self.subTest(scenario=scenario["id"]):
+                self.assertTrue(scenario["participants"])
+                self.assertTrue((REPO_ROOT / scenario["gold_profile"]).exists())
+                self.assertTrue((REPO_ROOT / scenario["reference_transcript"]).exists())
+                self.assertIn(scenario["id"], scenario_ids)
+
+                gates = scenario.get("gates") or [scenario.get("gate", {})]
+                self.assertTrue(gates)
+                for gate in gates:
+                    mode = gate.get("mode", "fresh_gold_loop")
+                    self.assertIn(mode, allowed_modes)
+                    self.assertGreater(float(gate.get("target_score", 4.0)), 0)
+                    self.assertGreater(int(gate.get("max_iterations", 1)), 0)
+                    if mode in {"fresh_gold_loop", "full_flow_gate", "snapshot_replay"}:
+                        self.assertGreaterEqual(int(gate.get("stop_after_stage", 2)), 1)
+                    if mode == "snapshot_replay":
+                        self.assertTrue(gate.get("snapshot_ref"))
+                    if mode == "seed_target_stage":
+                        self.assertTrue(gate.get("seed_target_stage"))
+
+    def test_gold_snapshot_registry_shape(self) -> None:
+        payload = json.loads((REPO_ROOT / "eval/gold-snapshot-registry.json").read_text())
+        scenario_ids = {item["id"] for item in json.loads((REPO_ROOT / "eval/gold-scenarios.json").read_text())["scenarios"]}
+        seen_ids: set[str] = set()
+
+        self.assertIsInstance(payload.get("snapshots"), list)
+        for entry in payload["snapshots"]:
+            with self.subTest(snapshot=entry.get("id")):
+                self.assertIsInstance(entry.get("id"), str)
+                self.assertNotIn(entry["id"], seen_ids)
+                seen_ids.add(entry["id"])
+                self.assertIn(entry.get("scenario"), scenario_ids)
+                self.assertIsInstance(entry.get("snapshot"), str)
+                self.assertGreaterEqual(int(entry.get("starts_at_stage", 1)), 1)
+                self.assertIsInstance(entry.get("starts_for"), list)
+                self.assertTrue(entry.get("purpose"))
+                self.assertIsInstance(entry.get("expected_state"), list)
+                self.assertIsInstance(entry.get("target_behaviors"), list)
+                self.assertIsInstance(entry.get("required_invariants"), list)
+
+    def test_gold_loop_actor_prompt_allows_realistic_typed_feel_heard_confirmation(self) -> None:
+        actor = gold_loop.Actor("Eve", "http://localhost:8082/session/test?e2e-user-id=eve")
+        partner = gold_loop.Actor("Adam", "http://localhost:8082/session/test?e2e-user-id=adam")
+
+        prompt = gold_loop.build_actor_prompt(
+            actor,
+            partner,
+            "session-test",
+            2,
+            REPO_ROOT / "eval/runs/test-run",
+            "adam-eve",
+        )
+        resume_prompt = gold_loop.build_resume_prompt(actor, partner, "session-test", 2)
+
+        for text in (prompt, resume_prompt):
+            self.assertIn('If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present', text)
+            self.assertIn("either click it or give a clear in-character typed confirmation", text)
+            self.assertIn('"I feel heard" / "Ready"', text)
+            self.assertIn("Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate", text)
+
+    def test_gold_loop_uses_profile_initiator_separate_from_registry_order(self) -> None:
+        james_catherine = gold_loop.infer_role_shape_from_profile("james-catherine")
+        self.assertEqual(james_catherine["initiator"], "Catherine")
+        self.assertEqual(james_catherine["invited"], "James")
+        self.assertEqual(gold_loop.scenario_start_character("james-catherine"), "Catherine")
+
+        adam_eve = gold_loop.infer_role_shape_from_profile("adam-eve")
+        self.assertEqual(adam_eve["initiator"], "Adam")
+        self.assertEqual(adam_eve["invited"], "Eve")
+        self.assertEqual(gold_loop.scenario_start_character("adam-eve"), "Adam")
+
+    def test_gold_loop_profile_initiator_inference_generalizes_from_stage0_evidence(self) -> None:
+        profile = {
+            "stage_profiles": {
+                "stage_0": {
+                    "mwf_effect_to_preserve": [
+                        "MWF lines 1-2: Before we begin, let's put together a short message for Blair.",
+                    ],
+                },
+            },
+        }
+        with mock.patch.dict(gold_loop.SCENARIOS, {"alex-blair": ("Alex", "Blair")}), \
+             mock.patch.object(gold_loop, "load_gold_profile", return_value=profile):
+            role_shape = gold_loop.infer_role_shape_from_profile("alex-blair")
+
+        self.assertEqual(role_shape["initiator"], "Alex")
+        self.assertEqual(role_shape["invited"], "Blair")
+        self.assertEqual(role_shape["confidence"], "medium")
+
+    def test_fresh_session_initiator_invariant_catches_mismatch(self) -> None:
+        run_data = {
+            "start": {"mode": "fresh"},
+            "role_shape": {"initiator": "Catherine", "invited": "James", "confidence": "high"},
+            "session_roles": {"assigned_character": "James", "partner_character": "Catherine"},
+        }
+
+        result = gold_loop.check_session_started_with_profile_initiator(run_data, "james-catherine")
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("profile initiator", result["evidence"][0])
+
+    def test_visible_control_tag_invariant_catches_feel_heard_xml_tag(self) -> None:
+        transcripts = [
+            (
+                Path("catherine-stage1.md"),
+                "- side: `catherine`\n- stage: `1`\n\n**[2026-05-06 15:00:00] AI:**\n<feel_heard_check>Y</feel_heard_check>\n\n",
+            )
+        ]
+
+        result = gold_loop.check_no_visible_control_tags(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("<feel_heard_check>", result["evidence"][0])
+
+    def test_visible_control_tag_invariant_catches_ready_share_xml_tag(self) -> None:
+        transcripts = [
+            (
+                Path("james-stage2.md"),
+                "- side: `james`\n- stage: `2`\n\n**[2026-05-06 15:00:00] AI:**\n<ready-share>Y</ready-share>\n\n",
+            )
+        ]
+
+        result = gold_loop.check_no_visible_control_tags(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("<ready-share>", result["evidence"][0])
+
+    def test_visible_control_tag_invariant_catches_needs_ready_payload(self) -> None:
+        transcripts = [
+            (
+                Path("catherine-stage1.md"),
+                "\n".join(
+                    [
+                        "- side: `catherine`",
+                        "- stage: `1`",
+                        "",
+                        "**[2026-05-06 15:00:00] AI:**",
+                        "<needs_ready>",
+                        "{",
+                        '  "core_needs": ["clarity"],',
+                        '  "boundary": "Reacting is not causing"',
+                        "}",
+                        "</needs_ready>",
+                        "Okay. You're clear on what you need.",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_no_visible_control_tags(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("<needs_ready>", result["evidence"][0])
+
+    def test_chat_copy_visible_input_invariant_accepts_following_user_turn(self) -> None:
+        transcripts = [
+            (
+                Path("adam-stage1.md"),
+                "\n".join(
+                    [
+                        "# Adam Stage 1 Transcript",
+                        "",
+                        "- side: `adam`",
+                        "- stage: `1`",
+                        "- visible_cta_state: see milestone/system lines when captured",
+                        "",
+                        "**[2026-05-06 15:00:00] AI:**",
+                        "In the meantime, let's keep going so you're not just sitting here.",
+                        "",
+                        "**[2026-05-06 15:00:10] Adam:**",
+                        "It starts gently sometimes, but I hear urgency in it.",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_chat_copy_has_visible_input(transcripts)
+
+        self.assertEqual(result["status"], "pass")
+
+    def test_chat_copy_visible_input_invariant_fails_without_metadata_or_user_turn(self) -> None:
+        transcripts = [
+            (
+                Path("adam-stage1.md"),
+                "\n".join(
+                    [
+                        "# Adam Stage 1 Transcript",
+                        "",
+                        "- side: `adam`",
+                        "- stage: `1`",
+                        "- visible_cta_state: see milestone/system lines when captured",
+                        "",
+                        "**[2026-05-06 15:00:00] AI:**",
+                        "In the meantime, let's keep going so you're not just sitting here.",
+                        "",
+                        "### STAGE 1 COMPLETED",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_chat_copy_has_visible_input(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("adam-stage1.md", result["evidence"][0])
+
+    def test_chat_copy_visible_input_invariant_ignores_shared_context_quotes(self) -> None:
+        transcripts = [
+            (
+                Path("eve-stage2.md"),
+                "\n".join(
+                    [
+                        "# Eve Stage 2 Transcript",
+                        "",
+                        "- side: `eve`",
+                        "- stage: `2`",
+                        "- visible_cta_state: see milestone/system lines when captured",
+                        "",
+                        "---",
+                        "**📤 Adam SHARED WITH YOU:**",
+                        "I'm telling you this because I'm still here and still love you.",
+                        "*2026-05-07 04:03:45*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_chat_copy_has_visible_input(transcripts)
+
+        self.assertEqual(result["status"], "pass")
+
+    def test_shared_context_blocks_must_be_labeled_in_stable_transcripts(self) -> None:
+        transcripts = [
+            (
+                Path("adam-stage2.md"),
+                "\n".join(
+                    [
+                        "# Adam Stage 2 Transcript",
+                        "",
+                        "- side: `adam`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "The resentment is already here, and I hate that I carry it.",
+                        "*2026-05-07 00:31:15*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_transcript_shared_context_blocks_labeled(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("unlabeled separator block", result["evidence"][0])
+
+    def test_shared_context_blocks_accept_explicit_partner_label(self) -> None:
+        transcripts = [
+            (
+                Path("adam-stage2.md"),
+                "\n".join(
+                    [
+                        "# Adam Stage 2 Transcript",
+                        "",
+                        "- side: `adam`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "**📤 Eve SHARED WITH YOU:**",
+                        "The resentment is already here, and I hate that I carry it.",
+                        "*2026-05-07 00:31:15*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_transcript_shared_context_blocks_labeled(transcripts)
+
+        self.assertEqual(result["status"], "pass")
+
+    def test_shared_context_directionality_catches_own_suggestion_labeled_as_partner_shared(self) -> None:
+        transcripts = [
+            (
+                Path("james-stage2.md"),
+                "\n".join(
+                    [
+                        "# James Stage 2 Transcript",
+                        "",
+                        "- side: `james`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "💡 SHARE SUGGESTION (to help Catherine understand you better):",
+                        "I feel convicted before I finish speaking.",
+                        "*2026-05-07 04:15:05*",
+                        "---",
+                        "",
+                        "---",
+                        "**📤 Catherine SHARED WITH YOU:**",
+                        "I feel convicted before I finish speaking.",
+                        "*2026-05-07 04:17:16*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_shared_context_directionality(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("duplicates this side's own share suggestion", result["evidence"][0])
+
+    def test_shared_context_directionality_accepts_distinct_partner_context(self) -> None:
+        transcripts = [
+            (
+                Path("james-stage2.md"),
+                "\n".join(
+                    [
+                        "# James Stage 2 Transcript",
+                        "",
+                        "- side: `james`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "💡 SHARE SUGGESTION (to help Catherine understand you better):",
+                        "I feel convicted before I finish speaking.",
+                        "*2026-05-07 04:15:05*",
+                        "---",
+                        "",
+                        "---",
+                        "**📤 Catherine SHARED WITH YOU:**",
+                        "I need safety before I can keep trying.",
+                        "*2026-05-07 04:17:16*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_shared_context_directionality(transcripts)
+
+        self.assertEqual(result["status"], "pass")
+
+    def test_internal_reconciler_analysis_fails_stable_transcript_invariant(self) -> None:
+        transcripts = [
+            (
+                Path("eve-stage2.md"),
+                "\n".join(
+                    [
+                        "# Eve Stage 2 Transcript",
+                        "",
+                        "- side: `eve`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "**📊 RECONCILER ANALYSIS (Your empathy vs Adam's actual feelings):",
+                        "  Alignment: 75%",
+                        "  Gap Severity: moderate",
+                        "  Action: OFFER_OPTIONAL**",
+                        "*2026-05-07 04:31:15*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_no_internal_reconciler_analysis(transcripts)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("internal reconciler analysis leaked", result["evidence"][0])
+
+    def test_internal_reconciler_analysis_allows_clean_share_blocks(self) -> None:
+        transcripts = [
+            (
+                Path("eve-stage2.md"),
+                "\n".join(
+                    [
+                        "# Eve Stage 2 Transcript",
+                        "",
+                        "- side: `eve`",
+                        "- stage: `2`",
+                        "",
+                        "---",
+                        "**📤 Adam SHARED WITH YOU:**",
+                        "I feel scared that I am proving your point.",
+                        "*2026-05-07 04:31:15*",
+                        "---",
+                        "",
+                    ]
+                ),
+            )
+        ]
+
+        result = gold_loop.check_no_internal_reconciler_analysis(transcripts)
+
+        self.assertEqual(result["status"], "pass")
+
+    def test_gold_loop_service_env_defaults_to_real_llm(self) -> None:
+        args = gold_loop.build_parser().parse_args(
+            ["run", "--api-url", "http://localhost:3000", "--app-url", "http://localhost:8082"]
+        )
+
+        env = gold_loop.build_loop_service_env(args, base_env={})
+
+        self.assertEqual(env["MOCK_LLM"], "false")
+        self.assertEqual(env["E2E_AUTH_BYPASS"], "true")
+
+    def test_gold_loop_service_env_preserves_explicit_mock_llm_override(self) -> None:
+        args = gold_loop.build_parser().parse_args(
+            ["run", "--api-url", "http://localhost:3000", "--app-url", "http://localhost:8082"]
+        )
+
+        env = gold_loop.build_loop_service_env(args, base_env={"MOCK_LLM": "true"})
+
+        self.assertEqual(env["MOCK_LLM"], "true")
+
+    def test_gold_profile_generator_emits_role_shape(self) -> None:
+        profile = gold_profile.build_profile(
+            REPO_ROOT / "docs/product/source-material/golden-transcripts/james-catherine.md",
+            "james-catherine",
+        )
+
+        self.assertEqual(profile["role_shape"]["initiator"], "Catherine")
+        self.assertEqual(profile["role_shape"]["invited"], "James")
 
     def test_trajectory_moment_schema_validation(self) -> None:
         for moment_id in TRAJECTORY_MOMENT_IDS:
@@ -756,6 +1209,17 @@ class TestAlignmentLoop(unittest.TestCase):
 
 
 class TestGoldExampleOnboarding(unittest.TestCase):
+    def test_gold_profile_extracts_process_shape_from_transcript_evidence(self) -> None:
+        profile = gold_profile.build_profile(
+            REPO_ROOT / "docs/product/source-material/golden-transcripts/james-catherine.md",
+            "james-catherine",
+        )
+
+        self.assertEqual(profile["scenario_shape"]["primary"], "no_shared_agreement_or_unresolved_closure")
+        self.assertEqual(profile["participant_profiles"]["james"]["resistance_level"]["level"], "high")
+        self.assertIn("Catherine", profile["participants"])
+        self.assertTrue(profile["scenario_shape"]["evidence"])
+
     def test_gold_example_onboarding_copies_scaffolds_indexes_and_runs_tests(self) -> None:
         def completed(cmd: list[str]) -> subprocess.CompletedProcess[str]:
             return subprocess.CompletedProcess(cmd, 0, stdout="OK\n", stderr="")
@@ -787,13 +1251,20 @@ class TestGoldExampleOnboarding(unittest.TestCase):
             with mock.patch.object(add_gold, "TRANSCRIPTS_ROOT", tmp_path / "golden-transcripts"), \
                  mock.patch.object(add_gold, "MOMENTS_ROOT", tmp_path / "moments"), \
                  mock.patch.object(add_gold, "INDEX_PATH", tmp_path / "moments/README.md"), \
+                 mock.patch.object(add_gold, "SCENARIOS_PATH", tmp_path / "gold-scenarios.json"), \
+                 mock.patch.object(gold_profile, "PROFILES_ROOT", tmp_path / "gold-profiles"), \
                  mock.patch.object(add_gold, "run_command", side_effect=completed) as run_tests:
                 result = add_gold.onboard(fixture)
 
             self.assertEqual(result["tests"], 0)
             self.assertTrue((tmp_path / "golden-transcripts/new-couple.md").exists())
             self.assertEqual(len(result["drafts"]), 2)
+            self.assertEqual(result["scenario"]["participants"], ["Alex", "Blair"])
+            self.assertTrue(result["scenario"]["live_enabled"])
+            self.assertTrue((tmp_path / "gold-profiles/new-couple.json").exists())
             self.assertTrue((tmp_path / "moments/new-couple-stage-1-moment-01.yaml.draft").exists())
+            scenarios = json.loads((tmp_path / "gold-scenarios.json").read_text(encoding="utf-8"))
+            self.assertEqual(scenarios["scenarios"][0]["id"], "new-couple")
             self.assertIn("new-couple-stage-2-moment-01.yaml.draft", (tmp_path / "moments/README.md").read_text(encoding="utf-8"))
             run_tests.assert_called_once()
 
@@ -829,6 +1300,8 @@ class TestGoldExampleOnboarding(unittest.TestCase):
                  mock.patch.object(add_gold, "MOMENTS_ROOT", tmp_path / "moments"), \
                  mock.patch.object(add_gold, "INDEX_PATH", tmp_path / "moments/README.md"), \
                  mock.patch.object(add_gold, "ALIGNMENT_CONFIG", tmp_path / "alignment-loop-config.yaml"), \
+                 mock.patch.object(add_gold, "SCENARIOS_PATH", tmp_path / "gold-scenarios.json"), \
+                 mock.patch.object(gold_profile, "PROFILES_ROOT", tmp_path / "gold-profiles"), \
                  mock.patch.object(extract, "MOMENTS_ROOT", tmp_path / "moments"), \
                  mock.patch.object(extract, "JUDGE_PROMPTS_ROOT", tmp_path / "judge-prompts"), \
                  mock.patch.object(add_gold, "run_command", side_effect=completed):

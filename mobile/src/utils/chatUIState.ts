@@ -280,10 +280,16 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
 
   const currentStage = myStage ?? Stage.ONBOARDING;
 
-  // When refining (Stage 2B), show the panel once AI proposes a new draft
-  // (messageCountSinceSharedContext > 0 means user has engaged with Stage 2B)
-  // Otherwise hide — user should use the Activity menu to view partner's shared context first
-  if (isRefiningEmpathy && inputs.messageCountSinceSharedContext === 0) {
+  // When refining (Stage 2B), the reconciler may already have a reviewable
+  // draft/attempt and the AI copy directs the user to "Revisit what you'll
+  // share." Only hold the panel before the user engages if there is no
+  // content to review yet.
+  if (
+    isRefiningEmpathy &&
+    inputs.messageCountSinceSharedContext === 0 &&
+    !hasEmpathyContent &&
+    !myAttemptContent
+  ) {
     return false;
   }
 
@@ -333,7 +339,14 @@ function computeShowFeelHeardPanel(inputs: ChatUIStateInputs): boolean {
  * Only shows during Stage 2 (Perspective Stretch).
  */
 function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
-  const { hasShareSuggestion, hasRespondedToShareOfferLocal, myStage, sessionStatus } = inputs;
+  const {
+    hasShareSuggestion,
+    hasRespondedToShareOfferLocal,
+    myStage,
+    sessionStatus,
+    empathyAlreadyConsented,
+    empathyDraft,
+  } = inputs;
 
   if (sessionStatus === SessionStatus.RESOLVED) return false;
 
@@ -344,7 +357,12 @@ function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
     return false;
   }
 
-  return hasShareSuggestion && !hasRespondedToShareOfferLocal;
+  // A subject may receive a share suggestion while they are still working on
+  // their own empathy attempt. Hold it until their own Stage 2 share is done
+  // so the suggestion does not interrupt perspective-taking.
+  const ownEmpathySubmitted = empathyAlreadyConsented || empathyDraft?.alreadyConsented === true;
+
+  return hasShareSuggestion && ownEmpathySubmitted && !hasRespondedToShareOfferLocal;
 }
 
 /**
@@ -395,7 +413,7 @@ function computeShowNeedsSharePanel(inputs: ChatUIStateInputs): boolean {
   const currentStage = myStage ?? Stage.ONBOARDING;
   if (currentStage !== Stage.NEED_MAPPING) return false;
   if (!needsAvailable || !allNeedsConfirmed) return false;
-  if (needsShared || needsRevealReady || hasConfirmedNeedsLocal) return false;
+  if (needsShared || needsRevealReady) return false;
   return true;
 }
 
@@ -573,14 +591,7 @@ function computeShouldHideInput(
     return true;
   }
 
-  if (
-    aboveInputPanel === 'topic-proposal' ||
-    aboveInputPanel === 'invitation' ||
-    aboveInputPanel === 'feel-heard' ||
-    aboveInputPanel === 'share-suggestion' ||
-    aboveInputPanel === 'empathy-statement' ||
-    aboveInputPanel === 'needs-reveal-validation'
-  ) {
+  if (aboveInputPanel === 'invitation') {
     return true;
   }
 
@@ -593,11 +604,31 @@ function computeShouldHideInput(
   // This prevents the flash of input on initial load before data arrives.
   // Exception: if there's a share suggestion, user CAN chat to respond.
   const currentStage = inputs.myStage ?? Stage.ONBOARDING;
+  if (
+    currentStage === Stage.NEED_MAPPING &&
+    (
+      aboveInputPanel === 'needs-review' ||
+      aboveInputPanel === 'needs-share' ||
+      aboveInputPanel === 'needs-reveal-validation'
+    )
+  ) {
+    return true;
+  }
+
   const hasShareSuggestion = inputs.shareOffer?.hasSuggestion === true;
+  if (
+    currentStage === Stage.PERSPECTIVE_STRETCH &&
+    inputs.hasPartnerEmpathy &&
+    inputs.myValidation?.validated !== true
+  ) {
+    return true;
+  }
+
   if (
     currentStage === Stage.PERSPECTIVE_STRETCH &&
     inputs.empathyDraft === undefined &&
     inputs.empathyStatus === undefined &&
+    aboveInputPanel !== 'empathy-statement' &&
     !hasShareSuggestion
   ) {
     return true;
