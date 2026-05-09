@@ -4577,7 +4577,8 @@ const useStyles = () => {
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
+      alignItems: 'center',
     },
     closeOverlay: {
       position: 'absolute',
