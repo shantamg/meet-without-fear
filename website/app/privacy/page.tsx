@@ -5,15 +5,11 @@ export default function PrivacyPage() {
   return (
     <main className="min-h-screen">
       {/* Gradient Top Bar */}
-      <div className="h-1 bg-gradient-top" />
-
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-lg border-b border-border">
+      <header className="sticky top-0 z-50 bg-background backdrop-blur-lg border-b border-border">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <Image src="/logo.svg" alt="Meet Without Fear" width={48} height={40} />
-            <span className="hidden min-[430px]:inline text-xl font-bold text-white">meet</span>
-            <span className="hidden min-[430px]:inline text-xl font-bold text-brand-cyan">without fear</span>
+            <span className="hidden min-[430px]:inline font-display text-xl italic text-foreground">meet without fear</span>
           </Link>
         </div>
       </header>
@@ -21,10 +17,10 @@ export default function PrivacyPage() {
       {/* Content */}
       <section className="py-16 md:py-24">
         <div className="container mx-auto px-6 max-w-3xl">
-          <h1 className="text-4xl font-bold mb-2">Privacy Policy</h1>
+          <h1 className="font-display text-5xl mb-2">Privacy Policy</h1>
           <p className="text-muted-foreground mb-12">Last updated: April 19, 2026</p>
 
-          <div className="space-y-8 text-foreground/90 leading-relaxed">
+          <div className="space-y-8 text-foreground leading-relaxed">
             <section>
               <h2 className="text-xl font-semibold mb-3">1. Information We Collect</h2>
               <p className="text-muted-foreground mb-3">
@@ -115,7 +111,7 @@ export default function PrivacyPage() {
                 If you have questions about this Privacy Policy, please contact us at{" "}
                 <a
                   href="mailto:support@meetwithoutfear.com"
-                  className="text-brand-cyan hover:underline"
+                  className="text-brand-orange hover:underline"
                 >
                   support@meetwithoutfear.com
                 </a>
