@@ -77,9 +77,9 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
   const { palette } = useAppAppearance();
 
   const semanticColors = {
-    informational: { text: palette.accent, line: palette.warningSoft },
-    success: { text: palette.success, line: palette.successSoft },
-    warning: { text: palette.warning, line: palette.warningSoft },
+    informational: { text: palette.accentText, line: palette.borderStrong },
+    success: { text: palette.success, line: palette.borderStrong },
+    warning: { text: palette.accentText, line: palette.borderStrong },
   };
 
   const getIndicatorText = (): string => {
@@ -318,7 +318,7 @@ const useStyles = () => {
     },
     line: {
       flex: 1,
-      height: 1,
+      height: 1.5,
       backgroundColor: palette.border,
     },
     textContainer: {
@@ -329,9 +329,10 @@ const useStyles = () => {
     text: {
       fontSize: t.typography.fontSize.sm,
       fontFamily: designFonts.mono,
-      color: palette.textMuted,
+      color: palette.text,
       textTransform: 'uppercase',
       letterSpacing: 1,
+      fontWeight: '700',
     },
     arrow: {
       fontSize: 16,
@@ -339,34 +340,34 @@ const useStyles = () => {
     },
     // Invitation sent: yellow/amber tint - separate line and text styles
     invitationSentLine: {
-      backgroundColor: palette.warningSoft,
+      backgroundColor: palette.borderStrong,
     },
     invitationSentText: {
-      color: palette.warning,
+      color: palette.accentText,
     },
     // Feel heard: teal/green tint for completion feeling
     feelHeardLine: {
-      backgroundColor: palette.successSoft,
+      backgroundColor: palette.borderStrong,
     },
     feelHeardText: {
       color: palette.success,
     },
     // Compact signed: dark blue tint for commitment
     compactSignedLine: {
-      backgroundColor: palette.warningSoft,
+      backgroundColor: palette.borderStrong,
     },
     compactSignedText: {
-      color: palette.warning,
+      color: palette.accentText,
     },
     // Context shared: purple/accent tint for shared content
     contextSharedLine: {
-      backgroundColor: palette.warningSoft,
+      backgroundColor: palette.borderStrong,
     },
     contextSharedText: {
-      color: palette.warning,
+      color: palette.accentText,
     },
     defaultLine: {
-      backgroundColor: palette.border,
+      backgroundColor: palette.borderStrong,
     },
     defaultText: {
       color: palette.textMuted,

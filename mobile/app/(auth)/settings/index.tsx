@@ -274,7 +274,7 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 64,
+    paddingTop: 16,
     paddingBottom: 16,
     gap: 24,
   },

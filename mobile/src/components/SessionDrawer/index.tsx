@@ -29,7 +29,7 @@ import {
 import { Drawer } from 'react-native-drawer-layout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { X, Plus, Trash2, Search, MoreHorizontal, Home } from 'lucide-react-native';
+import { X, Plus, Trash2, Search, MoreHorizontal } from 'lucide-react-native';
 
 import { useSessionDrawer } from '../../hooks/useSessionDrawer';
 import { useSessions, useDeleteSession } from '../../hooks/useSessions';
@@ -87,7 +87,7 @@ function getBadgeLabel(session: SessionSummaryDTO): { label: string; kind: 'read
   if (session.status === SessionStatus.RESOLVED) return { label: 'Complete', kind: 'neutral' };
   if (session.status === SessionStatus.PAUSED) return { label: 'Paused', kind: 'neutral' };
   if (session.status === SessionStatus.CREATED || session.status === SessionStatus.INVITED) {
-    return { label: 'Invitation sent', kind: 'ready' };
+    return { label: 'Invite pending', kind: 'ready' };
   }
   if (session.selfActionNeeded.length > 0) return { label: 'Ready for you', kind: 'ready' };
   return { label: 'In progress', kind: 'neutral' };
@@ -144,7 +144,12 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
 
   const sessions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return (data?.items ?? []).filter((s) => {
+    const uniqueSessions = new Map<string, SessionSummaryDTO>();
+    for (const session of data?.items ?? []) {
+      uniqueSessions.set(session.id, session);
+    }
+
+    return Array.from(uniqueSessions.values()).filter((s) => {
       if (s.status === SessionStatus.ARCHIVED) return false;
       if (!normalizedQuery) return true;
       const haystack = `${getPartnerDisplayName(s)} ${getTopicLine(s)}`.toLowerCase();
@@ -520,11 +525,6 @@ export function SessionDrawer({ children }: SessionDrawerProps) {
     router.push('/session/new');
   }, [closeDrawer, router]);
 
-  const handleHomePress = useCallback(() => {
-    closeDrawer();
-    router.replace('/(auth)/(tabs)');
-  }, [closeDrawer, router]);
-
   const renderDrawerContent = () => (
     <View style={[styles.drawerContent, { paddingTop: insets.top + 16, paddingBottom: insets.bottom }]}>
       <View style={styles.header}>
@@ -532,14 +532,6 @@ export function SessionDrawer({ children }: SessionDrawerProps) {
           <Text style={styles.headerTitle}>Conversations</Text>
         </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={handleHomePress}
-            accessibilityRole="button"
-            accessibilityLabel="Go to home"
-          >
-            <Home color={palette.textMuted} size={20} />
-          </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerButton}
             onPress={handleNewSession}

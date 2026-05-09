@@ -311,6 +311,7 @@ export function ActivityDrawer({
   // FlatList can be constrained to the visible area of the drawer.
   const [headerAreaHeight, setHeaderAreaHeight] = useState(0);
   const [snapPosition, setSnapPosition] = useState<'3q' | 'full'>('3q');
+  const [isMounted, setIsMounted] = useState(visible);
 
   // The visible height for the FlatList: screen minus snap offset minus header area
   const listHeight = useMemo(() => {
@@ -340,8 +341,10 @@ export function ActivityDrawer({
   const openDrawer = useCallback(() => {
     currentSnap.current = '3q';
     setSnapPosition('3q');
+    drawerTranslate.setValue(windowHeightRef.current);
+    backdropOpacity.setValue(0);
     snapTo(position3QRef.current, 0.4);
-  }, [snapTo]);
+  }, [backdropOpacity, drawerTranslate, snapTo]);
 
   const closeDrawer = useCallback(() => {
     Animated.parallel([
@@ -357,6 +360,7 @@ export function ActivityDrawer({
       }),
     ]).start(() => {
       currentSnap.current = '3q';
+      setIsMounted(false);
       onClose();
     });
   }, [drawerTranslate, backdropOpacity, onClose]);
@@ -365,20 +369,10 @@ export function ActivityDrawer({
   // The else branch is unnecessary since the component returns null when !visible.
   useEffect(() => {
     if (visible) {
+      setIsMounted(true);
       openDrawer();
     }
   }, [visible, openDrawer]);
-
-  useEffect(() => {
-    if (!visible) {
-      drawerTranslate.setValue(windowHeight);
-      return;
-    }
-
-    const position = currentSnap.current === 'full' ? positionFullRef.current : position3Q;
-    drawerTranslate.setValue(position);
-    setSnapPosition(currentSnap.current);
-  }, [visible, windowHeight, position3Q, drawerTranslate]);
 
   // -------------------------------------------------------------------------
   // Android back button
@@ -466,7 +460,7 @@ export function ActivityDrawer({
   // can override a parent's pointer-events:none with their own pointer-events:auto,
   // so the only reliable way to prevent the invisible backdrop from blocking clicks
   // is to remove it from the DOM entirely.
-  if (!visible) return null;
+  if (!isMounted) return null;
 
   return (
     <View
@@ -490,6 +484,7 @@ export function ActivityDrawer({
 
       {/* Drawer */}
       <Animated.View
+        pointerEvents={visible ? 'auto' : 'none'}
         style={[
           styles.drawer,
           appWidthStyle,
@@ -611,11 +606,11 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     position: 'absolute',
     left: 0,
     right: 0,
-    backgroundColor: palette.bgPane,
-    borderWidth: 1,
+    backgroundColor: palette.bg,
+    borderTopWidth: 1,
     borderColor: palette.border,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
     overflow: 'hidden',
     elevation: 10,
   },
@@ -625,17 +620,19 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     alignItems: 'center',
   },
   dragHandle: {
-    width: 36,
+    width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: palette.borderStrong,
+    backgroundColor: palette.textFaint,
+    opacity: 0.45,
   },
   header: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '400',
     color: palette.text,
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 14,
+    fontFamily: 'Lora',
   },
   sectionHeader: {
     fontSize: 11,
@@ -656,6 +653,11 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
   topicBlock: {
     marginTop: 4,
     marginBottom: 16,
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: palette.bgElev,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   topicLabel: {
     fontSize: 11,
@@ -670,22 +672,20 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     lineHeight: 20,
   },
   topicShareButton: {
-    marginTop: 10,
+    marginTop: 12,
     alignSelf: 'flex-start',
-    backgroundColor: 'transparent',
-    borderRadius: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: palette.borderStrong,
+    backgroundColor: palette.accent,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
   },
   topicShareButtonPressed: {
     opacity: 0.6,
   },
   topicShareButtonText: {
-    color: palette.textMuted,
+    color: palette.bg,
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '700',
   },
   emptyText: {
     fontSize: 14,

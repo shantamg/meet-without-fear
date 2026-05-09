@@ -11,6 +11,7 @@ import { memo } from 'react';
 import { View, Text } from 'react-native';
 import { AnimationState, IndicatorItem, IndicatorType } from '@meet-without-fear/shared';
 import { createStyles } from '../../../theme/styled';
+import { designFonts, useAppAppearance } from '../../../theme';
 import type { ChatItemRendererProps } from './types';
 
 type IndicatorRendererProps = ChatItemRendererProps<IndicatorItem>;
@@ -20,6 +21,7 @@ function IndicatorRendererImpl({
   animationState,
 }: IndicatorRendererProps) {
   const styles = useStyles();
+  const { palette } = useAppAppearance();
 
   // Indicators typically don't animate but if hidden, don't render
   if (animationState === AnimationState.HIDDEN) {
@@ -76,9 +78,9 @@ function IndicatorRendererImpl({
   return (
     <View style={styles.container} testID={`indicator-${item.id}`}>
       <View style={styles.lineContainer}>
-        <View style={[styles.line, getLineStyle()]} />
-        <Text style={[styles.text, getTextStyle()]}>{getIndicatorText()}</Text>
-        <View style={[styles.line, getLineStyle()]} />
+        <View style={[styles.line, { backgroundColor: palette.borderStrong }, getLineStyle()]} />
+        <Text style={[styles.text, { color: palette.textMuted }, getTextStyle()]}>{getIndicatorText()}</Text>
+        <View style={[styles.line, { backgroundColor: palette.borderStrong }, getLineStyle()]} />
       </View>
     </View>
   );
@@ -113,36 +115,37 @@ const useStyles = () =>
     },
     line: {
       flex: 1,
-      height: 1,
+      height: 1.5,
       backgroundColor: t.colors.border,
     },
     text: {
       fontSize: t.typography.fontSize.sm,
-      fontFamily: t.typography.fontFamily.regular,
+      fontFamily: designFonts.mono,
       color: t.colors.textMuted,
       textTransform: 'uppercase',
       letterSpacing: 1,
+      fontWeight: '700',
     },
     // Invitation sent: yellow/amber tint
     invitationSentLine: {
-      backgroundColor: 'rgba(245, 158, 11, 0.3)',
+      backgroundColor: 'rgba(138, 79, 25, 0.28)',
     },
     invitationSentText: {
-      color: 'rgba(245, 158, 11, 0.9)',
+      color: '#8a4f19',
     },
     // Feel heard: teal/green tint for completion feeling
     feelHeardLine: {
-      backgroundColor: 'rgba(20, 184, 166, 0.3)',
+      backgroundColor: 'rgba(58, 139, 99, 0.28)',
     },
     feelHeardText: {
-      color: 'rgba(20, 184, 166, 0.9)',
+      color: '#3a8b63',
     },
     // Compact signed: dark blue tint for commitment
     compactSignedLine: {
-      backgroundColor: 'rgba(59, 130, 246, 0.3)',
+      backgroundColor: 'rgba(138, 79, 25, 0.28)',
     },
     compactSignedText: {
-      color: 'rgba(59, 130, 246, 0.9)',
+      color: '#8a4f19',
     },
     defaultLine: {
       backgroundColor: t.colors.border,

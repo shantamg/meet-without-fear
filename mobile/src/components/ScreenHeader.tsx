@@ -9,12 +9,11 @@
  */
 
 import React, { ReactNode } from 'react';
-import { View, Text, Pressable, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
-import { createStyles } from '../theme/styled';
-import { colors } from '../theme';
+import { designFonts, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -56,7 +55,7 @@ export function ScreenHeader({
   rightContent,
   testID = 'screen-header',
 }: ScreenHeaderProps) {
-  const styles = useStyles();
+  const { palette } = useAppAppearance();
   const router = useRouter();
 
   const handleBackPress = () => {
@@ -68,7 +67,16 @@ export function ScreenHeader({
   };
 
   return (
-    <View style={styles.header} testID={testID}>
+    <View
+      style={[
+        styles.header,
+        {
+          backgroundColor: palette.bg,
+          borderBottomColor: palette.divider,
+        },
+      ]}
+      testID={testID}
+    >
       {/* Left section */}
       <View style={styles.leftSection}>
         {showBackButton ? (
@@ -80,7 +88,7 @@ export function ScreenHeader({
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             testID={`${testID}-back-button`}
           >
-            <ArrowLeft color={colors.textPrimary} size={24} />
+            <ArrowLeft color={palette.text} size={24} />
           </Pressable>
         ) : (
           <View style={styles.headerButtonSpacer} />
@@ -90,7 +98,7 @@ export function ScreenHeader({
       {/* Center section */}
       <View style={styles.titleContainer}>
         {titleIcon}
-        <Text style={styles.titleText} numberOfLines={1}>
+        <Text style={[styles.titleText, { color: palette.text }]} numberOfLines={1}>
           {title}
         </Text>
       </View>
@@ -107,7 +115,7 @@ export function ScreenHeader({
             testID={`${testID}-right-action`}
           >
             {rightAction.loading ? (
-              <ActivityIndicator size="small" color={colors.accent} />
+              <ActivityIndicator size="small" color={palette.accent} />
             ) : (
               rightAction.icon
             )}
@@ -126,47 +134,44 @@ export function ScreenHeader({
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: t.spacing.md,
-      paddingVertical: t.spacing.sm,
-      backgroundColor: t.colors.bgSecondary,
-      borderBottomWidth: 1,
-      borderBottomColor: t.colors.border,
-      minHeight: 56,
-    },
-    leftSection: {
-      width: 44,
-      alignItems: 'flex-start',
-    },
-    rightSection: {
-      width: 44,
-      alignItems: 'flex-end',
-    },
-    headerButton: {
-      padding: t.spacing.xs,
-    },
-    headerButtonSpacer: {
-      width: 24,
-      height: 24,
-    },
-    titleContainer: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: t.spacing.sm,
-    },
-    titleText: {
-      fontSize: 17,
-      fontWeight: '600',
-      color: t.colors.textPrimary,
-    },
-  }));
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    minHeight: 56,
+  },
+  leftSection: {
+    width: 44,
+    alignItems: 'flex-start',
+  },
+  rightSection: {
+    width: 44,
+    alignItems: 'flex-end',
+  },
+  headerButton: {
+    padding: 4,
+  },
+  headerButtonSpacer: {
+    width: 24,
+    height: 24,
+  },
+  titleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  titleText: {
+    fontSize: 17,
+    fontWeight: '600',
+    fontFamily: designFonts.sans,
+  },
+});
 
 // ============================================================================
 // Exports

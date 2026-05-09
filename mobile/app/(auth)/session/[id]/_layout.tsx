@@ -12,6 +12,7 @@ export default function SessionLayout() {
     <Stack
       screenOptions={{
         headerShown: false, // UnifiedSessionScreen has its own header
+        gestureEnabled: true,
         contentStyle: {
           backgroundColor: colors.bgPrimary,
         },
@@ -37,6 +38,7 @@ export default function SessionLayout() {
           },
           headerBackTitle: 'Chat',
           presentation: 'card',
+          gestureEnabled: true,
         }}
       />
       <Stack.Screen

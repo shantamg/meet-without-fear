@@ -108,11 +108,11 @@ export function GuidedActionPanel({
                   testID={action.testID}
                 >
                   {action.loading ? (
-                    <ActivityIndicator size="small" color={isPrimary ? palette.bg : accent} />
+                    <ActivityIndicator size="small" color={isPrimary ? '#fffaf0' : accent} />
                   ) : (
                     <Text style={[
                       styles.buttonText,
-                      isPrimary ? [styles.primaryButtonText, { color: palette.bg }] : [styles.secondaryButtonText, { color: accent }],
+                      isPrimary ? [styles.primaryButtonText, { color: '#fffaf0' }] : [styles.secondaryButtonText, { color: accent }],
                     ]}>
                       {action.label}
                     </Text>

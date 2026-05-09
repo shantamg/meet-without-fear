@@ -62,7 +62,6 @@ import { TypewriterText } from '../components/TypewriterText';
 import { GuidedActionPanel } from '../components/GuidedActionPanel';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
-import { useSessionDrawer } from '../hooks/useSessionDrawer';
 import { useConfirmTopicFrame } from '../hooks/useSessions';
 import { useValidationFeedbackCoachChat } from '../hooks/useRefinementChat';
 import { useChatUIState } from '../hooks/useChatUIState';
@@ -250,6 +249,7 @@ function InviteeTopicIntroCard({
   onAnimationComplete?: () => void;
 }) {
   const styles = useStyles();
+  const { palette } = useAppAppearance();
   const [showTopic, setShowTopic] = useState(skipAnimation);
   const [showOutro, setShowOutro] = useState(skipAnimation);
   const topicOpacity = useRef(new Animated.Value(skipAnimation ? 1 : 0)).current;
@@ -293,7 +293,7 @@ function InviteeTopicIntroCard({
     <View style={styles.inviteeTopicAckBody} testID="invitee-topic-ack-body">
       <TypewriterText
         text={introText}
-        style={styles.inviteeTopicAckText}
+        style={[styles.inviteeTopicAckText, { color: palette.text }]}
         wordDelay={45}
         fadeDuration={120}
         skipAnimation={skipAnimation}
@@ -301,8 +301,17 @@ function InviteeTopicIntroCard({
       />
 
       {showTopic ? (
-        <Animated.View style={[styles.inviteeTopicAckFrameWrap, { opacity: topicOpacity }]}>
-          <Text style={styles.inviteeTopicAckFrame} testID="invitee-topic-text">
+        <Animated.View
+          style={[
+            styles.inviteeTopicAckFrameWrap,
+            {
+              opacity: topicOpacity,
+              backgroundColor: palette.bgElev,
+              borderColor: palette.border,
+            },
+          ]}
+        >
+          <Text style={[styles.inviteeTopicAckFrame, { color: palette.text }]} testID="invitee-topic-text">
             {topicFrame}
           </Text>
         </Animated.View>
@@ -311,7 +320,7 @@ function InviteeTopicIntroCard({
       {showOutro ? (
         <TypewriterText
           text={outroText}
-          style={styles.inviteeTopicAckText}
+          style={[styles.inviteeTopicAckText, { color: palette.textMuted }]}
           wordDelay={45}
           fadeDuration={120}
           skipAnimation={skipAnimation}
@@ -511,7 +520,6 @@ export function UnifiedSessionScreen({
   const insets = useSafeAreaInsets();
   const { user, updateUser } = useAuth();
   const { mutate: updateMood } = useUpdateMood();
-  const { openDrawer } = useSessionDrawer();
   const queryClient = useQueryClient();
   const { showError } = useToast();
 
@@ -3163,8 +3171,7 @@ export function UnifiedSessionScreen({
             partnerOnline={partnerOnline}
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-            onBackPress={openDrawer}
-            leftActionIcon="menu"
+            onBackPress={onNavigateBack}
             onPress={() => setShowPartnerInfo(true)}
             stageName="Closed"
             testID="session-chat-header"
@@ -3200,8 +3207,7 @@ export function UnifiedSessionScreen({
           partnerOnline={partnerOnline}
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-          onBackPress={openDrawer}
-          leftActionIcon="menu"
+          onBackPress={onNavigateBack}
           onPress={() => setShowPartnerInfo(true)}
           stageName="Closed"
           testID="session-chat-header"
@@ -3240,8 +3246,7 @@ export function UnifiedSessionScreen({
             partnerOnline={partnerOnline}
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-            onBackPress={openDrawer}
-            leftActionIcon="menu"
+            onBackPress={onNavigateBack}
             onPress={() => setShowPartnerInfo(true)}
             stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
             testID="session-chat-header"
@@ -3278,8 +3283,7 @@ export function UnifiedSessionScreen({
             partnerOnline={partnerOnline}
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-            onBackPress={openDrawer}
-            leftActionIcon="menu"
+            onBackPress={onNavigateBack}
             onPress={() => setShowPartnerInfo(true)}
             stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
             testID="session-chat-header"
@@ -3310,8 +3314,7 @@ export function UnifiedSessionScreen({
           partnerOnline={partnerOnline}
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-          onBackPress={openDrawer}
-          leftActionIcon="menu"
+          onBackPress={onNavigateBack}
           onPress={() => setShowPartnerInfo(true)}
           stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
           testID="session-chat-header"
@@ -3348,8 +3351,7 @@ export function UnifiedSessionScreen({
           partnerOnline={partnerOnline}
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-          onBackPress={openDrawer}
-          leftActionIcon="menu"
+          onBackPress={onNavigateBack}
           onPress={() => setShowPartnerInfo(true)}
           stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
           testID="session-chat-header"
@@ -3393,8 +3395,7 @@ export function UnifiedSessionScreen({
         connectionStatus={connectionStatus}
         briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
         hideOnlineStatus={isInvitationPhase}
-        onBackPress={openDrawer}
-        leftActionIcon="menu"
+        onBackPress={onNavigateBack}
         onBriefStatusPress={
           session?.status === SessionStatus.INVITED && invitation?.isInviter
             ? () => {

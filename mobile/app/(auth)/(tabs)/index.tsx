@@ -11,8 +11,9 @@
  * - Self-Reflection, Needs Assessment, Gratitude, Meditation
  */
 
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
+  Animated,
   View,
   Text,
   TouchableOpacity,
@@ -25,7 +26,7 @@ import {
   TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowRight, Plus, Layers, UserPlus, Menu, Settings } from 'lucide-react-native';
+import { ArrowRight, ArrowUp, Plus, Layers, UserPlus, Menu, Settings } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/src/hooks/useAuth';
@@ -49,6 +50,13 @@ export default function HomeScreen() {
   const { isAvailable, isEnrolled, hasPrompted, isLoading: biometricLoading } = useBiometricAuth();
   const { openDrawer } = useSessionDrawer();
   const { count: unreadCount } = useUnreadSessionCount();
+  const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const composerExtrasOpacity = useRef(new Animated.Value(1)).current;
+
+  const dismissHomeComposer = useCallback(() => {
+    Keyboard.dismiss();
+    setIsComposerFocused(false);
+  }, []);
 
   // Check for pending invitation from deep link
   const { pendingInvitation, isLoading: isPendingLoading, clearInvitation } = usePendingInvitation();
@@ -91,6 +99,29 @@ export default function HomeScreen() {
       return () => clearTimeout(timer);
     }
   }, [biometricLoading, isAvailable, isEnrolled, hasPrompted]);
+
+  useEffect(() => {
+    const subscription = Keyboard.addListener('keyboardDidHide', () => {
+      setIsComposerFocused(false);
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (isComposerFocused) {
+      composerExtrasOpacity.stopAnimation();
+      composerExtrasOpacity.setValue(0);
+      return;
+    }
+
+    composerExtrasOpacity.setValue(0);
+    Animated.timing(composerExtrasOpacity, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [composerExtrasOpacity, isComposerFocused]);
 
   // Find the most recent session with a partner nickname
   const mostRecentSession = useMemo(() => {
@@ -156,42 +187,42 @@ export default function HomeScreen() {
     <SessionDrawer>
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Header with hamburger and settings icons */}
-          <View style={styles.headerBar}>
-            <TouchableOpacity
-              style={styles.headerIconButton}
-              onPress={openDrawer}
-              accessibilityRole="button"
-              accessibilityLabel="Open session drawer"
-            >
-              <Menu color={palette.textMuted} size={22} />
-              {unreadCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            <View style={styles.brandMark}>
-              <View style={styles.brandDot} />
-              <Text style={styles.brandText}>meet without fear</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.headerIconButton}
-              onPress={handleSettings}
-              accessibilityRole="button"
-              accessibilityLabel="Open settings"
-            >
-              <Settings color={palette.textMuted} size={22} />
-            </TouchableOpacity>
+        <View style={styles.headerBar}>
+          <TouchableOpacity
+            style={styles.headerIconButton}
+            onPress={openDrawer}
+            accessibilityRole="button"
+            accessibilityLabel="Open session drawer"
+          >
+            <Menu color={palette.textMuted} size={22} />
+            {unreadCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <View style={styles.brandMark}>
+            <View style={styles.brandDot} />
+            <Text style={styles.brandText}>meet without fear</Text>
           </View>
+          <TouchableOpacity
+            style={styles.headerIconButton}
+            onPress={handleSettings}
+            accessibilityRole="button"
+            accessibilityLabel="Open settings"
+          >
+            <Settings color={palette.textMuted} size={22} />
+          </TouchableOpacity>
+        </View>
 
           <KeyboardAvoidingView
             style={styles.keyboardAvoid}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={90}
+            keyboardVerticalOffset={0}
           >
-            <Pressable style={styles.content} onPress={Keyboard.dismiss}>
+            <Pressable style={styles.content} onPress={dismissHomeComposer}>
               <View style={styles.greetingSection}>
                 <Text style={styles.timeGreet}>{getGreetingLabel()}</Text>
                 <Text style={styles.greeting}>
@@ -202,102 +233,110 @@ export default function HomeScreen() {
                 </Text>
               </View>
 
-              <View style={styles.actionsSection}>
-                {/* Accept pending invitation - shown first if there's a pending invitation */}
-                {hasPendingInvitation && (
-                  <TouchableOpacity
-                    style={[styles.actionCard, styles.primaryActionCard]}
-                    onPress={handleAcceptInvitation}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Accept ${inviterName}'s invitation`}
-                    disabled={acceptInvitation.isPending}
-                  >
-                    {acceptInvitation.isPending ? (
-                      <ActivityIndicator size="small" color={palette.accent} />
-                    ) : (
-                      <View style={styles.actionIcon}>
-                        <UserPlus color={palette.textMuted} size={18} />
+              {!isComposerFocused && (
+                <Animated.View style={{ opacity: composerExtrasOpacity }}>
+                <View style={styles.actionsSection}>
+                  {/* Accept pending invitation - shown first if there's a pending invitation */}
+                  {hasPendingInvitation && (
+                    <TouchableOpacity
+                      style={[styles.actionCard, styles.primaryActionCard]}
+                      onPress={handleAcceptInvitation}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Accept ${inviterName}'s invitation`}
+                      disabled={acceptInvitation.isPending}
+                    >
+                      {acceptInvitation.isPending ? (
+                        <ActivityIndicator size="small" color={palette.accent} />
+                      ) : (
+                        <View style={styles.actionIcon}>
+                          <UserPlus color={palette.textMuted} size={18} />
+                        </View>
+                      )}
+                      <View style={styles.actionTextBlock}>
+                        <Text style={styles.actionEyebrow}>Invitation waiting</Text>
+                        <Text style={styles.actionTitle}>Accept {inviterName}&apos;s invitation</Text>
+                        <Text style={styles.actionSub}>Join the conversation when you are ready</Text>
                       </View>
-                    )}
-                    <View style={styles.actionTextBlock}>
-                      <Text style={styles.actionEyebrow}>Invitation waiting</Text>
-                      <Text style={styles.actionTitle}>Accept {inviterName}&apos;s invitation</Text>
-                      <Text style={styles.actionSub}>Join the conversation when you are ready</Text>
-                    </View>
-                    <ArrowRight color={palette.textFaint} size={16} />
-                  </TouchableOpacity>
-                )}
+                      <ArrowRight color={palette.textFaint} size={16} />
+                    </TouchableOpacity>
+                  )}
 
-                {/* Continue with partner - only show if there's a recent session and no pending invitation */}
-                {!hasPendingInvitation && mostRecentSession && partnerDisplayName && (
+                  {/* Continue with partner - only show if there's a recent session and no pending invitation */}
+                  {!hasPendingInvitation && mostRecentSession && partnerDisplayName && (
+                    <TouchableOpacity
+                      style={[styles.actionCard, styles.primaryActionCard]}
+                      onPress={handleContinueSession}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Continue with ${partnerDisplayName}`}
+                    >
+                      <View style={styles.actionAvatar}>
+                        <Text style={styles.actionAvatarText}>{partnerDisplayName.charAt(0).toUpperCase()}</Text>
+                        <View style={styles.actionPing} />
+                      </View>
+                      <View style={styles.actionTextBlock}>
+                        <Text style={styles.actionEyebrow}>Continue</Text>
+                        <Text style={styles.actionTitle}>A note for {partnerDisplayName}</Text>
+                        <Text style={styles.actionSub}>Pick up where you left off</Text>
+                      </View>
+                      <ArrowRight color={palette.textFaint} size={16} />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* New Session */}
                   <TouchableOpacity
-                    style={[styles.actionCard, styles.primaryActionCard]}
-                    onPress={handleContinueSession}
+                    style={styles.actionCard}
+                    onPress={handleNewSession}
                     accessibilityRole="button"
-                    accessibilityLabel={`Continue with ${partnerDisplayName}`}
+                    accessibilityLabel="Start new session"
                   >
-                    <View style={styles.actionAvatar}>
-                      <Text style={styles.actionAvatarText}>{partnerDisplayName.charAt(0).toUpperCase()}</Text>
-                      <View style={styles.actionPing} />
+                    <View style={styles.actionIcon}>
+                      <Plus color={palette.textMuted} size={18} />
                     </View>
                     <View style={styles.actionTextBlock}>
-                      <Text style={styles.actionEyebrow}>Continue</Text>
-                      <Text style={styles.actionTitle}>A note for {partnerDisplayName}</Text>
-                      <Text style={styles.actionSub}>Pick up where you left off</Text>
+                      <Text style={styles.actionTitle}>New conversation</Text>
+                      <Text style={styles.actionSub}>Start with someone close to you</Text>
                     </View>
                     <ArrowRight color={palette.textFaint} size={16} />
                   </TouchableOpacity>
-                )}
 
-                {/* New Session */}
-                <TouchableOpacity
-                  style={styles.actionCard}
-                  onPress={handleNewSession}
-                  accessibilityRole="button"
-                  accessibilityLabel="Start new session"
-                >
-                  <View style={styles.actionIcon}>
-                    <Plus color={palette.textMuted} size={18} />
-                  </View>
-                  <View style={styles.actionTextBlock}>
-                    <Text style={styles.actionTitle}>New conversation</Text>
-                    <Text style={styles.actionSub}>Start with someone close to you</Text>
-                  </View>
-                  <ArrowRight color={palette.textFaint} size={16} />
-                </TouchableOpacity>
-
-                {/* Inner Work */}
-                <TouchableOpacity
-                  style={styles.actionCard}
-                  onPress={handleInnerWork}
-                  accessibilityRole="button"
-                  accessibilityLabel="Inner Work"
-                >
-                  <View style={styles.actionIcon}>
-                    <Layers color={palette.textMuted} size={18} />
-                  </View>
-                  <View style={styles.actionTextBlock}>
-                    <Text style={styles.actionTitle}>Inner work</Text>
-                    <Text style={styles.actionSub}>Sit with what came up, just for you</Text>
-                  </View>
-                  <ArrowRight color={palette.textFaint} size={16} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.whisper}>
-                <View style={styles.whisperRule}>
-                  <View style={styles.whisperDot} />
-                  <Text style={styles.whisperLabel}>Today</Text>
-                  <View style={styles.whisperLine} />
+                  {/* Inner Work */}
+                  <TouchableOpacity
+                    style={styles.actionCard}
+                    onPress={handleInnerWork}
+                    accessibilityRole="button"
+                    accessibilityLabel="Inner Work"
+                  >
+                    <View style={styles.actionIcon}>
+                      <Layers color={palette.textMuted} size={18} />
+                    </View>
+                    <View style={styles.actionTextBlock}>
+                      <Text style={styles.actionTitle}>Inner work</Text>
+                      <Text style={styles.actionSub}>Sit with what came up, just for you</Text>
+                    </View>
+                    <ArrowRight color={palette.textFaint} size={16} />
+                  </TouchableOpacity>
                 </View>
-                <Text style={styles.whisperQuote}>
-                  It is okay to take your time getting to the words. The right ones usually arrive after the rough ones.
-                </Text>
-              </View>
+
+                <View style={styles.whisper}>
+                  <View style={styles.whisperRule}>
+                    <View style={styles.whisperDot} />
+                    <Text style={styles.whisperLabel}>Today</Text>
+                    <View style={styles.whisperLine} />
+                  </View>
+                  <Text style={styles.whisperQuote}>
+                    It is okay to take your time getting to the words. The right ones usually arrive after the rough ones.
+                  </Text>
+                </View>
+                </Animated.View>
+              )}
             </Pressable>
 
             <View style={styles.chatInputSection}>
-              <HomeComposer onSend={handleHomeChat} palette={palette} />
+              <HomeComposer
+                onSend={handleHomeChat}
+                onFocusChange={setIsComposerFocused}
+                palette={palette}
+              />
             </View>
         </KeyboardAvoidingView>
 
@@ -315,14 +354,16 @@ export default function HomeScreen() {
 function getGreetingLabel() {
   const hour = new Date().getHours();
   const part = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
-  return `Today ${part}`;
+  return `This ${part}`;
 }
 
 function HomeComposer({
   onSend,
+  onFocusChange,
   palette,
 }: {
   onSend: (message: string) => void;
+  onFocusChange: (focused: boolean) => void;
   palette: ReturnType<typeof useAppAppearance>['palette'];
 }) {
   const [value, setValue] = useState('');
@@ -350,6 +391,8 @@ function HomeComposer({
             color: palette.text,
           },
         ]}
+        onFocus={() => onFocusChange(true)}
+        onBlur={() => onFocusChange(false)}
         onSubmitEditing={handleSend}
         returnKeyType="send"
       />
@@ -363,7 +406,7 @@ function HomeComposer({
         accessibilityRole="button"
         accessibilityLabel="Send"
       >
-        <ArrowRight color={canSend ? palette.bg : palette.textFaint} size={18} />
+        <ArrowUp color={canSend ? palette.bg : palette.textFaint} size={18} />
       </TouchableOpacity>
     </View>
   );

@@ -5,9 +5,10 @@
  * Replaces the formal Curiosity Compact terms with a conversational welcome.
  */
 
-import { View } from 'react-native';
+import { useMemo } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { TypewriterText } from './TypewriterText';
-import { createStyles } from '../theme/styled';
+import { spacing, typography, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -54,22 +55,25 @@ export function CompactChatItem({ testID, isFirstSession = true }: CompactChatIt
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+
+  return useMemo(() => StyleSheet.create({
     container: {
-      paddingTop: t.spacing.lg,
-      paddingBottom: t.spacing.md,
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.md,
     },
     messageContainer: {
-      marginVertical: t.spacing.xs,
-      paddingHorizontal: t.spacing.lg,
+      marginVertical: spacing.xs,
+      paddingHorizontal: spacing.lg,
     },
     messageText: {
-      fontSize: t.typography.fontSize.md,
+      fontSize: typography.fontSize.md,
       lineHeight: 22,
-      color: t.colors.textPrimary,
-      fontFamily: t.typography.fontFamily.regular,
+      color: palette.text,
+      fontFamily: typography.fontFamily.regular,
     },
-  }));
+  }), [palette]);
+};
 
 export default CompactChatItem;
