@@ -115,7 +115,7 @@ export const PUSH_MESSAGES: Record<SessionEvent, PushMessageTemplate> = {
   },
   'session.joined': {
     title: '{actor} joined',
-    body: 'Open the session to continue together.',
+    body: '{actor} accepted your invitation. Open the session to continue together.',
   },
   'session.needs_reveal_ready': {
     title: 'Ready to reveal',
@@ -188,7 +188,8 @@ function getActorUserId(data: Record<string, unknown>): string | null {
     data.pausedBy ??
     data.resumedBy ??
     data.resolvedBy ??
-    data.proposedBy;
+    data.proposedBy ??
+    data.joinedBy;
 
   return typeof candidate === 'string' ? candidate : null;
 }
@@ -210,6 +211,42 @@ function getStageName(data: Record<string, unknown>): string {
     default:
       return 'the current step';
   }
+}
+
+async function getPushMessageTemplate(
+  userId: string,
+  event: SessionEvent,
+  data: Record<string, unknown>,
+  sessionId: string,
+): Promise<PushMessageTemplate> {
+  if (event === 'partner.signed_compact') {
+    const actorUserId = getActorUserId(data);
+
+    if (actorUserId && actorUserId !== userId) {
+      const invitation = await prisma.invitation.findFirst({
+        where: {
+          sessionId,
+          invitedById: userId,
+          status: 'ACCEPTED',
+        },
+        select: {
+          invitedById: true,
+        },
+      });
+
+      if (invitation) {
+        return {
+          title: '{actor} accepted your invitation',
+          body: '{actor} has started their side of the session. Open it to continue.',
+        };
+      }
+    }
+  }
+
+  return PUSH_MESSAGES[event] || {
+    title: 'Meet Without Fear',
+    body: 'You have an update',
+  };
 }
 
 async function getNotificationActorName(
@@ -304,11 +341,7 @@ export async function sendPushNotification(
       return false;
     }
 
-    // Get message template for this event type
-    const template = PUSH_MESSAGES[event] || {
-      title: 'Meet Without Fear',
-      body: 'You have an update',
-    };
+    const template = await getPushMessageTemplate(userId, event, data, sessionId);
     const actorName = await getNotificationActorName(userId, sessionId, data);
     const message = renderPushMessage(template, {
       actorName,

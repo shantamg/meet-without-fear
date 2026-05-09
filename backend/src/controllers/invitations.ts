@@ -680,6 +680,7 @@ export async function acceptInvitation(req: Request, res: Response): Promise<voi
     // Use notifyPartnerWithFallback to ensure Ably message is always published
     // and push is sent if user is offline
     await notifyPartnerWithFallback(invitation.sessionId, invitation.invitedById, 'session.joined', {
+      joinedBy: user.id,
       userId: user.id,
       userName: user.name,
     });
