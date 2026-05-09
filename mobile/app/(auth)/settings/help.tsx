@@ -13,6 +13,7 @@ import {
   Linking,
   Alert,
 } from 'react-native';
+import { useMemo } from 'react';
 import { Stack } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import {
@@ -24,7 +25,7 @@ import {
   ExternalLink,
   Heart,
 } from 'lucide-react-native';
-import { colors } from '@/src/theme';
+import { designFonts, useAppAppearance } from '@/src/theme';
 
 interface FAQItem {
   question: string;
@@ -55,6 +56,9 @@ const faqItems: FAQItem[] = [
 ];
 
 export default function HelpSupportScreen() {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
+
   const handleEmailSupport = () => {
     Linking.openURL('mailto:support@meetwithoutfear.com?subject=Support Request').catch(() => {
       Alert.alert('Error', 'Could not open email app');
@@ -81,12 +85,13 @@ export default function HelpSupportScreen() {
           headerShown: true,
           headerBackTitle: 'Back',
           headerStyle: {
-            backgroundColor: colors.bgPrimary,
+            backgroundColor: palette.bg,
           },
-          headerTintColor: colors.textPrimary,
+          headerTintColor: palette.text,
           headerTitleStyle: {
             fontWeight: '600',
-            color: colors.textPrimary,
+            color: palette.text,
+            fontFamily: designFonts.sans,
           },
         }}
       />
@@ -94,7 +99,7 @@ export default function HelpSupportScreen() {
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         {/* Welcome Message */}
         <View style={styles.welcomeCard}>
-          <HelpCircle color={colors.accent} size={28} />
+          <HelpCircle color={palette.accent} size={28} />
           <View style={styles.welcomeText}>
             <Text style={styles.welcomeTitle}>How can we help?</Text>
             <Text style={styles.welcomeSubtitle}>
@@ -110,7 +115,7 @@ export default function HelpSupportScreen() {
           <TouchableOpacity style={styles.contactItem} onPress={handleEmailSupport}>
             <View style={styles.contactItemLeft}>
               <View style={styles.iconCircle}>
-                <Mail color={colors.textPrimary} size={20} />
+                <Mail color={palette.bg} size={20} />
               </View>
               <View>
                 <Text style={styles.contactItemLabel}>Email Support</Text>
@@ -119,13 +124,13 @@ export default function HelpSupportScreen() {
                 </Text>
               </View>
             </View>
-            <ChevronRight color={colors.textSecondary} size={20} />
+            <ChevronRight color={palette.textMuted} size={20} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.contactItem} onPress={handleOpenDocs}>
             <View style={styles.contactItemLeft}>
               <View style={styles.iconCircle}>
-                <BookOpen color={colors.textPrimary} size={20} />
+                <BookOpen color={palette.bg} size={20} />
               </View>
               <View>
                 <Text style={styles.contactItemLabel}>Documentation</Text>
@@ -134,13 +139,13 @@ export default function HelpSupportScreen() {
                 </Text>
               </View>
             </View>
-            <ExternalLink color={colors.textSecondary} size={18} />
+            <ExternalLink color={palette.textMuted} size={18} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.contactItem} onPress={handleFeedback}>
             <View style={styles.contactItemLeft}>
               <View style={styles.iconCircle}>
-                <MessageCircle color={colors.textPrimary} size={20} />
+                <MessageCircle color={palette.bg} size={20} />
               </View>
               <View>
                 <Text style={styles.contactItemLabel}>Send Feedback</Text>
@@ -149,7 +154,7 @@ export default function HelpSupportScreen() {
                 </Text>
               </View>
             </View>
-            <ChevronRight color={colors.textSecondary} size={20} />
+            <ChevronRight color={palette.textMuted} size={20} />
           </TouchableOpacity>
         </View>
 
@@ -167,7 +172,7 @@ export default function HelpSupportScreen() {
 
         {/* Made with Love */}
         <View style={styles.footer}>
-          <Heart color={colors.error} size={16} fill={colors.error} />
+          <Heart color={palette.danger} size={16} fill={palette.danger} />
           <Text style={styles.footerText}>Made with love for better relationships</Text>
         </View>
       </ScrollView>
@@ -175,10 +180,10 @@ export default function HelpSupportScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bgPage,
+    backgroundColor: palette.bg,
   },
   content: {
     padding: 16,
@@ -187,11 +192,13 @@ const styles = StyleSheet.create({
   },
   welcomeCard: {
     flexDirection: 'row',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
     gap: 16,
     alignItems: 'flex-start',
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   welcomeText: {
     flex: 1,
@@ -199,13 +206,15 @@ const styles = StyleSheet.create({
   welcomeTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
     marginBottom: 4,
+    fontFamily: designFonts.sans,
   },
   welcomeSubtitle: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     lineHeight: 20,
+    fontFamily: designFonts.sans,
   },
   section: {
     gap: 12,
@@ -213,18 +222,21 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginLeft: 4,
+    fontFamily: designFonts.sans,
   },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   contactItemLeft: {
     flexDirection: 'row',
@@ -235,35 +247,41 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     justifyContent: 'center',
     alignItems: 'center',
   },
   contactItemLabel: {
     fontSize: 16,
-    color: colors.textPrimary,
+    color: palette.text,
     fontWeight: '500',
+    fontFamily: designFonts.sans,
   },
   contactItemDescription: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginTop: 2,
+    fontFamily: designFonts.sans,
   },
   faqItem: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   faqQuestion: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
     marginBottom: 8,
+    fontFamily: designFonts.sans,
   },
   faqAnswer: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     lineHeight: 20,
+    fontFamily: designFonts.sans,
   },
   footer: {
     flexDirection: 'row',
@@ -274,6 +292,7 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 13,
-    color: colors.textMuted,
+    color: palette.textMuted,
+    fontFamily: designFonts.sans,
   },
 });

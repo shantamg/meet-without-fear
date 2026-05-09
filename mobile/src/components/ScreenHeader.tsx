@@ -10,10 +10,10 @@
 
 import React, { ReactNode } from 'react';
 import { StyleSheet, View, Text, Pressable, ActivityIndicator } from 'react-native';
-import { ArrowLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 import { designFonts, useAppAppearance } from '../theme';
+import { HeaderBackButton } from './HeaderBackButton';
 
 // ============================================================================
 // Types
@@ -80,16 +80,7 @@ export function ScreenHeader({
       {/* Left section */}
       <View style={styles.leftSection}>
         {showBackButton ? (
-          <Pressable
-            style={styles.headerButton}
-            onPress={handleBackPress}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            testID={`${testID}-back-button`}
-          >
-            <ArrowLeft color={palette.text} size={24} />
-          </Pressable>
+          <HeaderBackButton onPress={handleBackPress} testID={`${testID}-back-button`} />
         ) : (
           <View style={styles.headerButtonSpacer} />
         )}

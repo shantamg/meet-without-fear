@@ -16,7 +16,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ArrowLeft,
   Sparkles,
   Play,
   Clock,
@@ -49,6 +48,7 @@ import {
 } from '../hooks';
 import { useToast } from '../contexts/ToastContext';
 import { MeditationType, formatDurationEstimate } from '@meet-without-fear/shared';
+import { HeaderBackButton } from '../components/HeaderBackButton';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 
@@ -429,9 +429,7 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <ArrowLeft size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <HeaderBackButton onPress={handleBack} />
           <Text style={styles.headerTitle}>
             {selectedType === MeditationType.GUIDED ? 'Guided' : 'Unguided'} Meditation
           </Text>
@@ -533,9 +531,7 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <ArrowLeft size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <HeaderBackButton onPress={handleBack} />
           <Text style={styles.headerTitle}>
             {selectedType === MeditationType.GUIDED ? 'Guided' : 'Unguided'} Session
           </Text>
@@ -612,9 +608,7 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <ArrowLeft size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <HeaderBackButton onPress={handleBack} />
           <Text style={styles.headerTitle}>Saved Meditation</Text>
           <TouchableOpacity
             onPress={() => {
@@ -664,9 +658,7 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <ArrowLeft size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
+          <HeaderBackButton onPress={handleBack} />
         <Text style={styles.headerTitle}>Develop Loving Awareness</Text>
         <View style={{ width: 32 }} />
       </View>

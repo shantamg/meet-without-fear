@@ -600,7 +600,7 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
   },
   backdrop: {
     flex: 1,
-    backgroundColor: palette.scrim,
+    backgroundColor: 'transparent',
   },
   drawer: {
     position: 'absolute',

@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Layers, MoreVertical, Lock, Sparkles } from 'lucide-react-native';
+import { Layers, MoreVertical, Lock, Sparkles } from 'lucide-react-native';
 import { MessageRole, MemorySuggestion, SuggestedAction } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage } from '../components/ChatInterface';
@@ -18,6 +18,7 @@ import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 import { SuggestedActionButtons } from '../components/SuggestedActionButtons';
 import { TakeawayReviewSheet } from '../components/TakeawayReviewSheet';
 import { TranscriptionDrawer } from '../components/TranscriptionDrawer';
+import { HeaderBackButton } from '../components/HeaderBackButton';
 import { useInnerThoughtsSession, useSendInnerThoughtsMessage } from '../hooks';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { createStyles } from '../theme/styled';
@@ -44,7 +45,11 @@ interface InnerThoughtsScreenProps {
   hideContentUntilReady?: boolean;
   /** Narrow URL-controlled fixture for visual audit surfaces. */
   auditFixture?: string | null;
+  /** Temporary home-composer destination while standalone inner work is disabled. */
+  comingSoonMode?: boolean;
 }
+
+const INNER_WORK_COMING_SOON_MESSAGE = 'Doing inner work by yourself is a feature coming soon.';
 
 // ============================================================================
 // Component
@@ -60,6 +65,7 @@ export function InnerThoughtsScreen({
   initialSuggestedActions,
   hideContentUntilReady = false,
   auditFixture = null,
+  comingSoonMode = false,
 }: InnerThoughtsScreenProps) {
   const styles = useStyles();
   const { palette } = useAppAppearance();
@@ -89,7 +95,7 @@ export function InnerThoughtsScreen({
 
   // Only fetch session if we have a valid sessionId (not creating)
   const { data, isLoading, error } = useInnerThoughtsSession(
-    isCreating ? undefined : sessionId
+    isCreating || comingSoonMode ? undefined : sessionId
   );
   const sendMessage = useSendInnerThoughtsMessage(sessionId);
 
@@ -104,6 +110,18 @@ export function InnerThoughtsScreen({
   // Convert inner thoughts messages to ChatMessage format
   // When creating with an initial message, show it optimistically
   const messages: ChatMessage[] = useMemo(() => {
+    if (comingSoonMode) {
+      return [{
+        id: 'inner-work-coming-soon',
+        sessionId: sessionId || 'inner-work-coming-soon',
+        senderId: null,
+        role: MessageRole.AI,
+        content: INNER_WORK_COMING_SOON_MESSAGE,
+        stage: 1,
+        timestamp: new Date().toISOString(),
+      }];
+    }
+
     // If creating with initial message, show it optimistically
     if (isCreating && initialMessage) {
       return [{
@@ -128,7 +146,7 @@ export function InnerThoughtsScreen({
       stage: 1, // Inner thoughts doesn't use stages, but ChatMessage requires it
       timestamp: msg.timestamp,
     }));
-  }, [session?.messages, sessionId, isCreating, initialMessage]);
+  }, [session?.messages, sessionId, isCreating, initialMessage, comingSoonMode]);
 
   const handleSendMessage = useCallback(
     async (content: string) => {
@@ -227,7 +245,7 @@ export function InnerThoughtsScreen({
   }, [voice]);
 
   // Loading state - but NOT when creating (we show typing indicator instead)
-  if (isLoading && !isCreating) {
+  if (isLoading && !isCreating && !comingSoonMode) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
@@ -239,7 +257,7 @@ export function InnerThoughtsScreen({
   }
 
   // Error state - but NOT when creating
-  if (!isCreating && (error || !session)) {
+  if (!isCreating && !comingSoonMode && (error || !session)) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
@@ -252,7 +270,9 @@ export function InnerThoughtsScreen({
     );
   }
 
-  const title = isCreating ? 'Inner Thoughts' : (session?.title || session?.theme || 'Inner Thoughts');
+  const title = comingSoonMode
+    ? 'Inner Work'
+    : isCreating ? 'Inner Thoughts' : (session?.title || session?.theme || 'Inner Thoughts');
   const isLinked = !!linkedPartnerName;
 
   return (
@@ -267,15 +287,7 @@ export function InnerThoughtsScreen({
           },
         ]}
       >
-        <TouchableOpacity
-          style={styles.headerBackButton}
-          onPress={handleBack}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <ArrowLeft color={palette.text} size={24} />
-        </TouchableOpacity>
+        <HeaderBackButton onPress={handleBack} />
 
         <View style={styles.headerContent}>
           <View style={styles.headerTitleRow}>
@@ -335,10 +347,12 @@ export function InnerThoughtsScreen({
         onSendMessage={handleSendMessage}
         isLoading={hideContentUntilReady ? false : (isCreating || sendMessage.isPending)}
         disabled={isCreating || sendMessage.isPending}
-        emptyStateTitle="Inner Thoughts"
-        emptyStateMessage="A private space for reflection. Share what's on your mind."
+        hideInput={comingSoonMode}
+        emptyStateTitle={comingSoonMode ? 'Inner Work' : 'Inner Thoughts'}
+        emptyStateMessage={comingSoonMode ? '' : "A private space for reflection. Share what's on your mind."}
         keyboardVerticalOffset={0}
         onVoicePress={Platform.OS !== 'web' ? handleVoicePress : undefined}
+        skipInitialHistory={comingSoonMode}
       />
 
       {/* Suggested Action Buttons - shown when AI suggests next steps */}

@@ -94,7 +94,7 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: palette.scrim,
+    backgroundColor: 'transparent',
   },
   backdropPressable: {
     flex: 1,

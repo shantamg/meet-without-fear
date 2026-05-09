@@ -227,7 +227,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: palette.scrim,
+      backgroundColor: 'transparent',
     },
     sheet: {
       position: 'absolute',

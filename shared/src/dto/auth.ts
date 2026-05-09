@@ -94,6 +94,35 @@ export interface UpdateNotificationPreferencesResponse {
 }
 
 // ============================================================================
+// Privacy Preferences
+// ============================================================================
+
+export interface PrivacyPreferencesDTO {
+  /** Let partners see presence/activity timestamps such as "last active" */
+  showActivityStatus: boolean;
+  /** Allow existing connected people to start a new invited session with this user */
+  allowSessionInvites: boolean;
+}
+
+export const DEFAULT_PRIVACY_PREFERENCES: PrivacyPreferencesDTO = {
+  showActivityStatus: true,
+  allowSessionInvites: true,
+};
+
+export interface GetPrivacyPreferencesResponse {
+  preferences: PrivacyPreferencesDTO;
+}
+
+export interface UpdatePrivacyPreferencesRequest {
+  showActivityStatus?: boolean;
+  allowSessionInvites?: boolean;
+}
+
+export interface UpdatePrivacyPreferencesResponse {
+  preferences: PrivacyPreferencesDTO;
+}
+
+// ============================================================================
 // Ably Token
 // ============================================================================
 

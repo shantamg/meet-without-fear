@@ -14,10 +14,11 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import { ArrowLeft, BookOpen, Menu } from 'lucide-react-native';
+import { BookOpen, Menu } from 'lucide-react-native';
 import { ConnectionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
+import { HeaderBackButton } from './HeaderBackButton';
 
 // ============================================================================
 // Types
@@ -123,7 +124,6 @@ export function SessionChatHeader({
   };
 
   const displayName = partnerName || 'Meet Without Fear';
-  const LeftActionIcon = leftActionIcon === 'menu' ? Menu : ArrowLeft;
   const leftActionLabel = leftActionIcon === 'menu' ? 'Open session drawer' : 'Go back';
 
   // Center content - always partner name + status (whether tabs or not)
@@ -166,15 +166,23 @@ export function SessionChatHeader({
       {/* Left section: Back button */}
       <View style={styles.leftSection}>
         {onBackPress ? (
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={onBackPress}
-            accessibilityRole="button"
-            accessibilityLabel={leftActionLabel}
-            testID={`${testID}-back-button`}
-          >
-            <LeftActionIcon color={palette.textMuted} size={24} />
-          </TouchableOpacity>
+          leftActionIcon === 'menu' ? (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={onBackPress}
+              accessibilityRole="button"
+              accessibilityLabel={leftActionLabel}
+              testID={`${testID}-back-button`}
+            >
+              <Menu color={palette.textMuted} size={24} />
+            </TouchableOpacity>
+          ) : (
+            <HeaderBackButton
+              onPress={onBackPress}
+              accessibilityLabel={leftActionLabel}
+              testID={`${testID}-back-button`}
+            />
+          )
         ) : (
           <View style={styles.backButtonSpacer} />
         )}

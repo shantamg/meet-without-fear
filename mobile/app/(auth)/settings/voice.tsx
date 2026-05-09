@@ -4,7 +4,7 @@
  * Allows users to manage their voice and speech preferences.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Volume2, ChevronDown, Check } from 'lucide-react-native';
-import { colors } from '@/src/theme';
+import { designFonts, useAppAppearance } from '@/src/theme';
 import {
   useAutoSpeech,
   useVoiceSettings,
@@ -24,6 +24,8 @@ import {
 } from '@/src/hooks/useSpeech';
 
 export default function VoiceSettingsScreen() {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   // Speech settings
   const { isAutoSpeechEnabled, setAutoSpeechEnabled } = useAutoSpeech();
   const { voiceSettings, setVoiceId, previewVoice } = useVoiceSettings();
@@ -43,12 +45,13 @@ export default function VoiceSettingsScreen() {
           headerShown: true,
           headerBackTitle: 'Back',
           headerStyle: {
-            backgroundColor: colors.bgPrimary,
+            backgroundColor: palette.bg,
           },
-          headerTintColor: colors.textPrimary,
+          headerTintColor: palette.text,
           headerTitleStyle: {
             fontWeight: '600',
-            color: colors.textPrimary,
+            color: palette.text,
+            fontFamily: designFonts.sans,
           },
         }}
       />
@@ -58,7 +61,7 @@ export default function VoiceSettingsScreen() {
           {/* Auto-Speech Toggle */}
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Volume2 color={colors.accent} size={22} />
+              <Volume2 color={palette.accent} size={22} />
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Auto-Speech</Text>
                 <Text style={styles.settingDescription}>
@@ -69,8 +72,8 @@ export default function VoiceSettingsScreen() {
             <Switch
               value={isAutoSpeechEnabled}
               onValueChange={setAutoSpeechEnabled}
-              trackColor={{ false: colors.bgTertiary, true: colors.accent }}
-              thumbColor={colors.textPrimary}
+              trackColor={{ false: palette.chipBg, true: palette.accent }}
+              thumbColor={palette.bgElev}
             />
           </View>
 
@@ -85,7 +88,7 @@ export default function VoiceSettingsScreen() {
               <Text style={styles.pickerDescription}>{currentVoice.description}</Text>
             </View>
             <ChevronDown
-              color={colors.textSecondary}
+              color={palette.textMuted}
               size={20}
               style={{ transform: [{ rotate: showVoicePicker ? '180deg' : '0deg' }] }}
             />
@@ -112,7 +115,7 @@ export default function VoiceSettingsScreen() {
                     <Text style={styles.pickerOptionDescription}>{voice.description}</Text>
                   </View>
                   {voice.id === voiceSettings.voiceId && (
-                    <Check color={colors.accent} size={20} />
+                    <Check color={palette.accent} size={20} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -126,10 +129,10 @@ export default function VoiceSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bgPage,
+    backgroundColor: palette.bg,
   },
   content: {
     padding: 16,
@@ -142,18 +145,21 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginLeft: 4,
+    fontFamily: designFonts.sans,
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   settingLeft: {
     flexDirection: 'row',
@@ -166,45 +172,54 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     fontSize: 17,
-    color: colors.textPrimary,
+    color: palette.text,
     fontWeight: '500',
+    fontFamily: designFonts.sans,
   },
   settingDescription: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginTop: 2,
+    fontFamily: designFonts.sans,
   },
   // Voice Settings styles
   pickerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   pickerLeft: {
     flex: 1,
   },
   pickerLabel: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: palette.textMuted,
     marginBottom: 4,
+    fontFamily: designFonts.sans,
   },
   pickerValue: {
     fontSize: 17,
-    color: colors.textPrimary,
+    color: palette.text,
     fontWeight: '500',
+    fontFamily: designFonts.sans,
   },
   pickerDescription: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginTop: 2,
+    fontFamily: designFonts.sans,
   },
   pickerOptions: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   pickerOption: {
     flexDirection: 'row',
@@ -212,37 +227,39 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.bgTertiary,
+    borderBottomColor: palette.divider,
   },
   pickerOptionSelected: {
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.selected,
   },
   pickerOptionLeft: {
     flex: 1,
   },
   pickerOptionName: {
     fontSize: 16,
-    color: colors.textPrimary,
+    color: palette.text,
     fontWeight: '500',
+    fontFamily: designFonts.sans,
   },
   pickerOptionDescription: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginTop: 2,
+    fontFamily: designFonts.sans,
   },
   previewButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     borderRadius: 12,
     padding: 14,
     gap: 8,
   },
   previewButtonText: {
     fontSize: 16,
-    color: colors.textPrimary,
+    color: palette.bg,
     fontWeight: '600',
+    fontFamily: designFonts.sans,
   },
 });
-

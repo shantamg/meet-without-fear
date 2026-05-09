@@ -5,10 +5,11 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, PanResponder } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
 import { designFonts, useAppAppearance } from '@/theme';
+import { HeaderBackButton } from './HeaderBackButton';
 
 const FEELINGS = [
   { intensity: 10, label: 'Heated', hint: 'lit up, hard to breathe' },
@@ -54,6 +55,8 @@ export interface SessionEntryMoodCheckProps {
   initialValue?: number;
   /** Callback when user completes the check */
   onComplete: (intensity: number) => void;
+  /** Optional back action for full-screen presentation */
+  onBack?: () => void;
 }
 
 export function SessionEntryMoodCheck({
@@ -61,6 +64,7 @@ export function SessionEntryMoodCheck({
   fullScreen = false,
   initialValue = 5,
   onComplete,
+  onBack,
 }: SessionEntryMoodCheckProps) {
   const [value, setValue] = useState(initialValue);
   const { palette } = useAppAppearance();
@@ -76,10 +80,37 @@ export function SessionEntryMoodCheck({
     onComplete(value);
   }, [onComplete, value]);
 
+  const backSwipeResponder = useMemo(
+    () => PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Boolean(onBack) &&
+        gestureState.x0 <= 28 &&
+        gestureState.dx > 12 &&
+        Math.abs(gestureState.dy) < 24,
+      onPanResponderRelease: (_, gestureState) => {
+        if (!onBack) return;
+        if (gestureState.dx > 70 || gestureState.vx > 0.65) {
+          onBack();
+        }
+      },
+    }),
+    [onBack]
+  );
+
   const content = (
-    <View style={fullScreen ? styles.fullScreenOverlay : styles.overlay}>
+    <View
+      style={fullScreen ? styles.fullScreenOverlay : styles.overlay}
+      {...(onBack ? backSwipeResponder.panHandlers : {})}
+    >
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <View style={styles.topRow}>
+          {onBack && (
+            <HeaderBackButton
+              onPress={onBack}
+              accessibilityLabel="Back to home"
+              testID="mood-check-back-button"
+            />
+          )}
           <Text style={styles.topLabel}>Before we begin</Text>
           <View style={styles.topRule} />
         </View>
@@ -117,9 +148,9 @@ export function SessionEntryMoodCheck({
             <View style={styles.axis}>
               <Text style={styles.axisText}>Calm</Text>
               <View style={styles.axisRule} />
-              <Text style={styles.axisText}>Moderate</Text>
+              <Text style={styles.axisText}>Steady</Text>
               <View style={styles.axisRule} />
-              <Text style={styles.axisText}>Intense</Text>
+              <Text style={styles.axisText}>Heated</Text>
             </View>
           </View>
         </View>

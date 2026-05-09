@@ -180,3 +180,33 @@ export const updateNotificationPreferencesResponseSchema = z.object({
 });
 
 export type UpdateNotificationPreferencesResponseInput = z.infer<typeof updateNotificationPreferencesResponseSchema>;
+
+// ============================================================================
+// Privacy Preferences
+// ============================================================================
+
+export const privacyPreferencesDTOSchema = z.object({
+  showActivityStatus: z.boolean(),
+  allowSessionInvites: z.boolean(),
+});
+
+export type PrivacyPreferencesDTOInput = z.infer<typeof privacyPreferencesDTOSchema>;
+
+export const updatePrivacyPreferencesRequestSchema = z.object({
+  showActivityStatus: z.boolean().optional(),
+  allowSessionInvites: z.boolean().optional(),
+});
+
+export type UpdatePrivacyPreferencesRequestInput = z.infer<typeof updatePrivacyPreferencesRequestSchema>;
+
+export const getPrivacyPreferencesResponseSchema = z.object({
+  preferences: privacyPreferencesDTOSchema,
+});
+
+export type GetPrivacyPreferencesResponseInput = z.infer<typeof getPrivacyPreferencesResponseSchema>;
+
+export const updatePrivacyPreferencesResponseSchema = z.object({
+  preferences: privacyPreferencesDTOSchema,
+});
+
+export type UpdatePrivacyPreferencesResponseInput = z.infer<typeof updatePrivacyPreferencesResponseSchema>;

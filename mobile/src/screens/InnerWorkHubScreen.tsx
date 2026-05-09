@@ -9,7 +9,6 @@ import { useCallback } from 'react';
 import { View, Text, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ArrowLeft,
   Sparkles,
   MessageCircle,
   ChevronRight,
@@ -18,6 +17,7 @@ import {
 
 import { useInnerThoughtsSessions } from '../hooks';
 import { InnerWorkSessionSummaryDTO } from '@meet-without-fear/shared';
+import { HeaderBackButton } from '../components/HeaderBackButton';
 import { createStyles } from '../theme/styled';
 import { colors, useAppAppearance } from '../theme';
 
@@ -127,13 +127,7 @@ export function InnerWorkHubScreen({
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top']}>
         <View style={[styles.header, { backgroundColor: palette.bg, borderBottomColor: palette.divider }]}>
-          <TouchableOpacity
-            onPress={handleBack}
-            style={styles.backButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <ArrowLeft size={24} color={palette.text} />
-          </TouchableOpacity>
+          <HeaderBackButton onPress={handleBack} />
           <Text style={[styles.headerTitle, { color: palette.text }]}>Inner Work</Text>
           <View style={styles.headerRight} />
         </View>
@@ -169,13 +163,7 @@ export function InnerWorkHubScreen({
     <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top']}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: palette.bg, borderBottomColor: palette.divider }]}>
-        <TouchableOpacity
-          onPress={handleBack}
-          style={styles.backButton}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <ArrowLeft size={24} color={palette.text} />
-        </TouchableOpacity>
+        <HeaderBackButton onPress={handleBack} />
         <View style={styles.headerTitleContainer}>
           <Text style={[styles.headerTitle, { color: palette.text }]}>Inner Work</Text>
           <View style={styles.privacyBadge}>

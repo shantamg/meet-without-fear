@@ -4,7 +4,7 @@
  * Allows users to manage their privacy preferences.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -17,14 +17,23 @@ import {
 import { Stack } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { Shield, Eye, Users, FileText, ExternalLink } from 'lucide-react-native';
-import { colors } from '@/src/theme';
+import { designFonts, useAppAppearance } from '@/src/theme';
+import { usePrivacyPreferences, useUpdatePrivacyPreferences } from '@/src/hooks/useProfile';
 
 export default function PrivacySettingsScreen() {
-  // Local state for privacy settings - in a full implementation these would
-  // be persisted to the backend via API hooks
-  const [showActivityStatus, setShowActivityStatus] = useState(true);
-  const [allowSessionInvites, setAllowSessionInvites] = useState(true);
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
+  const { data: privacyPreferencesData, isLoading: isLoadingPrivacyPreferences } = usePrivacyPreferences();
+  const updatePrivacyPreferences = useUpdatePrivacyPreferences({
+    onError: () => {
+      Alert.alert('Error', 'Could not update privacy settings. Please try again.');
+    },
+  });
   const [shareAnonymousAnalytics, setShareAnonymousAnalytics] = useState(true);
+  const privacyPreferences = privacyPreferencesData?.preferences;
+  const showActivityStatus = privacyPreferences?.showActivityStatus ?? true;
+  const allowSessionInvites = privacyPreferences?.allowSessionInvites ?? true;
+  const privacyControlsDisabled = isLoadingPrivacyPreferences || updatePrivacyPreferences.isPending;
 
   const handlePrivacyPolicyPress = () => {
     WebBrowser.openBrowserAsync('https://meetwithoutfear.com/privacy').catch(() => {
@@ -46,12 +55,13 @@ export default function PrivacySettingsScreen() {
           headerShown: true,
           headerBackTitle: 'Back',
           headerStyle: {
-            backgroundColor: colors.bgPrimary,
+            backgroundColor: palette.bg,
           },
-          headerTintColor: colors.textPrimary,
+          headerTintColor: palette.text,
           headerTitleStyle: {
             fontWeight: '600',
-            color: colors.textPrimary,
+            color: palette.text,
+            fontFamily: designFonts.sans,
           },
         }}
       />
@@ -59,7 +69,7 @@ export default function PrivacySettingsScreen() {
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         {/* Privacy Info */}
         <View style={styles.infoCard}>
-          <Shield color={colors.accent} size={24} />
+          <Shield color={palette.accent} size={24} />
           <Text style={styles.infoText}>
             Your privacy is important to us. Control how your information is shared and used.
           </Text>
@@ -72,7 +82,7 @@ export default function PrivacySettingsScreen() {
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
               <View style={styles.settingHeader}>
-                <Eye color={colors.accent} size={20} />
+                <Eye color={palette.accent} size={20} />
                 <Text style={styles.settingLabel}>Show Activity Status</Text>
               </View>
               <Text style={styles.settingDescription}>
@@ -81,16 +91,19 @@ export default function PrivacySettingsScreen() {
             </View>
             <Switch
               value={showActivityStatus}
-              onValueChange={setShowActivityStatus}
-              trackColor={{ false: colors.bgTertiary, true: colors.accent }}
-              thumbColor={colors.textPrimary}
+              onValueChange={(showActivityStatus) => {
+                updatePrivacyPreferences.mutate({ showActivityStatus });
+              }}
+              trackColor={{ false: palette.chipBg, true: palette.accent }}
+              thumbColor={palette.bgElev}
+              disabled={privacyControlsDisabled}
             />
           </View>
 
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
               <View style={styles.settingHeader}>
-                <Users color={colors.accent} size={20} />
+                <Users color={palette.accent} size={20} />
                 <Text style={styles.settingLabel}>Allow Session Invites</Text>
               </View>
               <Text style={styles.settingDescription}>
@@ -99,9 +112,12 @@ export default function PrivacySettingsScreen() {
             </View>
             <Switch
               value={allowSessionInvites}
-              onValueChange={setAllowSessionInvites}
-              trackColor={{ false: colors.bgTertiary, true: colors.accent }}
-              thumbColor={colors.textPrimary}
+              onValueChange={(allowSessionInvites) => {
+                updatePrivacyPreferences.mutate({ allowSessionInvites });
+              }}
+              trackColor={{ false: palette.chipBg, true: palette.accent }}
+              thumbColor={palette.bgElev}
+              disabled={privacyControlsDisabled}
             />
           </View>
         </View>
@@ -120,8 +136,8 @@ export default function PrivacySettingsScreen() {
             <Switch
               value={shareAnonymousAnalytics}
               onValueChange={setShareAnonymousAnalytics}
-              trackColor={{ false: colors.bgTertiary, true: colors.accent }}
-              thumbColor={colors.textPrimary}
+              trackColor={{ false: palette.chipBg, true: palette.accent }}
+              thumbColor={palette.bgElev}
             />
           </View>
         </View>
@@ -132,18 +148,18 @@ export default function PrivacySettingsScreen() {
 
           <TouchableOpacity style={styles.linkItem} onPress={handlePrivacyPolicyPress}>
             <View style={styles.linkItemLeft}>
-              <FileText color={colors.accent} size={20} />
+              <FileText color={palette.accent} size={20} />
               <Text style={styles.linkItemLabel}>Privacy Policy</Text>
             </View>
-            <ExternalLink color={colors.textSecondary} size={18} />
+            <ExternalLink color={palette.textMuted} size={18} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.linkItem} onPress={handleTermsPress}>
             <View style={styles.linkItemLeft}>
-              <FileText color={colors.accent} size={20} />
+              <FileText color={palette.accent} size={20} />
               <Text style={styles.linkItemLabel}>Terms of Service</Text>
             </View>
-            <ExternalLink color={colors.textSecondary} size={18} />
+            <ExternalLink color={palette.textMuted} size={18} />
           </TouchableOpacity>
         </View>
 
@@ -159,10 +175,10 @@ export default function PrivacySettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bgPage,
+    backgroundColor: palette.bg,
   },
   content: {
     padding: 16,
@@ -171,17 +187,20 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     flexDirection: 'row',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
     gap: 12,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   infoText: {
     flex: 1,
     fontSize: 14,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     lineHeight: 20,
+    fontFamily: designFonts.sans,
   },
   section: {
     gap: 12,
@@ -189,18 +208,21 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginLeft: 4,
+    fontFamily: designFonts.sans,
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   settingInfo: {
     flex: 1,
@@ -214,21 +236,25 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     fontSize: 16,
-    color: colors.textPrimary,
+    color: palette.text,
     fontWeight: '500',
+    fontFamily: designFonts.sans,
   },
   settingDescription: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginLeft: 28,
+    fontFamily: designFonts.sans,
   },
   linkItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   linkItemLeft: {
     flexDirection: 'row',
@@ -237,19 +263,21 @@ const styles = StyleSheet.create({
   },
   linkItemLabel: {
     fontSize: 16,
-    color: colors.textPrimary,
+    color: palette.text,
     fontWeight: '500',
+    fontFamily: designFonts.sans,
   },
   notice: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
     borderLeftWidth: 3,
-    borderLeftColor: colors.accent,
+    borderLeftColor: palette.accent,
   },
   noticeText: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     lineHeight: 20,
+    fontFamily: designFonts.sans,
   },
 });

@@ -20,6 +20,8 @@ import {
   updateMemoryPreferences,
   getNotificationPreferences,
   updateNotificationPreferences,
+  getPrivacyPreferences,
+  updatePrivacyPreferences,
   updateMood,
   deleteAccount,
 } from '../controllers/auth';
@@ -155,6 +157,30 @@ router.get('/me/notification-preferences', getNotificationPreferences);
  * - preferences: NotificationPreferencesDTO
  */
 router.patch('/me/notification-preferences', updateNotificationPreferences);
+
+/**
+ * GET /auth/me/privacy-preferences
+ *
+ * Get current privacy preferences.
+ *
+ * Response: GetPrivacyPreferencesResponse
+ * - preferences: PrivacyPreferencesDTO
+ */
+router.get('/me/privacy-preferences', getPrivacyPreferences);
+
+/**
+ * PATCH /auth/me/privacy-preferences
+ *
+ * Update privacy preferences.
+ *
+ * Request: UpdatePrivacyPreferencesRequest
+ * - showActivityStatus?: boolean
+ * - allowSessionInvites?: boolean
+ *
+ * Response: UpdatePrivacyPreferencesResponse
+ * - preferences: PrivacyPreferencesDTO
+ */
+router.patch('/me/privacy-preferences', updatePrivacyPreferences);
 
 /**
  * PATCH /auth/me/mood

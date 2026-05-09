@@ -25,6 +25,7 @@ model User {
   biometricEnrolledAt     DateTime?
   memoryPreferences       Json? // MemoryPreferencesDTO - AI memory settings
   notificationPreferences Json? // NotificationPreferencesDTO - notification settings
+  privacyPreferences      Json? // PrivacyPreferencesDTO - visibility and invitation settings
   lastMoodIntensity       Int? // Last mood intensity (1-10) for session entry default
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt

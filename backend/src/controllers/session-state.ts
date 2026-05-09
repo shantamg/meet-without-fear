@@ -20,7 +20,7 @@
 import { Request, Response } from 'express';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { ErrorCode } from '@meet-without-fear/shared';
+import { DEFAULT_PRIVACY_PREFERENCES, ErrorCode, PrivacyPreferencesDTO } from '@meet-without-fear/shared';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
 
@@ -313,12 +313,20 @@ export async function getSessionState(req: Request, res: Response): Promise<void
           },
         })
       : null;
-    const partnerLastActiveAt = latestDate(
+    const partnerPrivacyUser = partnerId
+      ? await prisma.user.findUnique({
+          where: { id: partnerId },
+          select: { privacyPreferences: true } as any,
+        })
+      : null;
+    const partnerPrivacyPreferences = (partnerPrivacyUser as { privacyPreferences?: unknown } | null)?.privacyPreferences as PrivacyPreferencesDTO | null;
+    const partnerShowsActivity = (partnerPrivacyPreferences ?? DEFAULT_PRIVACY_PREFERENCES).showActivityStatus;
+    const partnerLastActiveAt = partnerShowsActivity ? latestDate(
       partnerVessel?.lastActiveAt,
       partnerLastMessage?.timestamp,
       partnerLastStageProgress?.completedAt,
       partnerLastStageProgress?.startedAt
-    );
+    ) : null;
 
     // Build messages response (reverse to chronological order)
     const hasMoreMessages = messages.length > 25;
@@ -410,7 +418,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
         createdAt: session.createdAt.toISOString(),
         resolvedAt: session.resolvedAt?.toISOString() ?? null,
         lastViewedAt: userVessel?.lastViewedAt?.toISOString() ?? null,
-        partnerLastViewedAt: partnerVessel?.lastViewedAt?.toISOString() ?? null,
+        partnerLastViewedAt: partnerShowsActivity ? partnerVessel?.lastViewedAt?.toISOString() ?? null : null,
         partnerLastActiveAt: partnerLastActiveAt?.toISOString() ?? null,
         lastSeenChatItemId: userVessel?.lastSeenChatItemId ?? null,
       },
