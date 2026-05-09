@@ -11,7 +11,7 @@
  */
 
 import { Stack, useRouter } from 'expo-router';
-import { TouchableOpacity } from 'react-native';
+import { StyleSheet, TouchableOpacity } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 import { designFonts, useAppAppearance } from '@/theme';
 
@@ -19,8 +19,13 @@ function BackButton() {
   const router = useRouter();
   const { palette } = useAppAppearance();
   return (
-    <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: -8, padding: 8 }}>
-      <ChevronLeft color={palette.text} size={28} />
+    <TouchableOpacity
+      onPress={() => router.back()}
+      style={[styles.backButton, { backgroundColor: palette.chipBg }]}
+      accessibilityRole="button"
+      accessibilityLabel="Go back"
+    >
+      <ChevronLeft color={palette.text} size={24} strokeWidth={2.4} />
     </TouchableOpacity>
   );
 }
@@ -33,9 +38,8 @@ export default function SettingsLayout() {
       screenOptions={{
         headerShown: true,
         headerBackTitle: 'Back',
-        headerTransparent: true,
         headerStyle: {
-          backgroundColor: 'transparent',
+          backgroundColor: palette.bg,
         },
         headerTintColor: palette.text,
         headerTitleStyle: {
@@ -89,3 +93,14 @@ export default function SettingsLayout() {
     </Stack>
   );
 }
+
+const styles = StyleSheet.create({
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -4,
+  },
+});

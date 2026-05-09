@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, Text, Platform, type TextInput as TextInputType } from 'react-native';
-import { ArrowRight, Mic } from 'lucide-react-native';
+import { ArrowUp, Mic } from 'lucide-react-native';
 import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
 
@@ -134,7 +134,7 @@ export function ChatInput({
         disabled={!canSend}
         activeOpacity={0.7}
       >
-        <ArrowRight color={canSend ? palette.bg : palette.textFaint} size={18} />
+        <ArrowUp color={canSend ? palette.bg : palette.textFaint} size={18} />
       </TouchableOpacity>
     </View>
   );

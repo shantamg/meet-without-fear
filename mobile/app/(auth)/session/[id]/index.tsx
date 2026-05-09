@@ -1,6 +1,5 @@
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { UnifiedSessionScreen } from '@/src/screens/UnifiedSessionScreen';
-import { SessionDrawer } from '@/src/components';
 import { Stage } from '@meet-without-fear/shared';
 
 /**
@@ -44,15 +43,13 @@ export default function SessionScreen() {
           headerShown: false, // UnifiedSessionScreen has its own header
         }}
       />
-      <SessionDrawer>
-        <UnifiedSessionScreen
-          sessionId={id}
-          initialTendingEntryId={typeof tendingEntryId === 'string' ? tendingEntryId : null}
-          auditFixture={typeof auditFixture === 'string' ? auditFixture : null}
-          onNavigateBack={handleNavigateBack}
-          onStageComplete={handleStageComplete}
-        />
-      </SessionDrawer>
+      <UnifiedSessionScreen
+        sessionId={id}
+        initialTendingEntryId={typeof tendingEntryId === 'string' ? tendingEntryId : null}
+        auditFixture={typeof auditFixture === 'string' ? auditFixture : null}
+        onNavigateBack={handleNavigateBack}
+        onStageComplete={handleStageComplete}
+      />
     </>
   );
 }

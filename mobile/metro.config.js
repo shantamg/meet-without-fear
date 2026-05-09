@@ -43,6 +43,13 @@ const isE2EMode = process.env.EXPO_PUBLIC_E2E_MODE === 'true';
 const originalResolveRequest = config.resolver.resolveRequest;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === 'react-native-reanimated' || moduleName.startsWith('react-native-reanimated/')) {
+    return {
+      filePath: require.resolve(moduleName, { paths: [projectRoot] }),
+      type: 'sourceFile',
+    };
+  }
+
   if (moduleName === '@meet-without-fear/shared') {
     return {
       filePath: path.resolve(workspaceRoot, 'shared/src/index.ts'),

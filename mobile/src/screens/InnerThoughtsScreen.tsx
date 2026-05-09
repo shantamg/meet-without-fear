@@ -21,7 +21,7 @@ import { TranscriptionDrawer } from '../components/TranscriptionDrawer';
 import { useInnerThoughtsSession, useSendInnerThoughtsMessage } from '../hooks';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { createStyles } from '../theme/styled';
-import { colors } from '../theme';
+import { colors, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -62,6 +62,7 @@ export function InnerThoughtsScreen({
   auditFixture = null,
 }: InnerThoughtsScreenProps) {
   const styles = useStyles();
+  const { palette } = useAppAppearance();
   const router = useRouter();
 
   // Takeaways review sheet state
@@ -228,7 +229,7 @@ export function InnerThoughtsScreen({
   // Loading state - but NOT when creating (we show typing indicator instead)
   if (isLoading && !isCreating) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>Loading...</Text>
@@ -240,7 +241,7 @@ export function InnerThoughtsScreen({
   // Error state - but NOT when creating
   if (!isCreating && (error || !session)) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
           <Text style={styles.errorText}>We couldn't load your reflection right now</Text>
           <TouchableOpacity style={styles.backButton} onPress={handleBack}>
@@ -255,9 +256,17 @@ export function InnerThoughtsScreen({
   const isLinked = !!linkedPartnerName;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top', 'bottom']}>
       {/* Header - styled like the rest of the app */}
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: palette.bg,
+            borderBottomColor: palette.border,
+          },
+        ]}
+      >
         <TouchableOpacity
           style={styles.headerBackButton}
           onPress={handleBack}
@@ -265,30 +274,30 @@ export function InnerThoughtsScreen({
           accessibilityLabel="Go back"
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <ArrowLeft color="#ececec" size={24} />
+          <ArrowLeft color={palette.text} size={24} />
         </TouchableOpacity>
 
         <View style={styles.headerContent}>
           <View style={styles.headerTitleRow}>
-            <Layers color={colors.brandBlue} size={16} />
-            <Text style={styles.headerTitle} numberOfLines={1}>
+            <Layers color={palette.accent} size={16} />
+            <Text style={[styles.headerTitle, { color: palette.text }]} numberOfLines={1}>
               {title}
             </Text>
-            <Lock size={12} color={colors.textMuted} />
+            <Lock size={12} color={palette.textMuted} />
           </View>
           {isLinked ? (
             <>
               <TouchableOpacity onPress={onNavigateToPartnerSession}>
-                <Text style={styles.linkedSubtitle} numberOfLines={1}>
+                <Text style={[styles.linkedSubtitle, { color: palette.accent }]} numberOfLines={1}>
                   ↩ Back to session with {linkedPartnerName}
                 </Text>
               </TouchableOpacity>
-              <Text style={styles.privacyNote}>
+              <Text style={[styles.privacyNote, { color: palette.textMuted }]}>
                 Private — {linkedPartnerName} cannot see this
               </Text>
             </>
           ) : !isCreating && session?.theme && session?.title ? (
-            <Text style={styles.headerSubtitle} numberOfLines={1}>
+            <Text style={[styles.headerSubtitle, { color: palette.textMuted }]} numberOfLines={1}>
               {session.theme}
             </Text>
           ) : null}
@@ -302,7 +311,7 @@ export function InnerThoughtsScreen({
             accessibilityRole="button"
             accessibilityLabel="View takeaways"
           >
-            <Sparkles color={colors.brandBlue} size={20} />
+            <Sparkles color={palette.accent} size={20} />
           </TouchableOpacity>
         )}
 
@@ -314,7 +323,7 @@ export function InnerThoughtsScreen({
             accessibilityRole="button"
             accessibilityLabel="End session"
           >
-            <MoreVertical color={colors.textMuted} size={20} />
+            <MoreVertical color={palette.textMuted} size={20} />
           </TouchableOpacity>
         )}
         {isCreating && <View style={{ width: 48 }} />}
@@ -328,6 +337,7 @@ export function InnerThoughtsScreen({
         disabled={isCreating || sendMessage.isPending}
         emptyStateTitle="Inner Thoughts"
         emptyStateMessage="A private space for reflection. Share what's on your mind."
+        keyboardVerticalOffset={0}
         onVoicePress={Platform.OS !== 'web' ? handleVoicePress : undefined}
       />
 

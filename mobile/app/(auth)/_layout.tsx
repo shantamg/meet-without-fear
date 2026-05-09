@@ -1,6 +1,6 @@
 import { Stack, Redirect } from 'expo-router';
 import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
-import { colors } from '@/theme';
+import { useAppAppearance } from '@/src/theme';
 import { useUserSessionUpdates } from '@/src/hooks/useRealtime';
 import { isE2EMode } from '@/src/providers/E2EAuthProvider';
 import { useOTAUpdate } from '@/src/hooks/useOTAUpdate';
@@ -17,6 +17,7 @@ import { BiometricLockOverlay } from '@/src/components/BiometricLockOverlay';
  */
 export default function AuthLayout() {
   const { isSignedIn, isLoaded } = useClerkAuth();
+  const { palette } = useAppAppearance();
 
   // Subscribe to user-level session updates for real-time list refreshes
   // This is placed here (not in individual screens) to ensure only ONE Ably connection
@@ -43,20 +44,26 @@ export default function AuthLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
+          gestureEnabled: false,
           headerStyle: {
-            backgroundColor: colors.bgPrimary,
+            backgroundColor: palette.bg,
           },
-          headerTintColor: colors.textPrimary,
+          headerTintColor: palette.text,
           headerTitleStyle: {
-            color: colors.textPrimary,
+            color: palette.text,
           },
           contentStyle: {
-            backgroundColor: colors.bgPrimary,
+            backgroundColor: palette.bg,
           },
         }}
       >
         {/* Main screens (Home, Settings) */}
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="(tabs)"
+          options={{
+            animationTypeForReplace: 'pop',
+          }}
+        />
 
         {/* Inner Work - animation is handled at the screen level */}
         <Stack.Screen name="inner-work" />
@@ -66,6 +73,7 @@ export default function AuthLayout() {
           name="settings"
           options={{
             animation: 'slide_from_right',
+            gestureEnabled: true,
           }}
         />
 
@@ -77,9 +85,15 @@ export default function AuthLayout() {
             presentation: 'modal',
             headerShown: true,
             title: 'New Session',
+            gestureEnabled: true,
           }}
         />
-        <Stack.Screen name="session/[id]" />
+        <Stack.Screen
+          name="session/[id]"
+          options={{
+            gestureEnabled: true,
+          }}
+        />
 
         {/* Person detail */}
         <Stack.Screen
@@ -87,6 +101,7 @@ export default function AuthLayout() {
           options={{
             headerShown: true,
             title: 'Person',
+            gestureEnabled: true,
           }}
         />
       </Stack>

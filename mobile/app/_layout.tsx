@@ -127,7 +127,7 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
             <SessionDrawerProvider>
               <ToastProvider>
                 {includeMixpanel && <MixpanelInitializer />}
-                <Stack screenOptions={{ headerShown: false }}>
+                <Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
                   <Stack.Screen name="(public)" />
                   <Stack.Screen name="(auth)" />
                   <Stack.Screen name="+not-found" options={{ headerShown: true }} />

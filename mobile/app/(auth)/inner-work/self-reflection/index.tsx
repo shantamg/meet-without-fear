@@ -18,7 +18,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { useInnerThoughtsSessionsInfinite, useCreateInnerThoughtsSession, useArchiveInnerThoughtsSession } from '@/src/hooks';
 import { ScreenHeader } from '@/src/components';
 import { createStyles } from '@/src/theme/styled';
-import { colors } from '@/src/theme';
+import { colors, useAppAppearance } from '@/src/theme';
 import { InnerWorkSessionSummaryDTO } from '@meet-without-fear/shared';
 
 // Animation types for delete
@@ -49,6 +49,7 @@ function formatTimeAgo(dateStr: string): string {
 
 export default function SelfReflectionListScreen() {
   const styles = useStyles();
+  const { palette } = useAppAppearance();
   const router = useRouter();
   const {
     data,
@@ -82,10 +83,10 @@ export default function SelfReflectionListScreen() {
     if (!isFetchingNextPage) return null;
     return (
       <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color={colors.accent} />
+        <ActivityIndicator size="small" color={palette.accent} />
       </View>
     );
-  }, [isFetchingNextPage, styles.footerLoader]);
+  }, [isFetchingNextPage, palette.accent, styles.footerLoader]);
 
   const handleStartNew = async () => {
     try {
@@ -266,7 +267,10 @@ export default function SelfReflectionListScreen() {
           <Pressable
             style={({ pressed }) => [
               styles.sessionCard,
-              pressed && styles.sessionCardPressed,
+              {
+                backgroundColor: pressed ? palette.chipBg : palette.bgElev,
+                borderColor: palette.border,
+              },
             ]}
             onPress={() => handleOpenSession(item.id)}
             disabled={isDeleting}
@@ -275,19 +279,19 @@ export default function SelfReflectionListScreen() {
           >
             <View style={styles.sessionContent}>
               <View style={styles.sessionTitleRow}>
-                <Text style={styles.sessionTitle} numberOfLines={1}>
+                <Text style={[styles.sessionTitle, { color: palette.text }]} numberOfLines={1}>
                   {displayTitle}
                 </Text>
                 {isLinked && (
-                  <Link color={colors.accent} size={14} />
+                  <Link color={palette.accent} size={14} />
                 )}
               </View>
-              <Text style={styles.sessionSummary} numberOfLines={2}>
+              <Text style={[styles.sessionSummary, { color: palette.textMuted }]} numberOfLines={2}>
                 {displaySummary}
               </Text>
-              <Text style={styles.sessionTime}>{timeAgo}</Text>
+              <Text style={[styles.sessionTime, { color: palette.textFaint }]}>{timeAgo}</Text>
             </View>
-            <ChevronRight color="#666" size={20} />
+            <ChevronRight color={palette.textFaint} size={20} />
           </Pressable>
         </Swipeable>
       </Animated.View>
@@ -298,9 +302,9 @@ export default function SelfReflectionListScreen() {
   // Header configuration
   const headerConfig = {
     title: 'Self-Reflection',
-    titleIcon: <MessageCircle color={colors.accent} size={18} />,
+    titleIcon: <MessageCircle color={palette.accent} size={18} />,
     rightAction: {
-      icon: <Plus color={colors.textPrimary} size={24} />,
+      icon: <Plus color={palette.text} size={24} />,
       onPress: handleStartNew,
       loading: createSession.isPending,
       accessibilityLabel: 'Start new self-reflection session',
@@ -309,25 +313,25 @@ export default function SelfReflectionListScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top', 'bottom']}>
         <ScreenHeader {...headerConfig} />
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={styles.loadingText}>Loading...</Text>
+          <ActivityIndicator size="large" color={palette.accent} />
+          <Text style={[styles.loadingText, { color: palette.textMuted }]}>Loading...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top', 'bottom']}>
       <ScreenHeader {...headerConfig} />
 
       {sessions.length === 0 && !isLoading ? (
         <View style={styles.emptyContainer}>
-          <MessageCircle color="#666" size={48} />
-          <Text style={styles.emptyTitle}>No sessions yet</Text>
-          <Text style={styles.emptySubtitle}>
+          <MessageCircle color={palette.textFaint} size={48} />
+          <Text style={[styles.emptyTitle, { color: palette.text }]}>No sessions yet</Text>
+          <Text style={[styles.emptySubtitle, { color: palette.textMuted }]}>
             Start a session to explore what's on your mind
           </Text>
         </View>
@@ -381,6 +385,7 @@ const useStyles = () =>
       backgroundColor: t.colors.bgSecondary,
       borderRadius: t.radius.lg,
       padding: t.spacing.lg,
+      borderWidth: 1,
     },
     sessionCardPressed: {
       backgroundColor: t.colors.bgTertiary,
