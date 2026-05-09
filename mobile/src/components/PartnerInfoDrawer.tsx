@@ -1,6 +1,5 @@
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X } from 'lucide-react-native';
 
 import { colors } from '@/src/theme';
 
@@ -65,24 +64,12 @@ export function PartnerInfoDrawer({
         />
         <SafeAreaView style={styles.drawer} edges={['bottom']}>
           <View style={styles.handle} />
-          <View style={styles.header}>
-            <View style={styles.titleBlock}>
-              <Text style={styles.name} numberOfLines={1}>
-                {name}
-              </Text>
-              <View style={styles.statusRow}>
-                <View style={[styles.statusDot, isOnline && styles.statusDotOnline]} />
-                <Text style={[styles.statusText, isOnline && styles.statusTextOnline]}>{statusText}</Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={onClose}
-              accessibilityRole="button"
-              accessibilityLabel="Close person details"
-            >
-              <X size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+          <Text style={styles.name} numberOfLines={1}>
+            {name}
+          </Text>
+          <View style={styles.statusRow}>
+            <View style={[styles.statusDot, isOnline && styles.statusDotOnline]} />
+            <Text style={[styles.statusText, isOnline && styles.statusTextOnline]}>{statusText}</Text>
           </View>
 
           <View style={styles.section}>
@@ -111,7 +98,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   drawer: {
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: colors.bgSecondary,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     borderWidth: 1,
@@ -128,14 +115,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgTertiary,
     marginTop: 10,
     marginBottom: 18,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 14,
-  },
-  titleBlock: {
-    flex: 1,
   },
   name: {
     color: colors.textPrimary,
@@ -167,14 +146,6 @@ const styles = StyleSheet.create({
   statusTextOnline: {
     color: colors.success,
   },
-  closeButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bgSecondary,
-  },
   section: {
     marginTop: 24,
   },
@@ -188,7 +159,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: colors.bgPrimary,
     padding: 16,
   },
   topicLabel: {

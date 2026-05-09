@@ -423,6 +423,7 @@ export function useUnifiedSession(
     sendMessage: streamingSendMessage,
     isSending,
     isStreaming,
+    failedMessageContent,
   } = useStreamingMessage({
     onMetadata: handleStreamMetadata,
     onError: handleStreamError,
@@ -1212,6 +1213,7 @@ export function useUnifiedSession(
     inlineCards,
     isSending,
     isStreaming,
+    failedMessageContent,
     isSigningCompact,
     isConfirmingFeelHeard,
     isConfirmingInvitation,

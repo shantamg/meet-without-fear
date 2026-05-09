@@ -20,6 +20,7 @@ import { ChatIndicator, ChatIndicatorType } from './ChatIndicator';
 import { EmpathyValidationCard } from './EmpathyValidationCard';
 import { createStyles } from '../theme/styled';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
+import { isPreRegisteredAnimatedId } from '../utils/animationBridge';
 
 // ============================================================================
 // Types
@@ -153,6 +154,8 @@ interface ChatInterfaceProps {
   partnerName?: string;
   /** Optional voice press handler -- passed through to ChatInput; renders mic button when provided */
   onVoicePress?: () => void;
+  /** Content of a failed message to restore to the input field */
+  failedMessage?: string | null;
   /** ID of the last chat item the user has seen - used to show "New messages" separator */
   lastSeenChatItemId?: string | null;
   /** Server-backed timestamp from before this screen marked the session viewed. */
@@ -231,6 +234,7 @@ export function ChatInterface({
   onValidateAccurate,
   onValidateNotQuite,
   onVoicePress,
+  failedMessage,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -461,6 +465,7 @@ export function ChatInterface({
     if (isIndicator(item) || isValidationCard(item) || isCustomEmptyState(item)) return false;
     if (animatedItemIdsRef.current.has(item.id)) return false;
     if (seenAnimatedItemIdsRef.current.has(item.id)) return false;
+    if (isPreRegisteredAnimatedId(item.id)) return false;
     if (isAtOrBeforeSeenBoundary(item, index)) return false;
 
     if (isCustomCard(item)) {
@@ -867,6 +872,7 @@ export function ChatInterface({
             onSend={onSendMessage}
             disabled={disabled || isInputDisabled || isLoading}
             onVoicePress={onVoicePress}
+            failedMessage={failedMessage}
           />
         )}
         {renderAboveInput?.()}
