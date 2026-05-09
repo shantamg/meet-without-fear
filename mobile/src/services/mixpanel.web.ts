@@ -69,17 +69,25 @@ export const identify = (userId: string): void => {
   }
 };
 
-export const alias = (aliasId: string): void => {
+export const alias = async (aliasId: string): Promise<boolean> => {
   assertInit();
+  if (typeof aliasId !== 'string' || aliasId.trim().length === 0) {
+    console.warn('[Mixpanel Web] alias() skipped: aliasId is not a valid string');
+    return false;
+  }
+
   if (!hasToken) {
     log('Alias:', aliasId);
-    return;
+    return true;
   }
+
   try {
     mixpanel.alias(aliasId);
     console.log('[Mixpanel Web] alias() completed for user:', aliasId);
+    return true;
   } catch (error) {
     console.error('[Mixpanel Web] alias() failed:', error);
+    return false;
   }
 };
 
