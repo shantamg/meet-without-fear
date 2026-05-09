@@ -34,23 +34,29 @@ const instrumentSerif = localFont({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://meetwithoutfear.com"),
   title: "Meet Without Fear",
   description: "Transform difficult conversations into opportunities for connection and understanding.",
   keywords: ["communication", "relationships", "conflict resolution", "therapy", "couples"],
   authors: [{ name: "Meet Without Fear" }],
   icons: {
-    icon: "/favicon.png",
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.png", type: "image/png" },
+    ],
     apple: "/favicon.png",
   },
   openGraph: {
     title: "Meet Without Fear",
     description: "Transform difficult conversations into opportunities for connection and understanding.",
     type: "website",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Meet Without Fear" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Meet Without Fear",
     description: "Transform difficult conversations into opportunities for connection and understanding.",
+    images: ["/og-image.png"],
   },
 };
 

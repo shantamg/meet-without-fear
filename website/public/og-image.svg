@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#f6f3ec"/>
+
+  <!-- Logo speech bubbles centered -->
+  <g transform="translate(370, 120) scale(1.7)">
+    <!-- Right ellipse bottom half with gap for tail (back layer) -->
+    <path d="M 105,70 A 60,45 0 0,0 185,112"
+          fill="none"
+          stroke="#b7742f"
+          stroke-width="10"
+          stroke-linecap="round" />
+    <path d="M 207,102 A 60,45 0 0,0 225,70"
+          fill="none"
+          stroke="#b7742f"
+          stroke-width="10"
+          stroke-linecap="round" />
+
+    <!-- Right speech bubble tail (back layer) -->
+    <path d="M 207,102 Q 220,118 215,128 Q 198,115 185,112"
+          fill="none"
+          stroke="#b7742f"
+          stroke-width="10"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+
+    <!-- Left ellipse with gap for tail (middle layer) -->
+    <path d="M 53,102 A 60,45 0 1,1 75,112"
+          fill="none"
+          stroke="#517884"
+          stroke-width="10"
+          stroke-linecap="round" />
+
+    <!-- Speech bubble tail connecting the gap -->
+    <path d="M 53,102 Q 40,118 45,128 Q 62,115 75,112"
+          fill="none"
+          stroke="#517884"
+          stroke-width="10"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+
+    <!-- Right ellipse top half (front layer) -->
+    <path d="M 105,70 A 60,45 0 0,1 225,70"
+          fill="none"
+          stroke="#b7742f"
+          stroke-width="10" />
+  </g>
+
+  <!-- Title text -->
+  <text x="600" y="430" text-anchor="middle"
+        font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"
+        font-size="56" font-weight="700" fill="#1a1815">
+    Meet Without Fear
+  </text>
+
+  <!-- Tagline -->
+  <text x="600" y="490" text-anchor="middle"
+        font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"
+        font-size="24" fill="#6c6961">
+    Transform difficult conversations into connection
+  </text>
+
+  <!-- Gradient accent bar -->
+  <defs>
+    <linearGradient id="brand-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#517884"/>
+      <stop offset="100%" stop-color="#b7742f"/>
+    </linearGradient>
+  </defs>
+  <rect x="460" y="520" width="280" height="4" rx="2" fill="url(#brand-gradient)"/>
+</svg>
