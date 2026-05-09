@@ -41,9 +41,7 @@ export function ShareTopicPanel({
   return (
     <GuidedActionPanel
       tone={action === 'OFFER_SHARING' ? 'share' : 'review'}
-      eyebrow="Share suggestion"
-      title={`Help ${partnerName} understand you better`}
-      subtitle="Review the suggested context before deciding whether to share it."
+      title={`Share this with ${partnerName}?`}
       primaryAction={{ label: 'Review', onPress }}
       testID="share-topic-panel"
     />

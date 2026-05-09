@@ -122,13 +122,16 @@ export function SessionChatHeader({
   // Center content - always partner name + status (whether tabs or not)
   const centerContent = (
     <View style={styles.centerSection}>
-      <Text
-        style={styles.partnerName}
-        numberOfLines={1}
-        testID={`${testID}-partner-name`}
-      >
-        {displayName}
-      </Text>
+      <View style={styles.nameRow}>
+        {!hideOnlineStatus && <StatusDot isOnline={isOnline} />}
+        <Text
+          style={styles.partnerName}
+          numberOfLines={1}
+          testID={`${testID}-partner-name`}
+        >
+          {displayName}
+        </Text>
+      </View>
       {stageName ? (
         <Text
           style={styles.stageNameText}
@@ -302,6 +305,15 @@ const useStyles = () =>
       fontWeight: '600',
       color: t.colors.textPrimary,
       textAlign: 'center',
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    nameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      maxWidth: '100%',
     },
     statusRow: {
       flexDirection: 'row',

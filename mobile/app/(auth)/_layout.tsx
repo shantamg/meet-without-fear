@@ -5,6 +5,9 @@ import { useUserSessionUpdates } from '@/src/hooks/useRealtime';
 import { isE2EMode } from '@/src/providers/E2EAuthProvider';
 import { useOTAUpdate } from '@/src/hooks/useOTAUpdate';
 import { UpdateBanner } from '@/src/components/UpdateBanner';
+import { useNotifications } from '@/src/hooks/useNotifications';
+import { BiometricLockProvider } from '@/src/contexts/BiometricLockContext';
+import { BiometricLockOverlay } from '@/src/components/BiometricLockOverlay';
 
 /**
  * Auth group layout
@@ -19,6 +22,7 @@ export default function AuthLayout() {
   // This is placed here (not in individual screens) to ensure only ONE Ably connection
   // Skip in E2E mode to avoid token/capability cache issues with the user notification channel
   useUserSessionUpdates({ enabled: !isE2EMode() });
+  useNotifications();
 
   // OTA update banner
   const { showUpdateBanner, applyUpdate, dismissUpdate } = useOTAUpdate();
@@ -35,7 +39,7 @@ export default function AuthLayout() {
 
   // Render the app - backend profile sync happens in useAuth hook
   return (
-    <>
+    <BiometricLockProvider>
       <Stack
         screenOptions={{
           headerShown: false,
@@ -88,6 +92,7 @@ export default function AuthLayout() {
       {showUpdateBanner && (
         <UpdateBanner onApply={applyUpdate} onDismiss={dismissUpdate} />
       )}
-    </>
+      <BiometricLockOverlay />
+    </BiometricLockProvider>
   );
 }

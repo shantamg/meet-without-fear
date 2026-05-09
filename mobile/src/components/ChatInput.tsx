@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, Text, Platform, type TextInput as TextInputType } from 'react-native';
 import { Send, Mic } from 'lucide-react-native';
 import { createStyles } from '../theme/styled';
@@ -16,6 +16,8 @@ interface ChatInputProps {
   showCharacterCount?: boolean;
   /** Optional voice press handler -- when provided, renders a mic button */
   onVoicePress?: () => void;
+  /** Content of a failed message to restore to the input field */
+  failedMessage?: string | null;
 }
 
 // ============================================================================
@@ -36,12 +38,21 @@ export function ChatInput({
   maxLength = DEFAULT_MAX_LENGTH,
   showCharacterCount = false,
   onVoicePress,
+  failedMessage,
 }: ChatInputProps) {
   const styles = useStyles();
   const [input, setInput] = useState('');
   const inputRef = useRef<TextInputType>(null);
   // Flag to ignore onChangeText events right after sending (prevents autocorrect race condition)
   const justSentRef = useRef(false);
+
+  // Restore text from a failed send attempt
+  useEffect(() => {
+    if (failedMessage && input.length === 0) {
+      justSentRef.current = false;
+      setInput(failedMessage);
+    }
+  }, [failedMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const canSend = input.trim().length > 0 && !disabled;
   const characterRatio = input.length / maxLength;

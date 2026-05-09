@@ -54,6 +54,7 @@ import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDr
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
 import { ActivityDrawer } from '../components/ActivityDrawer';
+import { PartnerInfoDrawer } from '../components/PartnerInfoDrawer';
 import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
 import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
@@ -151,6 +152,45 @@ const STAGE_FRIENDLY_NAMES: Record<number, string> = {
   [Stage.STRATEGIC_REPAIR]: 'What Comes Next',
   [Stage.INFORMED_EMPATHY]: 'Deeper Understanding',
 };
+
+function getPartnerStageDescription(
+  name: string,
+  progress: { stage?: number; status?: string } | null | undefined,
+  sessionStatus?: SessionStatus
+): string {
+  if (sessionStatus === SessionStatus.RESOLVED) {
+    return `${name} has completed this session with you.`;
+  }
+
+  const stageName = progress?.stage !== undefined
+    ? STAGE_FRIENDLY_NAMES[progress.stage]
+    : 'this step';
+
+  if (progress?.status === 'COMPLETED' || progress?.status === 'GATE_PENDING') {
+    return `${name} has finished ${stageName}.`;
+  }
+
+  if (progress?.status === 'NOT_STARTED') {
+    return `${name} is ready to begin ${stageName} when they are.`;
+  }
+
+  switch (progress?.stage) {
+    case Stage.ONBOARDING:
+      return `${name} is now getting ready to begin the session.`;
+    case Stage.WITNESS:
+      return `${name} is now sharing their story.`;
+    case Stage.PERSPECTIVE_STRETCH:
+      return `${name} is now working to understand your experience more clearly.`;
+    case Stage.NEED_MAPPING:
+      return `${name} is now exploring what matters most to them.`;
+    case Stage.STRATEGIC_REPAIR:
+      return `${name} is now considering what could come next.`;
+    case Stage.INFORMED_EMPATHY:
+      return `${name} is now working through deeper understanding.`;
+    default:
+      return `${name} is moving through the session with you.`;
+  }
+}
 
 /** Stages that should NOT generate chapter markers */
 const SUPPRESSED_CHAPTER_STAGES = new Set([Stage.ONBOARDING, Stage.INFORMED_EMPATHY]);
@@ -494,6 +534,7 @@ export function UnifiedSessionScreen({
     messages,
     inlineCards,
     isSending,
+    failedMessageContent,
     isSigningCompact,
     isConfirmingFeelHeard,
     isConfirmingInvitation,
@@ -1187,6 +1228,7 @@ export function UnifiedSessionScreen({
   // Activity Menu Modal
   // -------------------------------------------------------------------------
   const [showActivityMenu, setShowActivityMenu] = useState(false);
+  const [showPartnerInfo, setShowPartnerInfo] = useState(false);
   const topicFrame = invitation && 'topicFrame' in invitation
     ? (invitation.topicFrame as string | null)
     : null;
@@ -1200,6 +1242,24 @@ export function UnifiedSessionScreen({
   // for the current proposed value. As soon as the AI emits a new <draft>
   // (topicFrame changes), the latch resets and the panel reappears.
   const topicProposalDismissed = false;
+  const partnerInfoName = partnerName || 'Meet Without Fear';
+  const partnerStageDescription = getPartnerStageDescription(
+    partnerInfoName,
+    partnerProgress,
+    session?.status
+  );
+  const partnerLastViewedAt = (session as { partnerLastViewedAt?: string | null } | undefined)?.partnerLastViewedAt ?? null;
+  const partnerInfoDrawer = (
+    <PartnerInfoDrawer
+      visible={showPartnerInfo}
+      name={partnerInfoName}
+      isOnline={partnerOnline}
+      lastSeenAt={partnerLastViewedAt}
+      stageDescription={partnerStageDescription}
+      topic={topicFrame}
+      onClose={() => setShowPartnerInfo(false)}
+    />
+  );
 
   const { mutate: confirmTopicFrame, isPending: isConfirmingTopicFrame } = useConfirmTopicFrame({
     onError: (error) => {
@@ -3022,9 +3082,11 @@ export function UnifiedSessionScreen({
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
             onBackPress={onNavigateBack}
+            onPress={() => setShowPartnerInfo(true)}
             stageName="Closed"
             testID="session-chat-header"
           />
+          {partnerInfoDrawer}
           <View style={styles.content}>
             <Stage4RedesignPanel
               state={stage4State}
@@ -3056,9 +3118,11 @@ export function UnifiedSessionScreen({
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
           onBackPress={onNavigateBack}
+          onPress={() => setShowPartnerInfo(true)}
           stageName="Closed"
           testID="session-chat-header"
         />
+        {partnerInfoDrawer}
         <SessionCompletionScreen
           partnerName={partnerName}
           agreements={agreements.map((a) => ({
@@ -3093,9 +3157,11 @@ export function UnifiedSessionScreen({
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
             onBackPress={onNavigateBack}
+            onPress={() => setShowPartnerInfo(true)}
             stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
             testID="session-chat-header"
           />
+          {partnerInfoDrawer}
           <AgreementCard
             agreement={{
               experiment: unconfirmedAgreement.description,
@@ -3128,9 +3194,11 @@ export function UnifiedSessionScreen({
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
             onBackPress={onNavigateBack}
+            onPress={() => setShowPartnerInfo(true)}
             stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
             testID="session-chat-header"
           />
+          {partnerInfoDrawer}
           <WaitingRoom
             message={`You've proposed the agreement. Waiting for ${partnerName || 'your partner'} to confirm.`}
             partnerName={partnerName || undefined}
@@ -3157,9 +3225,11 @@ export function UnifiedSessionScreen({
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
           onBackPress={onNavigateBack}
+          onPress={() => setShowPartnerInfo(true)}
           stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
           testID="session-chat-header"
         />
+        {partnerInfoDrawer}
         <StrategyRanking
           strategies={strategies.map((s) => ({
             id: s.id,
@@ -3192,9 +3262,11 @@ export function UnifiedSessionScreen({
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
           onBackPress={onNavigateBack}
+          onPress={() => setShowPartnerInfo(true)}
           stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
           testID="session-chat-header"
         />
+        {partnerInfoDrawer}
         {waitingForRankingReveal ? (
           <WaitingRoom
             message="Waiting for your partner to submit their ranking"
@@ -3251,9 +3323,11 @@ export function UnifiedSessionScreen({
               }
             : undefined
         }
+        onPress={() => setShowPartnerInfo(true)}
         stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
         testID="session-chat-header"
       />
+      {partnerInfoDrawer}
       {/* Chat content - Share is now a separate route */}
       {(
       <View style={styles.content}>
@@ -3262,6 +3336,7 @@ export function UnifiedSessionScreen({
           messages={displayMessages}
           indicators={indicators}
           onSendMessage={sendMessageWithTracking}
+          failedMessage={failedMessageContent}
           // Cache-First: Ghost dots are derived from last message role in ChatInterface
           // isSending is still needed for brief moment during API call before optimistic message appears
           // isFetchingInitialMessage shows dots while fetching first AI message
