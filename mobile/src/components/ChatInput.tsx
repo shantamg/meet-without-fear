@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, Text, Platform, type TextInput as TextInputType } from 'react-native';
-import { Send, Mic } from 'lucide-react-native';
+import { ArrowRight, Mic } from 'lucide-react-native';
 import { createStyles } from '../theme/styled';
-import { theme } from '../theme';
+import { designFonts, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -41,6 +41,7 @@ export function ChatInput({
   failedMessage,
 }: ChatInputProps) {
   const styles = useStyles();
+  const { palette } = useAppAppearance();
   const [input, setInput] = useState('');
   const inputRef = useRef<TextInputType>(null);
   // Flag to ignore onChangeText events right after sending (prevents autocorrect race condition)
@@ -103,7 +104,7 @@ export function ChatInput({
           onChangeText={handleChangeText}
           onKeyPress={handleKeyPress}
           placeholder={placeholder}
-          placeholderTextColor={theme.colors.textMuted}
+          placeholderTextColor={palette.textFaint}
           multiline
           maxLength={maxLength}
           editable={!disabled}
@@ -123,7 +124,7 @@ export function ChatInput({
           accessibilityLabel="Voice input"
           testID="voice-input-button"
         >
-          <Mic color={theme.colors.textMuted} size={20} />
+          <Mic color={palette.textMuted} size={20} />
         </TouchableOpacity>
       )}
       <TouchableOpacity
@@ -133,7 +134,7 @@ export function ChatInput({
         disabled={!canSend}
         activeOpacity={0.7}
       >
-        <Send color={canSend ? theme.colors.textPrimary : theme.colors.textMuted} size={20} />
+        <ArrowRight color={canSend ? palette.bg : palette.textFaint} size={18} />
       </TouchableOpacity>
     </View>
   );
@@ -143,42 +144,46 @@ export function ChatInput({
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+  return createStyles((t) => ({
     container: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      padding: t.spacing.lg,
+      paddingHorizontal: 14,
+      paddingTop: 12,
+      paddingBottom: 18,
       borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-      backgroundColor: t.colors.bgSecondary,
+      borderTopColor: palette.border,
+      backgroundColor: palette.bg,
     },
     inputWrapper: {
       flex: 1,
       position: 'relative',
-      backgroundColor: t.colors.bgTertiary,
-      borderRadius: 20,
+      backgroundColor: palette.bgElev,
+      borderRadius: 999,
       borderWidth: 1,
-      borderColor: t.colors.border,
+      borderColor: palette.border,
     },
     input: {
       paddingHorizontal: t.spacing.lg,
       paddingTop: 12,
       paddingBottom: 12,
-      fontSize: t.typography.fontSize.lg,
+      fontSize: 14,
       maxHeight: 140,
-      color: t.colors.textPrimary,
+      color: palette.text,
       backgroundColor: 'transparent',
+      fontFamily: designFonts.sans,
     },
     characterCount: {
       position: 'absolute',
       right: t.spacing.md,
       bottom: -16,
       fontSize: t.typography.fontSize.xs,
-      color: t.colors.textMuted,
+      color: palette.textMuted,
     },
     characterCountWarning: {
-      color: t.colors.warning,
+      color: palette.accent,
     },
     micButton: {
       width: 40,
@@ -193,13 +198,13 @@ const useStyles = () =>
       width: 40,
       height: 40,
       marginLeft: t.spacing.sm,
-      backgroundColor: t.colors.accent,
+      backgroundColor: palette.accent,
       borderRadius: 20,
       alignItems: 'center',
       justifyContent: 'center',
     },
     sendButtonDisabled: {
-      opacity: 0.5,
-      backgroundColor: t.colors.bgTertiary,
+      backgroundColor: palette.chipBg,
     },
   }));
+};

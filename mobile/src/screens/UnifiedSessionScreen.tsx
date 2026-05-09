@@ -93,7 +93,7 @@ import {
 } from '../utils/realtimeInvalidation';
 import { useToast } from '../contexts/ToastContext';
 import { createStyles } from '../theme/styled';
-import { appWidthStyle } from '../theme';
+import { appWidthStyle, useAppAppearance } from '../theme';
 import { WaitingBanner } from '../components/WaitingBanner';
 import {
   trackInvitationSent,
@@ -113,6 +113,7 @@ import { shouldShowSessionEntryMoodCheck } from '../utils/sessionEntryMoodCheck'
 interface UnifiedSessionScreenProps {
   sessionId: string;
   initialTendingEntryId?: string | null;
+  auditFixture?: string | null;
   onNavigateBack?: () => void;
   onStageComplete?: (stage: Stage) => void;
 }
@@ -502,6 +503,7 @@ function MeasuredAnimatedPanel({
 export function UnifiedSessionScreen({
   sessionId,
   initialTendingEntryId = null,
+  auditFixture = null,
   onNavigateBack,
   onStageComplete,
 }: UnifiedSessionScreenProps) {
@@ -1232,6 +1234,7 @@ export function UnifiedSessionScreen({
   const [showFeedbackCoachChat, setShowFeedbackCoachChat] = useState(false);
   const [feedbackCoachRoughFeedback, setFeedbackCoachRoughFeedback] = useState('');
   const feedbackCoachInitializedRef = useRef(false);
+  const appliedAuditFixtureRef = useRef<string | null>(null);
   const [isAwaitingInvitationFollowUp, setIsAwaitingInvitationFollowUp] = useState(false);
 
   const hasInvitationTransitionResponse = useMemo(() => {
@@ -1360,6 +1363,47 @@ export function UnifiedSessionScreen({
   );
   const shouldUseRevealedNeeds =
     needsDrawerMode !== 'needs' && (needsComparisonData?.myNeeds?.length ?? 0) > 0;
+
+  useEffect(() => {
+    if (!auditFixture || appliedAuditFixtureRef.current === auditFixture) return;
+
+    if (
+      auditFixture === 'empathy-drawer' &&
+      (liveProposedEmpathyStatement || empathyDraftData?.draft?.content || empathyStatusData?.myAttempt?.content)
+    ) {
+      setShowEmpathyDrawer(true);
+      appliedAuditFixtureRef.current = auditFixture;
+      return;
+    }
+
+    if (auditFixture === 'accuracy-feedback' && partnerEmpathyData?.attempt?.content) {
+      setShowAccuracyFeedbackDrawer(true);
+      appliedAuditFixtureRef.current = auditFixture;
+      return;
+    }
+
+    if (auditFixture === 'guided-draft' && partnerEmpathyData?.attempt?.content) {
+      setFeedbackCoachRoughFeedback('I want to say what missed the mark without escalating.');
+      feedbackCoachInitializedRef.current = false;
+      setShowFeedbackCoachChat(true);
+      appliedAuditFixtureRef.current = auditFixture;
+      return;
+    }
+
+    if (auditFixture === 'needs-drawer' && needs && needs.length > 0) {
+      setNeedsDrawerMode(allNeedsConfirmed ? 'reveal' : 'needs');
+      setShowNeedsDrawer(true);
+      appliedAuditFixtureRef.current = auditFixture;
+    }
+  }, [
+    allNeedsConfirmed,
+    auditFixture,
+    empathyDraftData?.draft?.content,
+    empathyStatusData?.myAttempt?.content,
+    liveProposedEmpathyStatement,
+    needs,
+    partnerEmpathyData?.attempt?.content,
+  ]);
 
   const stage4Query = useStage4State(sessionId, {
     enabled:
@@ -3708,7 +3752,7 @@ export function UnifiedSessionScreen({
           pointing at the book icon. */}
       <Modal
         visible={
-          shouldShowInvitationPanel &&
+          (shouldShowInvitationPanel || auditFixture === 'invitation-ready') &&
           !!topicFrame &&
           !!invitationUrl &&
           !partnerAccepted
@@ -3874,11 +3918,12 @@ export function UnifiedSessionScreen({
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+  return createStyles((t) => ({
     container: {
       flex: 1,
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
       ...appWidthStyle,
     },
     content: {
@@ -3888,25 +3933,25 @@ const useStyles = () =>
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
       padding: 20,
     },
     loadingText: {
       marginTop: 12,
       fontSize: 16,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
     },
     accentColor: {
-      color: t.colors.accent,
+      color: palette.accent,
     },
 
     // Invitation Draft
     invitationDraftContainer: {
       paddingHorizontal: t.spacing.lg,
       paddingVertical: t.spacing.md,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bg,
       borderTopWidth: 1,
-      borderTopColor: t.colors.border,
+      borderTopColor: palette.border,
     },
     invitationDraftMessage: {
       fontSize: t.typography.fontSize.md,
@@ -3991,7 +4036,7 @@ const useStyles = () =>
     // Invitation Ready Modal (replaces inline 'invitation' panel)
     invitationModalBackdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      backgroundColor: palette.scrim,
       justifyContent: 'center' as const,
       alignItems: 'center' as const,
       paddingHorizontal: t.spacing.lg,
@@ -3999,10 +4044,12 @@ const useStyles = () =>
     invitationModalCard: {
       width: '100%' as const,
       maxWidth: 420,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderRadius: t.radius.lg,
       padding: t.spacing.lg,
       paddingTop: t.spacing.xl + t.spacing.lg,
+      borderWidth: 1,
+      borderColor: palette.border,
     },
     invitationModalCloseButton: {
       position: 'absolute' as const,
@@ -4015,14 +4062,14 @@ const useStyles = () =>
       zIndex: 1,
     },
     invitationModalCloseText: {
-      color: t.colors.textPrimary,
+      color: palette.text,
       fontSize: 24,
       lineHeight: 24,
       fontWeight: '400' as const,
     },
     invitationModalText: {
       fontSize: t.typography.fontSize.md,
-      color: t.colors.textPrimary,
+      color: palette.text,
       lineHeight: 22,
       marginBottom: t.spacing.lg,
     },
@@ -4039,20 +4086,20 @@ const useStyles = () =>
       paddingHorizontal: t.spacing.md,
     },
     invitationModalButtonPrimary: {
-      backgroundColor: t.colors.accent,
+      backgroundColor: palette.accent,
     },
     invitationModalButtonSecondary: {
       backgroundColor: 'transparent' as const,
       borderWidth: 1,
-      borderColor: t.colors.accent,
+      borderColor: palette.accent,
     },
     invitationModalButtonPrimaryText: {
-      color: t.colors.textOnAccent,
+      color: '#0d0f12',
       fontSize: t.typography.fontSize.md,
       fontWeight: '600' as const,
     },
     invitationModalButtonSecondaryText: {
-      color: t.colors.accent,
+      color: palette.accentText,
       fontSize: t.typography.fontSize.md,
       fontWeight: '600' as const,
     },
@@ -4154,25 +4201,27 @@ const useStyles = () =>
       paddingHorizontal: t.spacing.lg,
       paddingTop: t.spacing.sm,
       paddingBottom: t.spacing.md,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderTopWidth: 1,
-      borderTopColor: t.colors.border,
+      borderTopColor: palette.border,
     },
 
     // Inline Cards
     inlineCard: {
       margin: 16,
       padding: 16,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderRadius: 12,
+      borderWidth: 1,
+      borderColor: palette.border,
     },
     strategyPreviewCompactCard: {
       paddingVertical: 12,
       paddingHorizontal: 14,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: t.colors.border,
+      borderColor: palette.border,
     },
     strategyPreviewCompactBody: {
       flexDirection: 'row',
@@ -4195,7 +4244,7 @@ const useStyles = () =>
       paddingVertical: 8,
       paddingHorizontal: 12,
       borderRadius: 8,
-      backgroundColor: t.colors.brandBlue,
+      backgroundColor: palette.accent,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -4203,7 +4252,7 @@ const useStyles = () =>
       fontSize: 14,
       lineHeight: 18,
       fontWeight: '700',
-      color: t.colors.textOnAccent,
+      color: '#0d0f12',
       textAlign: 'center',
     },
     needsSummaryCard: {
@@ -4258,12 +4307,12 @@ const useStyles = () =>
       fontSize: 15,
       lineHeight: 20,
       fontWeight: '700',
-      color: t.colors.textPrimary,
+      color: palette.text,
     },
     needsSummaryCount: {
       fontSize: 13,
       lineHeight: 18,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
     },
     needsSummaryList: {
       gap: 8,
@@ -4301,12 +4350,12 @@ const useStyles = () =>
       paddingVertical: 8,
       paddingHorizontal: 12,
       borderRadius: 8,
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bgPane,
       borderWidth: 1,
-      borderColor: t.colors.border,
+      borderColor: palette.border,
       fontSize: 14,
       fontWeight: '700',
-      color: t.colors.brandBlue,
+      color: palette.success,
       overflow: 'hidden',
     },
     shareActions: {
@@ -4316,29 +4365,29 @@ const useStyles = () =>
     },
     primaryButton: {
       flex: 1,
-      backgroundColor: t.colors.brandBlue,
+      backgroundColor: palette.accent,
       paddingVertical: t.spacing.sm,
       borderRadius: t.radius.lg,
       alignItems: 'center',
       justifyContent: 'center',
     },
     primaryButtonText: {
-      color: 'white',
+      color: '#0d0f12',
       fontWeight: '700',
       fontSize: t.typography.fontSize.md,
     },
     secondaryButton: {
       flex: 1,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgPane,
       paddingVertical: t.spacing.sm,
       borderRadius: t.radius.lg,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1,
-      borderColor: t.colors.border,
+      borderColor: palette.border,
     },
     secondaryButtonText: {
-      color: t.colors.textPrimary,
+      color: palette.text,
       fontWeight: '600',
       fontSize: t.typography.fontSize.md,
     },
@@ -4384,12 +4433,12 @@ const useStyles = () =>
     cardTitle: {
       fontSize: 18,
       fontWeight: '600',
-      color: t.colors.textPrimary,
+      color: palette.text,
       marginBottom: 8,
     },
     cardSubtitle: {
       fontSize: 14,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       marginBottom: 16,
     },
 
@@ -4528,7 +4577,8 @@ const useStyles = () =>
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
+      alignItems: 'center',
     },
     closeOverlay: {
       position: 'absolute',
@@ -4546,5 +4596,6 @@ const useStyles = () =>
       fontWeight: '600',
     },
   }));
+};
 
 export default UnifiedSessionScreen;

@@ -11,7 +11,7 @@
  */
 
 import { View, Text, TouchableOpacity, Pressable, StyleSheet, Modal } from 'react-native';
-import { colors } from '@/theme';
+import { designFonts, useAppAppearance } from '@/theme';
 
 export type SupportOption =
   | 'keep-sharing'
@@ -68,6 +68,9 @@ export function SupportOptionsModal({
   onSelectOption,
   onClose,
 }: SupportOptionsModalProps) {
+  const { palette } = useAppAppearance();
+  const styles = makeStyles(palette);
+
   return (
     <Modal
       visible={visible}
@@ -102,46 +105,51 @@ export function SupportOptionsModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: palette.scrim,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   modal: {
-    backgroundColor: colors.bgSecondary,
-    borderRadius: 16,
+    backgroundColor: palette.bgElev,
+    borderRadius: 12,
     padding: 20,
     width: '100%',
     maxWidth: 400,
+    borderWidth: 1,
+    borderColor: palette.borderStrong,
   },
   title: {
     fontSize: 16,
     lineHeight: 24,
-    color: colors.textPrimary,
+    color: palette.text,
     marginBottom: 16,
+    fontFamily: designFonts.sans,
   },
   optionsContainer: {
     gap: 8,
   },
   optionButton: {
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.bgPane,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     borderRadius: 8,
     padding: 12,
   },
   optionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
     marginBottom: 2,
+    fontFamily: designFonts.sans,
   },
   optionDescription: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: palette.textMuted,
+    fontFamily: designFonts.sans,
   },
 });
 

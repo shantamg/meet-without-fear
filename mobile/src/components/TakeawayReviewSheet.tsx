@@ -12,11 +12,12 @@
  * - Semi-transparent overlay that closes the sheet on tap
  */
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   Animated,
   FlatList,
+  StyleSheet,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
@@ -28,8 +29,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import type { TakeawayDTO } from '@meet-without-fear/shared';
 import { useTakeaways, useUpdateTakeaway, useDeleteTakeaway } from '../hooks/useDistillation';
 import { TakeawayRow } from './TakeawayRow';
-import { createStyles } from '../theme/styled';
-import { appWidthStyle, colors } from '../theme';
+import { appWidthStyle, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -46,7 +46,8 @@ interface TakeawayReviewSheetProps {
 // ============================================================================
 
 export function TakeawayReviewSheet({ sessionId, visible, onClose }: TakeawayReviewSheetProps) {
-  const styles = useStyles();
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
 
@@ -184,7 +185,7 @@ export function TakeawayReviewSheet({ sessionId, visible, onClose }: TakeawayRev
         {/* Content */}
         {isLoading ? (
           <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color={colors.accent} />
+            <ActivityIndicator size="large" color={palette.accent} />
           </View>
         ) : takeaways.length === 0 ? (
           <View style={styles.centerContainer}>
@@ -207,8 +208,11 @@ export function TakeawayReviewSheet({ sessionId, visible, onClose }: TakeawayRev
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+type Palette = ReturnType<typeof useAppAppearance>['palette'];
+
+const DELETE_TEXT = '#ffffff';
+
+const makeStyles = (palette: Palette) => StyleSheet.create({
     overlay: {
       position: 'absolute',
       top: 0,
@@ -223,7 +227,7 @@ const useStyles = () =>
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: '#000',
+      backgroundColor: palette.scrim,
     },
     sheet: {
       position: 'absolute',
@@ -232,7 +236,7 @@ const useStyles = () =>
       bottom: 0,
       // Take up most of the screen height
       height: '85%',
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
       borderTopLeftRadius: 16,
       borderTopRightRadius: 16,
       overflow: 'hidden',
@@ -240,11 +244,11 @@ const useStyles = () =>
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.md,
+      paddingHorizontal: 24,
+      paddingVertical: 16,
       borderBottomWidth: 1,
-      borderBottomColor: t.colors.border,
-      backgroundColor: t.colors.bgSecondary,
+      borderBottomColor: palette.borderStrong,
+      backgroundColor: palette.bgElev,
     },
     headerHandle: {
       // Visual drag handle (decorative)
@@ -254,24 +258,24 @@ const useStyles = () =>
       width: 40,
       height: 4,
       borderRadius: 2,
-      backgroundColor: t.colors.textMuted,
+      backgroundColor: palette.textFaint,
       marginLeft: -20,
     },
     headerTitle: {
       flex: 1,
       fontSize: 17,
       fontWeight: '600',
-      color: t.colors.textPrimary,
+      color: palette.text,
       textAlign: 'center',
     },
     doneButton: {
-      paddingVertical: t.spacing.sm,
-      paddingHorizontal: t.spacing.md,
+      paddingVertical: 8,
+      paddingHorizontal: 16,
     },
     doneButtonText: {
       fontSize: 15,
       fontWeight: '600',
-      color: t.colors.brandBlue,
+      color: palette.accentText,
     },
     listContent: {
       flexGrow: 1,
@@ -284,17 +288,17 @@ const useStyles = () =>
     },
     emptyText: {
       fontSize: 16,
-      color: t.colors.textMuted,
+      color: palette.textFaint,
     },
     deleteAction: {
-      backgroundColor: t.colors.error,
+      backgroundColor: palette.danger,
       justifyContent: 'center',
       alignItems: 'center',
       width: 80,
     },
     deleteActionText: {
-      color: '#fff',
+      color: DELETE_TEXT,
       fontSize: 14,
       fontWeight: '600',
     },
-  }));
+  });

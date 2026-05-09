@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { X, Lightbulb } from 'lucide-react-native';
-import { appWidthStyle, colors, modalPageStyle } from '@/theme';
+import { appWidthStyle, designFonts, modalPageStyle, useAppAppearance } from '@/theme';
 
 // ============================================================================
 // Types
@@ -56,9 +56,11 @@ export function ShareTopicDrawer({
   onDecline,
   onClose,
 }: ShareTopicDrawerProps) {
+  const { palette } = useAppAppearance();
+  const styles = makeStyles(palette);
   // Use orange for OFFER_SHARING (significant gaps), blue for OFFER_OPTIONAL (moderate gaps)
-  const iconColor = action === 'OFFER_SHARING' ? colors.warning : colors.brandBlue;
-  const actionTextColor = action === 'OFFER_SHARING' ? colors.warning : colors.brandBlue;
+  const iconColor = action === 'OFFER_SHARING' ? palette.warning : palette.info;
+  const actionTextColor = action === 'OFFER_SHARING' ? palette.warning : palette.info;
 
   // Action-specific suffix text
   const actionSuffix = action === 'OFFER_SHARING'
@@ -104,7 +106,7 @@ export function ShareTopicDrawer({
               accessibilityLabel="Close"
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
             >
-              <X color={colors.textSecondary} size={24} />
+              <X color={palette.textMuted} size={24} />
             </TouchableOpacity>
           </View>
 
@@ -170,13 +172,14 @@ export function ShareTopicDrawer({
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   modalPage: {
     ...modalPageStyle,
+    backgroundColor: palette.bg,
   },
   container: {
     flex: 1,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bg,
     ...appWidthStyle,
   },
   header: {
@@ -203,17 +206,18 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: '700',
-    color: colors.textPrimary,
+    color: palette.text,
     textAlign: 'center',
     marginBottom: 16,
+    fontFamily: designFonts.serif,
   },
   intro: {
     fontSize: 16,
     lineHeight: 24,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textAlign: 'center',
     marginBottom: 32,
+    fontFamily: designFonts.sans,
   },
   actionText: {
     fontWeight: '600',
@@ -222,33 +226,35 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1,
-    color: colors.textMuted,
+    color: palette.textFaint,
     textTransform: 'uppercase',
     marginBottom: 8,
+    fontFamily: designFonts.mono,
   },
   topicContainer: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 20,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
   },
   topicText: {
     fontSize: 16,
     lineHeight: 24,
-    color: colors.textPrimary,
+    color: palette.text,
+    fontFamily: designFonts.sans,
   },
   buttonContainer: {
     paddingHorizontal: 24,
     paddingVertical: 16,
     gap: 12,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bg,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: palette.border,
   },
   acceptButton: {
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -256,7 +262,8 @@ const styles = StyleSheet.create({
   acceptButtonText: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#fff',
+    color: palette.bg,
+    fontFamily: designFonts.sans,
   },
   declineButton: {
     backgroundColor: 'transparent',
@@ -267,7 +274,8 @@ const styles = StyleSheet.create({
   declineButtonText: {
     fontSize: 17,
     fontWeight: '500',
-    color: colors.textSecondary,
+    color: palette.textMuted,
+    fontFamily: designFonts.sans,
   },
 });
 

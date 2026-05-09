@@ -7,7 +7,7 @@
 
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { StrategyCard } from './StrategyCard';
-import { colors } from '@/theme';
+import { appWidthStyle, useAppAppearance } from '@/theme';
 
 // ============================================================================
 // Types
@@ -54,8 +54,11 @@ export function StrategyPool({
   onClose,
   isGenerating = false,
 }: StrategyPoolProps) {
+  const { palette } = useAppAppearance();
+  const styles = makeStyles(palette);
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, appWidthStyle]}>
       <View style={styles.header}>
         <View style={styles.headerRow}>
           <View style={styles.headerText}>
@@ -114,15 +117,19 @@ export function StrategyPool({
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
+type Palette = ReturnType<typeof useAppAppearance>['palette'];
+
+const TEXT_ON_ACCENT = '#0d0f12';
+
+const makeStyles = (palette: Palette) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bg,
   },
   header: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: palette.border,
   },
   headerRow: {
     flexDirection: 'row',
@@ -137,24 +144,24 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.bgPane,
     alignItems: 'center',
     justifyContent: 'center',
   },
   closeButtonText: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 16,
     fontWeight: '600',
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: palette.textMuted,
   },
   list: {
     flex: 1,
@@ -165,36 +172,36 @@ const styles = StyleSheet.create({
   actions: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.bgSecondary,
+    borderTopColor: palette.border,
+    backgroundColor: palette.bgElev,
   },
   moreButton: {
     padding: 14,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     borderRadius: 8,
     alignItems: 'center',
     marginBottom: 8,
   },
   moreButtonDisabled: {
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.chipBg,
   },
   moreText: {
-    color: colors.accent,
+    color: palette.accentText,
     fontSize: 14,
     fontWeight: '500',
   },
   moreTextDisabled: {
-    color: colors.textMuted,
+    color: palette.textFaint,
   },
   readyButton: {
     padding: 14,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     borderRadius: 8,
     alignItems: 'center',
   },
   readyText: {
-    color: colors.textOnAccent,
+    color: TEXT_ON_ACCENT,
     fontSize: 14,
     fontWeight: '600',
   },

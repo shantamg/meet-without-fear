@@ -2,7 +2,7 @@ import { useRef, useEffect, useCallback } from 'react';
 import { View, Text, Animated } from 'react-native';
 import { MessageRole, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
-import { colors } from '../theme';
+import { designFonts, useAppAppearance } from '../theme';
 import { TypewriterText } from './TypewriterText';
 import { SpeakerButton } from './SpeakerButton';
 
@@ -382,11 +382,13 @@ export function ChatBubble({
   );
 }
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+  return createStyles((t) => ({
     container: {
-      marginVertical: t.spacing.xs,
-      paddingHorizontal: t.spacing.lg,
+      width: '100%',
+      marginVertical: 6,
+      paddingHorizontal: 18,
     },
     userContainer: {
       alignItems: 'flex-end',
@@ -406,21 +408,23 @@ const useStyles = () =>
     },
     // User messages: bgSecondary background, 16px border-radius
     userBubble: {
-      backgroundColor: colors.bgSecondary,
-      paddingVertical: t.spacing.md,
-      paddingHorizontal: t.spacing.lg,
-      borderRadius: 16,
+      backgroundColor: palette.chipBg,
+      borderWidth: 1,
+      borderColor: palette.border,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      borderRadius: 14,
     },
     // AI messages: full-width, no bubble background (like demo)
     aiBubble: {
       backgroundColor: 'transparent',
-      paddingVertical: t.spacing.sm,
+      paddingVertical: 6,
       paddingHorizontal: 0,
       borderRadius: 0,
     },
     // System messages: bgTertiary background, 12px border-radius, centered
     systemBubble: {
-      backgroundColor: colors.bgTertiary,
+      backgroundColor: palette.bgElev,
       paddingVertical: t.spacing.md,
       paddingHorizontal: t.spacing.lg,
       borderRadius: 12,
@@ -429,7 +433,7 @@ const useStyles = () =>
     interventionBubble: {
       backgroundColor: 'rgba(245, 158, 11, 0.15)',
       borderLeftWidth: 3,
-      borderLeftColor: colors.warning,
+      borderLeftColor: palette.accent,
       paddingVertical: t.spacing.md,
       paddingHorizontal: t.spacing.lg,
       borderTopRightRadius: 12,
@@ -445,16 +449,16 @@ const useStyles = () =>
     empathyStatementHeader: {
       fontSize: t.typography.fontSize.md,
       fontWeight: '700',
-      color: colors.textSecondary,
+      color: palette.textMuted,
       textAlign: 'center',
       marginBottom: t.spacing.sm,
     },
     // Empathy statement: matches drawer styling (bgSecondary, left border accent)
     empathyStatementBubble: {
-      backgroundColor: colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderRadius: 12,
       borderLeftWidth: 3,
-      borderLeftColor: colors.brandBlue,
+      borderLeftColor: palette.accent,
       padding: 20,
     },
     // Empathy statement text: italic, matches drawer
@@ -462,14 +466,14 @@ const useStyles = () =>
       fontSize: 17,
       fontStyle: 'italic',
       lineHeight: 26,
-      color: colors.textPrimary,
-      fontFamily: t.typography.fontFamily.regular,
+      color: palette.text,
+      fontFamily: designFonts.serifItalic,
     },
     // Shared content delivery status indicator (orange for pending/delivered)
     sharedContentDeliveryStatus: {
       fontSize: 11,
       fontWeight: '500',
-      color: '#f97316', // Orange-500 for pending/delivered states
+      color: palette.warning,
       textAlign: 'right',
       marginTop: t.spacing.sm,
       textTransform: 'capitalize',
@@ -478,27 +482,27 @@ const useStyles = () =>
     sharedContentDeliveryStatusLight: {
       fontSize: 11,
       fontWeight: '500',
-      color: '#ea580c', // Orange-600 for better contrast on light background
+      color: palette.warning,
       textAlign: 'right',
       marginTop: t.spacing.sm,
       textTransform: 'capitalize',
     },
     // Blue "Sending" status (optimistic UI - message being sent)
     sharedContentDeliveryStatusSending: {
-      color: '#3b82f6', // Blue-500 - indicates active/in-progress
+      color: palette.info,
       fontStyle: 'italic',
     },
     // Green "Seen" status (dark background)
     sharedContentDeliveryStatusSeen: {
-      color: '#22c55e', // Green-500
+      color: palette.success,
     },
     // Green "Seen" status (light background)
     sharedContentDeliveryStatusSeenLight: {
-      color: '#16a34a', // Green-600 for better contrast on light
+      color: palette.success,
     },
     // Gray "Superseded" status (content was replaced by updated version)
     sharedContentDeliveryStatusSuperseded: {
-      color: '#6b7280', // Gray-500 - muted to indicate outdated
+      color: palette.textFaint,
       fontStyle: 'italic',
     },
     // Shared context: subtle container
@@ -507,23 +511,26 @@ const useStyles = () =>
       marginVertical: t.spacing.md,
     },
     sharedContextBubble: {
-      backgroundColor: '#1a1f2e',
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
       borderRadius: 12,
       padding: 16,
     },
     sharedContextLabel: {
       fontSize: 10,
       fontWeight: '700',
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
       marginBottom: 6,
+      fontFamily: designFonts.mono,
     },
     sharedContextText: {
       fontSize: t.typography.fontSize.md,
       lineHeight: 22,
-      color: t.colors.textPrimary,
-      fontFamily: t.typography.fontFamily.regular,
+      color: palette.text,
+      fontFamily: designFonts.sans,
     },
     // Share suggestion: what user will share (from reconciler)
     shareSuggestionContainer: {
@@ -531,38 +538,39 @@ const useStyles = () =>
       marginVertical: t.spacing.md,
     },
     shareSuggestionBubble: {
-      backgroundColor: colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderRadius: 12,
       borderLeftWidth: 3,
-      borderLeftColor: '#005AC1',
+      borderLeftColor: palette.accent,
       padding: 20,
     },
     shareSuggestionLabel: {
       fontSize: 10,
       fontWeight: '700',
-      color: '#005AC1',
+      color: palette.accent,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
       marginBottom: 8,
+      fontFamily: designFonts.mono,
     },
     shareSuggestionText: {
       fontSize: 17,
       fontStyle: 'italic',
       lineHeight: 26,
-      color: colors.textPrimary,
-      fontFamily: t.typography.fontFamily.regular,
+      color: palette.text,
+      fontFamily: designFonts.serifItalic,
     },
     text: {
-      fontSize: t.typography.fontSize.md,
-      lineHeight: 22,
-      color: colors.textPrimary,
-      fontFamily: t.typography.fontFamily.regular,
+      fontSize: 15,
+      lineHeight: 23,
+      color: palette.text,
+      fontFamily: designFonts.sans,
     },
     systemText: {
       fontSize: t.typography.fontSize.sm,
       lineHeight: 20,
-      color: colors.textSecondary,
-      fontFamily: t.typography.fontFamily.regular,
+      color: palette.textMuted,
+      fontFamily: designFonts.sans,
       textAlign: 'center',
     },
     metaContainer: {
@@ -573,23 +581,25 @@ const useStyles = () =>
     },
     time: {
       fontSize: t.typography.fontSize.sm,
-      color: colors.textSecondary,
+      color: palette.textMuted,
+      fontFamily: designFonts.mono,
     },
     systemTime: {
       textAlign: 'center',
     },
     statusText: {
       fontSize: t.typography.fontSize.xs,
-      color: colors.textMuted,
-      fontFamily: t.typography.fontFamily.regular,
+      color: palette.textFaint,
+      fontFamily: designFonts.sans,
     },
     statusSending: {
       fontStyle: 'italic',
     },
     statusRead: {
-      color: colors.accent,
+      color: palette.accent,
     },
     statusError: {
-      color: colors.error,
+      color: palette.danger,
     },
   }));
+};

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { View, Animated } from 'react-native';
 import { createStyles } from '../theme/styled';
+import { useAppAppearance } from '../theme';
 
 // ============================================================================
 // Component
@@ -57,15 +58,16 @@ export function TypingIndicator() {
 
 // ============================================================================
 // Styles
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+  return createStyles((t) => ({
     container: {
       flexDirection: 'row',
       padding: t.spacing.md,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: t.colors.border,
+      borderColor: palette.border,
       alignSelf: 'flex-start',
       marginLeft: t.spacing.xl,
       marginVertical: t.spacing.xs,
@@ -74,7 +76,8 @@ const useStyles = () =>
       width: 8,
       height: 8,
       borderRadius: 4,
-      backgroundColor: t.colors.textMuted,
+      backgroundColor: palette.textFaint,
       marginHorizontal: 2,
     },
   }));
+};

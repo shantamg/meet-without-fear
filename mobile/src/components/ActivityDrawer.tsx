@@ -19,7 +19,8 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { appWidthStyle, colors } from '@/theme';
+import { appWidthStyle } from '@/theme';
+import { useAppAppearance } from '@/theme/appearance';
 import { TimelineItemCard, TimelineItem } from './TimelineItemCard';
 import { useSharingStatus } from '../hooks/useSharingStatus';
 import { usePendingActions, PendingAction } from '../hooks/usePendingActions';
@@ -223,6 +224,8 @@ export function ActivityDrawer({
   testID = 'activity-drawer',
 }: ActivityDrawerProps) {
   const insets = useSafeAreaInsets();
+  const { palette } = useAppAppearance();
+  const styles = makeStyles(palette);
   const { height: windowHeight } = useWindowDimensions();
   const position3Q = windowHeight * 0.25; // 3/4 visible = top 25% hidden
   const windowHeightRef = useRef(windowHeight);
@@ -596,19 +599,21 @@ export function ActivityDrawer({
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   backdropPressable: {
     ...StyleSheet.absoluteFillObject,
   },
   backdrop: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: palette.scrim,
   },
   drawer: {
     position: 'absolute',
     left: 0,
     right: 0,
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgPane,
+    borderWidth: 1,
+    borderColor: palette.border,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     overflow: 'hidden',
@@ -623,19 +628,19 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.borderStrong,
   },
   header: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
   sectionHeader: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
     paddingTop: 12,
@@ -655,13 +660,13 @@ const styles = StyleSheet.create({
   topicLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.textSecondary,
+    color: palette.textMuted,
     letterSpacing: 1.2,
     marginBottom: 6,
   },
   topicText: {
     fontSize: 15,
-    color: colors.textPrimary,
+    color: palette.text,
     lineHeight: 20,
   },
   topicShareButton: {
@@ -672,19 +677,19 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.borderStrong,
   },
   topicShareButtonPressed: {
     opacity: 0.6,
   },
   topicShareButtonText: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 13,
     fontWeight: '500',
   },
   emptyText: {
     fontSize: 14,
-    color: colors.textMuted,
+    color: palette.textFaint,
     textAlign: 'center',
     paddingVertical: 24,
     fontStyle: 'italic',

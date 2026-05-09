@@ -13,7 +13,7 @@ import { View, Text } from 'react-native';
 import { useRef } from 'react';
 import Slider from '@react-native-community/slider';
 import { createStyles } from '../theme/styled';
-import { colors } from '../theme';
+import { designFonts, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -88,6 +88,7 @@ export function EmotionSlider({
   testID = 'emotion-slider',
 }: EmotionSliderProps) {
   const styles = useStyles(compact);
+  const { palette } = useAppAppearance();
   const currentColor = getGradientColor(value);
   const intensityLabel = getIntensityLabel(value);
 
@@ -138,7 +139,7 @@ export function EmotionSlider({
           onValueChange={handleValueChange}
           onSlidingComplete={handleSlidingComplete}
           minimumTrackTintColor={currentColor}
-          maximumTrackTintColor={colors.bgTertiary}
+          maximumTrackTintColor={palette.progressPending}
           thumbTintColor={currentColor}
           disabled={disabled}
           testID={`${testID}-control`}
@@ -159,14 +160,15 @@ export function EmotionSlider({
 // Styles
 // ============================================================================
 
-const useStyles = (compact?: boolean) =>
-  createStyles((t) => ({
+const useStyles = (compact?: boolean) => {
+  const { palette } = useAppAppearance();
+  return createStyles((t) => ({
     container: {
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bg,
       paddingHorizontal: compact ? t.spacing.md : t.spacing.xl,
       paddingVertical: compact ? t.spacing.xs : t.spacing.md,
       borderTopWidth: 1,
-      borderTopColor: t.colors.border,
+      borderTopColor: palette.border,
     },
     header: {
       flexDirection: 'row',
@@ -176,11 +178,13 @@ const useStyles = (compact?: boolean) =>
     },
     label: {
       fontSize: compact ? t.typography.fontSize.xs : t.typography.fontSize.sm,
-      color: t.colors.textMuted,
+      color: palette.textFaint,
+      fontFamily: designFonts.sans,
     },
     value: {
       fontSize: compact ? t.typography.fontSize.sm : t.typography.fontSize.md,
       fontWeight: '600',
+      fontFamily: designFonts.sans,
     },
     sliderContainer: {
       marginVertical: compact ? 0 : t.spacing.xs,
@@ -197,6 +201,8 @@ const useStyles = (compact?: boolean) =>
     },
     labelText: {
       fontSize: t.typography.fontSize.xs,
-      color: t.colors.textMuted,
+      color: palette.textFaint,
+      fontFamily: designFonts.sans,
     },
   }));
+};

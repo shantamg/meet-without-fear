@@ -1,7 +1,7 @@
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors } from '@/src/theme';
+import { useAppAppearance } from '@/src/theme';
 
 interface PartnerInfoDrawerProps {
   visible: boolean;
@@ -50,6 +50,8 @@ export function PartnerInfoDrawer({
   topic,
   onClose,
 }: PartnerInfoDrawerProps) {
+  const { palette } = useAppAppearance();
+  const styles = makeStyles(palette);
   const lastSeenText = formatTimeAgo(lastSeenAt);
   const statusText = isOnline ? 'Online now' : lastSeenText ? `Last seen ${lastSeenText}` : 'Not online right now';
 
@@ -88,22 +90,22 @@ export function PartnerInfoDrawer({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(2, 6, 23, 0.62)',
+    backgroundColor: palette.scrim,
   },
   backdropPressable: {
     flex: 1,
   },
   drawer: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgPane,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     borderWidth: 1,
     borderBottomWidth: 0,
-    borderColor: colors.border,
+    borderColor: palette.border,
     paddingHorizontal: 20,
     paddingBottom: 18,
   },
@@ -112,12 +114,12 @@ const styles = StyleSheet.create({
     width: 42,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.borderStrong,
     marginTop: 10,
     marginBottom: 18,
   },
   name: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 26,
     lineHeight: 31,
     fontWeight: '800',
@@ -133,24 +135,24 @@ const styles = StyleSheet.create({
     width: 9,
     height: 9,
     borderRadius: 4.5,
-    backgroundColor: colors.textMuted,
+    backgroundColor: palette.textFaint,
   },
   statusDotOnline: {
-    backgroundColor: colors.success,
+    backgroundColor: palette.success,
   },
   statusText: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 14,
     fontWeight: '600',
   },
   statusTextOnline: {
-    color: colors.success,
+    color: palette.success,
   },
   section: {
     marginTop: 24,
   },
   bodyText: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 17,
     lineHeight: 25,
   },
@@ -158,12 +160,12 @@ const styles = StyleSheet.create({
     marginTop: 22,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bgPrimary,
+    borderColor: palette.border,
+    backgroundColor: palette.bgElev,
     padding: 16,
   },
   topicLabel: {
-    color: colors.brandBlue,
+    color: palette.info,
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -171,7 +173,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   topicText: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 16,
     lineHeight: 23,
   },
