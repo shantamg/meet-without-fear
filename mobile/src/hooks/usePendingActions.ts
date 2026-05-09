@@ -35,12 +35,13 @@ interface BadgeCountResponse {
 
 /**
  * Fetch pending actions for a specific session.
+ * Pass enabled: false to disable polling (e.g. when session is invalid/deleted).
  */
-export function usePendingActions(sessionId: string | undefined) {
+export function usePendingActions(sessionId: string | undefined, options?: { enabled?: boolean }) {
   return useQuery<PendingActionsResponse>({
     queryKey: stageKeys.pendingActions(sessionId!),
     queryFn: () => get<PendingActionsResponse>(`/sessions/${sessionId}/pending-actions`),
-    enabled: !!sessionId,
+    enabled: !!sessionId && (options?.enabled !== false),
     refetchOnWindowFocus: true,
     staleTime: 5_000, // 5s debounce — prevents rapid-fire refetches from multiple Ably invalidations
   });

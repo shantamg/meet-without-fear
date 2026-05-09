@@ -511,9 +511,6 @@ export function UnifiedSessionScreen({
   const queryClient = useQueryClient();
   const { showError } = useToast();
 
-  // Server-side pending actions for badge count (replaces client-side computation)
-  const pendingActionsQuery = usePendingActions(sessionId);
-
   // Real-time presence tracking
 
   const {
@@ -638,6 +635,10 @@ export function UnifiedSessionScreen({
 
   } = useUnifiedSession(sessionId);
 
+  // Server-side pending actions for badge count (replaces client-side computation)
+  // Gate behind !accessDenied to prevent polling when session is deleted (#428)
+  const pendingActionsQuery = usePendingActions(sessionId, { enabled: !accessDenied });
+
   // Sharing status for the header button. Keep these duplicate header queries
   // behind the same stage/access gates as useUnifiedSession so the badge does
   // not reintroduce the Stage 2 share-offer request storm this PR removes.
@@ -739,8 +740,10 @@ export function UnifiedSessionScreen({
   });
 
   // Real-time presence and event tracking
+  // Disable when session is invalid to prevent Ably subscription cascading errors (#428)
   const { partnerOnline, connectionStatus, reconnect: _reconnectRealtime } = useRealtime({
     sessionId,
+    enabled: !accessDenied,
     enablePresence: true,
     onSessionEvent: (event, data) => {
       console.log('[UnifiedSessionScreen] Received realtime event:', event);
