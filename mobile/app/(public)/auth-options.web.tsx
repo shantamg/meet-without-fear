@@ -17,7 +17,7 @@
  * `useClerk().handleRedirectCallback()` finalizes the session.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -29,7 +29,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useClerk, useSignIn, useSignUp } from '@clerk/clerk-expo';
 import { AntDesign } from '@expo/vector-icons';
-import { colors } from '@/theme';
+import { designFonts, useAppAppearance } from '@/theme';
 
 type OAuthStrategy = 'oauth_google' | 'oauth_apple';
 
@@ -38,6 +38,8 @@ export default function AuthOptionsScreenWeb() {
   const { signUp, isLoaded: signUpLoaded } = useSignUp();
   const clerk = useClerk();
   const router = useRouter();
+  const { palette } = useAppAppearance();
+  const styles = useStyles();
   const [error, setError] = useState<string | null>(null);
   const [busyProvider, setBusyProvider] = useState<OAuthStrategy | null>(null);
 
@@ -105,7 +107,7 @@ export default function AuthOptionsScreenWeb() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={handleBack} accessibilityLabel="Go back">
-          <AntDesign name="left" size={24} color={colors.textPrimary} />
+          <AntDesign name="left" size={24} color={palette.text} />
         </TouchableOpacity>
       </View>
 
@@ -149,6 +151,9 @@ function OAuthButton({
   busy: boolean;
   disabled: boolean;
 }) {
+  const { palette } = useAppAppearance();
+  const styles = useStyles();
+
   return (
     <TouchableOpacity
       style={[styles.oauthButton, disabled && styles.oauthButtonDisabled]}
@@ -158,75 +163,80 @@ function OAuthButton({
       accessibilityState={{ disabled, busy }}
     >
       {busy ? (
-        <ActivityIndicator size="small" color={colors.textPrimary} style={styles.buttonIcon} />
+        <ActivityIndicator size="small" color={palette.text} style={styles.buttonIcon} />
       ) : (
-        <AntDesign name={iconName} size={20} color={colors.textPrimary} style={styles.buttonIcon} />
+        <AntDesign name={iconName} size={20} color={palette.text} style={styles.buttonIcon} />
       )}
       <Text style={styles.oauthButtonText}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bgPrimary,
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.textPrimary,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    marginBottom: 32,
-    textAlign: 'center',
-  },
-  error: {
-    fontSize: 14,
-    color: colors.error,
-    marginBottom: 16,
-    paddingHorizontal: 4,
-    textAlign: 'center',
-  },
-  oauthButton: {
-    backgroundColor: colors.bgSecondary,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  oauthButtonDisabled: {
-    opacity: 0.5,
-  },
-  oauthButtonText: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  buttonIcon: {
-    marginRight: 8,
-  },
-});
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+
+  return useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: palette.bg,
+    },
+    header: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    backButton: {
+      width: 40,
+      height: 40,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    content: {
+      flex: 1,
+      paddingHorizontal: 24,
+      justifyContent: 'center',
+    },
+    title: {
+      fontFamily: designFonts.serif,
+      fontSize: 34,
+      fontWeight: '400',
+      color: palette.text,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    subtitle: {
+      fontSize: 16,
+      color: palette.textMuted,
+      marginBottom: 32,
+      textAlign: 'center',
+    },
+    error: {
+      fontSize: 14,
+      color: palette.danger,
+      marginBottom: 16,
+      paddingHorizontal: 4,
+      textAlign: 'center',
+    },
+    oauthButton: {
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+      paddingVertical: 14,
+      borderRadius: 12,
+      alignItems: 'center',
+      marginBottom: 12,
+      flexDirection: 'row',
+      justifyContent: 'center',
+    },
+    oauthButtonDisabled: {
+      opacity: 0.5,
+    },
+    oauthButtonText: {
+      color: palette.text,
+      fontSize: 16,
+      fontWeight: '500',
+    },
+    buttonIcon: {
+      marginRight: 8,
+    },
+  }), [palette]);
+};

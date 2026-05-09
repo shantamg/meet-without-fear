@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import { useRouter } from 'expo-router';
 import { useOAuth } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser';
 import { AntDesign } from '@expo/vector-icons';
-import { colors } from '@/theme';
+import { designFonts, useAppAppearance } from '@/theme';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -22,6 +22,8 @@ export default function AuthOptionsScreen() {
   const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
   const { startOAuthFlow: startAppleOAuth } = useOAuth({ strategy: 'oauth_apple' });
   const router = useRouter();
+  const { palette } = useAppAppearance();
+  const styles = useStyles();
   const [error, setError] = useState<string | null>(null);
 
   const handleOAuthSignIn = async (startOAuthFlow: typeof startGoogleOAuth, provider: string) => {
@@ -66,7 +68,7 @@ export default function AuthOptionsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          <AntDesign name="left" size={24} color={colors.textPrimary} />
+          <AntDesign name="left" size={24} color={palette.text} />
         </TouchableOpacity>
       </View>
 
@@ -80,7 +82,7 @@ export default function AuthOptionsScreen() {
           style={styles.oauthButton}
           onPress={() => handleOAuthSignIn(startGoogleOAuth, 'Google')}
         >
-          <AntDesign name="google" size={20} color={colors.textPrimary} style={styles.buttonIcon} />
+          <AntDesign name="google" size={20} color={palette.text} style={styles.buttonIcon} />
           <Text style={styles.oauthButtonText}>Continue with Google</Text>
         </TouchableOpacity>
 
@@ -88,7 +90,7 @@ export default function AuthOptionsScreen() {
           style={styles.oauthButton}
           onPress={() => handleOAuthSignIn(startAppleOAuth, 'Apple')}
         >
-          <AntDesign name={'apple1' as any} size={20} color={colors.textPrimary} style={styles.buttonIcon} />
+          <AntDesign name={'apple1' as any} size={20} color={palette.text} style={styles.buttonIcon} />
           <Text style={styles.oauthButtonText}>Continue with Apple</Text>
         </TouchableOpacity>
       </View>
@@ -96,63 +98,68 @@ export default function AuthOptionsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bgPrimary,
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.textPrimary,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    marginBottom: 32,
-    textAlign: 'center',
-  },
-  error: {
-    fontSize: 14,
-    color: colors.error,
-    marginBottom: 16,
-    paddingHorizontal: 4,
-    textAlign: 'center',
-  },
-  oauthButton: {
-    backgroundColor: colors.bgSecondary,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  oauthButtonText: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  buttonIcon: {
-    marginRight: 8,
-  },
-});
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+
+  return useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: palette.bg,
+    },
+    header: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    backButton: {
+      width: 40,
+      height: 40,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    content: {
+      flex: 1,
+      paddingHorizontal: 24,
+      justifyContent: 'center',
+    },
+    title: {
+      fontFamily: designFonts.serif,
+      fontSize: 34,
+      fontWeight: '400',
+      color: palette.text,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    subtitle: {
+      fontSize: 16,
+      color: palette.textMuted,
+      marginBottom: 32,
+      textAlign: 'center',
+    },
+    error: {
+      fontSize: 14,
+      color: palette.danger,
+      marginBottom: 16,
+      paddingHorizontal: 4,
+      textAlign: 'center',
+    },
+    oauthButton: {
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+      paddingVertical: 14,
+      borderRadius: 12,
+      alignItems: 'center',
+      marginBottom: 12,
+      flexDirection: 'row',
+      justifyContent: 'center',
+    },
+    oauthButtonText: {
+      color: palette.text,
+      fontSize: 16,
+      fontWeight: '500',
+    },
+    buttonIcon: {
+      marginRight: 8,
+    },
+  }), [palette]);
+};
