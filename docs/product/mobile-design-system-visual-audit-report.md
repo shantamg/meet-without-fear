@@ -18,11 +18,11 @@ Last updated: 2026-05-09
 
 Current run:
 
-`mobile/test-results/design-audit/2026-05-09T08-17-02-178Z/`
+`mobile/test-results/design-audit/2026-05-09T08-22-57-343Z/`
 
 Index:
 
-`mobile/test-results/design-audit/2026-05-09T08-17-02-178Z/index.md`
+`mobile/test-results/design-audit/2026-05-09T08-22-57-343Z/index.md`
 
 The index records each screenshot, light/dark mode, seed target stage where applicable, exact URL, and user side. The run contains 42 screenshots:
 
@@ -38,6 +38,7 @@ The index records each screenshot, light/dark mode, seed target stage where appl
 - Updated `ShareTopicDrawer`, `SupportOptionsModal`, and `WaitingBanner` to use appearance-aware palette and handoff-aligned font roles.
 - Expanded `/design-system` into a deterministic inventory with query-driven `section`, `mode`, and `overlay` params.
 - Added `mobile/scripts/capture-design-audit.mjs` to seed real sessions, capture light/dark screenshots, remove the Expo web app banner, and write a durable screenshot index.
+- Updated the `RECONCILER_SHOWN_B` seed target so the partner side satisfies mobile share-offer fetch eligibility and renders the real `ShareTopicPanel` in the session route.
 
 ## Tokens And Primitives Now Owning The Design
 
@@ -52,11 +53,11 @@ The index records each screenshot, light/dark mode, seed target stage where appl
 
 - `cd mobile && npm run check` passed.
 - `cd mobile && npm run lint -- --quiet` passed.
+- `cd backend && npm run check` passed.
 - `node mobile/scripts/capture-design-audit.mjs` passed against localhost backend/mobile servers and wrote the current screenshot run.
 
 ## Known Issues And Follow-Ups
 
-- The seeded `RECONCILER_SHOWN_B` session currently does not visibly render the share-offer panel in the real session route. The database seed creates an offered share suggestion, but the mobile share-offer fetch path appears gated by `hasSubmittedOwnEmpathy`, so this needs a fixture/product alignment fix before that real-route screenshot can be considered coverage for the share-offer panel.
 - Several drawer/sheet states are still covered through design-system representatives rather than direct seeded session interactions. The next pass should add narrow seed targets or URL-controllable fixture openings for activity, needs, partner info, empathy statement, accuracy feedback, transcription, invitation ready, edit suggestion, guided draft, and takeaway review surfaces.
 - Settings subpages are not yet individually captured.
 - Sidebar open/closed and row-menu screenshots should be captured by browser interaction against seeded home/session state, not only the design-system conversation-list preview.

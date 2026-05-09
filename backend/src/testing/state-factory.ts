@@ -970,6 +970,41 @@ export class StateFactory {
       });
     }
 
+    // User B's empathy draft/attempt keeps this visual fixture aligned with
+    // the mobile share-offer fetch gate, which only requests pending offers
+    // once the current user has submitted perspective-stretch empathy.
+    const empathyDraftB = await tx.empathyDraft.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        content: "I understand that Riley may feel alone with the household work and want their effort to be noticed.",
+        readyToShare: true,
+      },
+    });
+
+    await tx.empathyAttempt.create({
+      data: {
+        sessionId,
+        draftId: empathyDraftB.id,
+        sourceUserId: userBId,
+        content: empathyDraftB.content,
+        status: 'HELD',
+        sharedAt: timestamps.userBStage1Completed,
+      },
+    });
+
+    await tx.consentRecord.create({
+      data: {
+        userId: userBId,
+        sessionId,
+        targetType: 'EMPATHY_DRAFT',
+        targetId: empathyDraftB.id,
+        requestedByUserId: userBId,
+        decision: 'GRANTED',
+        decidedAt: timestamps.userBStage1Completed,
+      },
+    });
+
     // ========================================
     // RECONCILER RESULT & SHARE OFFER (OFFERED status)
     // ========================================
