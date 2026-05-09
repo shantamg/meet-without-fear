@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import * as Notifications from 'expo-notifications';
-import { router } from 'expo-router';
+import { router, useGlobalSearchParams, usePathname } from 'expo-router';
 
 import {
   getNotificationPermissionStatus,
@@ -8,7 +8,17 @@ import {
   requestAndRegisterForPushNotifications,
 } from '@/src/services/notifications';
 
+function normalizeParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export function useNotifications() {
+  const pathname = usePathname();
+  const params = useGlobalSearchParams<{ id?: string | string[] }>();
+  const currentSessionId = pathname.startsWith('/session/')
+    ? normalizeParam(params.id)
+    : undefined;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -32,7 +42,12 @@ export function useNotifications() {
       const screen = typeof data?.screen === 'string' ? data.screen : undefined;
 
       if (sessionId) {
-        router.push(`/session/${sessionId}`);
+        const sessionPath = `/session/${sessionId}` as const;
+        if (sessionId === currentSessionId) {
+          router.replace(sessionPath);
+        } else {
+          router.push(sessionPath);
+        }
       } else if (screen === 'home') {
         router.push('/(auth)/(tabs)');
       }
@@ -42,7 +57,7 @@ export function useNotifications() {
       cancelled = true;
       responseSubscription.remove();
     };
-  }, []);
+  }, [currentSessionId]);
 
   const shouldAskForSessionNotifications = useCallback(async () => {
     const status = await getNotificationPermissionStatus();
