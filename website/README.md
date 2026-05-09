@@ -30,6 +30,7 @@ Required environment variables:
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk publishable key |
 | `CLERK_SECRET_KEY` | Clerk secret key |
 | `NEXT_PUBLIC_API_URL` | Backend API URL |
+| `NEXT_PUBLIC_APP_URL` | Hosted app URL |
 | `NEXT_PUBLIC_TESTFLIGHT_URL` | iOS TestFlight invitation URL |
 | `NEXT_PUBLIC_ANDROID_APK_URL` | Android APK download URL |
 
@@ -66,6 +67,7 @@ Set these in your Vercel project settings:
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
 - `CLERK_SECRET_KEY`
 - `NEXT_PUBLIC_API_URL` (e.g., `https://api.meetwithoutfear.com`)
+- `NEXT_PUBLIC_APP_URL` (e.g., `https://app.meetwithoutfear.com/`)
 - `NEXT_PUBLIC_TESTFLIGHT_URL`
 - `NEXT_PUBLIC_ANDROID_APK_URL`
 
@@ -76,7 +78,7 @@ When a user opens an invitation link (`/invitation/{id}`):
 1. The page fetches invitation details from the API
 2. If the invitation is valid and the user is not signed in, they see a sign-up/sign-in form
 3. After authentication, the invitation is automatically accepted
-4. The user is redirected to the app download page
+4. The user can open the hosted app or download the mobile app
 
 ## Project Structure
 
