@@ -38,7 +38,7 @@ import { SupportOptionsModal } from '@/src/components/SupportOptionsModal';
 import { EditSuggestionModal } from '@/src/components/EditSuggestionModal';
 import { TranscriptionDrawer } from '@/src/components/TranscriptionDrawer';
 import { WaitingBanner } from '@/src/components/WaitingBanner';
-import { designFonts, useAppAppearance } from '@/src/theme';
+import { appWidthStyle, designFonts, useAppAppearance } from '@/src/theme';
 
 type Section = 'inventory' | 'palette' | 'chat' | 'ctas' | 'states' | 'overlays';
 type Palette = ReturnType<typeof useAppAppearance>['palette'];
@@ -1108,6 +1108,7 @@ const makeStyles = (palette: Palette) =>
       backgroundColor: palette.scrim,
     },
     sheet: {
+      ...appWidthStyle,
       backgroundColor: palette.bg,
       borderTopLeftRadius: 18,
       borderTopRightRadius: 18,
