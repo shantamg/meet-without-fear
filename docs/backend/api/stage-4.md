@@ -3,7 +3,7 @@ title: "Stage 4 API: Strategic Repair"
 sidebar_position: 11
 description: Endpoints for collaborative strategy proposal, willingness selection, agreement documentation, and Tending check-ins.
 slug: /backend/api/stage-4
-updated: 2026-05-06
+updated: 2026-05-09
 ---
 # Stage 4 API: Strategic Repair
 
@@ -203,6 +203,53 @@ interface GetAgreementsResponse {
   agreements: AgreementDTO[];
 }
 ```
+
+---
+
+---
+
+## Proposal Capture: Typed Structured Input
+
+The AI populates a hidden `<stage4_proposals>` block in its response when it identifies proposals in the conversation. The capture service reads this block to extract typed proposals before falling back to free-text inference.
+
+### Stage4StructuredProposalInput shape
+
+```typescript
+interface Stage4StructuredProposalInput {
+  action:          'ADD' | 'REVISE' | 'REMOVE' | 'IGNORE';
+  classification:  'PROPOSAL' | 'REFLECTION' | 'SUCCESS_MARKER' | 'PROCESS';
+  kind?:           Stage4ProposalKind;    // authoritative if set; bypasses inferProposalKind()
+  description:     string;
+  ownerUserId?:    string;               // explicit ownership (INDIVIDUAL_COMMITMENT only)
+  targetProposalId?: string;             // required for REVISE / REMOVE actions
+}
+```
+
+When `structuredProposals` are present the capture service uses them directly and assigns a confidence score of **0.92**. When absent it falls back to free-text heuristics (`inferProposalKind()`) with a confidence of **0.78**.
+
+### inferProposalKind() fallback rules
+
+When no typed kind is supplied the heuristic defaults to **INDIVIDUAL_COMMITMENT** on ambiguity (safer than auto-promoting to shared):
+- Keywords "we", "together", "let's" → `SHARED_PROPOSAL`
+- First-person commitment ("I can", "I'll", "I will") → `INDIVIDUAL_COMMITMENT`
+- Explicit signals ("mine alone", "just for me") → `INDIVIDUAL_COMMITMENT`
+- Uncertain → `INDIVIDUAL_COMMITMENT` (safe default)
+
+---
+
+## Auto-Closure
+
+`applyStage4AutoClosureFromSignal()` (`backend/src/services/stage4-auto-closure.service.ts`) closes Stage 4 automatically when the AI emits a `Stage4ClosureSignalDTO` in its response micro-tags.
+
+### Closure paths
+
+| Signal | Condition | Result |
+|--------|-----------|--------|
+| `readyToClose: true` + `kind: NO_SHARED_AGREEMENT` | Always | Closes immediately with `NO_SHARED_AGREEMENT` |
+| `readyToClose: true` + `kind: SHARED_AGREEMENT` | Both partners have WILLING selection on ≥1 SHARED_PROPOSAL | Closes with `SHARED_AGREEMENT` |
+| `readyToClose: true` + `kind: SHARED_AGREEMENT` | Mutual WILLING not satisfied | Signal ignored; manual close required |
+
+Both auto-closure and manual `POST /stage4/close` filter needs using **OPEN and PARTIAL** coverage status when computing `openNeedIds` for the closure record.
 
 ---
 

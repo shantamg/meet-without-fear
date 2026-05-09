@@ -3,7 +3,7 @@ title: Prisma Schema
 sidebar_position: 1
 description: Core Vessel Architecture tables plus pointers to the rest of the Prisma schema (Inner Work, reconciler, memory, needs/people, telemetry).
 slug: /backend/data-model/prisma-schema
-updated: "2026-05-06"
+updated: "2026-05-09"
 ---
 # Prisma Schema
 
@@ -167,14 +167,30 @@ model UserVessel {
   updatedAt DateTime @updatedAt
 
   // Private content
-  events           UserEvent[]
+  events            UserEvent[]
   emotionalReadings EmotionalReading[]
-  identifiedNeeds  IdentifiedNeed[]
-  boundaries       Boundary[]
-  documents        UserDocument[]
+  identifiedNeeds   IdentifiedNeed[]
+  boundaries        Boundary[]
+  documents         UserDocument[]
 
-  // Embedding for semantic search within user's own content
-  embedding        Unsupported("vector(1536)")?
+  // Rolling conversation summary for long sessions
+  // Stores JSON: { text, keyThemes, emotionalJourney, unresolvedTopics }
+  conversationSummary String? @db.Text
+
+  // Session-level content embedding (vector(1024)) for semantic search
+  // Embeds combined facts + summary; replaces message-level embedding
+  contentEmbedding Unsupported("vector(1024)")?
+
+  // === Session Read State ===
+  lastViewedAt         DateTime?  // When user last opened this session's chat
+  lastSeenChatItemId   String?    // ID of last chat item seen (for "new messages" line)
+  lastViewedShareTabAt DateTime?  // When user last viewed the Share/Partner tab
+  lastActiveAt         DateTime?  // When user last actively did something (presence indicator)
+  archivedAt           DateTime?  // When user removed session from their conversation list
+
+  // AI-extracted structured facts: [{ category: string, fact: string }]
+  // Updated by Haiku after each message; reduces chat history in prompts
+  notableFacts Json?
 
   @@unique([userId, sessionId])
 }
