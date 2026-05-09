@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -9,15 +9,17 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MessageRole } from '@meet-without-fear/shared';
 import {
   ArrowLeft,
   Check,
   ChevronRight,
+  Clock,
   Moon,
   PanelBottom,
   PanelRight,
+  Search,
   Sun,
   X,
 } from 'lucide-react-native';
@@ -36,25 +38,48 @@ import { SupportOptionsModal } from '@/src/components/SupportOptionsModal';
 import { WaitingBanner } from '@/src/components/WaitingBanner';
 import { designFonts, useAppAppearance } from '@/src/theme';
 
-type Section = 'palette' | 'chat' | 'ctas' | 'overlays';
+type Section = 'inventory' | 'palette' | 'chat' | 'ctas' | 'states' | 'overlays';
 type Palette = ReturnType<typeof useAppAppearance>['palette'];
+type Mode = 'light' | 'dark' | 'system';
 
 const sections: Array<{ id: Section; label: string }> = [
+  { id: 'inventory', label: 'Inventory' },
   { id: 'palette', label: 'Palette' },
   { id: 'chat', label: 'Chat' },
   { id: 'ctas', label: 'CTAs' },
+  { id: 'states', label: 'States' },
   { id: 'overlays', label: 'Overlays' },
 ];
 
 export default function DesignSystemScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ section?: string; mode?: string; overlay?: string }>();
   const appearance = useAppAppearance();
   const { palette, preference, setPreference } = appearance;
   const styles = useMemo(() => makeStyles(palette), [palette]);
-  const [section, setSection] = useState<Section>('palette');
-  const [shareDrawerOpen, setShareDrawerOpen] = useState(false);
-  const [supportOpen, setSupportOpen] = useState(false);
-  const [bottomSheetOpen, setBottomSheetOpen] = useState(false);
+  const requestedSection = sections.some((item) => item.id === params.section)
+    ? (params.section as Section)
+    : 'inventory';
+  const [section, setSection] = useState<Section>(requestedSection);
+  const [shareDrawerOpen, setShareDrawerOpen] = useState(params.overlay === 'share-topic');
+  const [supportOpen, setSupportOpen] = useState(params.overlay === 'support');
+  const [bottomSheetOpen, setBottomSheetOpen] = useState(params.overlay === 'sheet');
+
+  useEffect(() => {
+    setSection(requestedSection);
+  }, [requestedSection]);
+
+  useEffect(() => {
+    if (params.mode === 'light' || params.mode === 'dark' || params.mode === 'system') {
+      void setPreference(params.mode);
+    }
+  }, [params.mode, setPreference]);
+
+  useEffect(() => {
+    setShareDrawerOpen(params.overlay === 'share-topic');
+    setSupportOpen(params.overlay === 'support');
+    setBottomSheetOpen(params.overlay === 'sheet');
+  }, [params.overlay]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -74,7 +99,7 @@ export default function DesignSystemScreen() {
       </View>
 
       <View style={styles.modeRow}>
-        {(['light', 'dark', 'system'] as const).map((mode) => (
+        {(['light', 'dark', 'system'] as const).map((mode: Mode) => (
           <TouchableOpacity
             key={mode}
             style={[styles.modeButton, preference === mode && styles.modeButtonActive]}
@@ -115,9 +140,11 @@ export default function DesignSystemScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {section === 'inventory' && <InventorySection styles={styles} palette={palette} />}
         {section === 'palette' && <PaletteSection styles={styles} palette={palette} />}
         {section === 'chat' && <ChatSection styles={styles} palette={palette} />}
         {section === 'ctas' && <CtaSection styles={styles} onOpenShareDrawer={() => setShareDrawerOpen(true)} />}
+        {section === 'states' && <StateSection styles={styles} palette={palette} />}
         {section === 'overlays' && (
           <OverlaySection
             styles={styles}
@@ -153,6 +180,83 @@ export default function DesignSystemScreen() {
   );
 }
 
+function InventorySection({ styles, palette }: { styles: ReturnType<typeof makeStyles>; palette: Palette }) {
+  const rows = [
+    { name: 'Riley', topic: 'Different needs around family visits', state: 'Ready for you', active: true, progress: 4 },
+    { name: 'Maya', topic: 'Weekend planning tension', state: 'Invitation sent', active: false, progress: 1 },
+    { name: 'Sam', topic: 'Feeling heard after arguments', state: 'In progress', active: false, progress: 2 },
+  ];
+
+  return (
+    <View style={styles.sectionStack}>
+      <SectionTitle styles={styles} eyebrow="Inventory" title="Audited mobile surfaces" />
+      <View style={styles.inventoryGrid}>
+        {[
+          'Home',
+          'Sidebar open / closed',
+          'Conversation row menu',
+          'Chat stages',
+          'Inputs and indicators',
+          'Guided CTAs',
+          'Settings',
+          'Drawers',
+          'Sheets and modals',
+          'Loading / empty / waiting',
+        ].map((label) => (
+          <View key={label} style={styles.inventoryPill}>
+            <Check color={palette.accent} size={13} />
+            <Text style={styles.inventoryPillText}>{label}</Text>
+          </View>
+        ))}
+      </View>
+
+      <SectionTitle styles={styles} eyebrow="Sidebar" title="Conversation list direction" />
+      <View style={styles.conversationPreview}>
+        <View style={styles.conversationHeader}>
+          <Text style={styles.conversationTitle}>Conversations</Text>
+          <View style={styles.searchIcon}>
+            <Search color={palette.textFaint} size={16} />
+          </View>
+        </View>
+        {rows.map((row) => (
+          <View key={row.name} style={[styles.conversationRow, row.active && styles.conversationRowActive]}>
+            <View style={styles.avatarMini}>
+              <Text style={styles.avatarMiniText}>{row.name[0]}</Text>
+            </View>
+            <View style={styles.drawerPreviewCopy}>
+              <View style={styles.rowTop}>
+                <Text style={styles.drawerPreviewTitle}>{row.name}</Text>
+                <Text style={styles.rowTime}>{row.active ? 'now' : '2h'}</Text>
+              </View>
+              <Text style={styles.drawerPreviewSubtitle} numberOfLines={1}>{row.topic}</Text>
+              <View style={styles.rowFoot}>
+                <View style={[styles.stateChip, row.active && styles.stateChipReady]}>
+                  <View style={styles.stateDot} />
+                  <Text style={[styles.stateChipText, row.active && styles.stateChipTextReady]}>
+                    {row.state}
+                  </Text>
+                </View>
+                <View style={styles.progressSegments}>
+                  {[0, 1, 2, 3].map((index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.progressSegment,
+                        index < row.progress - 1 && styles.progressSegmentDone,
+                        index === row.progress - 1 && styles.progressSegmentNow,
+                      ]}
+                    />
+                  ))}
+                </View>
+              </View>
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function PaletteSection({ styles, palette }: { styles: ReturnType<typeof makeStyles>; palette: Palette }) {
   const swatches: Array<[string, string]> = [
     ['bg', palette.bg],
@@ -165,7 +269,10 @@ function PaletteSection({ styles, palette }: { styles: ReturnType<typeof makeSty
     ['accent', palette.accent],
     ['accentSoft', palette.accentSoft],
     ['success', palette.success],
+    ['warning', palette.warning],
+    ['info', palette.info],
     ['danger', palette.danger],
+    ['scrim', palette.scrim],
   ];
 
   return (
@@ -241,6 +348,18 @@ function ChatSection({ styles, palette }: { styles: ReturnType<typeof makeStyles
             enableTypewriter={false}
             partnerName="Sam"
           />
+          <ChatBubble
+            message={{
+              id: 'share-1',
+              role: 'SHARE_SUGGESTION' as MessageRole,
+              content: 'I want you to know I am not trying to keep score. I am asking for help before I run out.',
+              timestamp: new Date().toISOString(),
+              skipTypewriter: true,
+            }}
+            enableTypewriter={false}
+          />
+          <ChatIndicator type="reconciler-analyzing" />
+          <ChatIndicator type="needs-identified" />
           <ChatIndicator type="empathy-validated" metadata={{ partnerName: 'Sam' }} />
         </View>
         <EmotionSlider value={5} onChange={() => {}} compact />
@@ -297,6 +416,51 @@ function CtaSection({
         <WaitingBanner status="partner-validating-empathy" partnerName="Sam" onExercisePress={() => {}} />
       </View>
     </View>
+  );
+}
+
+function StateSection({ styles, palette }: { styles: ReturnType<typeof makeStyles>; palette: Palette }) {
+  return (
+    <View style={styles.sectionStack}>
+      <SectionTitle styles={styles} eyebrow="States" title="Empty, loading, blocked, complete" />
+      <View style={styles.stateGrid}>
+        <View style={styles.stateCard}>
+          <ActivityPreview color={palette.info} />
+          <Text style={styles.actionTitle}>Loading</Text>
+          <Text style={styles.actionSubtitle}>Warm neutral surface, muted progress, no bright spinner chrome.</Text>
+        </View>
+        <View style={styles.stateCard}>
+          <Clock color={palette.textFaint} size={22} />
+          <Text style={styles.actionTitle}>Waiting</Text>
+          <Text style={styles.actionSubtitle}>Partner status stays calm and readable above the input.</Text>
+        </View>
+        <View style={styles.stateCard}>
+          <X color={palette.danger} size={22} />
+          <Text style={styles.actionTitle}>Blocked</Text>
+          <Text style={styles.actionSubtitle}>Access and error states use semantic danger without loud fills.</Text>
+        </View>
+        <View style={styles.stateCard}>
+          <Check color={palette.success} size={22} />
+          <Text style={styles.actionTitle}>Complete</Text>
+          <Text style={styles.actionSubtitle}>Resolved states use success tokens and restrained confirmation copy.</Text>
+        </View>
+      </View>
+
+      <GuidedActionPanel
+        tone="success"
+        eyebrow="Resolved"
+        title="You have enough for the next step"
+        subtitle="The completion state keeps the same typography and CTA rhythm as in-progress panels."
+        primaryAction={{ label: 'Continue', onPress: () => {} }}
+      />
+      <WaitingBanner status="partner-validating-empathy" partnerName="Sam" onExercisePress={() => {}} />
+    </View>
+  );
+}
+
+function ActivityPreview({ color }: { color: string }) {
+  return (
+    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: color, opacity: 0.72 }} />
   );
 }
 
@@ -517,12 +681,14 @@ const makeStyles = (palette: Palette) =>
     },
     segmentRow: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: 8,
       paddingHorizontal: 16,
       paddingVertical: 12,
     },
     segmentButton: {
-      flex: 1,
+      flexGrow: 1,
+      flexBasis: '30%',
       minHeight: 38,
       alignItems: 'center',
       justifyContent: 'center',
@@ -553,6 +719,28 @@ const makeStyles = (palette: Palette) =>
     },
     sectionStack: {
       gap: 16,
+    },
+    inventoryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    inventoryPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      minHeight: 32,
+      borderRadius: 999,
+      backgroundColor: palette.chipBg,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    inventoryPillText: {
+      color: palette.textMuted,
+      fontSize: 12,
+      fontFamily: designFonts.sans,
+      fontWeight: '700',
     },
     sectionTitle: {
       gap: 4,
@@ -707,6 +895,129 @@ const makeStyles = (palette: Palette) =>
       borderRadius: 8,
       backgroundColor: palette.bgElev,
     },
+    conversationPreview: {
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 8,
+      backgroundColor: palette.bgElev,
+    },
+    conversationHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: palette.divider,
+    },
+    conversationTitle: {
+      flex: 1,
+      textAlign: 'center',
+      fontSize: 24,
+      lineHeight: 28,
+      color: palette.text,
+      fontFamily: designFonts.serif,
+    },
+    searchIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.chipBg,
+    },
+    conversationRow: {
+      position: 'relative',
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      padding: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: palette.divider,
+    },
+    conversationRowActive: {
+      backgroundColor: palette.selected,
+      borderLeftWidth: 2,
+      borderLeftColor: palette.accent,
+    },
+    rowTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    rowTime: {
+      fontSize: 10,
+      color: palette.textFaint,
+      fontFamily: designFonts.mono,
+    },
+    rowFoot: {
+      marginTop: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+    stateChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 8,
+      minHeight: 22,
+      borderRadius: 999,
+      backgroundColor: palette.chipBg,
+    },
+    stateChipReady: {
+      backgroundColor: palette.accentSoft,
+    },
+    stateChipText: {
+      color: palette.textMuted,
+      fontSize: 10,
+      fontWeight: '700',
+      fontFamily: designFonts.sans,
+    },
+    stateChipTextReady: {
+      color: palette.accentText,
+    },
+    stateDot: {
+      width: 5,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: palette.accent,
+    },
+    progressSegments: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+    },
+    progressSegment: {
+      width: 12,
+      height: 3,
+      borderRadius: 2,
+      backgroundColor: palette.progressPending,
+    },
+    progressSegmentDone: {
+      backgroundColor: palette.success,
+    },
+    progressSegmentNow: {
+      backgroundColor: palette.accent,
+    },
+    stateGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+    },
+    stateCard: {
+      width: '48%',
+      minWidth: 148,
+      minHeight: 142,
+      gap: 8,
+      padding: 14,
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 8,
+    },
     drawerPreviewRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -746,7 +1057,7 @@ const makeStyles = (palette: Palette) =>
     sheetScrim: {
       flex: 1,
       justifyContent: 'flex-end',
-      backgroundColor: 'rgba(0,0,0,0.58)',
+      backgroundColor: palette.scrim,
     },
     sheet: {
       backgroundColor: palette.bg,

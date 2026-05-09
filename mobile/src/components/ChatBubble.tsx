@@ -473,7 +473,7 @@ const useStyles = () => {
     sharedContentDeliveryStatus: {
       fontSize: 11,
       fontWeight: '500',
-      color: '#f97316', // Orange-500 for pending/delivered states
+      color: palette.warning,
       textAlign: 'right',
       marginTop: t.spacing.sm,
       textTransform: 'capitalize',
@@ -482,27 +482,27 @@ const useStyles = () => {
     sharedContentDeliveryStatusLight: {
       fontSize: 11,
       fontWeight: '500',
-      color: '#ea580c', // Orange-600 for better contrast on light background
+      color: palette.warning,
       textAlign: 'right',
       marginTop: t.spacing.sm,
       textTransform: 'capitalize',
     },
     // Blue "Sending" status (optimistic UI - message being sent)
     sharedContentDeliveryStatusSending: {
-      color: '#3b82f6', // Blue-500 - indicates active/in-progress
+      color: palette.info,
       fontStyle: 'italic',
     },
     // Green "Seen" status (dark background)
     sharedContentDeliveryStatusSeen: {
-      color: '#22c55e', // Green-500
+      color: palette.success,
     },
     // Green "Seen" status (light background)
     sharedContentDeliveryStatusSeenLight: {
-      color: '#16a34a', // Green-600 for better contrast on light
+      color: palette.success,
     },
     // Gray "Superseded" status (content was replaced by updated version)
     sharedContentDeliveryStatusSuperseded: {
-      color: '#6b7280', // Gray-500 - muted to indicate outdated
+      color: palette.textFaint,
       fontStyle: 'italic',
     },
     // Shared context: subtle container

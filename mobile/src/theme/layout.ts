@@ -15,7 +15,7 @@ export const modalPageStyle = Platform.OS === 'web'
       flex: 1,
       width: '100%' as const,
       alignItems: 'center' as const,
-      backgroundColor: '#0f172a',
+      backgroundColor: 'transparent',
     }
   : {
       flex: 1,
