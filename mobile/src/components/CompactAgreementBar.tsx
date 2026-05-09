@@ -40,9 +40,7 @@ export function CompactAgreementBar({
   return (
     <GuidedActionPanel
       tone="topic"
-      eyebrow="Curiosity compact"
       title="Ready to begin?"
-      subtitle={isFirstSession ? 'Start with the compact, then name the conversation topic.' : undefined}
       primaryAction={{
         label,
         onPress: onSign,
