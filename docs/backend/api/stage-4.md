@@ -246,8 +246,9 @@ When no typed kind is supplied the heuristic defaults to **INDIVIDUAL_COMMITMENT
 | Signal | Condition | Result |
 |--------|-----------|--------|
 | `readyToClose: true` + `kind: NO_SHARED_AGREEMENT` | Always | Closes immediately with `NO_SHARED_AGREEMENT` |
-| `readyToClose: true` + `kind: SHARED_AGREEMENT` | Both partners have WILLING selection on ≥1 SHARED_PROPOSAL | Closes with `SHARED_AGREEMENT` |
-| `readyToClose: true` + `kind: SHARED_AGREEMENT` | Mutual WILLING not satisfied | Signal ignored; manual close required |
+| Any other signal | — | Returns `{closed: false, reason: 'no_explicit_no_shared_closure_signal'}` — signal ignored |
+
+> **Note:** `SHARED_AGREEMENT` closures are not handled by this function. They require the manual `POST /stage4/close` endpoint, which evaluates mutual WILLING selections and creates agreement records.
 
 Both auto-closure and manual `POST /stage4/close` filter needs using **OPEN and PARTIAL** coverage status when computing `openNeedIds` for the closure record.
 
