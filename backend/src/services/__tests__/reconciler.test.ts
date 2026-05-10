@@ -835,6 +835,96 @@ describe('Reconciler Service', () => {
       );
     });
 
+    it('creates subject-specific quality commentary messages when revealing', async () => {
+      (prisma.empathyAttempt.findMany as jest.Mock).mockResolvedValue([
+        { id: 'attempt-1', sessionId: 'session-1', sourceUserId: 'user-1', status: 'READY' },
+        { id: 'attempt-2', sessionId: 'session-1', sourceUserId: 'user-2', status: 'READY' },
+      ]);
+      (prisma.reconcilerResult.findMany as jest.Mock).mockResolvedValue([
+        {
+          sessionId: 'session-1',
+          guesserId: 'user-1',
+          subjectId: 'user-2',
+          gapSeverity: 'moderate',
+        },
+        {
+          sessionId: 'session-1',
+          guesserId: 'user-2',
+          subjectId: 'user-1',
+          gapSeverity: 'minor',
+        },
+      ]);
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([
+        { id: 'user-1', firstName: 'Ava', name: 'Ava Example' },
+        { id: 'user-2', firstName: 'Ben', name: 'Ben Example' },
+      ]);
+
+      await checkAndRevealBothIfReady('session-1');
+
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId: 'session-1',
+          senderId: null,
+          forUserId: 'user-2',
+          role: 'AI',
+          stage: 2,
+          content: expect.stringContaining("Ava's attempt to understand your experience"),
+        }),
+      });
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId: 'session-1',
+          senderId: null,
+          forUserId: 'user-2',
+          role: 'AI',
+          stage: 2,
+          content: expect.stringContaining('may not fully capture everything you shared'),
+        }),
+      });
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId: 'session-1',
+          senderId: null,
+          forUserId: 'user-1',
+          role: 'AI',
+          stage: 2,
+          content: expect.stringContaining("Ben's attempt to understand your experience"),
+        }),
+      });
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId: 'session-1',
+          senderId: null,
+          forUserId: 'user-1',
+          role: 'AI',
+          stage: 2,
+          content: expect.not.stringContaining('may not fully capture everything you shared'),
+        }),
+      });
+
+      const { publishMessageAIResponse } = require('../../services/realtime');
+      expect(publishMessageAIResponse).toHaveBeenCalledWith(
+        'session-1',
+        'user-2',
+        expect.objectContaining({
+          role: MessageRole.AI,
+          stage: 2,
+          content: expect.stringContaining('may not fully capture everything you shared'),
+        }),
+        {}
+      );
+      expect(publishMessageAIResponse).toHaveBeenCalledWith(
+        'session-1',
+        'user-1',
+        expect.objectContaining({
+          role: MessageRole.AI,
+          stage: 2,
+          content: expect.not.stringContaining('may not fully capture everything you shared'),
+        }),
+        {}
+      );
+    });
+
     it('returns false when no attempts exist', async () => {
       (prisma.empathyAttempt.findMany as jest.Mock).mockResolvedValue([]);
 

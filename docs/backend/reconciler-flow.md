@@ -60,6 +60,8 @@ stateDiagram-v2
 
 > **Mutual Reveal**: Empathy statements are only revealed when BOTH users have completed Stage 2 and had their empathy analyzed. The `READY` status means "reconciler complete, waiting for partner to also finish Stage 2".
 
+> **Quality Commentary at Reveal**: At mutual reveal time, `checkAndRevealBothIfReady()` also creates an AI quality message for each subject (the person reviewing their partner's empathy attempt). The message is tailored to the `gapSeverity` from the latest non-superseded `ReconcilerResult` for that direction (guesser → subject): moderate/significant gaps generate a message noting the attempt may not fully capture everything and encouraging feedback; no/minor gaps generate a simpler "ready to review" prompt. This runs as a best-effort side effect — errors are logged as warnings and do not block the reveal.
+
 ## Share Offer States
 
 The `ReconcilerShareOffer` tracks the suggestion lifecycle:
@@ -379,7 +381,7 @@ Only one panel shows at a time, in this priority order:
 |-------|---------|-------------------|-----------|
 | `empathy.status_updated` (status=`AWAITING_SHARING`) | Reconciler offers a share prompt (Moderate+focus or Significant gap) | `shareOffer`, `empathyStatus` | Show share suggestion panel (message: "&lt;name&gt; is considering a suggestion to share more") |
 | `empathy.context_shared` | Subject shares additional context | `empathyStatus`, `shareOffer`, `messages` | Guesser sees shared context |
-| `empathy.revealed` | Empathy revealed (no significant gaps) | `empathyStatus`, `partnerEmpathy` | Subject can validate |
+| `empathy.revealed` | Empathy revealed (mutual reveal — both directions READY) | `empathyStatus`, `partnerEmpathy` | Subject can validate; also triggers an AI quality commentary message for each subject based on `gapSeverity` of the corresponding reconciler result |
 | `partner.stage_completed` | Partner completes a stage; Stage 2 validation emits this only for `validated=true` | `empathyStatus`, `progress` | Update waiting status |
 | `partner.session_viewed` | Partner views session | `empathyStatus` (delivery status) | Update delivery indicator |
 | `empathy.validated` | Partner validates empathy | `empathyStatus` | Show validation result |

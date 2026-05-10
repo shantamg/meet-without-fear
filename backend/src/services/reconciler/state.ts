@@ -467,6 +467,80 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
     });
   }
 
+  // Create quality commentary messages so each subject knows what to expect
+  // when reviewing their partner's empathy attempt (issue #497)
+  try {
+    const justRevealed = revealed.filter((a: EmpathyAttemptState) => a.status === 'READY');
+    if (justRevealed.length > 0) {
+      const allUserIds = revealed.map((a: EmpathyAttemptState) => a.sourceUserId!);
+
+      // Get reconciler results and user names
+      const [reconcilerResults, users] = await Promise.all([
+        prisma.reconcilerResult.findMany({
+          where: { sessionId, supersededAt: null },
+        }),
+        prisma.user.findMany({
+          where: { id: { in: allUserIds } },
+          select: { id: true, firstName: true, name: true },
+        }),
+      ]);
+
+      const nameOf = (id: string) => {
+        const match = users.find((u: { id: string }) => u.id === id);
+        return match?.firstName || match?.name || 'Your partner';
+      };
+
+      for (const attempt of justRevealed) {
+        const guesserId = attempt.sourceUserId!;
+        const subjectId = allUserIds.find((uid: string) => uid !== guesserId);
+        if (!subjectId) continue;
+
+        // Find the reconciler result for this direction (guesser → subject)
+        const result = reconcilerResults.find(
+          (r: { guesserId: string; subjectId: string }) => r.guesserId === guesserId && r.subjectId === subjectId
+        );
+
+        const guesserName = nameOf(guesserId);
+        const hasGaps = result && (result.gapSeverity === 'moderate' || result.gapSeverity === 'significant');
+
+        const qualityMessage = hasGaps
+          ? `${guesserName}'s attempt to understand your experience is ready for you to review. It may not fully capture everything you shared — if something feels off or missing, you can share feedback to help them understand better.`
+          : `${guesserName}'s attempt to understand your experience is ready for you to review. Take a moment to read it and let us know how it feels.`;
+
+        const savedMsg = await prisma.message.create({
+          data: {
+            sessionId,
+            senderId: null,
+            forUserId: subjectId,
+            role: 'AI',
+            content: qualityMessage,
+            stage: 2,
+          },
+        });
+
+        await publishMessageAIResponse(
+          sessionId,
+          subjectId,
+          {
+            id: savedMsg.id,
+            sessionId,
+            senderId: null,
+            content: savedMsg.content,
+            timestamp: savedMsg.timestamp.toISOString(),
+            role: MessageRole.AI,
+            stage: savedMsg.stage,
+          },
+          {}
+        );
+
+        logger.debug('Created reveal quality message', { subjectId, gapSeverity: result?.gapSeverity ?? 'unknown' });
+      }
+    }
+  } catch (err) {
+    // Not critical — don't block the reveal flow
+    logger.warn('Failed to create reveal quality messages', { error: (err as Error).message });
+  }
+
   logger.info('Both empathy attempts revealed and notifications sent', { sessionId });
   return true;
 }
