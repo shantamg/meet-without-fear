@@ -5,7 +5,7 @@
  * Each session displays its date and AI-generated topic tag.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { View, Text, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -18,6 +18,7 @@ import {
 import { useInnerThoughtsSessions } from '../hooks';
 import { InnerWorkSessionSummaryDTO } from '@meet-without-fear/shared';
 import { HeaderBackButton } from '../components/HeaderBackButton';
+import { trackInnerWorkHubOpened } from '../services/analytics';
 import { createStyles } from '../theme/styled';
 import { useAppAppearance } from '../theme';
 
@@ -29,6 +30,8 @@ interface InnerWorkHubScreenProps {
   onBack?: () => void;
   onStartNewSession?: () => void;
   onOpenSession?: (sessionId: string) => void;
+  /** How the user arrived at the hub (e.g. 'tab_press', 'post_session_prompt') */
+  source?: string;
 }
 
 interface SessionListItemProps {
@@ -94,9 +97,14 @@ export function InnerWorkHubScreen({
   onBack,
   onStartNewSession,
   onOpenSession,
+  source = 'tab_press',
 }: InnerWorkHubScreenProps) {
   const { palette } = useAppAppearance();
   const { data, isLoading, error, refetch } = useInnerThoughtsSessions();
+
+  useEffect(() => {
+    trackInnerWorkHubOpened(source);
+  }, [source]);
 
   const handleBack = useCallback(() => {
     onBack?.();

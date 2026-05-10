@@ -6,7 +6,7 @@
  * Strategies are shown without author labels to focus on the ideas themselves.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -51,6 +51,7 @@ import {
   Stage4ClosureReason,
   Stage4SelectionDecision,
 } from '@meet-without-fear/shared';
+import { trackStrategicRepairStarted, trackStrategicRepairCompleted } from '../services/analytics';
 import { colors } from '@/theme';
 
 // ============================================================================
@@ -419,6 +420,12 @@ export function StrategicRepairScreen() {
   const submitStage4Selection = useSubmitStage4ProposalSelection();
   const closeStage4 = useCloseStage4();
 
+  useEffect(() => {
+    if (sessionId) {
+      trackStrategicRepairStarted(sessionId);
+    }
+  }, [sessionId]);
+
   // Determine current phase
   const phase = strategyData?.phase || StrategyPhase.COLLECTING;
 
@@ -541,6 +548,7 @@ export function StrategicRepairScreen() {
         {
           onSuccess: (response) => {
             if (response.sessionCanResolve) {
+              trackStrategicRepairCompleted(sessionId);
               resolveSession(
                 { sessionId },
                 {

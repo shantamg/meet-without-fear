@@ -47,6 +47,14 @@ const assertInit = (): void => {
 
 export const track = (eventName: string, properties?: Record<string, unknown>): void => {
   assertInit();
+  if (__DEV__ && properties) {
+    if ('session_id' in properties && !properties.session_id) {
+      console.warn(`[Mixpanel DEV] "${eventName}" tracked with falsy session_id`);
+    }
+    if ('user_id' in properties && !properties.user_id) {
+      console.warn(`[Mixpanel DEV] "${eventName}" tracked with falsy user_id`);
+    }
+  }
   if (!hasToken) {
     log('Track:', eventName, properties ?? {});
     return;

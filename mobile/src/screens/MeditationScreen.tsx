@@ -49,6 +49,7 @@ import {
 import { useToast } from '../contexts/ToastContext';
 import { MeditationType, formatDurationEstimate } from '@meet-without-fear/shared';
 import { HeaderBackButton } from '../components/HeaderBackButton';
+import { trackMeditationStarted, trackMeditationCompleted } from '../services/analytics';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 
@@ -267,6 +268,7 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
           setCurrentSessionId(data.session.id);
           setTimerSeconds(duration * 60);
           setMode('active');
+          trackMeditationStarted(duration * 60);
 
           // Auto-start speech if enabled
           if (isAutoSpeechEnabled) {
@@ -329,6 +331,7 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
           setCurrentSessionId(data.session.id);
           setTimerSeconds(duration * 60);
           setMode('active');
+          trackMeditationStarted(duration * 60);
 
           // Auto-start speech for guided meditation if auto-speech is enabled
           if (selectedType === MeditationType.GUIDED && generatedScript && isAutoSpeechEnabled) {
@@ -384,6 +387,7 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
   const handleCompleteSession = useCallback(
     (_rating?: number) => {
       stopSpeech(); // Stop any ongoing speech
+      trackMeditationCompleted(duration * 60);
       if (currentSessionId) {
         updateSession.mutate({
           id: currentSessionId,
@@ -397,7 +401,7 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
       setTimerSeconds(0);
       setGeneratedScript(undefined);
     },
-    [currentSessionId, updateSession, stopSpeech]
+    [currentSessionId, duration, updateSession, stopSpeech]
   );
 
   // Handle speaking the meditation script
