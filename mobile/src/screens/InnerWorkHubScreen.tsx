@@ -20,7 +20,7 @@ import { InnerWorkSessionSummaryDTO } from '@meet-without-fear/shared';
 import { HeaderBackButton } from '../components/HeaderBackButton';
 import { trackInnerWorkHubOpened } from '../services/analytics';
 import { createStyles } from '../theme/styled';
-import { colors, useAppAppearance } from '../theme';
+import { useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -28,7 +28,8 @@ import { colors, useAppAppearance } from '../theme';
 
 interface InnerWorkHubScreenProps {
   onBack?: () => void;
-  onNavigateToSelfReflection?: () => void;
+  onStartNewSession?: () => void;
+  onOpenSession?: (sessionId: string) => void;
   /** How the user arrived at the hub (e.g. 'tab_press', 'post_session_prompt') */
   source?: string;
 }
@@ -94,7 +95,8 @@ function SessionListItem({ session, onPress }: SessionListItemProps) {
 
 export function InnerWorkHubScreen({
   onBack,
-  onNavigateToSelfReflection,
+  onStartNewSession,
+  onOpenSession,
   source = 'tab_press',
 }: InnerWorkHubScreenProps) {
   const { palette } = useAppAppearance();
@@ -109,12 +111,12 @@ export function InnerWorkHubScreen({
   }, [onBack]);
 
   const handleNewSession = useCallback(() => {
-    onNavigateToSelfReflection?.();
-  }, [onNavigateToSelfReflection]);
+    onStartNewSession?.();
+  }, [onStartNewSession]);
 
-  const handleSessionPress = useCallback(() => {
-    onNavigateToSelfReflection?.();
-  }, [onNavigateToSelfReflection]);
+  const handleSessionPress = useCallback((sessionId: string) => {
+    onOpenSession?.(sessionId);
+  }, [onOpenSession]);
 
   const sessions = data?.sessions ?? [];
 
@@ -207,7 +209,7 @@ export function InnerWorkHubScreen({
           </TouchableOpacity>
         }
         renderItem={({ item }) => (
-          <SessionListItem session={item} onPress={handleSessionPress} />
+          <SessionListItem session={item} onPress={() => handleSessionPress(item.id)} />
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -335,7 +337,7 @@ const styles = createStyles((t) => ({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: t.colors.bgSecondary,
-    borderRadius: t.radius.lg,
+    borderRadius: t.radius.sm,
     padding: t.spacing.md,
     marginBottom: t.spacing.md,
     borderWidth: 1,
@@ -344,8 +346,7 @@ const styles = createStyles((t) => ({
   newSessionIconContainer: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.brandPurple + '20',
+    borderRadius: t.radius.sm,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: t.spacing.sm,
@@ -362,7 +363,7 @@ const styles = createStyles((t) => ({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: t.colors.bgSecondary,
-    borderRadius: t.radius.lg,
+    borderRadius: t.radius.sm,
     padding: t.spacing.md,
     marginBottom: t.spacing.sm,
     borderWidth: 1,
@@ -385,7 +386,7 @@ const styles = createStyles((t) => ({
   },
   sessionThemeText: {
     fontSize: 12,
-    color: colors.brandPurple,
+    color: t.colors.accent,
     fontWeight: '500',
   },
   sessionSummary: {

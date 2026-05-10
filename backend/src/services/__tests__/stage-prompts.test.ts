@@ -1,4 +1,4 @@
-import { buildStagePrompt, buildStagePromptString, buildInitialMessagePrompt, PromptContext, PromptBlocks, BuildStagePromptOptions, buildInnerWorkPrompt, InsightContext } from '../stage-prompts';
+import { buildStagePrompt, buildStagePromptString, buildInitialMessagePrompt, PromptContext, PromptBlocks, BuildStagePromptOptions, buildInnerWorkPrompt, InsightContext, buildReconcilerPrompt, buildReconcilerEvidencePacket } from '../stage-prompts';
 import type { ContextBundle } from '../context-assembler';
 import type { MemoryIntentResult } from '../memory-intent';
 
@@ -855,6 +855,51 @@ describe('Stage Prompts Service', () => {
     });
   });
 
+  describe('buildReconcilerPrompt', () => {
+    const reconcilerContext = {
+      guesserName: 'Adam',
+      subjectName: 'Eve',
+      empathyStatement: 'I think you felt wrongly accused and scared.',
+      witnessingContent: 'I felt scared, but I also denied yelling at first.',
+      extractedThemes: ['scared', 'defensive'],
+      subjectFacts: [
+        { category: 'Conflict', fact: 'Eve later acknowledged yelling during the argument.' },
+      ],
+      recentSubjectTurns: [
+        { role: 'assistant' as const, content: 'Did you actually yell?', stage: 2 },
+        { role: 'user' as const, content: 'Yeah, I did.', stage: 2 },
+      ],
+    };
+
+    it('keeps reconciler instructions in a cacheable static block without per-session evidence', () => {
+      const result = buildReconcilerPrompt(reconcilerContext);
+
+      expect(result).toHaveProperty('staticBlock');
+      expect(result).toHaveProperty('dynamicBlock');
+      expect(result.staticBlock).toContain('TRUTH HIERARCHY');
+      expect(result.staticBlock).toContain('Stage 1 witnessing is the emotional anchor');
+      expect(result.staticBlock).toContain('Recent Stage 2 subject messages are the freshest signal');
+      expect(result.staticBlock).not.toContain('Adam');
+      expect(result.staticBlock).not.toContain('Eve');
+      expect(result.staticBlock).not.toContain('Yeah, I did.');
+      expect(result.staticBlock).not.toContain('Eve later acknowledged');
+    });
+
+    it('puts run-specific evidence in the evidence packet with the required sections', () => {
+      const packet = buildReconcilerEvidencePacket(reconcilerContext);
+
+      expect(packet).toContain('1. EMOTIONAL ANCHOR (Stage 1)');
+      expect(packet).toContain('2. FACTUAL BASELINE (Ledger)');
+      expect(packet).toContain('3. RECENT SIGNAL (Stage 2 Hot Buffer)');
+      expect(packet).toContain('If Section 3 contradicts Section 2 or Stage 1 factual claims');
+      expect(packet).toContain('Adam');
+      expect(packet).toContain('Eve');
+      expect(packet).toContain('[Conflict] Eve later acknowledged yelling during the argument.');
+      expect(packet).toContain('Stage 2 AI framing prompt: Did you actually yell?');
+      expect(packet).toContain('Stage 2 Eve subject-owned reply: Yeah, I did.');
+    });
+  });
+
   describe('Response Protocol (Semantic Router)', () => {
     it('Stage 1 protocol includes FeelHeardCheck flag instruction', () => {
       const context = createContext();
@@ -863,9 +908,8 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('<thinking>');
       // The flag instruction is in format "FeelHeardCheck: [Y if ready..., N otherwise]"
       expect(prompt).toContain('FeelHeardCheck:');
-      expect(prompt).toContain('FeelHeardConfirmed:');
+      expect(prompt).not.toContain('FeelHeardConfirmed:');
       expect(prompt).toMatch(/FeelHeardCheck.*Y.*N/s);
-      expect(prompt).toMatch(/FeelHeardConfirmed.*Y.*N/s);
       expect(prompt).toContain('Do NOT invite more freeform chat unless the input remains visible');
     });
 
@@ -903,7 +947,7 @@ describe('Stage Prompts Service', () => {
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
       expect(prompt).toContain('The only XML-style tags you may use are exactly <thinking>, <draft>, <needs>, and <dispatch>.');
-      expect(prompt).toContain('Flags such as FeelHeardCheck, FeelHeardConfirmed, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>');
+      expect(prompt).toContain('Flags such as FeelHeardCheck, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>');
       expect(prompt).toContain('never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>');
       expect(prompt).toContain('The <needs> tag is only for the structured Stage 3 needs JSON shown above');
     });
@@ -1198,6 +1242,25 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Does NOT greet them by name');
       expect(prompt).toContain('Does NOT say "thanks for accepting"');
       expect(prompt).not.toContain('Hey Jason, thanks for accepting');
+    });
+  });
+
+  describe('topicFrame in dynamic guidance', () => {
+    it('includes topicFrame in dynamic block for stages 1–4 when provided', () => {
+      for (const stage of [1, 2, 3, 4]) {
+        const blocks = buildStagePrompt(stage, createContext({ topicFrame: 'Mealtime poking' }));
+        expect(blocks.dynamicBlock).toContain('CONVERSATION TOPIC: "Mealtime poking"');
+      }
+    });
+
+    it('omits topicFrame from dynamic block when null', () => {
+      const blocks = buildStagePrompt(1, createContext({ topicFrame: null }));
+      expect(blocks.dynamicBlock).not.toContain('CONVERSATION TOPIC');
+    });
+
+    it('omits topicFrame from dynamic block when undefined', () => {
+      const blocks = buildStagePrompt(1, createContext());
+      expect(blocks.dynamicBlock).not.toContain('CONVERSATION TOPIC');
     });
   });
 
