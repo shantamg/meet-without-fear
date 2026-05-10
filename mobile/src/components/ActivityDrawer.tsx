@@ -17,6 +17,7 @@ import {
   StyleSheet,
   BackHandler,
   useWindowDimensions,
+  type FlatList as FlatListType,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { appWidthStyle } from '@/theme';
@@ -53,7 +54,14 @@ export interface ActivityDrawerProps {
   partnerAccepted?: boolean;
   sessionStatus?: string;
   partnerEmpathyValidated?: boolean;
+  focusTarget?: ActivityDrawerFocusTarget | null;
   testID?: string;
+}
+
+export interface ActivityDrawerFocusTarget {
+  type: 'context' | 'empathy';
+  direction: 'sent' | 'received';
+  timestamp?: string;
 }
 
 // ============================================================================
@@ -221,6 +229,7 @@ export function ActivityDrawer({
   partnerAccepted = false,
   sessionStatus,
   partnerEmpathyValidated,
+  focusTarget,
   testID = 'activity-drawer',
 }: ActivityDrawerProps) {
   const insets = useSafeAreaInsets();
@@ -248,8 +257,13 @@ export function ActivityDrawer({
     enabled: visible && isSessionActive,
   });
   const pendingActionsQuery = usePendingActions(sessionId);
-  const pendingActions = pendingActionsQuery.data?.actions ?? [];
+  const pendingActions = useMemo(
+    () => pendingActionsQuery.data?.actions ?? [],
+    [pendingActionsQuery.data?.actions],
+  );
   const { mutate: markShareTabViewed } = useMarkShareTabViewed(sessionId);
+  const listRef = useRef<FlatListType<TimelineItem>>(null);
+  const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
 
   // Mark as viewed when drawer opens
   useEffect(() => {
@@ -298,6 +312,25 @@ export function ActivityDrawer({
     () => allItems.filter((item) => !item.actionRequired),
     [allItems],
   );
+
+  const focusMatch = useMemo(() => {
+    if (!focusTarget) return null;
+
+    const sameKindItems = allItems.filter(
+      (item) => item.type === focusTarget.type && item.direction === focusTarget.direction,
+    );
+    if (sameKindItems.length === 0) return null;
+    if (!focusTarget.timestamp) return sameKindItems[sameKindItems.length - 1];
+
+    const targetTime = new Date(focusTarget.timestamp).getTime();
+    if (Number.isNaN(targetTime)) return sameKindItems[sameKindItems.length - 1];
+
+    return sameKindItems.reduce((best, item) => {
+      const bestDelta = Math.abs(new Date(best.timestamp).getTime() - targetTime);
+      const itemDelta = Math.abs(new Date(item.timestamp).getTime() - targetTime);
+      return itemDelta < bestDelta ? item : best;
+    });
+  }, [allItems, focusTarget]);
 
   // -------------------------------------------------------------------------
   // Animation refs
@@ -374,6 +407,29 @@ export function ActivityDrawer({
     }
   }, [visible, openDrawer]);
 
+  useEffect(() => {
+    if (!visible || !focusMatch) return;
+
+    setHighlightedItemId(focusMatch.id);
+
+    const timeout = setTimeout(() => {
+      const historyIndex = historyItems.findIndex((item) => item.id === focusMatch.id);
+      if (historyIndex >= 0) {
+        listRef.current?.scrollToIndex({
+          index: historyIndex,
+          animated: true,
+          viewPosition: 0.35,
+        });
+        return;
+      }
+
+      // Attention items render in the list header, above history.
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }, 280);
+
+    return () => clearTimeout(timeout);
+  }, [visible, focusMatch, historyItems]);
+
   // -------------------------------------------------------------------------
   // Android back button
   // -------------------------------------------------------------------------
@@ -439,6 +495,7 @@ export function ActivityDrawer({
     ({ item }: { item: TimelineItem }) => (
       <TimelineItemCard
         item={item}
+        highlighted={item.id === highlightedItemId}
         onOpenRefinement={onOpenRefinement}
         onShareAsIs={onShareAsIs}
         onOpenEmpathyDetail={onOpenEmpathyDetail}
@@ -446,7 +503,7 @@ export function ActivityDrawer({
         testID={`${testID}-item-${item.id}`}
       />
     ),
-    [onOpenRefinement, onShareAsIs, onOpenEmpathyDetail, onShareInvitation, testID],
+    [highlightedItemId, onOpenRefinement, onShareAsIs, onOpenEmpathyDetail, onShareInvitation, testID],
   );
 
   const keyExtractor = useCallback((item: TimelineItem) => item.id, []);
@@ -515,10 +572,17 @@ export function ActivityDrawer({
         {/* Wrapper constrains FlatList frame to the visible drawer area */}
         <View style={listHeight > 0 ? { height: listHeight, overflow: 'hidden' } : { flex: 1 }}>
           <FlatList
+            ref={listRef}
             style={{ flex: 1 }}
             data={historyItems}
             renderItem={renderTimelineItem}
             keyExtractor={keyExtractor}
+            onScrollToIndexFailed={({ index, averageItemLength }) => {
+              listRef.current?.scrollToOffset({
+                offset: Math.max(0, averageItemLength * index),
+                animated: true,
+              });
+            }}
             contentContainerStyle={[styles.listContent, { paddingBottom: 32 + insets.bottom }]}
             showsVerticalScrollIndicator={false}
             ListHeaderComponent={
@@ -559,6 +623,7 @@ export function ActivityDrawer({
                           key={item.id}
                           item={item}
                           centered
+                          highlighted={item.id === highlightedItemId}
                           onOpenRefinement={onOpenRefinement}
                           onShareAsIs={onShareAsIs}
                           onOpenEmpathyDetail={onOpenEmpathyDetail}

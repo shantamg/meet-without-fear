@@ -32,6 +32,8 @@ export interface ChatMessage extends MessageDTO {
   status?: MessageDeliveryStatus;
   /** Delivery status for shared content (empathy statements, shared context) */
   sharedContentDeliveryStatus?: SharedContentDeliveryStatus;
+  /** Whether the shared artifact was sent by the current user or received from partner */
+  sharedContentDirection?: 'sent' | 'received';
 }
 
 export { ChatIndicatorType } from './ChatIndicator';
@@ -165,7 +167,11 @@ interface ChatInterfaceProps {
   /** Callback when "Context shared" indicator is tapped - navigates to Sharing Status
    * @param timestamp - The timestamp of the shared context (for scrolling to it)
    */
-  onContextSharedPress?: (timestamp?: string, isFromMe?: boolean) => void;
+  onContextSharedPress?: (
+    timestamp?: string,
+    isFromMe?: boolean,
+    indicatorType?: ChatIndicatorType,
+  ) => void;
   /** Validation cards to render inline (e.g., partner's empathy attempt for validation) */
   validationCards?: ChatValidationCardItem[];
   /** Callback when user taps "Yes, mostly" on a validation card */
@@ -629,7 +635,7 @@ export function ChatInterface({
       const isTappableIndicator = item.indicatorType === 'context-shared'
         || item.indicatorType === 'empathy-shared';
       const onPress = isTappableIndicator && onContextSharedPress
-        ? () => onContextSharedPress(item.timestamp, item.metadata?.isFromMe)
+        ? () => onContextSharedPress(item.timestamp, item.metadata?.isFromMe, item.indicatorType)
         : undefined;
       return (
         <ChatIndicator
@@ -694,9 +700,11 @@ export function ChatInterface({
       role: message.role,
       content: message.content,
       timestamp: message.timestamp,
+      senderId: message.senderId,
       status: message.status,
       skipTypewriter: !shouldAnimateTypewriter,
       sharedContentDeliveryStatus: message.sharedContentDeliveryStatus,
+      sharedContentDirection: message.sharedContentDirection,
     };
 
     return (
@@ -716,7 +724,7 @@ export function ChatInterface({
         {renderMessageExtra?.(message)}
       </>
     );
-  }, [listItems, shouldAnimateItem, nextAnimatableMessageId, animatingItemId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra, onValidateAccurate, onValidateNotQuite, markItemAnimationSeen]);
+  }, [listItems, shouldAnimateItem, nextAnimatableMessageId, animatingItemId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra, onContextSharedPress, onValidateAccurate, onValidateNotQuite, markItemAnimationSeen]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 
