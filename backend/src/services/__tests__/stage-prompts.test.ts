@@ -706,6 +706,31 @@ describe('Stage Prompts Service', () => {
       expect(result.staticBlock).toContain('<thinking>');
     });
 
+    it('requires earned low-pressure partner-session suggestions', () => {
+      const result = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 5,
+      });
+
+      expect(result.staticBlock).toContain('only when the user is clearly processing a specific relationship or conflict with a named person');
+      expect(result.staticBlock).toContain('you have first reflected the issue accurately');
+      expect(result.staticBlock).toContain('low-pressure and specific');
+      expect(result.staticBlock).toContain('Start a session with Maya');
+    });
+
+    it('guards against over-routing ambiguous person mentions', () => {
+      const result = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 5,
+      });
+
+      expect(result.staticBlock).toContain('Do NOT suggest "start_partner_session" merely because a person is mentioned');
+      expect(result.staticBlock).toContain('self-boundaries');
+      expect(result.staticBlock).toContain('workplace power-dynamics processing');
+      expect(result.staticBlock).toContain('If the situation is ambiguous');
+      expect(result.staticBlock).not.toContain('Be proactive with "start_partner_session"');
+    });
+
     it('static block does not contain clinical language patterns', () => {
       const result = buildInnerWorkPrompt({
         userName: 'Test User',

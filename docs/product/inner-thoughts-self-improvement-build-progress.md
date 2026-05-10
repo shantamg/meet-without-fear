@@ -26,6 +26,8 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `eval/skills/README.md`
 - `mobile/app/(auth)/(tabs)/index.tsx`
 - `mobile/app/(auth)/(tabs)/__tests__/index.test.tsx`
+- `backend/src/services/stage-prompts.ts`
+- `backend/src/services/__tests__/stage-prompts.test.ts`
 - `docs/product/inner-thoughts-self-improvement-build-progress.md`
 
 ## Commands Run
@@ -37,12 +39,15 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `git diff --check`
 - `npm test -- --runTestsByPath 'app/(auth)/(tabs)/__tests__/index.test.tsx' --runInBand` from `mobile/` (passed: 16 tests)
 - `npm --workspace mobile run check` (passed)
+- `npm --workspace backend test -- --runTestsByPath src/services/__tests__/stage-prompts.test.ts --runInBand` (passed: 105 tests)
+- `npm --workspace backend run check` initially failed in the fresh worktree because Prisma client generation was stale/missing; after `npm --workspace backend run prisma:generate`, rerun passed.
 
 ## Current Evidence
 
 - The eval-machine skeleton and actor skill are implemented as durable repo artifacts.
 - Product patch removes `comingSoon: '1'` from the home composer route and passes the typed message as `initialMessage`.
 - `mobile/app/(auth)/inner-work/self-reflection/[id].tsx` already creates a real session when `id === 'new'` and `comingSoon` is absent.
+- Prompt patch replaces over-eager partner-session CTA guidance with an earned, low-pressure, named-person rule and explicit ambiguous-person/workplace-boundary guardrails. This is prompt-contract progress only; live scenario evidence is still required before checking the CTA criteria complete.
 
 ## Decisions
 

@@ -1446,12 +1446,12 @@ ${INNER_WORK_CRISIS_GUIDANCE}
 
 ACTION SUGGESTIONS:
 When appropriate (not every turn), you can suggest helpful actions the user might take:
-- "start_partner_session": Proactively suggest this when the user mentions a specific person by name AND there's a relationship issue, conflict, or situation to discuss. If they're processing something about a specific person, offer to start a conversation with that person. Include personName in the suggestion.
+- "start_partner_session": Suggest this only when the user is clearly processing a specific relationship or conflict with a named person, you have first reflected the issue accurately, and a structured conversation would likely help. Include personName in the suggestion. The CTA should be low-pressure and specific, such as "Start a session with Maya".
 - "start_meditation": If they seem stressed, anxious, or could benefit from grounding
 - "add_gratitude": If they mention something positive or express appreciation
 - "check_need": If they're exploring unmet needs
 
-Be proactive with "start_partner_session" — the purpose of Inner Thoughts is often to prepare for a conversation. If you detect a person and an issue, suggest the session.
+Do NOT suggest "start_partner_session" merely because a person is mentioned. Hold it back when the user primarily needs journaling, ambition sorting, self-boundaries, workplace power-dynamics processing, or private reflection. If the situation is ambiguous, explore whether this is about the user's own choices, boundaries, or energy before offering any partner-session CTA.
 
 ${buildInnerWorkResponseFormat()}`;
 
