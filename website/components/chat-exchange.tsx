@@ -229,7 +229,7 @@ function HeardBubble({
         dim ? "opacity-0" : "opacity-100",
       ].join(" ")}
     >
-      <div className="relative whitespace-nowrap rounded-2xl bg-[var(--accent-soft)] px-7 py-5 text-center text-[clamp(1.125rem,3.6vw,1.5rem)] leading-[1.35] text-foreground shadow-[0_1px_0_0_rgba(28,25,20,0.04),0_10px_28px_-12px_rgba(183,116,47,0.4)]">
+      <div className="relative whitespace-nowrap rounded-2xl bg-[var(--accent-soft)] px-7 py-5 text-center text-[clamp(1.125rem,3.6vw,1.5rem)] leading-[1.35] text-foreground shadow-[0_1px_0_0_rgba(28,25,20,0.04),0_10px_28px_-12px_rgba(183,116,47,0.4)] dark:shadow-[0_1px_0_0_rgba(255,250,240,0.035),0_10px_28px_-12px_rgba(2,8,18,0.78)]">
         <span className="font-display italic">
           {words.length === 0 ? (
             " "
@@ -277,10 +277,10 @@ function Bubble({
     >
       <div
         className={[
-          "relative whitespace-nowrap rounded-2xl px-7 py-5 text-center text-[clamp(1.125rem,3.6vw,1.5rem)] leading-[1.35]",
+          "relative whitespace-nowrap text-center text-[clamp(1.125rem,3.6vw,1.5rem)] leading-[1.35]",
           isRaw
-            ? "bg-card text-foreground shadow-[0_1px_0_0_rgba(28,25,20,0.04),0_10px_28px_-12px_rgba(28,25,20,0.2)]"
-            : "bg-[var(--accent-soft)] text-foreground shadow-[0_1px_0_0_rgba(28,25,20,0.04),0_8px_24px_-12px_rgba(183,116,47,0.4)]",
+            ? "px-0 py-0 text-foreground"
+            : "rounded-2xl bg-[var(--accent-soft)] px-7 py-5 text-foreground shadow-[0_1px_0_0_rgba(28,25,20,0.04),0_8px_24px_-12px_rgba(183,116,47,0.4)] dark:shadow-[0_1px_0_0_rgba(255,250,240,0.035),0_8px_24px_-12px_rgba(2,8,18,0.78)]",
         ].join(" ")}
       >
         <span className="font-display italic">{text || " "}</span>
