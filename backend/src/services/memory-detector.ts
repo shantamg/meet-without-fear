@@ -197,8 +197,7 @@ Output only valid JSON with no markdown formatting or extra text.`;
 
   logger.info(`${logPrefix} Sending to Haiku...`);
 
-  // Ensure turnId is always a string - generate synthetic if not provided
-  const effectiveSessionId = sessionId || 'memory-detection';
+  // Generate synthetic turnId if not provided
   const effectiveTurnId = turnId || (sessionId ? `${sessionId}-${Date.now()}` : `memory-detection-${Date.now()}`);
 
   // Use circuit breaker to prevent slow Haiku calls from blocking the entire response
@@ -214,7 +213,9 @@ Output only valid JSON with no markdown formatting or extra text.`;
         systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
         maxTokens: 512,
-        sessionId: effectiveSessionId,
+        ...(context === 'inner-thoughts'
+          ? { innerWorkSessionId: sessionId }
+          : { sessionId }),
         turnId: effectiveTurnId,
         operation: 'memory-detection',
         callType: BrainActivityCallType.MEMORY_DETECTION,
