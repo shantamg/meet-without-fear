@@ -94,7 +94,7 @@ The reconciler runs when one user confirms "feel heard" (completing Stage 1) and
 
 > **Implementation Note:** The reconciler has been refactored into a modular `backend/src/services/reconciler/` directory:
 > - `state.ts` — Empathy status transitions, reveal logic. Contains `runReconcilerForDirection()` (asymmetric) and `checkAndRevealBothIfReady()` (serializable transaction for mutual reveal).
-> - `analysis.ts` — Core AI gap analysis (`analyzeEmpathyGap()`), theme extraction, witnessing content retrieval.
+> - `analysis.ts` — Core AI gap analysis (`analyzeEmpathyGap()`), theme extraction, witnessing content retrieval. It also loads the subject's `notableFacts` from UserVessel and a scoped Stage 2 subject hot buffer so later subject-owned shifts (for example, denial → confession) can update stale Stage 1 factual framing while preserving Stage 1 as the emotional anchor.
 > - `sharing.ts` — Share suggestion generation, refinement, and response handling.
 > - `circuit-breaker.ts` — Attempt counting to prevent infinite refinement loops (max 3 per direction).
 > - `index.ts` — Barrel re-exports.
@@ -119,7 +119,7 @@ flowchart TB
     B -->|No| C[No action needed]
     B -->|Yes| D[Run Reconciler Analysis]
 
-    D --> E{Analyze gaps in<br/>partner's empathy attempt}
+    D --> E{Analyze gaps using<br/>witnessing + notableFacts<br/>+ Stage 2 subject hot buffer}
 
     E --> F{Gap Severity?}
 
