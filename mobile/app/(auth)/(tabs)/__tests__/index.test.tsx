@@ -360,7 +360,7 @@ describe('HomeScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/session/recent-session');
   });
 
-  it('routes home composer to the inner work coming-soon chat', () => {
+  it('routes home composer to a real Inner Thoughts session with the typed message', () => {
     const session = createMockSession({
       id: 'recent-session',
       partner: { id: 'user-2', name: 'Jane', nickname: 'Jane' },
@@ -380,8 +380,7 @@ describe('HomeScreen', () => {
       pathname: '/inner-work/self-reflection/[id]',
       params: {
         id: 'new',
-        comingSoon: '1',
-        initialMessage: 'Doing inner work by yourself is a feature coming soon.',
+        initialMessage: 'I feel stuck',
       },
     });
   });

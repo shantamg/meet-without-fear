@@ -6,7 +6,7 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 
 ## Goal Checklist
 
-- [ ] Home page composer creates a real Inner Thoughts session from typed user input.
+- [x] Home page composer creates a real Inner Thoughts session from typed user input.
 - [ ] Solo Inner Thoughts reflection is high quality for journaling, ambition, and idea organization.
 - [ ] Person-specific conversation earns a polished partner-session CTA.
 - [ ] Ambiguous person mentions do not over-route to partner sessions.
@@ -24,17 +24,25 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `eval/skills/mwf-inner-thoughts-loop-actor/**`
 - `scripts/install_mwf_eval_skills.sh`
 - `eval/skills/README.md`
+- `mobile/app/(auth)/(tabs)/index.tsx`
+- `mobile/app/(auth)/(tabs)/__tests__/index.test.tsx`
 - `docs/product/inner-thoughts-self-improvement-build-progress.md`
 
 ## Commands Run
 
 - `git worktree add -b codex/inner-thoughts-self-improvement /private/tmp/mwf-inner-thoughts-self-improvement main`
 - Read required starting files listed in `docs/product/inner-thoughts-self-improvement-goal.md`.
+- `python3 -m json.tool eval/inner-thoughts/scenarios.json >/dev/null`
+- `bash -n scripts/install_mwf_eval_skills.sh && bash -n scripts/install_mwf_gold_skills.sh`
+- `git diff --check`
+- `npm test -- --runTestsByPath 'app/(auth)/(tabs)/__tests__/index.test.tsx' --runInBand` from `mobile/` (passed: 16 tests)
+- `npm --workspace mobile run check` (passed)
 
 ## Current Evidence
 
 - The eval-machine skeleton and actor skill are implemented as durable repo artifacts.
-- Product code inspection shows home composer still routes with `comingSoon: '1'` in `mobile/app/(auth)/(tabs)/index.tsx`, so the product criteria are not complete yet.
+- Product patch removes `comingSoon: '1'` from the home composer route and passes the typed message as `initialMessage`.
+- `mobile/app/(auth)/inner-work/self-reflection/[id].tsx` already creates a real session when `id === 'new'` and `comingSoon` is absent.
 
 ## Decisions
 

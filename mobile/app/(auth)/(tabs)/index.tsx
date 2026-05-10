@@ -134,18 +134,14 @@ export default function HomeScreen() {
   const partnerDisplayName = mostRecentSession?.partner?.nickname || mostRecentSession?.partner?.name;
 
   // Handle sending a message from home page chat input.
-  // Inner work is temporarily unavailable, but we still route into the chat shell
-  // so the transition and layout stay familiar.
-  const handleHomeChat = useCallback(() => {
+  const handleHomeChat = useCallback((message: string) => {
     Keyboard.dismiss();
     const params: {
       id: string;
-      comingSoon: string;
       initialMessage: string;
     } = {
       id: 'new',
-      comingSoon: '1',
-      initialMessage: 'Doing inner work by yourself is a feature coming soon.',
+      initialMessage: message,
     };
 
     router.push({
