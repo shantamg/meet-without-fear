@@ -238,7 +238,7 @@ export function useUnifiedSession(
   // Consolidated Session State (reduces initial requests from ~5 to 1)
   // Returns session, progress, messages, invitation, and compact in one request
   // -------------------------------------------------------------------------
-  const { data: stateData, isLoading: loadingState, error: stateError } = useSessionState(sessionId);
+  const { data: stateData, isLoading: loadingState, error: stateError, refetch: refetchState } = useSessionState(sessionId);
 
   // If the /state endpoint returns 403 (no access) or 404 (session deleted/missing),
   // disable all child queries to prevent hundreds of redundant errors from polling.
@@ -262,7 +262,7 @@ export function useUnifiedSession(
   // Messages - use infinite scroll for pagination
   // The useSessionState hook hydrates the messages cache, so this will get a cache hit
   // Gate behind !loadingState to prevent initial parallel burst before /state resolves (see #428)
-  const stateResolved = !loadingState;
+  const stateResolved = !loadingState && !stateError;
   const {
     data: messagesData,
     isLoading: loadingMessages,
@@ -1193,6 +1193,8 @@ export function useUnifiedSession(
   return {
     // Loading state
     isLoading: loadingSession || loadingProgress || loadingMessages,
+    loadError: accessDenied ? null : stateError,
+    refetchSession: refetchState,
     accessDenied,
     isFetchingInitialMessage,
 
