@@ -274,7 +274,7 @@ describe('HomeScreen', () => {
     expect(screen.getByText('What would you like to work through?')).toBeTruthy();
   });
 
-  it('shows New Conversation and hides Inner Work while unavailable', () => {
+  it('shows New Conversation and Inner Work entry points', () => {
     mockUseSessions.mockReturnValue({
       data: { items: [], hasMore: false },
       isLoading: false,
@@ -283,7 +283,7 @@ describe('HomeScreen', () => {
     renderWithProviders(<HomeScreen />);
 
     expect(screen.getByText('New conversation')).toBeTruthy();
-    expect(screen.queryByText('Inner work')).toBeNull();
+    expect(screen.getByText('Inner work')).toBeTruthy();
   });
 
   it('shows Continue button when there is a recent session with partner nickname', () => {
@@ -360,7 +360,7 @@ describe('HomeScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/session/recent-session');
   });
 
-  it('routes home composer to the inner work coming-soon chat', () => {
+  it('routes home composer directly into a new inner thoughts session', () => {
     const session = createMockSession({
       id: 'recent-session',
       partner: { id: 'user-2', name: 'Jane', nickname: 'Jane' },
@@ -380,8 +380,7 @@ describe('HomeScreen', () => {
       pathname: '/inner-work/self-reflection/[id]',
       params: {
         id: 'new',
-        comingSoon: '1',
-        initialMessage: 'Doing inner work by yourself is a feature coming soon.',
+        initialMessage: 'I feel stuck',
       },
     });
   });
