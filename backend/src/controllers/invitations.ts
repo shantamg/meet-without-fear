@@ -32,6 +32,7 @@ const createSessionSchema = z.object({
   inviteName: z.string().min(1).optional(),
   context: z.string().optional(),
   innerThoughtsId: z.string().optional(),
+  linkedAtMessageId: z.string().optional(),
 }).refine(
   (data) => data.personId || data.inviteName,
   { message: 'Must provide personId or inviteName' }
@@ -313,7 +314,7 @@ export async function createSession(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const { personId, inviteName, innerThoughtsId } = parseResult.data;
+    const { personId, inviteName, innerThoughtsId, linkedAtMessageId, context } = parseResult.data;
 
     // Create or find relationship
     let relationship;
@@ -431,11 +432,26 @@ export async function createSession(req: Request, res: Response): Promise<void> 
     // If originated from Inner Thoughts, link it back (non-critical, outside transaction)
     if (innerThoughtsId) {
       try {
+        const validLinkedAtMessage = linkedAtMessageId
+          ? await prisma.innerWorkMessage.findFirst({
+              where: {
+                id: linkedAtMessageId,
+                sessionId: innerThoughtsId,
+              },
+              select: { id: true },
+            })
+          : null;
+
         await prisma.innerWorkSession.updateMany({
-          where: { id: innerThoughtsId, userId: user.id },
+          where: {
+            id: innerThoughtsId,
+            userId: user.id,
+          },
           data: {
             linkedPartnerSessionId: session.id,
             linkedTrigger: 'suggestion_start',
+            ...(validLinkedAtMessage ? { linkedAtMessageId: validLinkedAtMessage.id } : {}),
+            ...(context ? { contextSummarySnapshot: context } : {}),
           },
         });
         logger.info(`[createSession] Linked session ${session.id} to origin inner thoughts ${innerThoughtsId}`);

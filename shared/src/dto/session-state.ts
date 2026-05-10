@@ -48,6 +48,14 @@ export interface SessionStateResponse {
     partnerLastActiveAt: string | null;
     // ID of last chat item seen (for "new messages" line placement)
     lastSeenChatItemId: string | null;
+    // Originating Inner Thoughts session, when this partner session was started from one.
+    sourceInnerThoughts: {
+      id: string;
+      title: string | null;
+      summary: string | null;
+      theme: string | null;
+      contextSummarySnapshot: string | null;
+    } | null;
   };
 
   // Stage progress

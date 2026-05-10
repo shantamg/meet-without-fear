@@ -172,6 +172,22 @@ export async function getSessionState(req: Request, res: Response): Promise<void
             orderBy: { createdAt: 'desc' },
             take: 1,
           },
+          linkedInnerThoughts: {
+            where: {
+              userId: user.id,
+              linkedTrigger: 'suggestion_start',
+              status: { not: 'ARCHIVED' },
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              title: true,
+              summary: true,
+              theme: true,
+              contextSummarySnapshot: true,
+            },
+          },
         },
       }),
 
@@ -221,6 +237,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
     }
 
     const session = sessionWithRelations;
+    const sourceInnerThoughts = session.linkedInnerThoughts[0] ?? null;
     const partnerId = await getPartnerUserId(sessionId, user.id);
 
     // Get my membership (for nickname I use for partner)
@@ -421,6 +438,15 @@ export async function getSessionState(req: Request, res: Response): Promise<void
         partnerLastViewedAt: partnerShowsActivity ? partnerVessel?.lastViewedAt?.toISOString() ?? null : null,
         partnerLastActiveAt: partnerLastActiveAt?.toISOString() ?? null,
         lastSeenChatItemId: userVessel?.lastSeenChatItemId ?? null,
+        sourceInnerThoughts: sourceInnerThoughts
+          ? {
+              id: sourceInnerThoughts.id,
+              title: sourceInnerThoughts.title,
+              summary: sourceInnerThoughts.summary,
+              theme: sourceInnerThoughts.theme,
+              contextSummarySnapshot: sourceInnerThoughts.contextSummarySnapshot,
+            }
+          : null,
       },
 
       // Stage progress

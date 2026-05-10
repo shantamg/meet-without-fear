@@ -106,6 +106,8 @@ export interface CreateSessionRequest {
 
   // Optional: link to Inner Thoughts session that originated this partner session
   innerThoughtsId?: string;
+  // Optional: Inner Thoughts message where the user tapped the start-session action
+  linkedAtMessageId?: string;
 }
 
 export interface CreateSessionResponse {

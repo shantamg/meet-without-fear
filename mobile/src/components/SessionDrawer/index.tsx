@@ -307,7 +307,6 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
     ({ section }: { section: SessionSection }) => (
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>{section.title}</Text>
-        <Text style={styles.sectionCount}>{section.data.length}</Text>
         <View style={styles.sectionRule} />
       </View>
     ),
@@ -636,13 +635,6 @@ const useStyles = () => {
       color: palette.textFaint,
       textTransform: 'uppercase',
       letterSpacing: 1,
-      fontFamily: designFonts.mono,
-    },
-    sectionCount: {
-      fontSize: 10.5,
-      fontWeight: '700',
-      color: palette.textFaint,
-      opacity: 0.75,
       fontFamily: designFonts.mono,
     },
     sectionRule: {

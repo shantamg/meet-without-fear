@@ -1142,17 +1142,53 @@ export async function getInitialMessage(
       responseContent = getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
     }
 
-    // Save the AI message (trim whitespace that Claude sometimes adds)
-    const aiMessage = await prisma.message.create({
-      data: {
-        sessionId,
-        senderId: null,
-        forUserId: user.id, // Track which user this AI response is for (data isolation)
-        role: 'AI',
-        content: responseContent.trim(),
-        stage: currentStage,
-      },
-    });
+    // Save the AI message (trim whitespace that Claude sometimes adds).
+    // This endpoint can be called twice during the Ready/compact transition;
+    // make the final write idempotent so concurrent calls do not create twins.
+    let aiMessage;
+    try {
+      aiMessage = await prisma.$transaction(async (tx) => {
+        const existing = await tx.message.findFirst({
+          where: {
+            sessionId,
+            forUserId: user.id,
+          },
+          orderBy: { timestamp: 'asc' },
+        });
+
+        if (existing) {
+          return existing;
+        }
+
+        return tx.message.create({
+          data: {
+            sessionId,
+            senderId: null,
+            forUserId: user.id, // Track which user this AI response is for (data isolation)
+            role: 'AI',
+            content: responseContent.trim(),
+            stage: currentStage,
+          },
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        const existing = await prisma.message.findFirst({
+          where: {
+            sessionId,
+            forUserId: user.id,
+          },
+          orderBy: { timestamp: 'asc' },
+        });
+        if (existing) {
+          aiMessage = existing;
+        } else {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
+    }
 
     // Embed session content for cross-session retrieval (non-blocking)
     // Per fact-ledger architecture, we embed at session level

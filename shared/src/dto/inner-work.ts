@@ -33,6 +33,10 @@ export interface InnerWorkSessionSummaryDTO {
   messageCount: number;
   /** If linked to a partner session, the session ID */
   linkedPartnerSessionId: string | null;
+  /** Message that produced the start-partner-session branch, when known */
+  linkedAtMessageId: string | null;
+  /** Snapshot of the context passed into the partner session at creation time */
+  contextSummarySnapshot: string | null;
 }
 
 // ============================================================================

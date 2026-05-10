@@ -74,6 +74,8 @@ function mapSessionToSummary(
     updatedAt: Date;
     distilledAt?: Date | null;
     linkedPartnerSessionId?: string | null;
+    linkedAtMessageId?: string | null;
+    contextSummarySnapshot?: string | null;
     _count?: { messages: number };
   }
 ): InnerWorkSessionSummaryDTO {
@@ -88,6 +90,8 @@ function mapSessionToSummary(
     distilledAt: session.distilledAt?.toISOString() ?? null,
     messageCount: session._count?.messages ?? 0,
     linkedPartnerSessionId: session.linkedPartnerSessionId ?? null,
+    linkedAtMessageId: session.linkedAtMessageId ?? null,
+    contextSummarySnapshot: session.contextSummarySnapshot ?? null,
   };
 }
 

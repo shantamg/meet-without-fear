@@ -211,12 +211,16 @@ model InnerWorkSession {
   // When set, AI has access to partner session context and can reference it
   linkedPartnerSession   Session? @relation("LinkedInnerThoughts", fields: [linkedPartnerSessionId], references: [id], onDelete: SetNull)
   linkedPartnerSessionId String?
+  linkedAtMessage        InnerWorkMessage? @relation("InnerWorkBranchPoint", fields: [linkedAtMessageId], references: [id], onDelete: SetNull)
+  linkedAtMessageId      String?
   linkedAtStage          Int? // Stage when Inner Thoughts was opened (1, 2, 3, 4)
   linkedTrigger          String? // Why it was opened: "empathy_wait", "voluntary", "witness_wait"
+  contextSummarySnapshot String? @db.Text // Point-in-time context passed when a partner session was started
 
   @@index([userId, updatedAt])
   @@index([status])
   @@index([linkedPartnerSessionId])
+  @@index([linkedAtMessageId])
 }
 
 enum InnerWorkStatus {
@@ -248,6 +252,7 @@ model InnerWorkMessage {
   role      MessageRole
   content   String           @db.Text
   timestamp DateTime         @default(now())
+  branchForSessions InnerWorkSession[] @relation("InnerWorkBranchPoint")
 
   // NOTE: Message-level embedding removed per fact-ledger architecture
   // Session-level contentEmbedding on InnerWorkSession is used instead

@@ -274,7 +274,7 @@ describe('HomeScreen', () => {
     expect(screen.getByText('What would you like to work through?')).toBeTruthy();
   });
 
-  it('shows New Conversation and Inner Work entry points', () => {
+  it('shows New Conversation and Inner Thoughts entry points', () => {
     mockUseSessions.mockReturnValue({
       data: { items: [], hasMore: false },
       isLoading: false,
@@ -283,7 +283,7 @@ describe('HomeScreen', () => {
     renderWithProviders(<HomeScreen />);
 
     expect(screen.getByText('New conversation')).toBeTruthy();
-    expect(screen.getByText('Inner work')).toBeTruthy();
+    expect(screen.getByText('Inner thoughts')).toBeTruthy();
   });
 
   it('shows Continue button when there is a recent session with partner nickname', () => {
