@@ -3,6 +3,7 @@ import {
   View,
   Text,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ListRenderItem,
@@ -246,11 +247,25 @@ export function ChatInterface({
   const animationScope = sessionId || localAnimationScopeRef.current;
   const animationScopeRef = useRef(animationScope);
   const seenAnimatedItemIdsRef = useRef(getSeenAnimatedItemIds(animationScope));
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   if (animationScopeRef.current !== animationScope) {
     animationScopeRef.current = animationScope;
     seenAnimatedItemIdsRef.current = getSeenAnimatedItemIds(animationScope);
   }
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, () => setIsKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setIsKeyboardVisible(false));
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Cache-First Architecture: Derive "waiting for AI" from last message role
@@ -876,8 +891,8 @@ export function ChatInterface({
             failedMessage={failedMessage}
           />
         )}
-        {renderAboveInput?.()}
-        {renderBelowInput?.()}
+        {!isKeyboardVisible && renderAboveInput?.()}
+        {!isKeyboardVisible && renderBelowInput?.()}
       </View>
     </KeyboardAvoidingView>
   );
