@@ -33,6 +33,8 @@ export {
 
 // Analysis
 export {
+  analyzeEmpathyGap,
+  loadRecentSubjectStage2Turns,
   runReconciler,
 } from './analysis';
 
