@@ -34,6 +34,8 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `eval/inner-thoughts/stages/01-intake/output/latest-artifact-index.md`
 - `eval/inner-thoughts/stages/06-rerun/output/rerun-results.md`
 - `eval/inner-thoughts/stages/07-judge/output/readiness-judgment.md`
+- `eval/inner-thoughts/stages/08-report/output/cycle-report.md`
+- `eval/inner-thoughts/cycles/20260510-bootstrap-and-home-composer/cycle-report.md`
 - `docs/product/inner-thoughts-self-improvement-build-progress.md`
 
 ## Commands Run
@@ -51,6 +53,7 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `npm --workspace backend run check` (passed)
 - `npm --workspace mobile run start:e2e` (started local web app on `localhost:8082`)
 - `agent-browser --session mwf-inner-journal ...` drove `journal-organize-ambition` through the home composer and first follow-up turn.
+- `agent-browser --session mwf-inner-journal close`
 
 ## Current Evidence
 
@@ -70,3 +73,4 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 
 - Whether live actor runs should use the existing `localhost:8082` E2E app as-is or need a dedicated Inner Thoughts no-Clerk fixture.
 - A real-LLM rerun is required; current local backend process advertises `MOCK_LLM=true`.
+- Human/environment action required: start or provide a backend with `MOCK_LLM=false` and real model credentials for the remaining scenario gates.
