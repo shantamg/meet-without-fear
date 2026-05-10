@@ -2,12 +2,12 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, LockKeyhole, MessageCircle, Pause, Sparkles } from "lucide-react";
 
-import { TransformationPairs } from "@/components/transformation-pairs";
+import { ChatExchange } from "@/components/chat-exchange";
 
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-50 border-b border-border bg-background backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6">
           <Link href="/" className="flex items-center gap-3" aria-label="Meet Without Fear home">
             <Image src="/logo.svg" alt="" width={40} height={34} priority />
@@ -23,55 +23,74 @@ export default function HomePage() {
         </div>
       </header>
 
-      <section className="mx-auto grid min-h-[calc(100svh-4rem)] max-w-6xl content-center justify-items-center px-5 pb-16 pt-12 text-center sm:px-6 lg:pb-20">
-        <div className="mx-auto max-w-4xl">
-          <div className="mb-8 flex items-center justify-center gap-3">
-            <Image src="/logo.svg" alt="" width={72} height={60} priority />
-            <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
-              Guided conflict repair
+      {/* HERO — asymmetric editorial layout: oversized display type left, live chat right. */}
+      <section className="paper-grain relative overflow-hidden">
+        {/* soft warm glow behind the type */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-32 left-1/2 h-[640px] w-[640px] -translate-x-[60%] rounded-full bg-[var(--accent-soft)] opacity-60 blur-3xl"
+        />
+        <div className="relative z-10 mx-auto grid min-h-[calc(100svh-4rem)] max-w-6xl content-center gap-x-12 gap-y-16 px-5 pb-24 pt-16 sm:px-6 lg:grid-cols-12 lg:gap-y-0 lg:pb-28 lg:pt-20">
+          {/* Left: title + lede + CTAs */}
+          <div className="text-center lg:col-span-7 lg:text-left">
+            <div className="mb-7 flex items-center justify-center gap-3 lg:justify-start">
+              <Image src="/logo.svg" alt="" width={56} height={48} priority />
+              <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
+                Guided conflict repair
+              </p>
+            </div>
+
+            <h1 className="font-display text-[clamp(2rem,8.4vw,6.75rem)] leading-[0.92] tracking-[-0.01em] text-foreground">
+              <span className="lg:block">Meet </span>
+              <span className="italic text-accent-text lg:block">Without </span>
+              <span className="lg:block">Fear.</span>
+            </h1>
+
+            <p className="mx-auto mt-8 max-w-xl text-lg leading-8 text-muted-foreground sm:text-xl lg:mx-0">
+              A quieter way through the conversations that matter most. Start in
+              private, feel heard, and move toward repair without rushing into a
+              reactive exchange.
             </p>
+
+            <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
+              <Link
+                href="/app"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-7 py-4 text-base font-medium text-accent-foreground transition hover:opacity-90"
+              >
+                Get started
+                <ArrowRight className="h-5 w-5" strokeWidth={1.8} />
+              </Link>
+            </div>
           </div>
 
-          <h1 className="mx-auto max-w-3xl font-display text-5xl leading-[0.94] tracking-normal text-foreground sm:text-7xl">
-            Meet Without Fear
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-muted-foreground sm:text-xl">
-            A quieter way through the conversations that matter most. Start in private,
-            feel heard, and move toward repair without rushing into a reactive exchange.
-          </p>
+          {/* Mobile divider between title block and chat exchange */}
+          <div
+            aria-hidden
+            className="mx-auto h-px w-24 bg-border lg:hidden"
+          />
 
-          <div className="mx-auto mt-12 max-w-2xl">
-            <TransformationPairs />
-          </div>
-
-          <div className="mt-16 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              href="/app"
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-7 py-4 text-base font-medium text-accent-foreground transition hover:opacity-90"
-            >
-              Get started
-              <ArrowRight className="h-5 w-5" strokeWidth={1.8} />
-            </Link>
-            <a
-              href="#process"
-              className="inline-flex items-center justify-center rounded-full border border-border bg-background-elevated px-7 py-4 text-base font-medium text-foreground transition hover:border-accent"
-            >
-              How it works
-            </a>
+          {/* Right: live chat exchange — the visual proof */}
+          <div className="lg:col-span-5 lg:pl-4 lg:flex lg:items-center">
+            <div className="w-full px-2 py-4 sm:px-4 lg:-translate-y-10">
+              <ChatExchange />
+            </div>
           </div>
         </div>
       </section>
 
-      <section id="process" className="border-y border-border bg-background-elevated py-20 sm:py-28">
+      {/* Process */}
+      <section id="process" className="bg-background-elevated py-24 sm:py-32">
         <div className="mx-auto max-w-6xl px-5 sm:px-6">
           <div className="mb-14 max-w-2xl">
             <p className="mb-4 font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
               The process
             </p>
-            <h2 className="font-display text-4xl leading-tight text-foreground sm:text-5xl">
-              A buffer between two people.
+            <h2 className="font-display text-4xl leading-[1.05] text-foreground sm:text-6xl">
+              A buffer between
+              <br />
+              <span className="italic text-accent-text">two people.</span>
             </h2>
-            <p className="mt-5 text-base leading-7 text-muted-foreground">
+            <p className="mt-6 text-base leading-7 text-muted-foreground">
               Meet Without Fear helps each side settle, be heard, and move toward
               a next step without rushing into a reactive conversation.
             </p>
@@ -89,8 +108,7 @@ export default function HomePage() {
                     aria-hidden
                   />
                 )}
-                <div className="mb-7 h-px w-10 bg-brand-orange/70" aria-hidden />
-                <h3 className="mb-4 font-display text-2xl leading-none text-foreground md:text-[1.65rem]">
+                <h3 className="mb-4 font-display text-2xl italic leading-tight text-accent-text md:text-[1.65rem]">
                   {step.title}
                 </h3>
                 <p className="text-sm leading-6 text-muted-foreground">{step.body}</p>
@@ -100,14 +118,19 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="py-20 sm:py-28">
+      {/* Features */}
+      <section className="bg-background py-24 sm:py-32">
         <div className="mx-auto max-w-6xl px-5 sm:px-6">
           <div className="mb-12 max-w-2xl">
             <p className="mb-4 font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
               What stays protected
             </p>
-            <h2 className="font-display text-4xl leading-tight text-foreground sm:text-5xl">
-              Built for emotional safety before progress.
+            <h2 className="font-display text-4xl leading-[1.05] text-foreground sm:text-6xl">
+              Built for
+              <br />
+              <span className="italic text-accent-text">emotional safety</span>
+              <br />
+              before progress.
             </h2>
           </div>
 
@@ -136,12 +159,15 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="border-t border-border bg-background-elevated py-20">
+      {/* Final CTA */}
+      <section className="bg-background-elevated py-24">
         <div className="mx-auto max-w-3xl px-5 text-center sm:px-6">
-          <h2 className="font-display text-4xl leading-tight text-foreground sm:text-5xl">
-            Ready when the words are not.
+          <h2 className="font-display text-4xl leading-[1.05] text-foreground sm:text-6xl">
+            Ready when the
+            <br />
+            <span className="italic text-accent-text">words are not.</span>
           </h2>
-          <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-muted-foreground">
+          <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-muted-foreground">
             Open the app and begin with what you can say. The process will slow
             everything down from there.
           </p>
