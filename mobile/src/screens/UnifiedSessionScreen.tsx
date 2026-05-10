@@ -1928,6 +1928,13 @@ export function UnifiedSessionScreen({
     }).start();
   }, [readyToShowShareSuggestion, shareSuggestionAnim]);
 
+  // Fire when share prompt first renders on screen (not on press)
+  useEffect(() => {
+    if (shareOfferData?.suggestion) {
+      trackShareTopicShown(sessionId, shareOfferData.suggestion.action as 'OFFER_SHARING' | 'OFFER_OPTIONAL');
+    }
+  }, [shareOfferData?.suggestion]);
+
   // Share topic analytics tracking has moved to the Sharing Status screen
 
   // -------------------------------------------------------------------------
@@ -2932,7 +2939,6 @@ export function UnifiedSessionScreen({
                 partnerName={partnerName}
                 onPress={() => {
                   setShowShareTopicDrawer(true);
-                  trackShareTopicShown(sessionId, shareOfferData.suggestion!.action as 'OFFER_SHARING' | 'OFFER_OPTIONAL');
                 }}
               />
             )}
