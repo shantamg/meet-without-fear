@@ -982,6 +982,7 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
       isInvitationPhase: false,
       isStageTransition: true,
       previousStage: 0,
+      topicFrame: session.topicFrameConfirmedAt ? session.topicFrame : undefined,
     };
 
     // Notify session that invitation was confirmed

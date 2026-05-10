@@ -384,6 +384,10 @@ ${INVALID_MEMORY_GUIDANCE}`;
 function buildBaseDynamicGuidance(context: PromptContext): string {
   const parts: string[] = [];
 
+  if (context.topicFrame) {
+    parts.push(`CONVERSATION TOPIC: "${context.topicFrame}"`);
+  }
+
   const lastUserMessage = getLastUserMessage(context);
   if (lastUserMessage && isProcessQuestion(lastUserMessage)) {
     parts.push(PROCESS_OVERVIEW);
@@ -473,6 +477,8 @@ export interface PromptContext {
    * this — it has its own in-app UI for re-sharing or abandoning invites.
    */
   invitedSessionNudge?: string | null;
+  /** The confirmed topic of this conversation (stages 1–4) */
+  topicFrame?: string | null;
 }
 
 /** Simplified context for initial message generation (no context bundle needed) */
