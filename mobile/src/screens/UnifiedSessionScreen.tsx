@@ -535,6 +535,8 @@ export function UnifiedSessionScreen({
   const {
     // Loading
     isLoading,
+    loadError,
+    refetchSession,
     accessDenied,
     isFetchingInitialMessage,
 
@@ -653,16 +655,17 @@ export function UnifiedSessionScreen({
     markSessionViewed,
 
   } = useUnifiedSession(sessionId);
+  const sessionQueriesEnabled = !accessDenied && !loadError;
 
   // Server-side pending actions for badge count (replaces client-side computation)
-  // Gate behind !accessDenied to prevent polling when session is deleted (#428)
-  const pendingActionsQuery = usePendingActions(sessionId, { enabled: !accessDenied });
+  // Gate behind a clean session load to prevent polling when session state fails (#428, #522)
+  const pendingActionsQuery = usePendingActions(sessionId, { enabled: sessionQueriesEnabled });
 
   // Sharing status for the header button. Keep these duplicate header queries
   // behind the same stage/access gates as useUnifiedSession so the badge does
   // not reintroduce the Stage 2 share-offer request storm this PR removes.
   const sharingStatus = useSharingStatus(sessionId, {
-    enabled: !accessDenied && currentStage >= Stage.PERSPECTIVE_STRETCH,
+    enabled: sessionQueriesEnabled && currentStage >= Stage.PERSPECTIVE_STRETCH,
     enableEmpathyStatus: currentStage >= Stage.PERSPECTIVE_STRETCH,
     enablePartnerEmpathy: currentStage >= Stage.PERSPECTIVE_STRETCH,
     enableShareOffer: currentStage === Stage.PERSPECTIVE_STRETCH,
@@ -759,10 +762,10 @@ export function UnifiedSessionScreen({
   });
 
   // Real-time presence and event tracking
-  // Disable when session is invalid to prevent Ably subscription cascading errors (#428)
+  // Disable when session is invalid or failed to load to prevent cascading errors (#428, #522)
   const { partnerOnline, connectionStatus, reconnect: _reconnectRealtime } = useRealtime({
     sessionId,
-    enabled: !accessDenied,
+    enabled: sessionQueriesEnabled,
     enablePresence: true,
     onSessionEvent: (event, data) => {
       console.log('[UnifiedSessionScreen] Received realtime event:', event);
@@ -3261,6 +3264,30 @@ export function UnifiedSessionScreen({
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={styles.accentColor.color} />
         <Text style={styles.loadingText}>Loading session...</Text>
+      </View>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Load Error — network/server failure (retries exhausted)
+  // The foreground recovery effect (AppState listener) will auto-retry when
+  // the app returns from background, so the user can also just reopen.
+  // -------------------------------------------------------------------------
+  if (loadError) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.loadingText}>Couldn't load session</Text>
+        <Text style={[styles.loadingText, { fontSize: 14, marginTop: 4, opacity: 0.7 }]}>
+          Check your connection and try again.
+        </Text>
+        <TouchableOpacity onPress={() => refetchSession()} style={{ marginTop: 20 }}>
+          <Text style={[styles.loadingText, { textDecorationLine: 'underline' }]}>Retry</Text>
+        </TouchableOpacity>
+        {onNavigateBack && (
+          <TouchableOpacity onPress={onNavigateBack} style={{ marginTop: 12 }}>
+            <Text style={[styles.loadingText, { textDecorationLine: 'underline' }]}>Go back</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }

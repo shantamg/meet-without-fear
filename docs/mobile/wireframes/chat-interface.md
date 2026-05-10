@@ -2,7 +2,7 @@
 title: Chat Interface
 sidebar_position: 3
 description: The primary conversation interface where users interact with the AI.
-updated: 2026-05-09
+updated: 2026-05-10
 status: living
 ---
 # Chat Interface
@@ -205,7 +205,13 @@ flowchart TB
 
 ## Session entry flow
 
-Before the chat list renders, `UnifiedSessionScreen` can swap in a full-screen mood check (`SessionEntryMoodCheck`) — this is the default entry when `shouldShowMoodCheck` is true. Only after the user submits (or dismisses) the mood reading does the usual chat layout show.
+Before the chat list renders, `UnifiedSessionScreen` checks three guard states in order:
+
+1. **Loading** — shows spinner + "Loading session..." while the `/state` endpoint (and retries) are in flight.
+2. **Load error** — if the state fetch fails (network timeout, offline, server error) after React Query retries are exhausted, shows "Couldn't load session" with a **Retry** button and a **Go back** link. The existing `AppState` foreground listener also auto-retries when the app returns from background.
+3. **Access denied** — 403/404 shows "You don't have access to this session." with a Go back link.
+
+After these guards pass, the mood check may appear (`SessionEntryMoodCheck`) if `shouldShowMoodCheck` is true. Only after the user submits (or dismisses) the mood reading does the usual chat layout show.
 
 ## App-level overlays
 
