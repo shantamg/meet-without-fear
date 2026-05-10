@@ -28,20 +28,21 @@ Screenshot: `/tmp/mwf-inner-journal.png`
 - Expected: The route wrapper intentionally stores `createdSessionId` in component state to avoid remount flicker, so this may be expected. It is still awkward evidence for actor runs because the URL alone does not expose the real session id.
 - Likely fix: If future actor automation needs durable URLs, consider replacing the route after creation only after cache prepopulation and transition completion, or expose session id in DOM/test metadata.
 
-### Reflection Quality Blocked By Generic Fallback
+### Reflection Quality Not Evaluable With Mock LLM
 
 - Stage: Inner Thoughts chat
-- Type: prompt/product evidence
-- Status: confirmed for this local run
+- Type: eval environment
+- Status: confirmed
 - What happened: The first two AI responses were generic fallback-style prompts: "I hear you. Tell me more about what you're experiencing." and "I'm here with you. Tell me more about what's on your mind."
 - Evidence: `document.body.innerText` after two actor messages contained those two AI responses and no organizing structure, themes, tensions, or idea parking lot.
 - Expected: Scenario 1 expects a skillful reflection partner that helps organize ambition, stability, creative work, and fear of wasting time without rushing to action.
-- Likely fix: Diagnose whether the local backend had model access/configuration for this run. If the model is available, improve the Inner Thoughts prompt and response parsing; if not, record the run as not evaluable for reflection quality.
+- Diagnosis: The backend process used for this run was the already-running main-checkout process on port 3000 with `MOCK_LLM=true` and `E2E_AUTH_BYPASS=true`, confirmed via `ps eww -p 84909`.
+- Likely fix: Rerun with `MOCK_LLM=false` and real model credentials before judging reflection quality.
 
 ## Findings
 
 - Creation path passes the first product criterion in local E2E UI evidence.
-- Reflection quality did not pass in this run.
+- Reflection quality is not evaluable in this run because the backend was in mock-LLM mode.
 - No partner-session CTA appeared during the first two turns, which is appropriate for this scenario, but the run is too weak to claim the full scenario pass.
 
 MWF_INNER_THOUGHTS_STATUS:
@@ -49,9 +50,9 @@ MWF_INNER_THOUGHTS_STATUS:
 {
   "scenario_id": "journal-organize-ambition",
   "run_id": "local",
-  "state": "bug_blocked",
-  "blocked_on": "generic_ai_fallback",
-  "next_action_needed": "Diagnose local backend model configuration or response generation fallback before judging reflection quality.",
+  "state": "error",
+  "blocked_on": "mock_llm_backend",
+  "next_action_needed": "Rerun with MOCK_LLM=false and real model credentials before judging reflection quality.",
   "scratch_log": "docs/product/inner-thoughts-scratch/2026-05-10-local-journal-organize-ambition.md",
   "current_url": "http://localhost:8082/inner-work/self-reflection/new?id=new"
 }

@@ -59,7 +59,7 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `mobile/app/(auth)/inner-work/self-reflection/[id].tsx` already creates a real session when `id === 'new'` and `comingSoon` is absent.
 - Prompt patch replaces over-eager partner-session CTA guidance with an earned, low-pressure, named-person rule and explicit ambiguous-person/workplace-boundary guardrails. This is prompt-contract progress only; live scenario evidence is still required before checking the CTA criteria complete.
 - Handoff patch preserves `innerThoughtsId` traceability even when the new-session flow returns an existing active session instead of creating a new one.
-- Local `journal-organize-ambition` browser run passed creation evidence but did not pass reflection quality because AI responses were generic fallback prompts.
+- Local `journal-organize-ambition` browser run passed creation evidence but could not evaluate reflection quality because the backend process was running with `MOCK_LLM=true`.
 
 ## Decisions
 
@@ -69,4 +69,4 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 ## Unresolved Questions
 
 - Whether live actor runs should use the existing `localhost:8082` E2E app as-is or need a dedicated Inner Thoughts no-Clerk fixture.
-- Whether the generic AI fallback in the local browser run was caused by backend model configuration, response parsing, or prompt behavior.
+- A real-LLM rerun is required; current local backend process advertises `MOCK_LLM=true`.
