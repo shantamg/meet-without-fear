@@ -12,8 +12,9 @@ export default function InnerWorkHubRoute() {
 
   return (
     <InnerWorkHubScreen
-      onNavigateToSelfReflection={() => router.push('/inner-work/self-reflection')}
-      onBack={() => router.back()}
+      onStartNewSession={() => router.push('/inner-work/self-reflection/new')}
+      onOpenSession={(sessionId) => router.push(`/inner-work/self-reflection/${sessionId}`)}
+      onBack={() => router.replace('/(auth)/(tabs)')}
     />
   );
 }
