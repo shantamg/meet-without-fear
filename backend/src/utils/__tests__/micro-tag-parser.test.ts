@@ -377,7 +377,7 @@ That gives this a clearer shape.`;
       expect(result.stage4ProposalBlockPresent).toBe(false);
     });
 
-    it('extracts FeelHeardConfirmed:Y as true', () => {
+    it('ignores FeelHeardConfirmed:Y from LLM (feel-heard gate is button-only)', () => {
       const raw = `<thinking>
 Mode: WITNESS
 FeelHeardCheck:Y
@@ -388,7 +388,7 @@ Let's move into the next part.`;
       const result = parseMicroTagResponse(raw);
 
       expect(result.offerFeelHeardCheck).toBe(true);
-      expect(result.feelHeardConfirmed).toBe(true);
+      expect(result.feelHeardConfirmed).toBe(false);
     });
 
     it('trims whitespace from draft content', () => {

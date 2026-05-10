@@ -286,7 +286,8 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
 
   // 3. Extract flags from thinking string (no JSON needed!)
   const offerFeelHeardCheck = feelHeardControlTag ?? /FeelHeardCheck:\s*Y/i.test(thinking);
-  const feelHeardConfirmed = /FeelHeardConfirmed:\s*Y/i.test(thinking);
+  // FeelHeardConfirmed extraction removed — feel-heard gate is button-only (POST /sessions/:id/feel-heard)
+  const feelHeardConfirmed = false;
   const offerReadyToShare = readyShareControlTag ?? /ReadyShare:\s*Y/i.test(thinking);
 
   // 4. Extract proposed strategies from thinking (Stage 4)

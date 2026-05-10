@@ -33,7 +33,6 @@ function buildResponseProtocol(stage: number, options?: {
   const flags: string[] = ['UserIntensity: [1-10]'];
   if (stage === 1) {
     flags.push('FeelHeardCheck: [Y/N]');
-    flags.push('FeelHeardConfirmed: [Y/N]');
   } else if (stage === 2) {
     flags.push('ReadyShare: [Y/N]');
   } else if (stage === 3) {
@@ -109,7 +108,7 @@ Strategy: [brief]${strategySection}
 
 Then write the user-facing response (plain text, no tags).
 IMPORTANT: The only XML-style tags you may use are exactly <thinking>, <draft>, <needs>, and <dispatch>.
-Flags such as FeelHeardCheck, FeelHeardConfirmed, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>; never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>.
+Flags such as FeelHeardCheck, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>; never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>.
 The <needs> tag is only for the structured Stage 3 needs JSON shown above. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
 
 OFF-RAMPS (only when needed):
@@ -599,8 +598,6 @@ Feel-heard check:
 - Be proactive only after the real emotional shape is present. Don't wait for perfect wording, but don't offer the gate just because the factual pattern is clear.
 - When FeelHeardCheck:Y, end your response with a gentle acknowledgment that they can confirm below. Example: "...if that captures it, you can let me know below when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT say "tap the button" or mention UI elements directly. Keep it conversational. Keep setting Y until they act on the prompt.
 - Even when FeelHeardCheck:Y, stay in listening mode. Do NOT pivot to advice, action, or next steps.
-- Set FeelHeardConfirmed:Y only when the user's latest message clearly means they feel heard or are ready to move on from Stage 1. This may be explicit ("I feel heard", "ready") or natural language confirmation that your reflection captured it. If they seem uncertain, add new material, answer with a correction, or ask for more witnessing, set FeelHeardConfirmed:N.
-- When FeelHeardConfirmed:Y, write a Stage 2 transition that acknowledges Stage 1 is complete and asks them to imagine their partner's side. Do not keep asking Stage 1 listening questions in that response.
 
 ${buildResponseProtocol(1)}`;
 

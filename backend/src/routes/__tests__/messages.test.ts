@@ -229,7 +229,7 @@ describe('Messages API (Fire-and-Forget)', () => {
   });
 
   describe('POST /sessions/:id/messages/stream (sendMessageStream)', () => {
-    it('advances Stage 1 through the backend gate when the LLM confirms typed felt-heard readiness', async () => {
+    it('does NOT auto-advance Stage 1 when the LLM emits FeelHeardConfirmed:Y (feel-heard gate is button-only)', async () => {
       const stage1Progress = {
         id: 'progress-1',
         sessionId: mockSessionId,
@@ -254,7 +254,7 @@ describe('Messages API (Fire-and-Forget)', () => {
         forUserId: mockUser.id,
         role: 'AI',
         content: 'That feels complete. Now let us turn toward what your partner might be experiencing in this.',
-        stage: 2,
+        stage: 1,
         timestamp: new Date('2026-05-07T08:00:01Z'),
       };
       const session = {
@@ -269,18 +269,7 @@ describe('Messages API (Fire-and-Forget)', () => {
       (prisma.session.findUnique as jest.Mock).mockResolvedValue(session);
       (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(stage1Progress);
       (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue(null);
-      (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
-        ...stage1Progress,
-        status: 'COMPLETED',
-      });
-      (prisma.stageProgress.upsert as jest.Mock).mockResolvedValue({
-        id: 'progress-2',
-        sessionId: mockSessionId,
-        userId: mockUser.id,
-        stage: 2,
-        status: 'IN_PROGRESS',
-        gatesSatisfied: {},
-      });
+      (prisma.stageProgress.update as jest.Mock).mockResolvedValue(stage1Progress);
       (prisma.message.create as jest.Mock).mockImplementation(async ({ data }) => (
         data.role === 'USER' ? userMessage : { ...aiMessage, content: data.content, stage: data.stage }
       ));
@@ -311,46 +300,31 @@ describe('Messages API (Fire-and-Forget)', () => {
 
       await sendMessageStream(req as Request, res as Response);
 
+      // AI message stays on stage 1 (no auto-advance)
       expect(prisma.message.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             role: 'AI',
-            stage: 2,
+            stage: 1,
           }),
         })
       );
+      // Stage progress updated with feelHeardCheckOffered only — NOT completed
       expect(prisma.stageProgress.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'progress-1' },
           data: expect.objectContaining({
-            status: 'COMPLETED',
             gatesSatisfied: expect.objectContaining({
               feelHeardCheckOffered: true,
-              feelHeardConfirmed: true,
-              feedback: userMessage.content,
             }),
           }),
         })
       );
-      expect(prisma.stageProgress.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            sessionId_userId_stage: {
-              sessionId: mockSessionId,
-              userId: mockUser.id,
-              stage: 2,
-            },
-          },
-          create: expect.objectContaining({
-            sessionId: mockSessionId,
-            userId: mockUser.id,
-            stage: 2,
-            status: 'IN_PROGRESS',
-          }),
-        })
-      );
-      expect(writeMock.mock.calls.map(([chunk]) => String(chunk)).join('')).toContain('"feelHeardConfirmed":true');
-      expect(writeMock.mock.calls.map(([chunk]) => String(chunk)).join('')).toContain('"advancedToStage":2');
+      // No Stage 2 progress created by LLM path
+      expect(prisma.stageProgress.upsert).not.toHaveBeenCalled();
+      // No advancedToStage in SSE metadata
+      const sseOutput = writeMock.mock.calls.map(([chunk]: [unknown]) => String(chunk)).join('');
+      expect(sseOutput).not.toContain('"advancedToStage":2');
       expect(endMock).toHaveBeenCalled();
     });
   });

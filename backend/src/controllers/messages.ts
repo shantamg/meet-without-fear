@@ -1910,7 +1910,6 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
       // Extract metadata from parsed response
       metadata.offerFeelHeardCheck = parsed.offerFeelHeardCheck;
-      metadata.feelHeardConfirmed = parsed.feelHeardConfirmed;
       metadata.offerReadyToShare = parsed.offerReadyToShare;
       if (parsed.proposedStrategies.length > 0) {
         metadata.proposedStrategies = parsed.proposedStrategies;
@@ -1934,7 +1933,6 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
       logger.info(`[sendMessageStream:${requestId}] Parsed metadata:`, {
         offerFeelHeardCheck: metadata.offerFeelHeardCheck,
-        feelHeardConfirmed: metadata.feelHeardConfirmed,
         offerReadyToShare: metadata.offerReadyToShare,
         hasDraft: !!parsed.draft,
         proposedNeedsCount: metadata.proposedNeeds?.length ?? 0,
@@ -2087,14 +2085,6 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       );
     }
 
-    const stage1ConfirmationAt = currentStage === 1 && metadata.feelHeardConfirmed === true
-      ? new Date()
-      : null;
-    if (stage1ConfirmationAt) {
-      metadata.feelHeardConfirmedAt = stage1ConfirmationAt.toISOString();
-      metadata.advancedToStage = 2;
-    }
-
     // =========================================================================
     // Signal that text streaming is complete (before DB saves for faster UX)
     // =========================================================================
@@ -2107,7 +2097,6 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     // Save AI message (only if streaming succeeded)
     // Trim whitespace that Claude sometimes adds
     // =========================================================================
-    const completedStage1FromLLM = currentStage === 1 && metadata.feelHeardConfirmed === true && progress?.id;
     const aiMessage = await prisma.message.create({
       data: {
         sessionId,
@@ -2115,7 +2104,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         forUserId: user.id,
         role: 'AI',
         content: accumulatedText.trim(),
-        stage: completedStage1FromLLM ? 2 : effectiveStage, // Use effective stage (21 for Stage 2B) for analytics
+        stage: effectiveStage, // Use effective stage (21 for Stage 2B) for analytics
       },
     });
     logger.info(`[sendMessageStream:${requestId}] AI message created: ${aiMessage.id}`);
@@ -2126,76 +2115,17 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     // =========================================================================
     // Process metadata (persist to database)
     // =========================================================================
-    if (currentStage === 1 && progress?.id && (metadata.offerFeelHeardCheck || metadata.feelHeardConfirmed)) {
+    if (currentStage === 1 && progress?.id && metadata.offerFeelHeardCheck) {
       const currentGates = (progress.gatesSatisfied as Record<string, unknown>) ?? {};
-      const completedAt = stage1ConfirmationAt ?? new Date();
-      const confirmedAt = completedAt.toISOString();
       await prisma.stageProgress.update({
         where: { id: progress.id },
         data: {
           gatesSatisfied: {
             ...currentGates,
             feelHeardCheckOffered: true,
-            ...(metadata.feelHeardConfirmed
-              ? {
-                  feelHeardConfirmed: true,
-                  feelHeardConfirmedAt: confirmedAt,
-                  finalEmotionalReading: null,
-                  feedback: content,
-                }
-              : {}),
           },
-          ...(metadata.feelHeardConfirmed
-            ? {
-                status: 'COMPLETED' as const,
-                completedAt,
-              }
-            : {}),
         },
       });
-
-      if (metadata.feelHeardConfirmed) {
-        await prisma.stageProgress.upsert({
-          where: {
-            sessionId_userId_stage: {
-              sessionId,
-              userId: user.id,
-              stage: 2,
-            },
-          },
-          create: {
-            sessionId,
-            userId: user.id,
-            stage: 2,
-            status: 'IN_PROGRESS',
-            startedAt: completedAt,
-            gatesSatisfied: {},
-          },
-          update: {},
-        });
-
-        const partnerId = await getPartnerUserId(sessionId, user.id);
-        if (partnerId) {
-          await notifyPartner(sessionId, partnerId, 'partner.stage_completed', {
-            stage: 1,
-            completedBy: user.id,
-          });
-        }
-
-        const partnerCompleted = await hasPartnerCompletedStage1(sessionId, user.id);
-        if (partnerCompleted) {
-          await publishSessionEvent(sessionId, 'partner.advanced', {
-            fromStage: 1,
-            toStage: 2,
-          });
-        }
-
-        consolidateGlobalFacts(user.id, sessionId, `${sessionId}-${user.id}-llm-feel-heard`).catch((err: unknown) =>
-          logger.warn('[sendMessageStream] Failed to consolidate global facts after LLM feel-heard confirmation:', err)
-        );
-
-        logger.info(`[sendMessageStream:${requestId}] LLM confirmed Stage 1 feel-heard gate; advanced backend state to Stage 2`);
-      }
     }
 
     // Save topic frame (Stage 0 / invitation phase) - only if not already confirmed
