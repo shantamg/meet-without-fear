@@ -67,8 +67,8 @@ export const PUSH_MESSAGES: Record<SessionEvent, PushMessageTemplate> = {
     body: '{actor} is ready for the next step with you.',
   },
   'partner.empathy_shared': {
-    title: '{actorPossessive} empathy is ready',
-    body: 'Read what {actor} understood about your experience.',
+    title: '{actor} shared empathy',
+    body: "We're checking it now and will show it when it is ready to read.",
   },
   'partner.additional_context_shared': {
     title: 'More context shared',
@@ -160,8 +160,8 @@ export const PUSH_MESSAGES: Record<SessionEvent, PushMessageTemplate> = {
     body: 'Use the new context to refine your empathy when you are ready.',
   },
   'empathy.revealed': {
-    title: 'Your empathy is revealed',
-    body: 'Your empathy statement has been shared with {actor}.',
+    title: 'Empathy exchange is ready',
+    body: 'You can now read what {actor} understood about your experience.',
   },
   'empathy.refining': {
     title: 'New context to consider',
