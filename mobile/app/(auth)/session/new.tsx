@@ -12,7 +12,7 @@
  * and pre-fills the partner name if available.
  */
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -60,6 +60,7 @@ export default function NewSessionScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [innerThoughtsContext, setInnerThoughtsContext] = useState<GenerateContextResponse | null>(null);
+  const hasPreFilledPartnerName = useRef(false);
   const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<(() => Promise<void>) | null>(null);
@@ -91,13 +92,14 @@ export default function NewSessionScreen() {
 
   // Pre-fill partner name from query params (from InnerThoughtsScreen navigation)
   useEffect(() => {
-    if (partnerName && !firstName) {
+    if (partnerName && !hasPreFilledPartnerName.current) {
+      hasPreFilledPartnerName.current = true;
       const nameParts = partnerName.split(' ');
       setFirstName(nameParts[0] || '');
       setLastName(nameParts.slice(1).join(' ') || '');
       setMode('new'); // Switch to new person mode since we have a name
     }
-  }, [partnerName, firstName]);
+  }, [partnerName]);
 
   // Determine if we have people to pick from
   const hasPeople = people.length > 0;
