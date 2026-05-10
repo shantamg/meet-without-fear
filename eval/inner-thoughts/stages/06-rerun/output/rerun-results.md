@@ -4,25 +4,31 @@ Date: 2026-05-10
 
 ## `journal-organize-ambition`
 
-- Run id: `local`
-- Scratch log: `docs/product/inner-thoughts-scratch/2026-05-10-local-journal-organize-ambition.md`
-- App URL: `http://localhost:8082/?e2e-user-id=inner-journal-user&e2e-user-email=inner-journal-user%40e2e.test`
-- Backend: existing local backend on `localhost:3000` with `MOCK_LLM=true`
-- Status: `error`
+- Run id: `real-local`
+- Scratch log: `docs/product/inner-thoughts-scratch/2026-05-10-real-journal-organize-ambition.md`
+- App URL: `http://localhost:8082/?e2e-user-id=inner-real-journal-user&e2e-user-email=inner-real-journal-user%40e2e.test`
+- Backend: worktree backend on `localhost:3000` with `MOCK_LLM=false`
+- Status: `pass`
 
 ### What Passed
 
 - Home composer accepted the exact starting message.
 - The app navigated into Inner Thoughts.
 - The visible chat contained the exact user message and no coming-soon copy.
-- No inappropriate partner-session CTA appeared during the first two turns.
+- No inappropriate partner-session CTA appeared during the solo reflection.
+- The AI stayed reflective and asked focused follow-up questions.
+- When asked to organize the material, the AI identified three coherent buckets: practical risk, fear of disappointing others, and fear of not being good enough.
+- The AI did not turn the user's request into a productivity checklist.
 
-### What Is Not Evaluable
+### Defect Found
 
-- Reflection quality cannot be judged because the backend was running with `MOCK_LLM=true`.
-- The first two AI responses were generic fallback-style prompts and did not organize the user's themes or tensions.
-- The URL remained `.../self-reflection/new?id=new`, which makes actor status less informative even though the route may hold the created id in component state.
+- Real-LLM inner-thoughts memory detection initially logged BrainActivity with `sessionId: <innerWorkSessionId>`, causing Prisma `P2025` errors because the id was not a partner `Session`.
+- The chat recovered through fallback, but real-LLM telemetry was broken.
+- Fixed in `backend/src/services/memory-detector.ts` by logging inner-thoughts detection with `innerWorkSessionId`.
+- Verified after backend restart with another real turn: BrainActivity inserted with `innerWorkSessionId`, memory detection completed, and no Prisma relation error appeared.
 
-### Next Action
+### Still Not Covered
 
-Rerun with `MOCK_LLM=false` and real model credentials before judging reflection quality.
+- `person-to-partner-session`
+- `ambiguous-person-boundary`
+- live CTA click-through into generated context and Stage 0

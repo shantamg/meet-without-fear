@@ -1,4 +1,5 @@
 import { detectMemoryIntent, detectMemoryIntentMock } from '../memory-detector';
+import { getHaikuJson } from '../../lib/bedrock';
 
 // Mock circuit breaker to execute immediately without timeout
 jest.mock('../../utils/circuit-breaker', () => ({
@@ -225,6 +226,17 @@ describe('Memory Detector Service', () => {
       const result = await detectMemoryIntent('Test message', 'session-123');
 
       expect(result).toHaveProperty('hasMemoryIntent');
+    });
+
+    it('logs inner thoughts detection against an inner work session', async () => {
+      await detectMemoryIntent('Remember that I like short responses', 'inner-session-123', undefined, 'inner-thoughts');
+
+      const lastCall = (getHaikuJson as jest.Mock).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(expect.objectContaining({
+        innerWorkSessionId: 'inner-session-123',
+        operation: 'memory-detection',
+      }));
+      expect(lastCall).not.toHaveProperty('sessionId');
     });
   });
 });

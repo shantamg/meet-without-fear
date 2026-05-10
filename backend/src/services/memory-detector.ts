@@ -208,13 +208,17 @@ Output only valid JSON with no markdown formatting or extra text.`;
     topicContext: '',
   };
 
+  const activityScope = context === 'inner-thoughts'
+    ? { innerWorkSessionId: effectiveSessionId }
+    : { sessionId: effectiveSessionId };
+
   const response = await withHaikuCircuitBreaker(
     async () => {
       return await getHaikuJson<HaikuDetectionResponse>({
         systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
         maxTokens: 512,
-        sessionId: effectiveSessionId,
+        ...activityScope,
         turnId: effectiveTurnId,
         operation: 'memory-detection',
         callType: BrainActivityCallType.MEMORY_DETECTION,

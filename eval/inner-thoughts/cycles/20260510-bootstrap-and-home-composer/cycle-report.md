@@ -16,6 +16,7 @@ Turn Inner Thoughts back on from the home composer, improve the partner-session 
 - Changed the home composer to route the typed message to a real Inner Thoughts session instead of `comingSoonMode`.
 - Tightened `buildInnerWorkPrompt` so partner-session CTAs are earned, low-pressure, and not triggered merely by ambiguous person mentions.
 - Preserved `innerThoughtsId` traceability when the new-session flow returns an existing active session.
+- Fixed inner-thoughts memory-detection telemetry so real-LLM BrainActivity rows connect to `InnerWorkSession` instead of attempting to connect the inner-work id as a partner `Session`.
 - Added progress and scratch evidence docs.
 
 ## Verification
@@ -28,28 +29,29 @@ Turn Inner Thoughts back on from the home composer, improve the partner-session 
 - `npm --workspace backend test -- --runTestsByPath src/services/__tests__/stage-prompts.test.ts --runInBand`: passed, 105 tests.
 - `npm --workspace backend test -- --runTestsByPath src/routes/__tests__/invitations.test.ts --runInBand`: passed, 14 tests.
 - `npm --workspace backend run check`: passed after `npm --workspace backend run prisma:generate` in the fresh worktree.
+- `npm --workspace backend test -- --runInBand backend/src/services/__tests__/memory-detector.test.ts`: passed, 25 tests.
 
 ## Live Run
 
 Scenario: `journal-organize-ambition`
 
-- Scratch log: `docs/product/inner-thoughts-scratch/2026-05-10-local-journal-organize-ambition.md`
-- Status: `error`
-- Blocker: backend used for local browser run had `MOCK_LLM=true`.
-- Evidence: `ps eww -p 84909` showed `E2E_AUTH_BYPASS=true` and `MOCK_LLM=true`.
-- Result: home composer creation evidence passed; reflection quality could not be evaluated.
+- Scratch log: `docs/product/inner-thoughts-scratch/2026-05-10-real-journal-organize-ambition.md`
+- Status: `pass`
+- Backend: worktree backend with `MOCK_LLM=false` and real Bedrock credentials.
+- Result: home composer creation passed; solo reflection stayed on topic; no partner-session CTA appeared; the AI organized the user's scattered ambition/work thoughts into useful non-checklist buckets.
+- Additional finding: the real-LLM run exposed a BrainActivity relation bug in memory detection for inner thoughts. The bug was patched and verified with a subsequent real turn.
 
 ## Remaining Risks
 
-- No real-LLM live pass exists for any of the three scenarios.
+- Real-LLM live pass exists only for `journal-organize-ambition`.
 - No live evidence yet for the person-to-partner CTA, generated-context banner, or Stage 0 context use.
+- No live evidence yet for ambiguous person mentions being held inside Inner Thoughts.
 - The created-session route keeps the URL at `/inner-work/self-reflection/new?id=new` while holding the real session id in state. This avoids flicker but weakens URL-only actor evidence.
 
-## Human Decision / Environment Blocker
+## Current State
 
-The remaining completion criteria require `MOCK_LLM=false` live runs. This shell has no model credentials in the environment, and the only running backend was a main-checkout process with `MOCK_LLM=true`. A human needs to provide or start a real-LLM backend before the loop can honestly judge reflection quality and CTA timing.
+The human cleared use of real model credentials. The environment blocker is removed for this worktree. Completion is still not claimable because the person-specific CTA and ambiguous-person scenarios have not been run to live evidence yet.
 
 ## Cleanup
 
-- Closed `agent-browser` session `mwf-inner-journal`.
-- Stopped the mobile E2E web server started from this worktree.
+- Cleanup will be performed when this active continuation stops.
