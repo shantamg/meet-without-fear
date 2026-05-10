@@ -17,12 +17,14 @@ export interface ChatBubbleMessage {
   role: MessageRole;
   content: string;
   timestamp: string;
+  senderId?: string | null;
   isIntervention?: boolean;
   status?: MessageDeliveryStatus;
   /** If true, skip animation (for messages loaded from history) */
   skipTypewriter?: boolean;
   /** Delivery status for shared content messages (EMPATHY_STATEMENT, SHARED_CONTEXT) */
   sharedContentDeliveryStatus?: SharedContentDeliveryStatus;
+  sharedContentDirection?: 'sent' | 'received';
 }
 
 interface ChatBubbleProps {
@@ -252,9 +254,13 @@ export function ChatBubble({
     // Empathy statements - use fade-in for new messages
     if (isEmpathyStatement) {
       const deliveryStatus = message.sharedContentDeliveryStatus;
+      const header =
+        message.sharedContentDirection === 'received'
+          ? (partnerName ? `Empathy from ${partnerName}` : 'Empathy from your partner')
+          : 'What you shared';
       const content = (
         <View>
-          <Text style={styles.empathyStatementHeader}>What you shared</Text>
+          <Text style={styles.empathyStatementHeader}>{header}</Text>
           <Text style={styles.empathyStatementText}>{message.content}</Text>
           {/* Delivery status indicator - only show when we have a status */}
           {deliveryStatus && (
@@ -279,6 +285,8 @@ export function ChatBubble({
     if (isSharedContext) {
       const contextLabel = isValidationFeedback
         ? (partnerName ? `Feedback from ${partnerName}` : 'Feedback from your partner')
+        : message.sharedContentDirection === 'sent'
+          ? (partnerName ? `Context shared with ${partnerName}` : 'Context shared')
         : (partnerName ? `New context from ${partnerName}` : 'New context from your partner');
       const deliveryStatus = message.sharedContentDeliveryStatus;
       const content = (
