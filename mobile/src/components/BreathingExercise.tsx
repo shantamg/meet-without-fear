@@ -470,7 +470,7 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     alignItems: 'center',
   },
   startButtonText: {
-    color: '#fffaf0',
+    color: palette.textOnAccent,
     fontSize: 18,
     fontWeight: '600',
     fontFamily: designFonts.sans,

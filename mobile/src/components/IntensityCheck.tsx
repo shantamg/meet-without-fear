@@ -186,7 +186,7 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     borderRadius: 8,
   },
   doneButtonText: {
-    color: '#fffaf0',
+    color: palette.textOnAccent,
     fontSize: 18,
     fontWeight: '600',
     fontFamily: designFonts.sans,

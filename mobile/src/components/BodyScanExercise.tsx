@@ -297,7 +297,7 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
   stepNumberText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#fffaf0',
+    color: palette.textOnAccent,
     fontFamily: designFonts.mono,
   },
   stepArea: {
@@ -325,7 +325,7 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     marginTop: 16,
   },
   primaryButtonText: {
-    color: '#fffaf0',
+    color: palette.textOnAccent,
     fontSize: 18,
     fontWeight: '600',
     fontFamily: designFonts.sans,

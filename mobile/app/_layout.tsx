@@ -80,6 +80,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
         outline: none !important;
         box-shadow: none !important;
       }
+      /* RN Web portals Modal content to document.body, outside our app-width frame. */
       [aria-modal="true"] {
         align-items: center !important;
       }

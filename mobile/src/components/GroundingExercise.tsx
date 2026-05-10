@@ -332,7 +332,7 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
   stepNumberText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#fffaf0',
+    color: palette.textOnAccent,
     fontFamily: designFonts.mono,
   },
   stepSense: {
@@ -376,7 +376,7 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     opacity: 0.5,
   },
   primaryButtonText: {
-    color: '#fffaf0',
+    color: palette.textOnAccent,
     fontSize: 18,
     fontWeight: '600',
     fontFamily: designFonts.sans,
