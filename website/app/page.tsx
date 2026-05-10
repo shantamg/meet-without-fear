@@ -69,22 +69,30 @@ export default function HomePage() {
               The process
             </p>
             <h2 className="font-display text-4xl leading-tight text-foreground sm:text-5xl">
-              An airlock between two pressurized rooms.
+              A buffer between two people.
             </h2>
             <p className="mt-5 text-base leading-7 text-muted-foreground">
-              The app gives each person a separate space with the AI first. Nothing
-              sensitive is shared by default, and the conversation only moves forward
-              when the necessary readiness and consent are there.
+              Meet Without Fear helps each side settle, be heard, and move toward
+              a next step without rushing into a reactive conversation.
             </p>
           </div>
 
           <ol className="grid gap-4 md:grid-cols-5">
             {PROCESS_STEPS.map((step, index) => (
-              <li key={step.title} className="rounded-lg border border-border bg-card p-5">
-                <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.2em] text-brand-orange">
-                  {String(index + 1).padStart(2, "0")}
-                </p>
-                <h3 className="mb-3 text-base font-semibold text-foreground">{step.title}</h3>
+              <li
+                key={step.title}
+                className="relative rounded-lg border border-border bg-card px-5 pb-6 pt-6"
+              >
+                {index < PROCESS_STEPS.length - 1 && (
+                  <span
+                    className="pointer-events-none absolute right-[-1rem] top-8 hidden h-px w-4 bg-border md:block"
+                    aria-hidden
+                  />
+                )}
+                <div className="mb-7 h-px w-10 bg-brand-orange/70" aria-hidden />
+                <h3 className="mb-4 font-display text-2xl leading-none text-foreground md:text-[1.65rem]">
+                  {step.title}
+                </h3>
                 <p className="text-sm leading-6 text-muted-foreground">{step.body}</p>
               </li>
             ))}
@@ -162,24 +170,24 @@ export default function HomePage() {
 
 const PROCESS_STEPS = [
   {
-    title: "Start privately",
-    body: "Each person begins with the AI, not with a live confrontation.",
+    title: "Start in private",
+    body: "Each person works with the AI separately. The app slows things down before anyone is asked to respond directly.",
   },
   {
-    title: "Feel heard",
-    body: "The first gate is being accurately reflected before anything is shared.",
+    title: "Be fully heard",
+    body: "You first tell your side without interruption. The AI reflects it back until you feel accurately understood.",
   },
   {
-    title: "Stretch perspective",
-    body: "Each side practices understanding the other without excusing or debating.",
+    title: "Practice understanding",
+    body: "When both people are ready, the process helps each of you understand the other person without excusing or debating what happened.",
   },
   {
-    title: "Name needs",
-    body: "The app helps clarify what matters underneath the conflict, with consent before reveal.",
+    title: "Name what matters",
+    body: "You clarify the needs underneath the conflict, choose what to share, and only reveal it when both people have consented.",
   },
   {
-    title: "Try repair",
-    body: "Both people look for small, reversible experiments they can genuinely attempt.",
+    title: "Try a small repair",
+    body: "The final step looks for small, reversible experiments both people are willing to try, then turns overlap into a clear next step.",
   },
 ] as const;
 

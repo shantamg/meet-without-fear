@@ -44,8 +44,6 @@ export interface ParsedMicroTagResponse {
   dispatchTag: string | null;
   /** Extracted from thinking: FeelHeardCheck:Y */
   offerFeelHeardCheck: boolean;
-  /** Extracted from thinking: FeelHeardConfirmed:Y */
-  feelHeardConfirmed: boolean;
   /** Extracted from thinking: ReadyShare:Y */
   offerReadyToShare: boolean;
   /** Extracted from thinking: ProposedStrategy lines (Stage 4) */
@@ -286,7 +284,6 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
 
   // 3. Extract flags from thinking string (no JSON needed!)
   const offerFeelHeardCheck = feelHeardControlTag ?? /FeelHeardCheck:\s*Y/i.test(thinking);
-  const feelHeardConfirmed = /FeelHeardConfirmed:\s*Y/i.test(thinking);
   const offerReadyToShare = readyShareControlTag ?? /ReadyShare:\s*Y/i.test(thinking);
 
   // 4. Extract proposed strategies from thinking (Stage 4)
@@ -325,7 +322,6 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
         topicFrame: empathy,
         dispatchTag: null,
         offerFeelHeardCheck,
-        feelHeardConfirmed,
         offerReadyToShare,
         proposedStrategies,
         stage4Proposals,
@@ -344,7 +340,6 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     topicFrame: draft,
     dispatchTag,
     offerFeelHeardCheck,
-    feelHeardConfirmed,
     offerReadyToShare,
     proposedStrategies,
     stage4Proposals,
