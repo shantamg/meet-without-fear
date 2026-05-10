@@ -3,7 +3,7 @@ title: "Stage 2: Perspective Stretch - Empathy Exchange Flow"
 sidebar_position: 6
 description: This document describes the empathy exchange flow in Stage 2, including the reconciler system that analyzes empathy accuracy and manages the sharing of addit...
 created: 2026-03-11
-updated: 2026-05-02
+updated: 2026-05-10
 status: living
 ---
 # Stage 2: Perspective Stretch - Empathy Exchange Flow
@@ -92,7 +92,7 @@ The reconciler runs when one user confirms "feel heard" (completing Stage 1) and
 
 > **Implementation Note:** The reconciler has been refactored into a modular `backend/src/services/reconciler/` directory:
 > - `state.ts` — Empathy status transitions, reveal logic. Contains `runReconcilerForDirection()` (asymmetric) and `checkAndRevealBothIfReady()` (serializable transaction for mutual reveal).
-> - `analysis.ts` — Core AI gap analysis (`analyzeEmpathyGap()`), theme extraction, witnessing content retrieval.
+> - `analysis.ts` — Core AI gap analysis (`analyzeEmpathyGap()`), theme extraction, witnessing content retrieval. Also loads the subject's `notableFacts` from UserVessel as supplementary context — these facts are updated throughout the conversation (including Stage 2) and help the reconciler detect position shifts (e.g., denial → confession).
 > - `sharing.ts` — Share suggestion generation, refinement, and response handling.
 > - `circuit-breaker.ts` — Attempt counting to prevent infinite refinement loops (max 3 per direction).
 > - `index.ts` — Barrel re-exports.
@@ -117,7 +117,7 @@ flowchart TB
     B -->|No| C[No action needed]
     B -->|Yes| D[Run Reconciler Analysis]
 
-    D --> E{Analyze gaps in<br/>partner's empathy attempt}
+    D --> E{Analyze gaps using<br/>witnessing + notableFacts}
 
     E --> F{Gap Severity?}
 

@@ -3,7 +3,7 @@ title: Backend Prompting Architecture Audit
 sidebar_position: 5
 description: "Last Updated: 2026-03-11"
 created: 2026-03-11
-updated: 2026-04-20
+updated: 2026-05-10
 status: living
 ---
 # Backend Prompting Architecture Audit
@@ -780,7 +780,7 @@ sequenceDiagram
 
     Controller->>Reconciler: runReconciler()
 
-    Reconciler->>Database: Get both users'<br/>witnessing content
+    Reconciler->>Database: Get both users'<br/>witnessing content + notableFacts
 
     Reconciler->>Sonnet: buildReconcilerPrompt()<br/>Analyze empathy gaps
     Sonnet-->>Reconciler: Analysis (JSON)

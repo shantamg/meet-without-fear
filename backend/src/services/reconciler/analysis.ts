@@ -14,6 +14,7 @@ import {
   buildReconcilerPrompt,
   type ReconcilerContext,
 } from '../stage-prompts';
+import type { CategorizedFact } from '../background-classifier';
 import { extractJsonFromResponse } from '../../utils/json-extractor';
 import type {
   ReconcilerResult,
@@ -58,6 +59,8 @@ export interface ReconcilerAnalysisInput {
   subject: UserInfo;
   empathyStatement: string;
   witnessingContent: WitnessingContent;
+  /** Current known facts from the subject's UserVessel (may include Stage 2 updates) */
+  subjectFacts?: CategorizedFact[];
 }
 
 // ============================================================================
@@ -195,6 +198,38 @@ async function extractThemes(content: string, sessionId: string, userId?: string
   });
 
   return result?.themes || [];
+}
+
+// ============================================================================
+// Helper: Load subject facts from UserVessel
+// ============================================================================
+
+/**
+ * Load notable facts for a user from their UserVessel.
+ * Used by runReconciler (two-direction flow).
+ */
+async function loadSubjectFactsForReconciler(
+  sessionId: string,
+  userId: string
+): Promise<CategorizedFact[] | undefined> {
+  const vessel = await prisma.userVessel.findUnique({
+    where: { userId_sessionId: { userId, sessionId } },
+    select: { notableFacts: true },
+  });
+
+  if (!vessel?.notableFacts || !Array.isArray(vessel.notableFacts)) {
+    return undefined;
+  }
+
+  const facts = (vessel.notableFacts as unknown[]).filter(
+    (f): f is CategorizedFact => {
+      if (typeof f !== 'object' || f === null) return false;
+      const obj = f as Record<string, unknown>;
+      return typeof obj.category === 'string' && typeof obj.fact === 'string';
+    }
+  );
+
+  return facts.length > 0 ? facts : undefined;
 }
 
 // ============================================================================
@@ -405,6 +440,7 @@ export async function analyzeEmpathyGap(
     empathyStatement: input.empathyStatement,
     witnessingContent: input.witnessingContent.userMessages,
     extractedThemes: input.witnessingContent.themes,
+    subjectFacts: input.subjectFacts,
   };
 
   const prompt = buildReconcilerPrompt(context);
@@ -553,10 +589,12 @@ export async function runReconciler(
     };
   }
 
-  // Get witnessing content for both users
-  const [userAWitnessing, userBWitnessing] = await Promise.all([
+  // Get witnessing content and notable facts for both users
+  const [userAWitnessing, userBWitnessing, userAFacts, userBFacts] = await Promise.all([
     getWitnessingContent(sessionId, participants.userA.id),
     getWitnessingContent(sessionId, participants.userB.id),
+    loadSubjectFactsForReconciler(sessionId, participants.userA.id),
+    loadSubjectFactsForReconciler(sessionId, participants.userB.id),
   ]);
 
   // Run analysis for each direction (or just one if forUserId is specified)
@@ -571,6 +609,7 @@ export async function runReconciler(
       subject: participants.userB,
       empathyStatement: userAEmpathy.statement,
       witnessingContent: userBWitnessing,
+      subjectFacts: userBFacts,
     });
   }
 
@@ -582,6 +621,7 @@ export async function runReconciler(
       subject: participants.userA,
       empathyStatement: userBEmpathy.statement,
       witnessingContent: userAWitnessing,
+      subjectFacts: userAFacts,
     });
   }
 

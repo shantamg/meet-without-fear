@@ -1916,6 +1916,8 @@ export interface ReconcilerContext {
   witnessingContent: string;
   /** Key themes extracted from subject's witnessing */
   extractedThemes?: string[];
+  /** Current known facts about the subject (may include Stage 2 updates that supersede Stage 1 positions) */
+  subjectFacts?: Array<{ category: string; fact: string }>;
 }
 
 /**
@@ -1925,6 +1927,12 @@ export interface ReconcilerContext {
 export function buildReconcilerPrompt(context: ReconcilerContext): string {
   const themesSection = context.extractedThemes?.length
     ? `Key themes/feelings ${context.subjectName} expressed:\n- ${context.extractedThemes.join('\n- ')}`
+    : '';
+
+  const factsSection = context.subjectFacts?.length
+    ? `\n[Current Known Facts about ${context.subjectName}]
+These facts reflect the most up-to-date understanding of ${context.subjectName}'s situation, including any evolution during the conversation (e.g., a denial in Stage 1 that became a confession in Stage 2). Where these facts conflict with the Stage 1 witnessing content above, the facts represent ${context.subjectName}'s CURRENT position.
+${context.subjectFacts.map(f => `- [${f.category}] ${f.fact}`).join('\n')}\n`
     : '';
 
   return `You are the Empathy Reconciler for Meet Without Fear. Your role is to analyze empathy gaps and determine if additional sharing would benefit mutual understanding.
@@ -1943,6 +1951,7 @@ This is what ${context.subjectName} ACTUALLY said about their own feelings durin
 "${context.witnessingContent}"
 
 ${themesSection}
+${factsSection}
 
 SIGNAL-TO-NOISE FILTERING:
 When analyzing the witnessing content, IGNORE:

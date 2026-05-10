@@ -38,6 +38,7 @@ import {
   getWitnessingContent,
   analyzeEmpathyGap,
 } from './analysis';
+import type { CategorizedFact } from '../background-classifier';
 import { checkAttempts, hasContextAlreadyBeenShared, markResultHandledAlreadyShared } from './circuit-breaker';
 import { generateShareSuggestion } from './sharing';
 
@@ -143,6 +144,39 @@ async function markEmpathyReady(
 }
 
 // ============================================================================
+// Helper: Load subject's notable facts from UserVessel
+// ============================================================================
+
+/**
+ * Load the subject's current notable facts from their UserVessel.
+ * These facts are updated by the background classifier throughout the conversation
+ * (including Stage 2), so they reflect position shifts like denial → confession.
+ */
+async function loadSubjectFacts(
+  sessionId: string,
+  subjectId: string
+): Promise<CategorizedFact[] | undefined> {
+  const vessel = await prisma.userVessel.findUnique({
+    where: { userId_sessionId: { userId: subjectId, sessionId } },
+    select: { notableFacts: true },
+  });
+
+  if (!vessel?.notableFacts || !Array.isArray(vessel.notableFacts)) {
+    return undefined;
+  }
+
+  const facts = (vessel.notableFacts as unknown[]).filter(
+    (f): f is CategorizedFact => {
+      if (typeof f !== 'object' || f === null) return false;
+      const obj = f as Record<string, unknown>;
+      return typeof obj.category === 'string' && typeof obj.fact === 'string';
+    }
+  );
+
+  return facts.length > 0 ? facts : undefined;
+}
+
+// ============================================================================
 // Main Function: runReconcilerForDirection
 // ============================================================================
 
@@ -226,13 +260,16 @@ export async function runReconcilerForDirection(
   }
   logger.debug('Found guesser empathy statement', { length: empathyData.statement.length });
 
-  // Get subject's witnessing content (Stage 1)
-  const witnessingContent = await getWitnessingContent(sessionId, subjectId);
+  // Get subject's witnessing content (Stage 1) and current notable facts in parallel
+  const [witnessingContent, subjectFacts] = await Promise.all([
+    getWitnessingContent(sessionId, subjectId),
+    loadSubjectFacts(sessionId, subjectId),
+  ]);
   if (!witnessingContent.userMessages) {
     logger.error('Subject has no Stage 1 content', { subjectId: subjectInfo.id, sessionId });
     throw new Error('Subject has no Stage 1 content');
   }
-  logger.debug('Found subject witnessing content', { themes: witnessingContent.themes.length, chars: witnessingContent.userMessages.length });
+  logger.debug('Found subject witnessing content', { themes: witnessingContent.themes.length, chars: witnessingContent.userMessages.length, factsCount: subjectFacts?.length ?? 0 });
 
   // Run the analysis
   const result = await analyzeEmpathyGap({
@@ -241,6 +278,7 @@ export async function runReconcilerForDirection(
     subject: subjectInfo,
     empathyStatement: empathyData.statement,
     witnessingContent,
+    subjectFacts,
   });
 
   // Determine outcome based on gaps
