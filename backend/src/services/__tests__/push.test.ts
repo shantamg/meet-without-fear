@@ -112,8 +112,8 @@ describe('Push Notification Service', () => {
         expect.objectContaining({
           to: validPushToken,
           sound: 'default',
-          title: 'Their empathy is ready',
-          body: 'Read what They understood about your experience.',
+          title: 'They shared empathy',
+          body: "We're checking it now and will show it when it is ready to read.",
           data: expect.objectContaining({
             screen: 'session',
             sessionId: testSessionId,
@@ -329,6 +329,43 @@ describe('Push Notification Service', () => {
       const result = await sendPushNotification(testUserId, 'session.resolved', {}, testSessionId);
 
       expect(result).toBe(true);
+    });
+
+    it('uses readable-empathy copy only for the reveal event', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        pushToken: validPushToken,
+      });
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        relationship: {
+          members: [
+            {
+              userId: testUserId,
+              nickname: null,
+              user: { firstName: 'Jason', name: 'Jason Person' },
+            },
+            {
+              userId: 'actor-123',
+              nickname: null,
+              user: { firstName: 'Darryl', name: 'Darryl Person' },
+            },
+          ],
+        },
+      });
+      mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
+
+      await sendPushNotification(
+        testUserId,
+        'empathy.revealed',
+        { triggeredByUserId: 'actor-123' },
+        testSessionId,
+      );
+
+      expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+        expect.objectContaining({
+          title: 'Empathy exchange is ready',
+          body: 'You can now read what Darryl understood about your experience.',
+        }),
+      ]);
     });
 
     it('returns false on send error', async () => {
