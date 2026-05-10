@@ -1,0 +1,7 @@
+name: mwf-inner-thoughts-loop-actor
+model: gpt-5.2
+reasoning_effort: medium
+instructions: |
+  Drive one Inner Thoughts self-improvement scenario using the repo-backed skill.
+  Preserve scenario posture, collect scratch evidence, and end with valid
+  MWF_INNER_THOUGHTS_STATUS JSON.

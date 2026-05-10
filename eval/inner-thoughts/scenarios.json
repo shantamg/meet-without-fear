@@ -1,0 +1,77 @@
+{
+  "version": "inner-thoughts-v1",
+  "scenarios": [
+    {
+      "id": "journal-organize-ambition",
+      "title": "Journal, Organize, Ambition",
+      "live_enabled": true,
+      "starting_home_message": "I have a bunch of thoughts about work and what I want next, but they feel scattered. I do not think this is about another person exactly. I just need somewhere to sort it out.",
+      "actor_posture": [
+        "The user wants a private journaling and thinking space, not a partner session.",
+        "They talk about ambition, fear of wasting time, possible next projects, and feeling pulled between stability and creative work.",
+        "They should resist premature action plans and prefer reflection first."
+      ],
+      "expected_product_behavior": [
+        "The app creates a real Inner Thoughts session from the home composer.",
+        "MWF responds as a skillful reflection partner: grounding, curious, gently challenging, and useful for organizing thoughts.",
+        "The AI may help turn the mess into themes, questions, options, or a next note, but it should not over-structure too early.",
+        "No start_partner_session CTA should appear unless the actor clearly pivots to a specific interpersonal conflict.",
+        "Suggested actions for journaling, needs, gratitude, or meditation are allowed only when contextually earned and should not crowd the chat."
+      ],
+      "pass_signals": [
+        "The actor reports feeling more organized after 4-8 turns.",
+        "The final chat contains a concise captured structure: themes, tensions, possible next focus, or an idea parking lot.",
+        "No partner-session CTA was shown inappropriately."
+      ]
+    },
+    {
+      "id": "person-to-partner-session",
+      "title": "Person Detected, Partner Session CTA",
+      "live_enabled": true,
+      "starting_home_message": "I keep replaying this fight with Maya. She says I shut down whenever she brings up money, but I feel like she is already disappointed before I even answer.",
+      "actor_posture": [
+        "The user is upset about a specific person, Maya.",
+        "They initially want to talk privately, not jump straight into a partner session.",
+        "They become open to a structured conversation only after MWF reflects the issue accurately and explains why a partner session could help."
+      ],
+      "expected_product_behavior": [
+        "The app creates a real Inner Thoughts session from the home composer.",
+        "MWF reflects and explores the issue without immediately forcing a partner session.",
+        "Once the person and relational opportunity are clear, a bottom CTA appears in the app's existing design language.",
+        "The CTA is specific and low-pressure, such as Start a session with Maya, and includes a clear dismiss path.",
+        "The CTA opens the drawer/new-session flow with partnerName=Maya and innerThoughtsId=<inner session id> carried through.",
+        "POST /inner-thoughts/:id/generate-context produces a context summary before or during session creation.",
+        "The partner session starts in Stage 0.",
+        "The Stage 0 prompt has access to the Inner Thoughts context and uses it to get to the topic faster without pretending Maya has already participated."
+      ],
+      "pass_signals": [
+        "The CTA appears only after enough conversation to justify it.",
+        "The CTA is visually polished and does not overlap the chat input, keyboard, or safe area.",
+        "The new session flow carries the person name and context.",
+        "The created Session is linked back to the originating InnerWorkSession or otherwise has durable traceability through the existing innerThoughtsId contract.",
+        "Stage 0 asks a sharper topic-framing question than a cold start and does not reset the user as if no prior chat happened."
+      ]
+    },
+    {
+      "id": "ambiguous-person-boundary",
+      "title": "Ambiguous Person, Do Not Over-Route",
+      "live_enabled": true,
+      "starting_home_message": "I am frustrated with my manager and also with myself. Part of me wants to confront him, but part of me thinks this is really about how I keep giving away my evenings.",
+      "actor_posture": [
+        "The user mentions a person, but the primary work may be self-boundaries, energy, and choices.",
+        "They are not necessarily asking for a relationship repair session.",
+        "They may mention workplace power dynamics where inviting the other person would be inappropriate."
+      ],
+      "expected_product_behavior": [
+        "MWF explores whether this is about self-reflection, boundaries, or a conversation with another person.",
+        "It must not reflexively show a partner-session CTA just because a person is mentioned.",
+        "If it offers a CTA, the copy must be conditional and user-controlled, not presumptive.",
+        "It should support journaling, boundary clarification, and practical thought organization."
+      ],
+      "pass_signals": [
+        "No partner-session CTA appears during the first few turns.",
+        "If a CTA appears later, it is phrased as optional and appropriate to the actor's workplace context."
+      ]
+    }
+  ]
+}
