@@ -35,6 +35,7 @@ export interface TimelineItem {
 export interface TimelineItemCardProps {
   item: TimelineItem;
   centered?: boolean;
+  highlighted?: boolean;
   onOpenRefinement?: (offerId: string, suggestion: string) => void;
   onShareAsIs?: (offerId: string) => void;
   onOpenEmpathyDetail?: (attemptId: string, content: string) => void;
@@ -99,6 +100,7 @@ function formatRelativeTimestamp(iso: string): string {
 export function TimelineItemCard({
   item,
   centered = false,
+  highlighted = false,
   onOpenRefinement,
   onShareAsIs,
   onOpenEmpathyDetail,
@@ -217,7 +219,7 @@ export function TimelineItemCard({
   if (isTappable) {
     return (
       <Pressable
-        style={[styles.card, bubbleStyle]}
+        style={[styles.card, bubbleStyle, highlighted && styles.highlightedCard]}
         onPress={handleCardPress}
         accessibilityRole="button"
         accessibilityLabel={
@@ -234,7 +236,7 @@ export function TimelineItemCard({
 
   return (
     <View
-      style={[styles.card, bubbleStyle]}
+      style={[styles.card, bubbleStyle, highlighted && styles.highlightedCard]}
       testID={resolvedTestID}
     >
       {cardContent}
@@ -253,6 +255,15 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     marginBottom: 10,
     borderWidth: 1,
     borderColor: palette.border,
+  },
+  highlightedCard: {
+    borderColor: palette.accent,
+    borderWidth: 2,
+    shadowColor: palette.accent,
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
   bubbleSent: {
     backgroundColor: palette.infoSoft,

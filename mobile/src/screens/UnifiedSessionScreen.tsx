@@ -54,6 +54,7 @@ import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDr
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
 import { ActivityDrawer } from '../components/ActivityDrawer';
+import type { ActivityDrawerFocusTarget } from '../components/ActivityDrawer';
 import { PartnerInfoDrawer } from '../components/PartnerInfoDrawer';
 import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
@@ -1281,6 +1282,7 @@ export function UnifiedSessionScreen({
   // Activity Menu Modal
   // -------------------------------------------------------------------------
   const [showActivityMenu, setShowActivityMenu] = useState(false);
+  const [activityFocusTarget, setActivityFocusTarget] = useState<ActivityDrawerFocusTarget | null>(null);
   const [showPartnerInfo, setShowPartnerInfo] = useState(false);
   const topicFrame = invitation && 'topicFrame' in invitation
     ? (invitation.topicFrame as string | null)
@@ -2065,14 +2067,92 @@ export function UnifiedSessionScreen({
   // Prepare Messages for Display
   // -------------------------------------------------------------------------
   const displayMessages = useMemo((): ChatMessage[] => {
-    // Find all EMPATHY_STATEMENT messages to detect superseded ones
-    // User may have multiple empathy statements if they revised their understanding
-    const empathyStatements = messages.filter(
-      (m) => m.role === MessageRole.EMPATHY_STATEMENT
+    const baseMessages: ChatMessage[] = [...messages];
+    const myAttempt = empathyStatusData?.myAttempt;
+    const partnerAttempt = empathyStatusData?.partnerAttempt;
+    const mySharedContext = empathyStatusData?.mySharedContext;
+
+    if (myAttempt?.content && myAttempt.sharedAt) {
+      const hasMyAttemptMessage = baseMessages.some(
+        (message) =>
+          message.role === MessageRole.EMPATHY_STATEMENT &&
+          message.senderId === user?.id &&
+          message.timestamp === myAttempt.sharedAt,
+      );
+
+      if (!hasMyAttemptMessage) {
+        baseMessages.push({
+          id: `my-empathy-${myAttempt.id}`,
+          sessionId,
+          senderId: user?.id ?? null,
+          role: MessageRole.EMPATHY_STATEMENT,
+          content: myAttempt.content,
+          stage: Stage.PERSPECTIVE_STRETCH,
+          timestamp: myAttempt.sharedAt,
+          sharedContentDeliveryStatus: myAttempt.deliveryStatus,
+          sharedContentDirection: 'sent',
+        });
+      }
+    }
+
+    if (partnerAttempt?.content && (partnerAttempt.revealedAt || partnerAttempt.sharedAt)) {
+      const partnerTimestamp = partnerAttempt.revealedAt || partnerAttempt.sharedAt;
+      const hasPartnerAttemptMessage = baseMessages.some(
+        (message) =>
+          message.role === MessageRole.EMPATHY_STATEMENT &&
+          message.senderId === partnerAttempt.sourceUserId &&
+          message.timestamp === partnerTimestamp,
+      );
+
+      if (!hasPartnerAttemptMessage) {
+        baseMessages.push({
+          id: `partner-empathy-${partnerAttempt.id}`,
+          sessionId,
+          senderId: partnerAttempt.sourceUserId,
+          role: MessageRole.EMPATHY_STATEMENT,
+          content: partnerAttempt.content,
+          stage: Stage.PERSPECTIVE_STRETCH,
+          timestamp: partnerTimestamp,
+          sharedContentDeliveryStatus: 'delivered',
+          sharedContentDirection: 'received',
+        });
+      }
+    }
+
+    // The subject's accepted/refined share is stored on the empathy status
+    // response, but the backend only creates a SHARED_CONTEXT chat message for
+    // the recipient. Synthesize a local chat item so the sender's chat shows
+    // the same shared artifact inline too.
+    if (mySharedContext?.content && mySharedContext.sharedAt) {
+      const hasSelfSharedContextMessage = baseMessages.some(
+        (message) =>
+          message.role === MessageRole.SHARED_CONTEXT &&
+          message.senderId === user?.id &&
+          message.timestamp === mySharedContext.sharedAt,
+      );
+
+      if (!hasSelfSharedContextMessage) {
+        baseMessages.push({
+          id: `my-shared-context-${mySharedContext.sharedAt}`,
+          sessionId,
+          senderId: user?.id ?? null,
+          role: MessageRole.SHARED_CONTEXT,
+          content: mySharedContext.content,
+          stage: Stage.PERSPECTIVE_STRETCH,
+          timestamp: mySharedContext.sharedAt,
+          sharedContentDeliveryStatus: mySharedContext.deliveryStatus ?? undefined,
+          sharedContentDirection: 'sent',
+        });
+      }
+    }
+
+    // Find self-authored EMPATHY_STATEMENT messages to detect superseded revisions.
+    const myEmpathyStatements = baseMessages.filter(
+      (m) => m.role === MessageRole.EMPATHY_STATEMENT && m.senderId === user?.id
     );
 
     // Sort by timestamp to find the latest one
-    const sortedStatements = [...empathyStatements].sort(
+    const sortedStatements = [...myEmpathyStatements].sort(
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
@@ -2080,17 +2160,41 @@ export function UnifiedSessionScreen({
     const latestEmpathyId = sortedStatements[0]?.id;
 
     // Enrich messages with delivery status for shared content
-    return messages.map((message) => {
+    return baseMessages.map((message) => {
+      const sharedContentDirection =
+        message.role === MessageRole.EMPATHY_STATEMENT ||
+        message.role === MessageRole.SHARED_CONTEXT
+          ? (message.senderId === user?.id ? 'sent' as const : 'received' as const)
+          : undefined;
+
+      if (message.role === MessageRole.SHARED_CONTEXT) {
+        const deliveryStatus =
+          message.senderId === user?.id
+            ? (mySharedContext?.deliveryStatus ?? undefined)
+            : undefined;
+
+        return {
+          ...message,
+          sharedContentDeliveryStatus:
+            message.sharedContentDeliveryStatus ?? deliveryStatus,
+          sharedContentDirection,
+        };
+      }
+
       // For EMPATHY_STATEMENT messages, determine which delivery status to use:
       // - If this is NOT the latest empathy statement, mark as superseded
       // - If content matches myAttempt (guesser's empathy statement), use myAttempt.deliveryStatus
-      // - Otherwise, if sharedContentDeliveryStatus exists (subject shared via reconciler), use that
       if (message.role === MessageRole.EMPATHY_STATEMENT) {
         // Check if this is a superseded (older) empathy statement
-        if (empathyStatements.length > 1 && message.id !== latestEmpathyId) {
+        if (
+          message.senderId === user?.id &&
+          myEmpathyStatements.length > 1 &&
+          message.id !== latestEmpathyId
+        ) {
           return {
             ...message,
             sharedContentDeliveryStatus: 'superseded' as const,
+            sharedContentDirection,
           };
         }
 
@@ -2103,13 +2207,7 @@ export function UnifiedSessionScreen({
           return {
             ...message,
             sharedContentDeliveryStatus: empathyStatusData.myAttempt.deliveryStatus,
-          };
-        }
-        // Otherwise, this is shared context from the subject (via reconciler)
-        if (empathyStatusData?.sharedContentDeliveryStatus) {
-          return {
-            ...message,
-            sharedContentDeliveryStatus: empathyStatusData.sharedContentDeliveryStatus,
+            sharedContentDirection,
           };
         }
         // Fallback: If message already has a status (from optimistic update), preserve it
@@ -2117,26 +2215,26 @@ export function UnifiedSessionScreen({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const existingStatus = (message as any).sharedContentDeliveryStatus;
         if (existingStatus) {
-          return { ...message, sharedContentDeliveryStatus: existingStatus };
+          return { ...message, sharedContentDeliveryStatus: existingStatus, sharedContentDirection };
         }
         // Default to 'pending' for empathy statements without a status
         // (e.g., when empathyStatusData is still loading)
         return {
           ...message,
           sharedContentDeliveryStatus: 'pending' as const,
+          sharedContentDirection,
         };
       }
       return message;
-    })
-    // Filter out EMPATHY_STATEMENT messages (shown as tappable indicators)
-    // and own SHARED_CONTEXT messages (collapsed to indicator pills).
-    // Partner's SHARED_CONTEXT messages are kept inline so the user can read them in chat.
-    .filter((message) => {
-      if (message.role === MessageRole.EMPATHY_STATEMENT) return false;
-      if (message.role === MessageRole.SHARED_CONTEXT && message.senderId === user?.id) return false;
-      return true;
     });
-  }, [messages, empathyStatusData?.myAttempt?.content, empathyStatusData?.myAttempt?.deliveryStatus, empathyStatusData?.sharedContentDeliveryStatus]);
+  }, [
+    messages,
+    empathyStatusData?.myAttempt,
+    empathyStatusData?.mySharedContext,
+    empathyStatusData?.partnerAttempt,
+    sessionId,
+    user?.id,
+  ]);
 
   // -------------------------------------------------------------------------
   // Validation Cards (Inline in Chat FlatList)
@@ -3471,6 +3569,7 @@ export function UnifiedSessionScreen({
           session?.status === SessionStatus.INVITED && invitation?.isInviter
             ? () => {
                 setShowShareLaterTooltip(false);
+                setActivityFocusTarget(null);
                 setShowActivityMenu(true);
               }
             : undefined
@@ -3480,6 +3579,7 @@ export function UnifiedSessionScreen({
           !isInOnboardingUnsigned
             ? () => {
                 setShowShareLaterTooltip(false);
+                setActivityFocusTarget(null);
                 setShowActivityMenu(true);
               }
             : undefined
@@ -3543,8 +3643,13 @@ export function UnifiedSessionScreen({
           // arriving while viewing don't trigger a separator
           lastSeenChatItemId={lastSeenChatItemIdForSeparator}
           lastViewedAt={lastViewedAtForAnimation}
-          // Open activity menu when "Context shared" or "Empathy shared" indicator is tapped
-          onContextSharedPress={() => {
+          // Open activity menu and focus the corresponding "Context shared" / "Empathy shared" item.
+          onContextSharedPress={(timestamp, isFromMe, indicatorType) => {
+            setActivityFocusTarget({
+              type: indicatorType === 'empathy-shared' ? 'empathy' : 'context',
+              direction: isFromMe === false ? 'received' : 'sent',
+              timestamp,
+            });
             setShowActivityMenu(true);
           }}
           customCards={chatCustomCards}
@@ -3933,7 +4038,11 @@ export function UnifiedSessionScreen({
         sessionId={sessionId}
         partnerName={partnerName}
         sessionStatus={session?.status}
-        onClose={() => setShowActivityMenu(false)}
+        focusTarget={activityFocusTarget}
+        onClose={() => {
+          setShowActivityMenu(false);
+          setActivityFocusTarget(null);
+        }}
         onOpenRefinement={(offerId, suggestion) => {
           setShowActivityMenu(false);
           setRefinementInitialSuggestion(suggestion);
@@ -3975,6 +4084,7 @@ export function UnifiedSessionScreen({
             setRefinementOfferId(null);
             trackShareDraftSent(sessionId, (shareOfferData?.suggestion?.action ?? 'OFFER_OPTIONAL') as 'OFFER_SHARING' | 'OFFER_OPTIONAL', true);
             // Open activity drawer to show updated share status
+            setActivityFocusTarget(null);
             setShowActivityMenu(true);
             // Refresh activity menu data
             queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
