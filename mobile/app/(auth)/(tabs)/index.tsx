@@ -38,7 +38,7 @@ import { useUnreadSessionCount } from '@/src/hooks/useUnreadSessionCount';
 import { BiometricPrompt, SessionDrawer } from '../../../src/components';
 import { designFonts, useAppAppearance } from '@/src/theme';
 
-const SHOW_INNER_WORK_BUTTON = false;
+const SHOW_INNER_WORK_BUTTON = true;
 
 // ============================================================================
 // Component
@@ -133,19 +133,15 @@ export default function HomeScreen() {
   // Get the partner's nickname or name for the continue button
   const partnerDisplayName = mostRecentSession?.partner?.nickname || mostRecentSession?.partner?.name;
 
-  // Handle sending a message from home page chat input.
-  // Inner work is temporarily unavailable, but we still route into the chat shell
-  // so the transition and layout stay familiar.
-  const handleHomeChat = useCallback(() => {
+  // Handle sending a message from the home page chat input.
+  const handleHomeChat = useCallback((message: string) => {
     Keyboard.dismiss();
     const params: {
       id: string;
-      comingSoon: string;
       initialMessage: string;
     } = {
       id: 'new',
-      comingSoon: '1',
-      initialMessage: 'Doing inner work by yourself is a feature coming soon.',
+      initialMessage: message,
     };
 
     router.push({

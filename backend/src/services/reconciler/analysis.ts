@@ -7,13 +7,15 @@
 
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
-import { MessageRole } from '@meet-without-fear/shared';
 import { getSonnetResponse, getHaikuJson, BrainActivityCallType } from '../../lib/bedrock';
 import { getCurrentUserId } from '../../lib/request-context';
 import {
+  buildReconcilerEvidencePacket,
   buildReconcilerPrompt,
   type ReconcilerContext,
+  type PromptBlocks,
 } from '../stage-prompts';
+import { type CategorizedFact } from '../partner-session-classifier';
 import { extractJsonFromResponse } from '../../utils/json-extractor';
 import type {
   ReconcilerResult,
@@ -68,7 +70,7 @@ export interface ReconcilerAnalysisInput {
  * Get a JSON response from Sonnet, parsing the result.
  */
 export async function getSonnetJson<T>(options: {
-  systemPrompt: string;
+  systemPrompt: string | PromptBlocks;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   maxTokens: number;
   sessionId?: string;
@@ -103,6 +105,97 @@ export async function getSonnetJson<T>(options: {
     logger.warn('Failed to parse AI JSON response', { operation: effectiveOperation, error: (error as Error).message, rawResponse: response });
     return null;
   }
+}
+
+function normalizeCategorizedFacts(rawFacts: unknown): CategorizedFact[] | undefined {
+  if (!Array.isArray(rawFacts)) {
+    return undefined;
+  }
+
+  const facts = rawFacts
+    .filter((fact): fact is { category: string; fact: string } => {
+      if (typeof fact !== 'object' || fact === null) return false;
+      const candidate = fact as Record<string, unknown>;
+      return typeof candidate.category === 'string' && typeof candidate.fact === 'string';
+    })
+    .map((fact) => ({
+      category: fact.category.trim(),
+      fact: fact.fact.trim(),
+    }))
+    .filter((fact) => fact.category.length > 0 && fact.fact.length > 0);
+
+  return facts.length > 0 ? facts : undefined;
+}
+
+async function loadSubjectFacts(
+  sessionId: string,
+  subjectId: string
+): Promise<CategorizedFact[] | undefined> {
+  const vessel = await prisma.userVessel.findUnique({
+    where: {
+      userId_sessionId: {
+        userId: subjectId,
+        sessionId,
+      },
+    },
+    select: { notableFacts: true },
+  });
+
+  return normalizeCategorizedFacts(vessel?.notableFacts);
+}
+
+export async function loadRecentSubjectStage2Turns(
+  sessionId: string,
+  subjectId: string,
+  maxSubjectUserTurns = 5
+): Promise<Array<{ role: 'user' | 'assistant'; content: string; stage: number }>> {
+  const messages = await prisma.message.findMany({
+    where: {
+      sessionId,
+      stage: 2,
+      OR: [
+        {
+          senderId: subjectId,
+          role: 'USER',
+        },
+        {
+          forUserId: subjectId,
+          role: 'AI',
+        },
+      ],
+    },
+    orderBy: { timestamp: 'asc' },
+    select: {
+      role: true,
+      content: true,
+      stage: true,
+    },
+  });
+
+  const subjectUserIndexes = messages
+    .map((message, index) => message.role === 'USER' ? index : -1)
+    .filter((index) => index >= 0)
+    .slice(-maxSubjectUserTurns);
+
+  const selectedIndexes = new Set<number>();
+  for (const userIndex of subjectUserIndexes) {
+    const previousMessage = messages[userIndex - 1];
+    if (previousMessage?.role === 'AI') {
+      selectedIndexes.add(userIndex - 1);
+    }
+    selectedIndexes.add(userIndex);
+  }
+
+  return Array.from(selectedIndexes)
+    .sort((a, b) => a - b)
+    .map((index) => {
+      const message = messages[index];
+      return {
+        role: message.role === 'AI' ? 'assistant' as const : 'user' as const,
+        content: message.content,
+        stage: message.stage,
+      };
+    });
 }
 
 // ============================================================================
@@ -397,6 +490,10 @@ export async function analyzeEmpathyGap(
 
   // Generate turnId upfront so COST and RECONCILER logs group together
   const turnId = `${input.sessionId}-${Date.now()}`;
+  const [subjectFacts, recentSubjectTurns] = await Promise.all([
+    loadSubjectFacts(input.sessionId, input.subject.id),
+    loadRecentSubjectStage2Turns(input.sessionId, input.subject.id),
+  ]);
 
   // Build context for the AI prompt
   const context: ReconcilerContext = {
@@ -405,15 +502,24 @@ export async function analyzeEmpathyGap(
     empathyStatement: input.empathyStatement,
     witnessingContent: input.witnessingContent.userMessages,
     extractedThemes: input.witnessingContent.themes,
+    subjectFacts,
+    recentSubjectTurns,
   };
 
   const prompt = buildReconcilerPrompt(context);
-  logger.debug('Built analysis prompt', { promptLength: prompt.length });
+  const evidencePacket = buildReconcilerEvidencePacket(context);
+  logger.debug('Built analysis prompt', {
+    staticPromptLength: prompt.staticBlock.length,
+    dynamicPromptLength: prompt.dynamicBlock.length,
+    evidencePacketLength: evidencePacket.length,
+    subjectFactCount: subjectFacts?.length ?? 0,
+    recentSubjectTurnCount: recentSubjectTurns.length,
+  });
 
   // Call AI to analyze the gap
   const result = await getSonnetJson<ReconcilerResult>({
     systemPrompt: prompt,
-    messages: [{ role: 'user', content: 'Analyze the empathy gap and provide your assessment.' }],
+    messages: [{ role: 'user', content: evidencePacket }],
     maxTokens: 2048,
     sessionId: input.sessionId,
     turnId,

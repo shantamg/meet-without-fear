@@ -1,5 +1,5 @@
 import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -8,13 +8,16 @@ import Animated, {
   Easing,
   cancelAnimation,
 } from 'react-native-reanimated';
-import { colors } from '@/theme';
+import { appWidthStyle, designFonts, useAppAppearance } from '@/theme';
 import { IntensityCheck } from './IntensityCheck';
 
 /**
  * Breathing phases for the 4-7-8 exercise
  */
 type BreathingPhase = 'ready' | 'inhale' | 'hold' | 'exhale';
+
+const READY_INSTRUCTION = 'Take a deep breath in and out, then begin';
+const MIN_CIRCLE_SCALE = 0.18;
 
 /**
  * 4-7-8 Breathing timing (in seconds)
@@ -41,9 +44,9 @@ const PHASE_INSTRUCTIONS: Record<Exclude<BreathingPhase, 'ready'>, string> = {
  * Phase display text for the circle
  */
 const PHASE_DISPLAY_TEXT: Record<Exclude<BreathingPhase, 'ready'>, string> = {
-  inhale: 'Breathe In',
+  inhale: 'In through the nose',
   hold: 'Hold',
-  exhale: 'Breathe Out',
+  exhale: 'Out the mouth',
 };
 
 /**
@@ -69,7 +72,7 @@ export interface BreathingExerciseProps {
  */
 function getPhaseInstruction(phase: BreathingPhase): string {
   if (phase === 'ready') {
-    return 'Tap to begin';
+    return READY_INSTRUCTION;
   }
   return PHASE_INSTRUCTIONS[phase];
 }
@@ -79,7 +82,7 @@ function getPhaseInstruction(phase: BreathingPhase): string {
  */
 function getPhaseDisplayText(phase: BreathingPhase): string {
   if (phase === 'ready') {
-    return 'Ready';
+    return '';
   }
   return PHASE_DISPLAY_TEXT[phase];
 }
@@ -99,6 +102,8 @@ export function BreathingExercise({
   cycles = 3,
   phaseDuration,
 }: BreathingExerciseProps) {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const [phase, setPhase] = useState<BreathingPhase>('ready');
   const [completedCycles, setCompletedCycles] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -106,7 +111,8 @@ export function BreathingExercise({
   const [intensityAfter, setIntensityAfter] = useState(5);
   const [countdown, setCountdown] = useState<number | null>(null);
 
-  const scale = useSharedValue(1);
+  const scale = useSharedValue(MIN_CIRCLE_SCALE);
+  const breatheOpacity = useSharedValue(1);
   const phaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -147,18 +153,20 @@ export function BreathingExercise({
       setShowIntensityCheck(false);
       setIntensityAfter(intensityBefore);
       setCountdown(null);
-      scale.value = 1;
+      scale.value = MIN_CIRCLE_SCALE;
+      breatheOpacity.value = 1;
       clearTimers();
     }
-  }, [visible, intensityBefore, scale, clearTimers]);
+  }, [visible, intensityBefore, scale, breatheOpacity, clearTimers]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       clearTimers();
       cancelAnimation(scale);
+      cancelAnimation(breatheOpacity);
     };
-  }, [scale, clearTimers]);
+  }, [scale, breatheOpacity, clearTimers]);
 
   // Handle phase transitions
   const advancePhase = useCallback(() => {
@@ -192,11 +200,14 @@ export function BreathingExercise({
 
     // Animate scale based on phase
     if (phase === 'inhale') {
-      scale.value = withTiming(1.3, { duration: durationMs, easing: Easing.inOut(Easing.ease) });
+      breatheOpacity.value = withTiming(1, { duration: 250, easing: Easing.inOut(Easing.ease) });
+      scale.value = withTiming(1, { duration: durationMs, easing: Easing.inOut(Easing.ease) });
     } else if (phase === 'hold') {
+      breatheOpacity.value = withTiming(0, { duration: 450, easing: Easing.inOut(Easing.ease) });
       // Keep scale at current value
     } else if (phase === 'exhale') {
-      scale.value = withTiming(1, { duration: durationMs, easing: Easing.inOut(Easing.ease) });
+      breatheOpacity.value = withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) });
+      scale.value = withTiming(MIN_CIRCLE_SCALE, { duration: durationMs, easing: Easing.inOut(Easing.ease) });
     }
 
     // Update countdown every second
@@ -218,16 +229,32 @@ export function BreathingExercise({
     return () => {
       clearTimers();
     };
-  }, [phase, isRunning, advancePhase, completedCycles, cycles, scale, getPhaseDuration, clearTimers]);
+  }, [
+    phase,
+    isRunning,
+    advancePhase,
+    completedCycles,
+    cycles,
+    scale,
+    breatheOpacity,
+    getPhaseDuration,
+    clearTimers,
+  ]);
 
   const animatedCircleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
+  const animatedBreatheStyle = useAnimatedStyle(() => ({
+    opacity: breatheOpacity.value,
+  }));
+
   const handleStart = useCallback(() => {
+    scale.value = MIN_CIRCLE_SCALE;
+    breatheOpacity.value = 1;
     setIsRunning(true);
     setPhase('inhale');
-  }, []);
+  }, [scale, breatheOpacity]);
 
   const handleComplete = useCallback(() => {
     onComplete(intensityAfter);
@@ -253,24 +280,42 @@ export function BreathingExercise({
 
         <View style={styles.content}>
           <Text style={styles.title}>4-7-8 Breathing</Text>
-          <Text style={styles.subtitle}>Follow the circle and breathe with the rhythm</Text>
+          <Text style={styles.subtitle}>
+            {phase === 'ready'
+              ? 'A short reset before you continue'
+              : 'Follow the circle and breathe with the rhythm'}
+          </Text>
 
           {!showIntensityCheck ? (
             <View style={styles.exerciseContent}>
-              <Animated.View style={[styles.circle, animatedCircleStyle]}>
-                <Text style={styles.phaseText}>{getPhaseDisplayText(phase)}</Text>
-              </Animated.View>
+              {phase === 'ready' ? (
+                <View style={styles.readyContent}>
+                  <View style={styles.readyDot} testID="ready-dot" />
+                  <Text style={styles.readyInstruction}>{getPhaseInstruction(phase)}</Text>
+                </View>
+              ) : (
+                <>
+                  <Animated.Text style={[styles.breatheText, animatedBreatheStyle]}>
+                    Breathe
+                  </Animated.Text>
+                  <View style={styles.breathVisual}>
+                    <Animated.View style={[styles.circle, animatedCircleStyle]} />
+                    <Text style={styles.phaseText}>{getPhaseDisplayText(phase)}</Text>
+                  </View>
 
-              {/* Countdown timer */}
-              <Text style={styles.timer} testID="countdown-timer">
-                {countdown !== null ? countdown : '--'}
-              </Text>
+                  {/* Countdown timer */}
+                  <Text style={styles.timer} testID="countdown-timer">
+                    {countdown !== null ? countdown : '--'}
+                  </Text>
 
-              <Text style={styles.instruction}>{getPhaseInstruction(phase)}</Text>
+                  <Text style={styles.instruction}>{getPhaseInstruction(phase)}</Text>
 
-              <Text style={styles.count} testID="cycle-count">
-                {completedCycles > 0 ? `Cycle ${completedCycles} of ${cycles}` : ''}
-              </Text>
+                  <Text style={styles.count} testID="cycle-count">
+                    {completedCycles > 0 ? `Cycle ${completedCycles} of ${cycles}` : ''}
+                  </Text>
+                </>
+              )}
+
 
               {phase === 'ready' && (
                 <TouchableOpacity
@@ -278,7 +323,7 @@ export function BreathingExercise({
                   onPress={handleStart}
                   testID="start-button"
                 >
-                  <Text style={styles.startButtonText}>Start</Text>
+                  <Text style={styles.startButtonText}>Begin</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -299,10 +344,10 @@ export function BreathingExercise({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   fullScreen: {
     flex: 1,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bg,
   },
   header: {
     paddingHorizontal: 16,
@@ -313,9 +358,11 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: palette.textMuted,
+    fontFamily: designFonts.sans,
   },
   content: {
+    ...appWidthStyle,
     flex: 1,
     alignItems: 'center',
     paddingHorizontal: 24,
@@ -324,71 +371,118 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
-    color: colors.textPrimary,
+    fontWeight: '500',
+    color: palette.text,
     marginBottom: 8,
+    fontFamily: designFonts.serif,
   },
   subtitle: {
     fontSize: 16,
-    color: colors.textSecondary,
-    marginBottom: 32,
+    color: palette.textMuted,
+    marginBottom: 24,
     textAlign: 'center',
+    fontFamily: designFonts.sans,
   },
-  circle: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(16, 163, 127, 0.15)',
-    borderWidth: 4,
-    borderColor: colors.accent,
+  readyContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 40,
+  },
+  readyDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: palette.accentSoft,
+    borderWidth: 2,
+    borderColor: palette.accent,
+    marginBottom: 28,
+  },
+  readyInstruction: {
+    maxWidth: 300,
+    fontSize: 24,
+    lineHeight: 32,
+    color: palette.text,
+    textAlign: 'center',
+    fontWeight: '500',
+    fontFamily: designFonts.sans,
+  },
+  breatheText: {
+    fontSize: 42,
+    lineHeight: 48,
+    fontWeight: '600',
+    color: palette.text,
+    marginBottom: 22,
+    fontFamily: designFonts.serif,
+  },
+  breathVisual: {
+    width: 240,
+    height: 240,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
   },
+  circle: {
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: palette.accentSoft,
+    borderWidth: 4,
+    borderColor: palette.accent,
+    position: 'absolute',
+  },
   phaseText: {
     fontSize: 22,
     fontWeight: '600',
-    color: colors.accent,
+    color: palette.accentText,
+    fontFamily: designFonts.sans,
   },
   timer: {
     fontSize: 48,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: palette.text,
     marginBottom: 12,
+    fontFamily: designFonts.mono,
   },
   instruction: {
     fontSize: 18,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginBottom: 32,
     textAlign: 'center',
+    fontFamily: designFonts.sans,
   },
   count: {
     fontSize: 14,
-    color: colors.textMuted,
+    color: palette.textFaint,
     marginBottom: 24,
     minHeight: 20,
+    fontFamily: designFonts.sans,
   },
   startButton: {
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
+    minWidth: 220,
     paddingVertical: 16,
-    paddingHorizontal: 64,
-    borderRadius: 12,
+    paddingHorizontal: 48,
+    borderRadius: 8,
+    alignItems: 'center',
   },
   startButtonText: {
-    color: colors.textOnAccent,
+    color: palette.textOnAccent,
     fontSize: 18,
     fontWeight: '600',
+    fontFamily: designFonts.sans,
   },
   skipButton: {
     paddingVertical: 16,
     marginBottom: 24,
   },
   skip: {
-    color: colors.textMuted,
+    color: palette.textFaint,
     fontSize: 16,
+    fontFamily: designFonts.sans,
   },
 });
 

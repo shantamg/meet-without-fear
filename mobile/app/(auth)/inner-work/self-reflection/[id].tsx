@@ -43,15 +43,21 @@ export default function SelfReflectionChatScreen() {
 
   const isNewSession = id === 'new';
   const isComingSoon = comingSoon === '1';
+  const hasInitialMessage =
+    typeof initialMessage === 'string' && initialMessage.trim().length > 0;
 
   // Track the created session ID in state to avoid route replacement remounting
   const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
   // Store suggested actions from session creation (e.g., "Start conversation with Jason")
   const [initialSuggestedActions, setInitialSuggestedActions] = useState<SuggestedAction[] | undefined>(undefined);
   // Track when the fade transition has completed (only for new sessions)
-  const [transitionComplete, setTransitionComplete] = useState(!isNewSession);
+  const [transitionComplete, setTransitionComplete] = useState(!isNewSession || hasInitialMessage);
   const createSession = useCreateInnerThoughtsSession();
   const hasStartedCreation = useRef(false);
+
+  const handleNavigateBack = () => {
+    router.replace('/inner-work');
+  };
 
   // Wait for fade transition to complete before showing content (new sessions only)
   useEffect(() => {
@@ -93,7 +99,7 @@ export default function SelfReflectionChatScreen() {
           },
           onError: (err) => {
             console.error('Failed to create self-reflection session:', err);
-            router.back();
+            handleNavigateBack();
           },
         }
       );
@@ -120,7 +126,7 @@ export default function SelfReflectionChatScreen() {
       <InnerThoughtsScreen
         sessionId={effectiveSessionId}
         linkedPartnerName={partnerName}
-        onNavigateBack={() => router.back()}
+        onNavigateBack={handleNavigateBack}
         onNavigateToPartnerSession={
           partnerSessionId
             ? () => router.replace(`/session/${partnerSessionId}`)
