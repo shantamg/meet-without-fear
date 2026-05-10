@@ -6,8 +6,8 @@ Branch: `codex/inner-thoughts-self-improvement`
 ## Scenario Set
 
 - `journal-organize-ambition`: real-LLM pass exists at `docs/product/inner-thoughts-scratch/2026-05-10-real-journal-organize-ambition.md`.
-- `person-to-partner-session`: live enabled. No run artifact yet.
-- `ambiguous-person-boundary`: live enabled. No run artifact yet.
+- `person-to-partner-session`: real-LLM pass exists at `docs/product/inner-thoughts-scratch/2026-05-10-real-person-to-partner-session.md`.
+- `ambiguous-person-boundary`: real-LLM pass exists at `docs/product/inner-thoughts-scratch/2026-05-10-real-ambiguous-person-boundary.md`.
 
 ## Product Surfaces
 
@@ -24,14 +24,16 @@ Branch: `codex/inner-thoughts-self-improvement`
 
 - Screenshot: `/tmp/mwf-inner-real-journal.png` (local only, not committed)
 - Scratch log: `docs/product/inner-thoughts-scratch/2026-05-10-real-journal-organize-ambition.md`
+- Screenshot: `/tmp/mwf-inner-real-maya.png` (local only, not committed)
+- Scratch log: `docs/product/inner-thoughts-scratch/2026-05-10-real-person-to-partner-session.md`
+- Screenshot: `/tmp/mwf-inner-real-boundary.png` (local only, not committed)
+- Scratch log: `docs/product/inner-thoughts-scratch/2026-05-10-real-ambiguous-person-boundary.md`
 - Focused tests:
   - Mobile HomeScreen route test passed.
   - Backend stage prompt tests passed.
   - Backend invitations tests passed.
   - Backend memory detector test passed.
 
-## Missing Evidence
+## Remaining Caveats
 
-- Live evidence for `person-to-partner-session`.
-- Live evidence for `ambiguous-person-boundary`.
-- Live Stage 0 context-use evidence after partner-session creation.
+- Stage 0 opened from the Maya handoff and referenced Maya, but the initial screen stayed appropriately general rather than exposing the private Inner Thoughts summary verbatim.

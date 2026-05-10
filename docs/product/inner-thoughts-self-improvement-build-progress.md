@@ -8,11 +8,11 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 
 - [x] Home page composer creates a real Inner Thoughts session from typed user input.
 - [x] Solo Inner Thoughts reflection is high quality for journaling, ambition, and idea organization.
-- [ ] Person-specific conversation earns a polished partner-session CTA.
-- [ ] Ambiguous person mentions do not over-route to partner sessions.
+- [x] Person-specific conversation earns a polished partner-session CTA.
+- [x] Ambiguous person mentions do not over-route to partner sessions.
 - [x] CTA opens the existing new-session flow with `partnerName` and `innerThoughtsId`.
-- [ ] Context generation runs through `POST /inner-thoughts/:id/generate-context`.
-- [ ] Partner session starts in Stage 0 with Inner Thoughts context available.
+- [x] Context generation runs through `POST /inner-thoughts/:id/generate-context`.
+- [x] Partner session starts in Stage 0 with Inner Thoughts context available.
 - [x] Eval workspace exists under `eval/inner-thoughts/`.
 - [x] Actor skill exists under `eval/skills/mwf-inner-thoughts-loop-actor/`.
 - [x] Scenario definitions exist for the three required scenarios.
@@ -34,6 +34,8 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `backend/src/services/__tests__/memory-detector.test.ts`
 - `docs/product/inner-thoughts-scratch/2026-05-10-local-journal-organize-ambition.md`
 - `docs/product/inner-thoughts-scratch/2026-05-10-real-journal-organize-ambition.md`
+- `docs/product/inner-thoughts-scratch/2026-05-10-real-person-to-partner-session.md`
+- `docs/product/inner-thoughts-scratch/2026-05-10-real-ambiguous-person-boundary.md`
 - `eval/inner-thoughts/stages/01-intake/output/latest-artifact-index.md`
 - `eval/inner-thoughts/stages/06-rerun/output/rerun-results.md`
 - `eval/inner-thoughts/stages/07-judge/output/readiness-judgment.md`
@@ -62,6 +64,9 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `npm --workspace backend run migrate:deploy` applied the missing local database migration for `User.privacyPreferences`.
 - `agent-browser --session mwf-inner-real-journal ...` drove `journal-organize-ambition` through a real-LLM browser run.
 - `npm --workspace backend test -- --runInBand backend/src/services/__tests__/memory-detector.test.ts` (passed: 25 tests)
+- `agent-browser --session mwf-inner-real-maya ...` drove `person-to-partner-session`, clicked the CTA, created the Maya partner session, and opened Stage 0.
+- `agent-browser --session mwf-inner-real-boundary ...` drove `ambiguous-person-boundary` and confirmed no partner-session CTA appeared.
+- `psql "$DATABASE_URL" ...` verified the Maya Inner Thoughts link and Jordan boundary non-link.
 
 ## Current Evidence
 
@@ -73,6 +78,8 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - Local `journal-organize-ambition` browser run first exposed that the old backend was running with `MOCK_LLM=true`; after restart with real credentials, the scenario passed the solo reflection gate.
 - The real-LLM run exposed a telemetry bug: inner-thoughts memory detection passed an inner-work session id as a partner `sessionId` to BrainActivity logging. `backend/src/services/memory-detector.ts` now logs `context === 'inner-thoughts'` calls with `innerWorkSessionId`.
 - Live verification after backend restart showed BrainActivity inserts using `innerWorkSessionId` and memory detection completing without Prisma relation errors.
+- Real `person-to-partner-session` browser run passed: CTA appeared only after the user clearly moved toward talking with Maya; handoff URL preserved `partnerName=Maya` and `innerThoughtsId`; generated context appeared on the new-session screen; created session linked back to the Inner Thoughts session.
+- Real `ambiguous-person-boundary` browser run passed: Jordan was named, but no partner CTA appeared because the user wanted private workplace-boundary reflection.
 
 ## Decisions
 
@@ -82,4 +89,4 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 ## Unresolved Questions
 
 - Live actor runs can use the existing `localhost:8082` E2E app with `E2E_AUTH_BYPASS=true`.
-- Remaining live gates are `person-to-partner-session`, `ambiguous-person-boundary`, generated context handoff, and Stage 0 context verification.
+- No remaining live gates for the scoped `eval/inner-thoughts` cycle. A future hardening pass could make the created Inner Thoughts URL replace `new?id=new` with the created session id for easier actor evidence.

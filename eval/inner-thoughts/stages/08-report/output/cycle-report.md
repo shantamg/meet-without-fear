@@ -41,16 +41,29 @@ Scenario: `journal-organize-ambition`
 - Result: home composer creation passed; solo reflection stayed on topic; no partner-session CTA appeared; the AI organized the user's scattered ambition/work thoughts into useful non-checklist buckets.
 - Additional finding: the real-LLM run exposed a BrainActivity relation bug in memory detection for inner thoughts. The bug was patched and verified with a subsequent real turn.
 
+Scenario: `person-to-partner-session`
+
+- Scratch log: `docs/product/inner-thoughts-scratch/2026-05-10-real-person-to-partner-session.md`
+- Status: `pass`
+- Result: CTA did not appear just because Maya was named. It appeared after the user said they might need to talk with Maya and wanted to understand what to say.
+- Handoff: `/session/new?partnerName=Maya&innerThoughtsId=cmozer39v000apx253x4y5efe` showed `From Inner Thoughts`, rendered generated context, and prefilled `Maya`.
+- Partner session: created `/session/cmozeud490014px25t5xy0h50`, linked from the originating Inner Thoughts session with `linkedTrigger = suggestion_start`, and opened Stage 0.
+
+Scenario: `ambiguous-person-boundary`
+
+- Scratch log: `docs/product/inner-thoughts-scratch/2026-05-10-real-ambiguous-person-boundary.md`
+- Status: `pass`
+- Result: Jordan was named, but the user explicitly wanted private reflection. No partner-session CTA appeared, and the AI stayed with workplace boundaries and internal reassurance.
+
 ## Remaining Risks
 
-- Real-LLM live pass exists only for `journal-organize-ambition`.
-- No live evidence yet for the person-to-partner CTA, generated-context banner, or Stage 0 context use.
-- No live evidence yet for ambiguous person mentions being held inside Inner Thoughts.
+- Real-LLM live passes exist for all three required scenarios.
+- The Stage 0 opening prompt referenced Maya while keeping the private generated context out of the partner-session chat, which is expected for privacy.
 - The created-session route keeps the URL at `/inner-work/self-reflection/new?id=new` while holding the real session id in state. This avoids flicker but weakens URL-only actor evidence.
 
 ## Current State
 
-The human cleared use of real model credentials. The environment blocker is removed for this worktree. Completion is still not claimable because the person-specific CTA and ambiguous-person scenarios have not been run to live evidence yet.
+The human cleared use of real model credentials. The environment blocker is removed for this worktree, and the scoped completion criteria now have real-LLM evidence.
 
 ## Cleanup
 

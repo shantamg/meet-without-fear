@@ -29,6 +29,37 @@ Date: 2026-05-10
 
 ### Still Not Covered
 
-- `person-to-partner-session`
-- `ambiguous-person-boundary`
-- live CTA click-through into generated context and Stage 0
+None for this cycle's three required scenarios.
+
+## `person-to-partner-session`
+
+- Run id: `real-local`
+- Scratch log: `docs/product/inner-thoughts-scratch/2026-05-10-real-person-to-partner-session.md`
+- App URL: `http://localhost:8082/?e2e-user-id=inner-real-maya-user&e2e-user-email=inner-real-maya-user%40e2e.test`
+- Backend: worktree backend on `localhost:3000` with `MOCK_LLM=false`
+- Status: `pass`
+
+### What Passed
+
+- The AI did not suggest a partner session merely because Maya was named.
+- The CTA appeared after the user said they might need to talk with Maya and wanted to understand what to say.
+- Clicking `Start a session with Maya` opened `/session/new?partnerName=Maya&innerThoughtsId=cmozer39v000apx253x4y5efe`.
+- The new-session screen showed `From Inner Thoughts`, rendered the generated summary, and prefilled `Maya`.
+- Creating the session opened `/session/cmozeud490014px25t5xy0h50`.
+- Database evidence showed `InnerWorkSession.linkedPartnerSessionId = cmozeud490014px25t5xy0h50` and `linkedTrigger = suggestion_start`.
+- The first Stage 0 screen referenced talking with Maya.
+
+## `ambiguous-person-boundary`
+
+- Run id: `real-local`
+- Scratch log: `docs/product/inner-thoughts-scratch/2026-05-10-real-ambiguous-person-boundary.md`
+- App URL: `http://localhost:8082/?e2e-user-id=inner-real-boundary-user&e2e-user-email=inner-real-boundary-user%40e2e.test`
+- Backend: worktree backend on `localhost:3000` with `MOCK_LLM=false`
+- Status: `pass`
+
+### What Passed
+
+- The user named Jordan but explicitly said they did not want a conversation yet.
+- The AI stayed with private reflection on freezing, workplace power dynamics, uncertainty, and boundaries.
+- No `Suggested next steps` partner-session CTA appeared.
+- Database evidence showed no linked partner session for `InnerWorkSession.cmozex6nz001lpx25h3oik55d`.
