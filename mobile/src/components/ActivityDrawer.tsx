@@ -408,7 +408,10 @@ export function ActivityDrawer({
   }, [visible, openDrawer]);
 
   useEffect(() => {
-    if (!visible || !focusMatch) return;
+    if (!visible || !focusMatch) {
+      setHighlightedItemId(null);
+      return;
+    }
 
     setHighlightedItemId(focusMatch.id);
 
