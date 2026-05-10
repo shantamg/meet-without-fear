@@ -3,7 +3,7 @@ title: Prisma Schema
 sidebar_position: 1
 description: Core Vessel Architecture tables plus pointers to the rest of the Prisma schema (Inner Work, reconciler, memory, needs/people, telemetry).
 slug: /backend/data-model/prisma-schema
-updated: "2026-05-09"
+updated: "2026-05-10"
 ---
 # Prisma Schema
 
@@ -33,30 +33,28 @@ erDiagram
 
 ```prisma
 model User {
-  id                 String   @id @default(cuid())
-  clerkId            String   @unique  // Clerk user ID for auth
-  email              String   @unique
-  name               String?
-  firstName          String?
-  lastName           String?
-  pushToken          String?  // Expo push token for realtime fallbacks
-  biometricEnabled   Boolean  @default(false)
-  biometricEnrolledAt DateTime?
-  lastMoodIntensity  Int?
-  globalFacts        Json?    // Fact-Ledger: consolidated cross-session insights
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                      String    @id @default(cuid())
+  clerkId                 String?   @unique // Clerk authentication user ID
+  email                   String    @unique
+  name                    String?   // Full name (computed from firstName + lastName)
+  firstName               String?
+  lastName                String?
+  pushToken               String?   // Expo push token for realtime fallbacks
+  biometricEnabled        Boolean   @default(false)
+  biometricEnrolledAt     DateTime?
+  memoryPreferences       Json?     // MemoryPreferencesDTO - AI memory settings
+  notificationPreferences Json?     // NotificationPreferencesDTO - notification settings
+  privacyPreferences      Json?     // PrivacyPreferencesDTO - visibility and invitation settings
+  lastMoodIntensity       Int?      // Last mood intensity (1-10) for session entry default
+  globalFacts             Json?     // Fact-Ledger: consolidated cross-session insights
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   // Key relations (see schema.prisma for the full set)
   relationships      RelationshipMember[]
   vessels            UserVessel[]
   stageProgress      StageProgress[]
   messages           Message[]
-  consents           ConsentRecord[]
-  empathyDrafts      EmpathyDraft[]
-  empathyAttempts    EmpathyAttempt[]
-  strategyProposals  StrategyProposal[]
-  strategyRankings   StrategyRanking[]
   memories           UserMemory[]        // "Things to Always Remember"
   innerWorkSessions  InnerWorkSession[]
   gratitudeEntries   GratitudeEntry[]
