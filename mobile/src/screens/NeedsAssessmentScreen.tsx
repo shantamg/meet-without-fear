@@ -32,6 +32,7 @@ import {
 } from '../hooks';
 import { NeedWithScoreDTO } from '@meet-without-fear/shared';
 import { HeaderBackButton } from '../components/HeaderBackButton';
+import { trackNeedsAssessmentStarted, trackNeedsAssessmentCompleted } from '../services/analytics';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 
@@ -205,6 +206,7 @@ export function NeedsAssessmentScreen({
   }, [mode, onNavigateBack, stopSpeech]);
 
   const handleStartBaseline = useCallback(() => {
+    trackNeedsAssessmentStarted();
     setCurrentNeedIndex(0);
     setBaselineScores({});
     setMode('baseline');
@@ -221,6 +223,7 @@ export function NeedsAssessmentScreen({
       }));
       submitBaseline.mutate({ scores }, {
         onSuccess: () => {
+          trackNeedsAssessmentCompleted();
           refetch();
           setMode('summary');
         },

@@ -42,6 +42,7 @@ import {
 import { useToast } from '../contexts/ToastContext';
 import { GratitudeEntryDTO } from '@meet-without-fear/shared';
 import { HeaderBackButton } from '../components/HeaderBackButton';
+import { trackGratitudeStarted, trackGratitudeCompleted } from '../services/analytics';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 
@@ -200,6 +201,7 @@ export function GratitudeScreen({ onNavigateBack }: GratitudeScreenProps) {
   }, [onNavigateBack]);
 
   const handleAddEntry = useCallback(() => {
+    trackGratitudeStarted();
     setIsAddingEntry(true);
   }, []);
 
@@ -214,6 +216,7 @@ export function GratitudeScreen({ onNavigateBack }: GratitudeScreenProps) {
         {
           onSuccess: () => {
             setIsAddingEntry(false);
+            trackGratitudeCompleted(content.length);
             showSuccess('Gratitude Saved', 'Your gratitude entry has been recorded.');
           },
           onError: () => {

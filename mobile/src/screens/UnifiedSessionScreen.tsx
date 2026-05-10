@@ -102,6 +102,11 @@ import {
   trackSessionResolved,
   trackStageStarted,
   trackStageCompleted,
+  trackShareTopicShown,
+  trackShareTopicAccepted,
+  trackShareTopicDeclined,
+  trackShareTopicDismissed,
+  trackShareDraftSent,
 } from '../services/analytics';
 import { shouldShowSessionEntryMoodCheck } from '../utils/sessionEntryMoodCheck';
 
@@ -2925,7 +2930,10 @@ export function UnifiedSessionScreen({
                 visible={true}
                 action={shareOfferData.suggestion.action}
                 partnerName={partnerName}
-                onPress={() => setShowShareTopicDrawer(true)}
+                onPress={() => {
+                  setShowShareTopicDrawer(true);
+                  trackShareTopicShown(sessionId, shareOfferData.suggestion!.action as 'OFFER_SHARING' | 'OFFER_OPTIONAL');
+                }}
               />
             )}
           </MeasuredAnimatedPanel>
@@ -3687,6 +3695,7 @@ export function UnifiedSessionScreen({
           onAccept={() => {
             setShowShareTopicDrawer(false);
             markCompleted('responded-to-share-offer');
+            trackShareTopicAccepted(sessionId, shareOfferData.suggestion!.action as 'OFFER_SHARING' | 'OFFER_OPTIONAL');
             // Open refinement modal so user can chat about and refine the draft
             // before sharing (same flow as ActivityDrawer's "Refine" button)
             if (shareOfferData?.suggestion) {
@@ -3697,10 +3706,14 @@ export function UnifiedSessionScreen({
           onDecline={() => {
             setShowShareTopicDrawer(false);
             markCompleted('responded-to-share-offer');
+            trackShareTopicDeclined(sessionId, shareOfferData.suggestion!.action as 'OFFER_SHARING' | 'OFFER_OPTIONAL');
             // Decline marks empathy direction as READY (no notification to partner)
             handleRespondToShareOffer('decline');
           }}
-          onClose={() => setShowShareTopicDrawer(false)}
+          onClose={() => {
+            trackShareTopicDismissed(sessionId, shareOfferData.suggestion!.action as 'OFFER_SHARING' | 'OFFER_OPTIONAL');
+            setShowShareTopicDrawer(false);
+          }}
         />
       )}
 
@@ -3870,6 +3883,7 @@ export function UnifiedSessionScreen({
         }}
         onShareAsIs={(_offerId) => {
           setShowActivityMenu(false);
+          trackShareDraftSent(sessionId, (shareOfferData?.suggestion?.action ?? 'OFFER_OPTIONAL') as 'OFFER_SHARING' | 'OFFER_OPTIONAL', false);
           handleRespondToShareOffer('accept');
         }}
         onOpenEmpathyDetail={(_attemptId, _content) => {
@@ -3901,6 +3915,7 @@ export function UnifiedSessionScreen({
           onClose={() => setRefinementOfferId(null)}
           onShareComplete={() => {
             setRefinementOfferId(null);
+            trackShareDraftSent(sessionId, (shareOfferData?.suggestion?.action ?? 'OFFER_OPTIONAL') as 'OFFER_SHARING' | 'OFFER_OPTIONAL', true);
             // Open activity drawer to show updated share status
             setShowActivityMenu(true);
             // Refresh activity menu data
