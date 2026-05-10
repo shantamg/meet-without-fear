@@ -64,6 +64,8 @@ export interface FullAIContext extends WitnessContext {
   sharedContextFromPartner?: string | null;
   /** Whether the user is in onboarding mode (compact not yet signed) */
   isOnboarding?: boolean;
+  /** Confirmed topic of the conversation (only set when topicFrameConfirmedAt is non-null) */
+  topicFrame?: string | null;
   /**
    * Topic/area the subject should focus on when generating a share draft.
    * Set when user taps "Yes, help me share" in the ShareTopicDrawer.
@@ -137,6 +139,7 @@ export async function getOrchestratedResponse(
     isRefiningEmpathy: context.isRefiningEmpathy,
     sharedContextFromPartner: context.sharedContextFromPartner,
     isOnboarding: context.isOnboarding,
+    topicFrame: context.topicFrame,
   };
 
   return orchestrateResponse(orchestratorContext);
