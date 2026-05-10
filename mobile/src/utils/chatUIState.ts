@@ -262,6 +262,7 @@ function computeShowInvitationPanel(inputs: ChatUIStateInputs): boolean {
  *
  * The panel shows "Review what you'll share" for initial empathy drafts.
  * During REFINING (after receiving shared context from partner), the panel
+ * stays hidden until the user has taken one reflection turn. After that it
  * re-appears as "Revisit what you'll share" so the user can resubmit their
  * revised empathy through the UI.
  */
@@ -280,16 +281,10 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
 
   const currentStage = myStage ?? Stage.ONBOARDING;
 
-  // When refining (Stage 2B), the reconciler may already have a reviewable
-  // draft/attempt and the AI copy directs the user to "Revisit what you'll
-  // share." Only hold the panel before the user engages if there is no
-  // content to review yet.
-  if (
-    isRefiningEmpathy &&
-    inputs.messageCountSinceSharedContext === 0 &&
-    !hasEmpathyContent &&
-    !myAttemptContent
-  ) {
+  // When the partner has just shared context, the next user action should be
+  // reflection in chat. Do not offer review/resubmit until they have taken
+  // that first turn, even if an old attempt or draft is already reviewable.
+  if (isRefiningEmpathy && inputs.messageCountSinceSharedContext === 0) {
     return false;
   }
 
