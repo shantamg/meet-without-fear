@@ -11,6 +11,7 @@ import {
 import { prisma } from '../lib/prisma';
 import { logger } from '../lib/logger';
 import { refreshStage4NeedCoverage } from './stage4-coverage.service';
+import { isSupersededStrategy } from '../utils/strategy-dedupe';
 
 export type Stage4CaptureInput = {
   sessionId: string;
@@ -21,7 +22,20 @@ export type Stage4CaptureInput = {
   currentInventory?: ProposalInventoryDTO;
   confirmedNeeds?: Stage4NeedDTO[];
   recentStage4Messages?: Array<{ role: 'USER' | 'AI'; userId?: string; content: string; timestamp: string }>;
+  structuredProposals?: Stage4StructuredProposalInput[];
   compatibilityProposedStrategies?: string[];
+};
+
+export type Stage4StructuredProposalInput = {
+  action?: 'ADD' | 'REVISE' | 'REMOVE' | 'IGNORE';
+  targetProposalId?: string;
+  classification: 'PROPOSAL' | 'REFLECTION' | 'SUCCESS_MARKER' | 'PROCESS';
+  description: string;
+  kind?: Stage4ProposalKind;
+  ownerUserId?: string;
+  needsAddressed?: string[];
+  duration?: string;
+  measureOfSuccess?: string;
 };
 
 export type Stage4NeedDTO = {
@@ -49,6 +63,8 @@ export type Stage4InventoryOperation =
       needsAddressed?: string[];
       duration?: string;
       measureOfSuccess?: string;
+      kind?: Stage4ProposalKind;
+      ownerUserId?: string;
       reason?: string;
     }
   | {
@@ -126,6 +142,9 @@ function normalizeText(value: string): string {
 function cleanProposalDescription(value: string): string {
   return value
     .replace(/^to\s+/i, '')
+    .replace(/^(?:what\s+i\s+can\s+)?commit\s+to\s+is\s+/i, '')
+    .replace(/^private\s+weekly\s+check[-\s]*in:\s*/i, '')
+    .replace(/\s*\((?:shared proposal|(?:private\s+)?individual commitment|private commitment)\)\s*$/i, '')
     .replace(/\s+(?:please|maybe|i think|if that works)$/i, '')
     .replace(/[.!?]+$/g, '')
     .trim();
@@ -172,11 +191,66 @@ function findReferencedProposal(
   return { proposal: null, confidence: 0 };
 }
 
+function findLooseRevisionProposal(text: string, proposals: ProposalRow[]): { proposal: ProposalRow | null; confidence: number } {
+  const candidates = proposals.filter((proposal) =>
+    [Stage4ProposalStatus.ACTIVE, Stage4ProposalStatus.REVISED].includes(proposal.status)
+  );
+  const scored = candidates
+    .map((proposal) => ({ proposal, score: getOverlapScore(text, proposal.description) }))
+    .sort((a, b) => b.score - a.score);
+  if (scored[0] && scored[0].score >= 0.35 && (!scored[1] || scored[0].score - scored[1].score >= 0.15)) {
+    return { proposal: scored[0].proposal, confidence: 0.86 };
+  }
+  return { proposal: null, confidence: 0 };
+}
+
+/**
+ * Compatibility fallback for the legacy free-text `ProposedStrategy` capture
+ * path. The authoritative source for proposal kind is the `kind` field on the
+ * typed `<stage4_proposals>` block; this function is only reached when no typed
+ * block was emitted.
+ *
+ * Uses only generic, scenario-agnostic signals (pronouns and common commitment
+ * verbs). Scenario-specific regexes are explicitly avoided per the gold-loop
+ * Stage 4 supplement. When uncertain, defaults to INDIVIDUAL_COMMITMENT — the
+ * safer default, since auto-promoting an ambiguous fragment to a SHARED proposal
+ * pulls the partner into a commitment they did not author.
+ */
 function inferProposalKind(text: string): Stage4ProposalKind {
-  if (/\b(i can|i could|i will|i'll|i would|i want to|i am going to|i'm going to)\b/i.test(text)) {
+  // Explicit individual-commitment self-references.
+  if (/\b(?:mine alone|just for me|my commitment|individual commitment|my own)\b/i.test(text)) {
     return Stage4ProposalKind.INDIVIDUAL_COMMITMENT;
   }
-  return Stage4ProposalKind.SHARED_PROPOSAL;
+  // Generic shared/joint phrasing.
+  if (
+    /\b(?:we|both of us|together|each of us|we each|one thing each)\b/i.test(text) ||
+    /\blet's\b/i.test(text)
+  ) {
+    return Stage4ProposalKind.SHARED_PROPOSAL;
+  }
+  // First-person commitment phrasing.
+  if (/\b(?:i can|i could|i will|i'll|i would|i want to|i am going to|i'm going to)\b/i.test(text)) {
+    return Stage4ProposalKind.INDIVIDUAL_COMMITMENT;
+  }
+  // Uncertain — never auto-promote a fragment to SHARED.
+  return Stage4ProposalKind.INDIVIDUAL_COMMITMENT;
+}
+
+function isNonCommitmentFirstPerson(raw: string): boolean {
+  return [
+    /\bi\s+can\s+(?:see|understand|recognize|hear|imagine|tell|appreciate)\b/i,
+    /\bi\s+could\s+(?:see|understand|recognize|hear|imagine|tell|appreciate)\b/i,
+    /\bi\s+would\s+(?:worry|be worried|be concerned|feel|think)\b/i,
+    /\bi\s+(?:think|feel|worry|wonder|guess)\b/i,
+  ].some((pattern) => pattern.test(raw));
+}
+
+function proposalWordCount(value: string): number {
+  return normalizeText(value).split(' ').filter(Boolean).length;
+}
+
+function isConcreteProposal(description: string): boolean {
+  return hasEnoughSpecificity(description);
 }
 
 function hasRemoveIntent(text: string): boolean {
@@ -191,12 +265,60 @@ function hasRemoveIntent(text: string): boolean {
 
 function extractAddOperations(input: Stage4CaptureInput): Stage4InventoryOperation[] {
   const operations: Stage4InventoryOperation[] = [];
+  for (const proposal of input.structuredProposals ?? []) {
+    const action = proposal.action ?? 'ADD';
+    if (action === 'IGNORE') continue;
+    if (action === 'REMOVE' && proposal.targetProposalId) {
+      operations.push({
+        type: 'REMOVE_PROPOSAL',
+        proposalId: proposal.targetProposalId,
+        reason: proposal.description,
+      });
+      continue;
+    }
+    if (proposal.classification !== 'PROPOSAL' || !proposal.kind) continue;
+    const description = cleanProposalDescription(proposal.description);
+    if (!description) continue;
+    if (action === 'REVISE' && proposal.targetProposalId) {
+      operations.push({
+        type: 'REVISE_PROPOSAL',
+        proposalId: proposal.targetProposalId,
+        description,
+        kind: proposal.kind,
+        ownerUserId: proposal.kind === Stage4ProposalKind.INDIVIDUAL_COMMITMENT
+          ? proposal.ownerUserId ?? input.userId
+          : proposal.ownerUserId,
+        needsAddressed: proposal.needsAddressed ?? [],
+        duration: proposal.duration,
+        measureOfSuccess: proposal.measureOfSuccess,
+        reason: proposal.description,
+      });
+      continue;
+    }
+    operations.push({
+      type: 'ADD_PROPOSAL',
+      tempKey: `structured-${operations.length}`,
+      kind: proposal.kind,
+      ownerUserId: proposal.kind === Stage4ProposalKind.INDIVIDUAL_COMMITMENT
+        ? proposal.ownerUserId ?? input.userId
+        : proposal.ownerUserId,
+      description,
+      needsAddressed: proposal.needsAddressed ?? [],
+      duration: proposal.duration,
+      measureOfSuccess: proposal.measureOfSuccess,
+      capturedQuote: proposal.description,
+    });
+  }
+  if (input.structuredProposals !== undefined) {
+    return operations;
+  }
+
   const compatibility = input.compatibilityProposedStrategies ?? [];
 
   compatibility.forEach((description, index) => {
     const cleaned = cleanProposalDescription(description);
-    if (!hasEnoughSpecificity(cleaned)) return;
-    const kind = inferProposalKind(cleaned);
+    if (!isConcreteProposal(cleaned)) return;
+    const kind = inferProposalKind(description);
     operations.push({
       type: 'ADD_PROPOSAL',
       tempKey: `compat-${index}`,
@@ -219,8 +341,9 @@ function extractAddOperations(input: Stage4CaptureInput): Stage4InventoryOperati
       if (/\b(?:not willing|willing|remove|delete|take .* off|drop that|change|revise|update)\b/i.test(raw)) {
         continue;
       }
+      if (isNonCommitmentFirstPerson(raw)) continue;
       const description = cleanProposalDescription(match[1] ?? '');
-      if (!hasEnoughSpecificity(description)) continue;
+      if (!isConcreteProposal(description)) continue;
       const kind = inferProposalKind(raw);
       operations.push({
         type: 'ADD_PROPOSAL',
@@ -289,6 +412,26 @@ function extractDestructiveOrRevisionOperation(
     return { operation: null, confidence: 0.45, lowConfidenceAction: 'REVISE_PROPOSAL' };
   }
 
+  if (/\b(?:should be|is|make it|mark it|keep it)\s+(?:an?\s+)?individual\b/i.test(text) || /\bnot shared\b/i.test(text)) {
+    const directMatch = findReferencedProposal(text, proposals, [
+      Stage4ProposalStatus.ACTIVE,
+      Stage4ProposalStatus.REVISED,
+    ]);
+    const match = directMatch.proposal ? directMatch : findLooseRevisionProposal(text, proposals);
+    if (match.proposal) {
+      return {
+        operation: {
+          type: 'REVISE_PROPOSAL',
+          proposalId: match.proposal.id,
+          kind: Stage4ProposalKind.INDIVIDUAL_COMMITMENT,
+          reason: text,
+        },
+        confidence: match.confidence,
+      };
+    }
+    return { operation: null, confidence: 0.45, lowConfidenceAction: 'REVISE_PROPOSAL' };
+  }
+
   return { operation: null, confidence: 0 };
 }
 
@@ -315,6 +458,27 @@ function extractSelection(text: string, userId: string, proposals: ProposalRow[]
         note: text,
       },
     ],
+  };
+}
+
+function inferClosureSignalFromUserMessage(message: string): Stage4ClosureSignalDTO | undefined {
+  const explicitStop =
+    /\b(?:stop here|stop this|close here|close this|right place to close|ready to close|no agreement|no shared agreement|without a shared agreement)\b/i.test(message) ||
+    /\b(?:feels|feel|is)\s+complete\s+(?:for now|enough to close|as a stopping point|to stop here)\b/i.test(message);
+  const declinesSharedRepair =
+    /\b(?:not|don't|do not|can't|cannot)\s+(?:want|need|looking for|make|making|seeking)\s+(?:a\s+|another\s+)?(?:shared|couple|joint)\s+(?:strategy|agreement|plan|repair)\b/i.test(message) ||
+    /\b(?:not|don't|do not|can't|cannot)\s+(?:ready\s+to\s+)?(?:turn|make)\s+this\s+into\s+(?:a\s+|another\s+)?(?:shared|couple|joint)\s+(?:strategy|agreement|plan|repair)\b/i.test(message) ||
+    /\b(?:no|not another)\s+(?:shared|couple|joint)\s+(?:strategy|agreement|plan|repair)\b/i.test(message);
+
+  if (!explicitStop && !declinesSharedRepair) return undefined;
+
+  const boundaryLanguage = /\b(?:boundary|safety|safe|space|separat|ending|end this|protect)\b/i.test(message);
+
+  return {
+    readyToClose: true,
+    kind: Stage4ClosureKind.NO_SHARED_AGREEMENT,
+    reason: boundaryLanguage ? Stage4ClosureReason.BOUNDARY_HONORED : Stage4ClosureReason.USER_STOPPED,
+    summary: message,
   };
 }
 
@@ -373,12 +537,51 @@ async function applyOperation(
   proposals: ProposalRow[]
 ): Promise<boolean> {
   if (operation.type === 'ADD_PROPOSAL') {
+    const activeProposals = proposals.filter((proposal) => proposal.status !== Stage4ProposalStatus.REMOVED);
     const duplicate = proposals.find(
       (proposal) =>
         proposal.status !== Stage4ProposalStatus.REMOVED &&
         normalizeText(proposal.description) === normalizeText(operation.description)
     );
     if (duplicate) return false;
+    const superseded = activeProposals.find((proposal) =>
+      isSupersededStrategy(proposal.description, operation.description)
+    );
+    if (superseded) {
+      await prisma.strategyProposal.update({
+        where: { id: superseded.id },
+        data: {
+          description: operation.description,
+          needsAddressed: operation.needsAddressed,
+          duration: operation.duration,
+          measureOfSuccess: operation.measureOfSuccess,
+          kind: operation.kind,
+          status: Stage4ProposalStatus.ACTIVE,
+        },
+      });
+      const beforeSnapshot = proposalSnapshot(superseded);
+      Object.assign(superseded, {
+        description: operation.description,
+        needsAddressed: operation.needsAddressed,
+        duration: operation.duration ?? null,
+        measureOfSuccess: operation.measureOfSuccess ?? null,
+        kind: operation.kind,
+        status: Stage4ProposalStatus.ACTIVE,
+      });
+      await prisma.stage4ProposalRevision.create({
+        data: {
+          proposalId: superseded.id,
+          sessionId: input.sessionId,
+          actorUserId: input.userId,
+          action: 'REVISED',
+          before: beforeSnapshot,
+          after: proposalSnapshot(superseded),
+          reason: 'Captured refined Stage 4 proposal superseding an existing draft.',
+          messageId: input.messageId,
+        },
+      });
+      return true;
+    }
 
     const created = await prisma.strategyProposal.create({
       data: {
@@ -394,6 +597,26 @@ async function applyOperation(
         capturedFromMessageId: input.messageId,
       },
     });
+    proposals.push({
+      id: created.id,
+      sessionId: input.sessionId,
+      createdByUserId: operation.ownerUserId ?? input.userId,
+      description: operation.description,
+      needsAddressed: operation.needsAddressed,
+      duration: operation.duration ?? null,
+      measureOfSuccess: operation.measureOfSuccess ?? null,
+      kind: operation.kind,
+      status: Stage4ProposalStatus.ACTIVE,
+      removedAt: null,
+      removedByUserId: null,
+      removalReason: null,
+      parentProposalId: null,
+      coverageSummary: null,
+      capturedFromMessageId: input.messageId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      consentRecordId: null,
+    } as ProposalRow);
     await prisma.stage4ProposalRevision.create({
       data: {
         proposalId: created.id,
@@ -488,7 +711,12 @@ async function applyOperation(
       needsAddressed: operation.needsAddressed ?? proposal.needsAddressed,
       duration: operation.duration ?? proposal.duration,
       measureOfSuccess: operation.measureOfSuccess ?? proposal.measureOfSuccess,
-      status: Stage4ProposalStatus.REVISED,
+      kind: operation.kind ?? proposal.kind,
+      createdByUserId:
+        operation.kind === Stage4ProposalKind.INDIVIDUAL_COMMITMENT
+          ? input.userId
+          : operation.ownerUserId ?? proposal.createdByUserId,
+      status: Stage4ProposalStatus.ACTIVE,
     },
   });
   await prisma.stage4ProposalRevision.create({
@@ -504,7 +732,8 @@ async function applyOperation(
         needsAddressed: operation.needsAddressed ?? proposal.needsAddressed,
         duration: operation.duration ?? proposal.duration,
         measureOfSuccess: operation.measureOfSuccess ?? proposal.measureOfSuccess,
-        status: Stage4ProposalStatus.REVISED,
+        kind: operation.kind ?? proposal.kind,
+        status: Stage4ProposalStatus.ACTIVE,
       },
       reason: operation.reason,
       messageId: input.messageId,
@@ -528,6 +757,7 @@ export async function captureStage4Turn(input: Stage4CaptureInput): Promise<Stag
   const selection = extractSelection(input.userMessage, input.userId, proposals);
   const confidence = operations.length > 0 || selection
     ? Math.max(
+        input.structuredProposals !== undefined && operations.length > 0 ? 0.92 : 0,
         operations.some((operation) => operation.type === 'ADD_PROPOSAL') ? 0.78 : 0,
         destructiveOrRevision.confidence,
         selection ? 0.82 : 0
@@ -592,14 +822,7 @@ export async function captureStage4Turn(input: Stage4CaptureInput): Promise<Stag
   return {
     operations,
     selection,
-    closureSignal: /\b(?:stop|done|close this|no agreement|no shared agreement)\b/i.test(input.userMessage)
-      ? {
-          readyToClose: true,
-          kind: Stage4ClosureKind.NO_SHARED_AGREEMENT,
-          reason: Stage4ClosureReason.USER_STOPPED,
-          summary: input.userMessage,
-        }
-      : undefined,
+    closureSignal: inferClosureSignalFromUserMessage(input.userMessage),
     confidence,
     rationale: operations.length > 0 || selection
       ? 'Captured deterministic Stage 4 inventory or selection signal from the conversation turn.'

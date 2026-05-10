@@ -16,12 +16,13 @@ import {
   Pressable,
   Animated,
   PanResponder,
-  Dimensions,
   StyleSheet,
   BackHandler,
+  useWindowDimensions,
+  LayoutChangeEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '@/theme';
+import { appWidthStyle, useAppAppearance } from '@/theme';
 import { NeedCard } from './NeedCard';
 
 // ============================================================================
@@ -60,8 +61,6 @@ export interface NeedsDrawerProps {
 // Constants
 // ============================================================================
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-const POSITION_3Q = SCREEN_HEIGHT * 0.25;
 const SNAP_UP_THRESHOLD = 80;
 const SNAP_DOWN_THRESHOLD = 100;
 
@@ -86,24 +85,42 @@ export function NeedsDrawer({
   testID = 'needs-drawer',
 }: NeedsDrawerProps) {
   const insets = useSafeAreaInsets();
+  const { palette } = useAppAppearance();
+  const styles = makeStyles(palette);
+  const { height: windowHeight } = useWindowDimensions();
+  const [drawerHostHeight, setDrawerHostHeight] = useState(windowHeight);
+  const position3Q = drawerHostHeight * 0.25;
+  const drawerHostHeightRef = useRef(drawerHostHeight);
+  const position3QRef = useRef(position3Q);
   const positionFullRef = useRef(insets.top);
+  drawerHostHeightRef.current = drawerHostHeight;
+  position3QRef.current = position3Q;
   positionFullRef.current = insets.top;
 
   // -------------------------------------------------------------------------
   // Animation refs
   // -------------------------------------------------------------------------
-  const drawerTranslate = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const drawerTranslate = useRef(new Animated.Value(drawerHostHeight)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const isDragging = useRef(false);
   const currentSnap = useRef<'3q' | 'full'>('3q');
-  const [contentHeight, setContentHeight] = useState(SCREEN_HEIGHT - POSITION_3Q);
+  const [contentHeight, setContentHeight] = useState(drawerHostHeight - position3Q);
+
+  const handleHostLayout = useCallback((event: LayoutChangeEvent) => {
+    const measuredHeight = event.nativeEvent.layout.height;
+    if (measuredHeight > 0) {
+      setDrawerHostHeight((current) =>
+        Math.abs(current - measuredHeight) > 1 ? measuredHeight : current,
+      );
+    }
+  }, []);
 
   // -------------------------------------------------------------------------
   // Open / Close / Snap animations
   // -------------------------------------------------------------------------
   const snapTo = useCallback(
     (position: number, backdrop: number) => {
-      setContentHeight(SCREEN_HEIGHT - position);
+      setContentHeight(drawerHostHeightRef.current - position);
       Animated.parallel([
         Animated.spring(drawerTranslate, {
           toValue: position,
@@ -123,13 +140,13 @@ export function NeedsDrawer({
 
   const openDrawer = useCallback(() => {
     currentSnap.current = '3q';
-    snapTo(POSITION_3Q, 0.4);
+    snapTo(position3QRef.current, 0.4);
   }, [snapTo]);
 
   const closeDrawer = useCallback(() => {
     Animated.parallel([
       Animated.timing(drawerTranslate, {
-        toValue: SCREEN_HEIGHT,
+        toValue: drawerHostHeightRef.current,
         duration: 200,
         useNativeDriver: true,
       }),
@@ -149,6 +166,17 @@ export function NeedsDrawer({
       openDrawer();
     }
   }, [visible, openDrawer]);
+
+  useEffect(() => {
+    if (!visible) {
+      drawerTranslate.setValue(drawerHostHeight);
+      return;
+    }
+
+    const position = currentSnap.current === 'full' ? positionFullRef.current : position3Q;
+    drawerTranslate.setValue(position);
+    setContentHeight(drawerHostHeight - position);
+  }, [visible, drawerHostHeight, position3Q, drawerTranslate]);
 
   // -------------------------------------------------------------------------
   // Android back button
@@ -174,9 +202,9 @@ export function NeedsDrawer({
       },
       onPanResponderMove: (_, gestureState) => {
         const pFull = positionFullRef.current;
-        const base = currentSnap.current === 'full' ? pFull : POSITION_3Q;
+        const base = currentSnap.current === 'full' ? pFull : position3QRef.current;
         const newPos = base + gestureState.dy;
-        const clamped = Math.max(pFull, Math.min(newPos, SCREEN_HEIGHT));
+        const clamped = Math.max(pFull, Math.min(newPos, drawerHostHeightRef.current));
         drawerTranslate.setValue(clamped);
       },
       onPanResponderRelease: (_, gestureState) => {
@@ -191,12 +219,12 @@ export function NeedsDrawer({
           } else if (dy > SNAP_DOWN_THRESHOLD || vy > 0.5) {
             closeDrawer();
           } else {
-            snapTo(POSITION_3Q, 0.4);
+            snapTo(position3QRef.current, 0.4);
           }
         } else {
           if (dy > SNAP_DOWN_THRESHOLD || vy > 0.5) {
             currentSnap.current = '3q';
-            snapTo(POSITION_3Q, 0.4);
+            snapTo(position3QRef.current, 0.4);
           } else {
             snapTo(pFull, 0.6);
           }
@@ -362,6 +390,7 @@ export function NeedsDrawer({
   return (
     <View
       style={[StyleSheet.absoluteFill, { zIndex: 100, elevation: 100 }]}
+      onLayout={handleHostLayout}
       pointerEvents="auto"
       testID={testID}
     >
@@ -383,14 +412,16 @@ export function NeedsDrawer({
       <Animated.View
         style={[
           styles.drawer,
+          appWidthStyle,
           {
-            height: SCREEN_HEIGHT,
+            height: drawerHostHeight,
             transform: [{ translateY: drawerTranslate }],
           },
         ]}
+        testID={`${testID}-sheet`}
       >
         {/* Content wrapper constrains layout to visible drawer area */}
-        <View style={{ height: contentHeight }}>
+        <View style={{ height: contentHeight }} testID={`${testID}-content`}>
           {/* Drag handle */}
           <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
             <View style={styles.dragHandle} />
@@ -429,19 +460,21 @@ export function NeedsDrawer({
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   backdropPressable: {
     ...StyleSheet.absoluteFillObject,
   },
   backdrop: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
   },
   drawer: {
     position: 'absolute',
     left: 0,
     right: 0,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bgPane,
+    borderWidth: 1,
+    borderColor: palette.border,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     overflow: 'hidden',
@@ -456,12 +489,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.borderStrong,
   },
   header: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
@@ -477,20 +510,20 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: palette.text,
     marginBottom: 4,
     marginHorizontal: 16,
   },
   sectionSubtitle: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginBottom: 16,
     marginHorizontal: 16,
     lineHeight: 20,
   },
   emptyText: {
     fontSize: 14,
-    color: colors.textMuted,
+    color: palette.textFaint,
     textAlign: 'center',
     paddingVertical: 24,
     fontStyle: 'italic',
@@ -500,8 +533,8 @@ const styles = StyleSheet.create({
   // Fixed button area at bottom of drawer
   fixedButtonArea: {
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: colors.bgPrimary,
+    borderTopColor: palette.border,
+    backgroundColor: palette.bgPane,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 16,
@@ -514,7 +547,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     flex: 1,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -523,19 +556,19 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   primaryButtonText: {
-    color: colors.textOnAccent,
+    color: palette.bg,
     fontSize: 15,
     fontWeight: '600',
   },
   secondaryButton: {
     flex: 1,
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
   },
   secondaryButtonText: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -555,39 +588,39 @@ const styles = StyleSheet.create({
   columnHeader: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.textMuted,
+    color: palette.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 10,
     paddingHorizontal: 4,
   },
   revealCard: {
-    backgroundColor: 'rgba(147, 197, 253, 0.15)',
+    backgroundColor: palette.infoSoft,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(147, 197, 253, 0.3)',
+    borderColor: palette.info,
     padding: 10,
     marginBottom: 8,
     position: 'relative',
   },
   partnerRevealCard: {
-    backgroundColor: 'rgba(251, 191, 36, 0.12)',
-    borderColor: 'rgba(251, 191, 36, 0.3)',
+    backgroundColor: palette.warningSoft,
+    borderColor: palette.warning,
   },
   revealCategory: {
     fontSize: 11,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginBottom: 2,
   },
   revealNeed: {
     fontSize: 13,
-    color: colors.textPrimary,
+    color: palette.text,
     lineHeight: 18,
   },
   emptyColumnText: {
     fontSize: 13,
-    color: colors.textMuted,
+    color: palette.textFaint,
     fontStyle: 'italic',
     textAlign: 'center',
     paddingVertical: 12,

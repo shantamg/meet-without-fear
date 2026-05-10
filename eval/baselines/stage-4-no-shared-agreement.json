@@ -1,0 +1,12 @@
+{
+  "dimensions": {
+    "dignified_closure": 4.5,
+    "individual_commitments_preserved": 4.5,
+    "no_overlap_clarity": 4.0
+  },
+  "moment_id": "stage-4-no-shared-agreement",
+  "overall_score": 4.33,
+  "source": "alignment_loop_initial:autonomous-real-dry-run-20260506b",
+  "updated_at": "2026-05-06T09:08:06.685548Z",
+  "verdict": "eval_fail"
+}

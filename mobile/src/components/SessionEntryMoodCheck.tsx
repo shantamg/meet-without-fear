@@ -1,50 +1,49 @@
 /**
  * SessionEntryMoodCheck Component
  *
- * A modal that appears when entering a chat session to capture the user's
- * current emotional state. This ensures the emotional barometer reflects
- * how the user is actually feeling at the start of the conversation.
- *
- * Polished, inviting design with clean slider and soothing aesthetic.
+ * Full-screen check-in shown when entering a session.
  */
 
-import { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, PanResponder } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
-import { colors, spacing, radius } from '@/theme';
+import { designFonts, useAppAppearance } from '@/theme';
+import { HeaderBackButton } from './HeaderBackButton';
 
-/**
- * Get interpolated color based on value (1-10)
- * Non-judgmental gradient: teal → gray → amber (no red)
- */
+const FEELINGS = [
+  { intensity: 10, label: 'Heated', hint: 'lit up, hard to breathe' },
+  { intensity: 8, label: 'Activated', hint: 'on edge, fast' },
+  { intensity: 6, label: 'Tense', hint: 'shoulders up' },
+  { intensity: 5, label: 'Steady', hint: 'with you' },
+  { intensity: 3, label: 'Settled', hint: 'a little softer' },
+  { intensity: 1, label: 'Calm', hint: 'open, slow' },
+] as const;
+
+function nearestFeeling(intensity: number) {
+  return FEELINGS.reduce((best, feeling) => {
+    const bestDistance = Math.abs(best.intensity - intensity);
+    const distance = Math.abs(feeling.intensity - intensity);
+    return distance < bestDistance ? feeling : best;
+  }, FEELINGS[0]);
+}
+
 function getGradientColor(value: number): string {
   const t = (value - 1) / 9;
 
   if (t <= 0.5) {
-    // Calm (#5eaaa8 teal) to Moderate (#94a3b8 gray)
     const localT = t * 2;
-    const r = Math.round(94 + (148 - 94) * localT);
-    const g = Math.round(170 + (163 - 170) * localT);
-    const b = Math.round(168 + (184 - 168) * localT);
-    return `rgb(${r}, ${g}, ${b})`;
-  } else {
-    // Moderate (#94a3b8 gray) to Intense (#f59e0b amber)
-    const localT = (t - 0.5) * 2;
-    const r = Math.round(148 + (245 - 148) * localT);
+    const r = Math.round(16 + (245 - 16) * localT);
     const g = Math.round(163 + (158 - 163) * localT);
-    const b = Math.round(184 + (11 - 184) * localT);
+    const b = Math.round(127 + (11 - 127) * localT);
     return `rgb(${r}, ${g}, ${b})`;
   }
-}
 
-/**
- * Get energy label for a value
- */
-function getIntensityLabel(value: number): string {
-  if (value <= 4) return 'Calm';
-  if (value <= 7) return 'Moderate';
-  return 'Intense';
+  const localT = (t - 0.5) * 2;
+  const r = Math.round(245 + (239 - 245) * localT);
+  const g = Math.round(158 + (68 - 158) * localT);
+  const b = Math.round(11 + (68 - 11) * localT);
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 export interface SessionEntryMoodCheckProps {
@@ -56,26 +55,22 @@ export interface SessionEntryMoodCheckProps {
   initialValue?: number;
   /** Callback when user completes the check */
   onComplete: (intensity: number) => void;
+  /** Optional back action for full-screen presentation */
+  onBack?: () => void;
 }
 
-/**
- * SessionEntryMoodCheck - Modal for checking emotional state on session entry
- *
- * Displays a full-screen modal with a slider for users to indicate how they're
- * feeling before starting or resuming a chat conversation.
- *
- * When fullScreen is true, renders as a standalone view (not modal) to prevent
- * flash of content behind it during screen transitions.
- */
 export function SessionEntryMoodCheck({
   visible,
   fullScreen = false,
   initialValue = 5,
   onComplete,
+  onBack,
 }: SessionEntryMoodCheckProps) {
   const [value, setValue] = useState(initialValue);
-  const currentColor = getGradientColor(value);
-  const currentLabel = getIntensityLabel(value);
+  const { palette } = useAppAppearance();
+  const styles = useStyles();
+  const feeling = nearestFeeling(value);
+  const sliderColor = getGradientColor(value);
 
   const handleValueChange = useCallback((newValue: number) => {
     setValue(Math.round(newValue));
@@ -85,32 +80,57 @@ export function SessionEntryMoodCheck({
     onComplete(value);
   }, [onComplete, value]);
 
-  // Get a softer pastel color for the label
-  const getSoftLabelColor = (label: string): string => {
-    if (label === 'Calm') return '#7dd3c0'; // Soft teal
-    if (label === 'Moderate') return '#94a3b8'; // Soft gray
-    return '#fbbf24'; // Soft amber
-  };
+  const backSwipeResponder = useMemo(
+    () => PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Boolean(onBack) &&
+        gestureState.x0 <= 28 &&
+        gestureState.dx > 12 &&
+        Math.abs(gestureState.dy) < 24,
+      onPanResponderRelease: (_, gestureState) => {
+        if (!onBack) return;
+        if (gestureState.dx > 70 || gestureState.vx > 0.65) {
+          onBack();
+        }
+      },
+    }),
+    [onBack]
+  );
 
-  const softLabelColor = getSoftLabelColor(currentLabel);
-
-  // Shared content between modal and full-screen modes
   const content = (
-    <View style={fullScreen ? styles.fullScreenOverlay : styles.overlay}>
-      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-        <View style={styles.container}>
-          <View style={styles.contentArea}>
-            <Text style={styles.title}>How are you feeling right now?</Text>
-            <Text style={styles.privacyText}>
-              This helps your AI guide adjust its approach. Only the AI sees this — your partner won't.
-            </Text>
+    <View
+      style={fullScreen ? styles.fullScreenOverlay : styles.overlay}
+      {...(onBack ? backSwipeResponder.panHandlers : {})}
+    >
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <View style={styles.topRow}>
+          {onBack && (
+            <HeaderBackButton
+              onPress={onBack}
+              accessibilityLabel="Back to home"
+              testID="mood-check-back-button"
+            />
+          )}
+          <Text style={styles.topLabel}>Before we begin</Text>
+          <View style={styles.topRule} />
+        </View>
 
-            <View style={styles.labelContainer}>
-              <Text style={[styles.emotionLabel, { color: softLabelColor }]}>
-                {currentLabel}
-              </Text>
-            </View>
+        <View style={styles.center}>
+          <Text style={styles.kicker}>A check-in, just for you</Text>
+          <Text style={styles.title}>
+            How are you feeling{'\n'}
+            <Text style={styles.titleEmphasis}>right now?</Text>
+          </Text>
+          <Text style={styles.subtitle}>
+            This helps your guide adjust its approach. Only the AI sees this — your partner won't.
+          </Text>
 
+          <View style={styles.readout}>
+            <Text style={styles.feelingName}>{feeling.label}</Text>
+            <Text style={styles.feelingHint}>— {feeling.hint}</Text>
+          </View>
+
+          <View style={styles.scale} testID="mood-check-scale">
             <View style={styles.sliderContainer}>
               <Slider
                 testID="mood-check-slider"
@@ -120,41 +140,40 @@ export function SessionEntryMoodCheck({
                 step={1}
                 value={value}
                 onValueChange={handleValueChange}
-                minimumTrackTintColor={currentColor}
-                maximumTrackTintColor="rgba(148, 163, 184, 0.3)"
-                thumbTintColor={currentColor}
+                minimumTrackTintColor={sliderColor}
+                maximumTrackTintColor={palette.progressPending}
+                thumbTintColor={sliderColor}
               />
             </View>
-
-            <TouchableOpacity
-              style={styles.continueButton}
-              onPress={handleContinue}
-              testID="mood-check-continue-button"
-              activeOpacity={0.8}
-            >
-              <Text style={styles.continueButtonText}>Continue</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.skipLink}
-              onPress={() => onComplete(5)}
-              testID="mood-check-skip-button"
-              activeOpacity={0.7}
-            >
-              <Text style={styles.skipLinkText}>Skip for now</Text>
-            </TouchableOpacity>
+            <View style={styles.axis}>
+              <Text style={styles.axisText}>Calm</Text>
+              <View style={styles.axisRule} />
+              <Text style={styles.axisText}>Steady</Text>
+              <View style={styles.axisRule} />
+              <Text style={styles.axisText}>Heated</Text>
+            </View>
           </View>
+        </View>
+
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={handleContinue}
+            testID="mood-check-continue-button"
+            activeOpacity={0.86}
+          >
+            <Text style={styles.continueButtonText}>Continue</Text>
+          </TouchableOpacity>
+
         </View>
       </SafeAreaView>
     </View>
   );
 
-  // Full-screen mode: render directly without Modal wrapper
   if (fullScreen) {
     return visible ? content : null;
   }
 
-  // Modal mode: wrap in Modal for overlay behavior
   return (
     <Modal
       visible={visible}
@@ -168,92 +187,146 @@ export function SessionEntryMoodCheck({
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-  },
-  fullScreenOverlay: {
-    flex: 1,
-    backgroundColor: colors.bgPrimary,
-  },
-  safeArea: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  container: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 400,
-    alignSelf: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing['2xl'],
-  },
-  contentArea: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '500',
-    color: colors.textPrimary,
-    marginBottom: spacing.md,
-    textAlign: 'center',
-    lineHeight: 32,
-  },
-  labelContainer: {
-    alignItems: 'center',
-    marginBottom: spacing['3xl'],
-  },
-  emotionLabel: {
-    fontSize: 28,
-    fontWeight: '600',
-    letterSpacing: -0.25,
-  },
-  sliderContainer: {
-    width: '100%',
-    marginBottom: 64,
-    backgroundColor: colors.bgSecondary,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-  },
-  slider: {
-    width: '100%',
-    height: 40,
-  },
-  privacyText: {
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: spacing['2xl'],
-    paddingHorizontal: spacing.md,
-  },
-  continueButton: {
-    backgroundColor: colors.accent,
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing['2xl'],
-    borderRadius: radius.full,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  continueButtonText: {
-    color: colors.textOnAccent,
-    fontSize: 18,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  skipLink: {
-    marginTop: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  skipLinkText: {
-    color: colors.textMuted,
-    fontSize: 15,
-    fontWeight: '400',
-  },
-});
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+
+  return useMemo(() => StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: palette.scrim,
+    },
+    fullScreenOverlay: {
+      flex: 1,
+      backgroundColor: palette.bg,
+    },
+    safeArea: {
+      flex: 1,
+      paddingTop: 18,
+    },
+    topRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      paddingHorizontal: 22,
+      paddingBottom: 8,
+    },
+    topLabel: {
+      color: palette.textFaint,
+      fontFamily: designFonts.mono,
+      fontSize: 11,
+      letterSpacing: 1.54,
+      textTransform: 'uppercase',
+    },
+    topRule: {
+      flex: 1,
+      height: 1,
+      backgroundColor: palette.divider,
+    },
+    center: {
+      flex: 1,
+      justifyContent: 'center',
+      paddingHorizontal: 28,
+      gap: 14,
+    },
+    kicker: {
+      fontFamily: designFonts.serif,
+      fontSize: 17,
+      fontStyle: 'italic',
+      letterSpacing: 0.08,
+      color: palette.textMuted,
+    },
+    title: {
+      fontFamily: designFonts.serif,
+      fontSize: 46,
+      lineHeight: 45,
+      fontWeight: '400',
+      letterSpacing: -1,
+      color: palette.text,
+    },
+    titleEmphasis: {
+      fontFamily: designFonts.serif,
+      fontStyle: 'italic',
+      color: palette.accentText,
+    },
+    subtitle: {
+      fontSize: 14.5,
+      lineHeight: 21.75,
+      color: palette.textMuted,
+      maxWidth: 300,
+      marginTop: 4,
+    },
+    readout: {
+      marginTop: 22,
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 10,
+      flexWrap: 'wrap',
+    },
+    feelingName: {
+      fontFamily: designFonts.serif,
+      fontSize: 30,
+      fontStyle: 'italic',
+      letterSpacing: -0.15,
+      color: palette.accentText,
+    },
+    feelingHint: {
+      fontFamily: designFonts.serif,
+      fontSize: 13.5,
+      fontStyle: 'italic',
+      color: palette.textFaint,
+    },
+    scale: {
+      marginTop: 8,
+    },
+    sliderContainer: {
+      paddingTop: 4,
+      paddingBottom: 2,
+    },
+    slider: {
+      width: '100%',
+      height: 40,
+    },
+    axis: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginTop: 8,
+    },
+    axisText: {
+      fontFamily: designFonts.mono,
+      fontSize: 10,
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+      color: palette.textFaint,
+    },
+    axisRule: {
+      flex: 1,
+      height: 1,
+      backgroundColor: palette.divider,
+    },
+    footer: {
+      paddingHorizontal: 22,
+      paddingTop: 16,
+      paddingBottom: 28,
+      alignItems: 'stretch',
+      gap: 8,
+    },
+    continueButton: {
+      width: '100%',
+      minHeight: 54,
+      borderRadius: 999,
+      backgroundColor: palette.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+    },
+    continueButtonText: {
+      color: '#fffaf0',
+      fontSize: 15,
+      fontWeight: '500',
+    },
+  }), [palette]);
+};
 
 export default SessionEntryMoodCheck;

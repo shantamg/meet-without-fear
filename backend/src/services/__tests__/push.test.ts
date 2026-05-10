@@ -1,16 +1,9 @@
-import {
-  sendPushNotification,
-  sendPushNotifications,
-  isValidPushToken,
-  PUSH_MESSAGES,
-  resetExpoClient,
-} from '../push';
+import { sendPushNotification, sendPushNotifications, isValidPushToken, PUSH_MESSAGES, resetExpoClient } from '../push';
 import { prisma } from '../../lib/prisma';
 import type { SessionEvent } from '../realtime';
 
 // Mock Prisma
 jest.mock('../../lib/prisma');
-
 
 // Mock Expo SDK
 const mockSendPushNotificationsAsync = jest.fn();
@@ -35,7 +28,7 @@ describe('Push Notification Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetExpoClient();
-    ((Expo as unknown as { isExpoPushToken: jest.Mock }).isExpoPushToken).mockReturnValue(true);
+    (Expo as unknown as { isExpoPushToken: jest.Mock }).isExpoPushToken.mockReturnValue(true);
   });
 
   describe('PUSH_MESSAGES', () => {
@@ -63,12 +56,12 @@ describe('Push Notification Service', () => {
 
     it('has appropriate messages for partner events', () => {
       expect(PUSH_MESSAGES['partner.signed_compact'].title).toContain('ready');
-      expect(PUSH_MESSAGES['partner.empathy_shared'].title).toContain('Empathy');
+      expect(PUSH_MESSAGES['partner.empathy_shared'].title).toContain('empathy');
     });
 
     it('has appropriate messages for agreement events', () => {
-      expect(PUSH_MESSAGES['agreement.proposed'].title).toContain('proposed');
-      expect(PUSH_MESSAGES['agreement.confirmed'].title).toContain('review');
+      expect(PUSH_MESSAGES['agreement.proposed'].title).toContain('agreement');
+      expect(PUSH_MESSAGES['agreement.confirmed'].title).toContain('confirmed');
     });
 
     it('has appropriate messages for session events', () => {
@@ -82,12 +75,7 @@ describe('Push Notification Service', () => {
     it('returns false when user has no push token', async () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue({ pushToken: null });
 
-      const result = await sendPushNotification(
-        testUserId,
-        'partner.signed_compact',
-        {},
-        testSessionId
-      );
+      const result = await sendPushNotification(testUserId, 'partner.signed_compact', {}, testSessionId);
 
       expect(result).toBe(false);
       expect(mockSendPushNotificationsAsync).not.toHaveBeenCalled();
@@ -96,12 +84,7 @@ describe('Push Notification Service', () => {
     it('returns false when user is not found', async () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
 
-      const result = await sendPushNotification(
-        testUserId,
-        'partner.signed_compact',
-        {},
-        testSessionId
-      );
+      const result = await sendPushNotification(testUserId, 'partner.signed_compact', {}, testSessionId);
 
       expect(result).toBe(false);
     });
@@ -110,14 +93,9 @@ describe('Push Notification Service', () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue({
         pushToken: 'invalid-token',
       });
-      ((Expo as unknown as { isExpoPushToken: jest.Mock }).isExpoPushToken).mockReturnValue(false);
+      (Expo as unknown as { isExpoPushToken: jest.Mock }).isExpoPushToken.mockReturnValue(false);
 
-      const result = await sendPushNotification(
-        testUserId,
-        'partner.signed_compact',
-        {},
-        testSessionId
-      );
+      const result = await sendPushNotification(testUserId, 'partner.signed_compact', {}, testSessionId);
 
       expect(result).toBe(false);
     });
@@ -128,24 +106,216 @@ describe('Push Notification Service', () => {
       });
       mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
 
-      await sendPushNotification(
-        testUserId,
-        'partner.empathy_shared',
-        { empathyId: 'emp-1' },
-        testSessionId
-      );
+      await sendPushNotification(testUserId, 'partner.empathy_shared', { empathyId: 'emp-1' }, testSessionId);
 
       expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
         expect.objectContaining({
           to: validPushToken,
           sound: 'default',
-          title: PUSH_MESSAGES['partner.empathy_shared'].title,
-          body: PUSH_MESSAGES['partner.empathy_shared'].body,
+          title: 'They shared empathy',
+          body: "We're checking it now and will show it when it is ready to read.",
           data: expect.objectContaining({
+            screen: 'session',
             sessionId: testSessionId,
             event: 'partner.empathy_shared',
             empathyId: 'emp-1',
           }),
+        }),
+      ]);
+    });
+
+    it('uses the recipient nickname for the other person when available', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        pushToken: validPushToken,
+      });
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        relationship: {
+          members: [
+            {
+              userId: testUserId,
+              nickname: 'Sammy',
+              user: { firstName: 'Recipient', name: 'Recipient User' },
+            },
+            {
+              userId: 'actor-123',
+              nickname: null,
+              user: { firstName: 'Sam', name: 'Sam Person' },
+            },
+          ],
+        },
+      });
+      mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
+
+      await sendPushNotification(
+        testUserId,
+        'partner.stage_completed',
+        { completedBy: 'actor-123', stage: 1 },
+        testSessionId,
+      );
+
+      expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+        expect.objectContaining({
+          title: 'Sammy moved forward',
+          body: 'Sammy felt heard. Keep going at your own pace.',
+        }),
+      ]);
+    });
+
+    it('uses progress nudge copy when Stage 1 completion reaches someone already in empathy', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        pushToken: validPushToken,
+      });
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: testUserId, stage: 2, status: 'IN_PROGRESS' },
+        { userId: 'actor-123', stage: 2, status: 'IN_PROGRESS' },
+      ]);
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        relationship: {
+          members: [
+            {
+              userId: testUserId,
+              nickname: null,
+              user: { firstName: 'Jason', name: 'Jason Person' },
+            },
+            {
+              userId: 'actor-123',
+              nickname: null,
+              user: { firstName: 'Shantam', name: 'Shantam Person' },
+            },
+          ],
+        },
+      });
+      mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
+
+      await sendPushNotification(
+        testUserId,
+        'partner.stage_completed',
+        { completedBy: 'actor-123', stage: 1 },
+        testSessionId,
+      );
+
+      expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+        expect.objectContaining({
+          title: 'Shantam is progressing',
+          body: 'Shantam felt heard and moved forward. Come back and keep going when you are ready.',
+        }),
+      ]);
+    });
+
+    it('uses ready-to-continue copy when Stage 1 completion reaches someone waiting', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        pushToken: validPushToken,
+      });
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: testUserId, stage: 1, status: 'GATE_PENDING' },
+        { userId: 'actor-123', stage: 2, status: 'IN_PROGRESS' },
+      ]);
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        relationship: {
+          members: [
+            {
+              userId: testUserId,
+              nickname: null,
+              user: { firstName: 'Jason', name: 'Jason Person' },
+            },
+            {
+              userId: 'actor-123',
+              nickname: null,
+              user: { firstName: 'Shantam', name: 'Shantam Person' },
+            },
+          ],
+        },
+      });
+      mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
+
+      await sendPushNotification(
+        testUserId,
+        'partner.stage_completed',
+        { completedBy: 'actor-123', stage: 1 },
+        testSessionId,
+      );
+
+      expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+        expect.objectContaining({
+          title: 'Ready to continue',
+          body: 'Shantam felt heard, so the next step is ready when you are.',
+        }),
+      ]);
+    });
+
+    it('uses invitation acceptance copy when the invitee starts their side', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        pushToken: validPushToken,
+      });
+      (prisma.invitation.findFirst as jest.Mock).mockResolvedValue({
+        invitedById: testUserId,
+      });
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        relationship: {
+          members: [
+            {
+              userId: testUserId,
+              nickname: null,
+              user: { firstName: 'Jason', name: 'Jason Person' },
+            },
+            {
+              userId: 'actor-123',
+              nickname: null,
+              user: { firstName: 'Shantam', name: 'Shantam Person' },
+            },
+          ],
+        },
+      });
+      mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
+
+      await sendPushNotification(
+        testUserId,
+        'partner.signed_compact',
+        { signedBy: 'actor-123' },
+        testSessionId,
+      );
+
+      expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+        expect.objectContaining({
+          title: 'Shantam accepted your invitation',
+          body: 'Shantam accepted your invitation and started the session. Come back when you are ready.',
+        }),
+      ]);
+    });
+
+    it('resolves the invitee name for session joined notifications', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        pushToken: validPushToken,
+      });
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        relationship: {
+          members: [
+            {
+              userId: testUserId,
+              nickname: null,
+              user: { firstName: 'Jason', name: 'Jason Person' },
+            },
+            {
+              userId: 'actor-123',
+              nickname: null,
+              user: { firstName: 'Shantam', name: 'Shantam Person' },
+            },
+          ],
+        },
+      });
+      mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
+
+      await sendPushNotification(
+        testUserId,
+        'session.joined',
+        { joinedBy: 'actor-123' },
+        testSessionId,
+      );
+
+      expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+        expect.objectContaining({
+          title: 'Shantam joined',
+          body: 'Shantam accepted your invitation. Open the session to continue together.',
         }),
       ]);
     });
@@ -156,30 +326,55 @@ describe('Push Notification Service', () => {
       });
       mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
 
-      const result = await sendPushNotification(
-        testUserId,
-        'session.resolved',
-        {},
-        testSessionId
-      );
+      const result = await sendPushNotification(testUserId, 'session.resolved', {}, testSessionId);
 
       expect(result).toBe(true);
+    });
+
+    it('uses readable-empathy copy only for the reveal event', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        pushToken: validPushToken,
+      });
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        relationship: {
+          members: [
+            {
+              userId: testUserId,
+              nickname: null,
+              user: { firstName: 'Jason', name: 'Jason Person' },
+            },
+            {
+              userId: 'actor-123',
+              nickname: null,
+              user: { firstName: 'Darryl', name: 'Darryl Person' },
+            },
+          ],
+        },
+      });
+      mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
+
+      await sendPushNotification(
+        testUserId,
+        'empathy.revealed',
+        { triggeredByUserId: 'actor-123' },
+        testSessionId,
+      );
+
+      expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+        expect.objectContaining({
+          title: 'Empathy exchange is ready',
+          body: 'You can now read what Darryl understood about your experience.',
+        }),
+      ]);
     });
 
     it('returns false on send error', async () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue({
         pushToken: validPushToken,
       });
-      mockSendPushNotificationsAsync.mockResolvedValue([
-        { status: 'error', message: 'Push failed' },
-      ]);
+      mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'error', message: 'Push failed' }]);
 
-      const result = await sendPushNotification(
-        testUserId,
-        'session.paused',
-        {},
-        testSessionId
-      );
+      const result = await sendPushNotification(testUserId, 'session.paused', {}, testSessionId);
 
       expect(result).toBe(false);
     });
@@ -210,12 +405,7 @@ describe('Push Notification Service', () => {
       });
       mockSendPushNotificationsAsync.mockRejectedValue(new Error('Network error'));
 
-      const result = await sendPushNotification(
-        testUserId,
-        'partner.advanced',
-        {},
-        testSessionId
-      );
+      const result = await sendPushNotification(testUserId, 'partner.advanced', {}, testSessionId);
 
       expect(result).toBe(false);
     });
@@ -229,12 +419,7 @@ describe('Push Notification Service', () => {
       mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
 
       const userIds = ['user-1', 'user-2', 'user-3'];
-      const result = await sendPushNotifications(
-        userIds,
-        'agreement.confirmed',
-        {},
-        testSessionId
-      );
+      const result = await sendPushNotifications(userIds, 'agreement.confirmed', {}, testSessionId);
 
       expect(result).toBe(3);
       expect(mockSendPushNotificationsAsync).toHaveBeenCalledTimes(3);
@@ -252,12 +437,7 @@ describe('Push Notification Service', () => {
       mockSendPushNotificationsAsync.mockResolvedValue([{ status: 'ok' }]);
 
       const userIds = ['user-1', 'user-2', 'user-3'];
-      const result = await sendPushNotifications(
-        userIds,
-        'partner.ranking_submitted',
-        {},
-        testSessionId
-      );
+      const result = await sendPushNotifications(userIds, 'partner.ranking_submitted', {}, testSessionId);
 
       expect(result).toBe(2); // Only 2 successful sends
     });
@@ -266,12 +446,7 @@ describe('Push Notification Service', () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue({ pushToken: null });
 
       const userIds = ['user-1', 'user-2'];
-      const result = await sendPushNotifications(
-        userIds,
-        'partner.needs_shared',
-        {},
-        testSessionId
-      );
+      const result = await sendPushNotifications(userIds, 'partner.needs_shared', {}, testSessionId);
 
       expect(result).toBe(0);
     });
@@ -279,12 +454,12 @@ describe('Push Notification Service', () => {
 
   describe('isValidPushToken', () => {
     it('returns true for valid Expo push token', () => {
-      ((Expo as unknown as { isExpoPushToken: jest.Mock }).isExpoPushToken).mockReturnValue(true);
+      (Expo as unknown as { isExpoPushToken: jest.Mock }).isExpoPushToken.mockReturnValue(true);
       expect(isValidPushToken(validPushToken)).toBe(true);
     });
 
     it('returns false for invalid token', () => {
-      ((Expo as unknown as { isExpoPushToken: jest.Mock }).isExpoPushToken).mockReturnValue(false);
+      (Expo as unknown as { isExpoPushToken: jest.Mock }).isExpoPushToken.mockReturnValue(false);
       expect(isValidPushToken('invalid')).toBe(false);
     });
   });

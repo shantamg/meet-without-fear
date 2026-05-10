@@ -187,6 +187,58 @@ export function trackShareDraftSent(
 }
 
 // ============================================================================
+// Inner Work Events
+// ============================================================================
+
+export function trackInnerWorkHubOpened(source: string): void {
+  track('Inner Work Hub Opened', {
+    source,
+  });
+}
+
+export function trackMeditationStarted(durationSeconds: number): void {
+  track('Meditation Started', {
+    duration_seconds: durationSeconds,
+  });
+}
+
+export function trackMeditationCompleted(durationSeconds: number): void {
+  track('Meditation Completed', {
+    duration_seconds: durationSeconds,
+  });
+}
+
+export function trackGratitudeStarted(): void {
+  track('Gratitude Started');
+}
+
+export function trackGratitudeCompleted(entryLength: number): void {
+  track('Gratitude Completed', {
+    entry_length: entryLength,
+  });
+}
+
+export function trackNeedsAssessmentStarted(): void {
+  track('Needs Assessment Started');
+}
+
+export function trackNeedsAssessmentCompleted(): void {
+  track('Needs Assessment Completed');
+}
+
+export function trackStrategicRepairStarted(sessionId: string): void {
+  track('Strategic Repair Started', {
+    session_id: sessionId,
+  });
+}
+
+export function trackStrategicRepairCompleted(sessionId: string): void {
+  track('Strategic Repair Completed', {
+    session_id: sessionId,
+  });
+}
+
+// ============================================================================
 // Error Events
 // ============================================================================
 

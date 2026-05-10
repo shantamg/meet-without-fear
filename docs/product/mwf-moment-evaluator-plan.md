@@ -240,6 +240,24 @@ Same shape as the existing E2E loop:
 - A successful Moment Evaluator iteration on Stage 2 prompts produces a new version of `stage-prompts.ts`. The next E2E loop run picks up the same version automatically.
 - Conversely, the Moment Evaluator does not block on the E2E loop. They run on independent cadences.
 
+## Autonomous Transcript Extraction
+
+The truly autonomous alignment pass adds `scripts/mwf_extract_moments.py` and extends `scripts/mwf_add_gold_example.py --auto`.
+
+The extractor parses markdown gold material into ordered turns with speaker role, content, line range, inferred stage, and inferred sub-state. It handles the turn-by-turn transcript format (`**Adam:**`, `**MWF:**`) and quoted protocol MWF turns in prose protocol files. It then selects AI turns worth evaluating, preferring stage posture beats such as fact reflection, emotional handling, consent gates, validation, mutual reveal, and willingness/closure language.
+
+For each selected AI turn, the auto-onboarding path writes:
+
+- A ready moment yaml under `eval/moments/`, not a `.draft` scaffold.
+- A judge prompt under `eval/scorer/judge-prompts/` anchored to the trigger, gold AI turn, protocol posture, and transcript excerpt.
+- A serializable seed shape containing participants, stage gates, prior-history summary, transcript line references, and the triggering user turn.
+- Deterministic hard invariants using the existing invariant engine.
+- A `moment_type` field used by coverage reporting.
+
+`eval/moment-types.yaml` defines the fixed taxonomy used for cross-transcript coverage. `scripts/mwf_alignment_status.py --coverage-check` reports covered and missing moment types per transcript, and the status dashboard includes a compact coverage summary.
+
+Cross-moment regularization is now baseline-delta based instead of absolute-threshold based. Other moments may remain below the eventual target, but a candidate revision is rejected if any checked moment drops more than `0.05` below its persisted baseline or fails deterministic hard invariants. Baselines live under `eval/baselines/<moment-id>.json`; normal runs initialize missing baselines but do not overwrite existing baselines. Baseline updates after merged revisions must go through the explicit merged-baseline update helper.
+
 ## Build phases
 
 **Phase 1: minimal viable, one moment, end-to-end** (target: 2-3 days of focused work)

@@ -627,7 +627,8 @@ async function judge(input: {
   const text = textBlock && textBlock.type === 'text' ? textBlock.text : '{}';
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim());
+    const cleaned = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+    parsed = JSON.parse(cleaned);
   } catch {
     parsed = { parse_error: true, raw: text };
   }
@@ -635,6 +636,78 @@ async function judge(input: {
     model: HAIKU_MODEL_ID,
     durationMs: Date.now() - startedAt,
     usage: result.usage,
+    parsed,
+    raw: text,
+  };
+}
+
+async function generateRubric(input: {
+  transcript: string;
+  transcriptPath: string;
+  aiTurn: {
+    content: string;
+    stage: number | null;
+    subState: string;
+    startLine: number;
+    endLine: number;
+  };
+  trigger?: {
+    content: string;
+    speaker: string;
+    startLine: number;
+    endLine: number;
+  } | null;
+  protocolPosture: string;
+  transcriptExcerpt: string;
+}): Promise<Record<string, unknown>> {
+  requireEnv(['AWS_REGION', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']);
+  const client = new AnthropicBedrock({ awsRegion: process.env.AWS_REGION });
+  const startedAt = Date.now();
+  const result = await client.messages.create({
+    model: HAIKU_MODEL_ID,
+    max_tokens: 1400,
+    temperature: 0,
+    system: [
+      {
+        type: 'text',
+        text:
+          'You generate Meet Without Fear moment-evaluator rubric dimensions. Return only JSON. ' +
+          'Create 3 to 5 dimensions anchored to the provided gold AI turn, stage posture, trigger, and transcript evidence. ' +
+          'Each dimension must have id, description, pass_threshold, and evidence_excerpt. ' +
+          'Do not score grammar or generic helpfulness; score MWF posture and protocol fidelity.',
+      },
+      {
+        type: 'text',
+        text: `Full gold transcript (${input.transcriptPath}):\n\n${input.transcript}`,
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
+    messages: [
+      {
+        role: 'user',
+        content:
+          `Protocol posture:\n${input.protocolPosture}\n\n` +
+          `Chosen AI turn (${input.aiTurn.subState}, Stage ${input.aiTurn.stage}, lines ${input.aiTurn.startLine}-${input.aiTurn.endLine}):\n${input.aiTurn.content}\n\n` +
+          `Immediately preceding trigger:\n${input.trigger ? `${input.trigger.speaker}: ${input.trigger.content}` : 'None'}\n\n` +
+          `Surrounding transcript excerpt:\n${input.transcriptExcerpt}\n\n` +
+          'Return JSON shaped as {"dimensions":[{"id":"...", "description":"...", "pass_threshold":4, "evidence_excerpt":"..."}]}.',
+      },
+    ],
+  });
+  const textBlock = result.content.find((block) => block.type === 'text');
+  const text = textBlock && textBlock.type === 'text' ? textBlock.text : '{}';
+  let parsed: unknown;
+  try {
+    const cleaned = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+    parsed = JSON.parse(cleaned);
+  } catch {
+    parsed = { parse_error: true, raw: text };
+  }
+  return {
+    model: HAIKU_MODEL_ID,
+    durationMs: Date.now() - startedAt,
+    usage: result.usage,
+    promptCaching: 'full transcript sent as cache_control ephemeral system block',
     parsed,
     raw: text,
   };
@@ -688,6 +761,13 @@ async function main(): Promise<void> {
       for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
       const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       console.log(JSON.stringify(await judge(payload)));
+      return;
+    }
+    if (command === 'rubric') {
+      const chunks: Buffer[] = [];
+      for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+      const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      console.log(JSON.stringify(await generateRubric(payload)));
       return;
     }
     throw new Error(`Unknown command: ${command}`);

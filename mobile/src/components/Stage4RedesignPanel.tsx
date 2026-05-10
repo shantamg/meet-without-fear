@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Check, Clock, MinusCircle, Send, XCircle } from 'lucide-react-native';
 import {
@@ -10,7 +11,7 @@ import {
   Stage4ProposalKind,
   Stage4SelectionDecision,
 } from '@meet-without-fear/shared';
-import { colors } from '@/theme';
+import { useAppAppearance } from '@/theme';
 
 interface Stage4RedesignPanelProps {
   state: GetStage4StateResponse;
@@ -82,6 +83,9 @@ function DecisionBadge({
   label: string;
   decision?: Stage4SelectionDecision;
 }) {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
+
   return (
     <View style={styles.decisionBadge}>
       <Text style={styles.decisionLabel}>{label}</Text>
@@ -96,13 +100,17 @@ function ProposalCard({
   proposal,
   partnerName,
   isSelecting,
+  readOnly,
   onSelectProposal,
 }: {
   proposal: ProposalCardDTO;
   partnerName?: string | null;
   isSelecting?: boolean;
+  readOnly?: boolean;
   onSelectProposal: (proposalId: string, decision: Stage4SelectionDecision) => void;
 }) {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const needsText = proposal.needsAddressed
     .map((need) => `${need.label} (${coverageLabels[need.coverage]})`)
     .join(', ');
@@ -141,15 +149,16 @@ function ProposalCard({
           Stage4SelectionDecision.NOT_WILLING,
         ].map((decision) => {
           const selected = proposal.myDecision === decision;
+          const disabled = Boolean(isSelecting || readOnly);
           return (
             <TouchableOpacity
               key={decision}
               style={[styles.selectionButton, selected && styles.selectionButtonSelected]}
               onPress={() => onSelectProposal(proposal.id, decision)}
-              disabled={isSelecting}
+              disabled={disabled}
               accessibilityRole="button"
               accessibilityLabel={`${decisionLabels[decision]} for proposal`}
-              accessibilityState={{ selected, disabled: isSelecting }}
+              accessibilityState={{ selected, disabled }}
             >
               <Text style={[styles.selectionButtonText, selected && styles.selectionButtonTextSelected]}>
                 {decisionLabels[decision]}
@@ -171,6 +180,9 @@ function NeedRows({
   rows: GetStage4StateResponse['coverageAudit']['covered'];
   tone: 'covered' | 'partial' | 'open';
 }) {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
+
   if (rows.length === 0) return null;
 
   return (
@@ -197,6 +209,8 @@ export function Stage4RedesignPanel({
   onSelectProposal,
   onCloseStage4,
 }: Stage4RedesignPanelProps) {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const allProposals = [
     ...state.inventory.sharedProposals,
     ...state.inventory.individualCommitments,
@@ -206,18 +220,20 @@ export function Stage4RedesignPanel({
       proposal.myDecision === Stage4SelectionDecision.WILLING &&
       proposal.partnerDecisionVisible === Stage4SelectionDecision.WILLING
   );
-  const partnerSelections = state.partnerSelections ?? [];
-  const canCloseShared = mutualShared.length > 0;
+  const canCloseShared =
+    mutualShared.length > 0 &&
+    state.partnerSelectionStatus === 'SUBMITTED';
   const canCloseNoShared =
     (state.phase === Stage4Phase.OUTCOME_REVIEW ||
       state.phase === Stage4Phase.SELECTION ||
       state.phase === Stage4Phase.COVERAGE_REVIEW) &&
-    partnerSelections.length > 0;
+    state.partnerSelectionStatus === 'SUBMITTED';
   const showNoSharedClose =
     state.phase === Stage4Phase.OUTCOME_REVIEW ||
     state.phase === Stage4Phase.SELECTION ||
     state.phase === Stage4Phase.COVERAGE_REVIEW;
   const noSharedCloseDisabled = !canCloseNoShared || isClosing;
+  const proposalSelectionsReadOnly = Boolean(state.outcome);
 
   return (
     <View style={styles.container} testID="stage4-redesign-panel">
@@ -242,6 +258,7 @@ export function Stage4RedesignPanel({
               proposal={proposal}
               partnerName={partnerName}
               isSelecting={isSelecting}
+              readOnly={proposalSelectionsReadOnly}
               onSelectProposal={onSelectProposal}
             />
           ))
@@ -273,13 +290,13 @@ export function Stage4RedesignPanel({
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Selection receipt</Text>
         <View style={styles.receiptRow}>
-          <Check color={colors.success} size={18} />
+          <Check color={palette.success} size={18} />
           <Text style={styles.receiptText}>
             Your choices are saved proposal by proposal.
           </Text>
         </View>
         <View style={styles.receiptRow}>
-          <Clock color={colors.textSecondary} size={18} />
+          <Clock color={palette.textMuted} size={18} />
           <Text style={styles.receiptText}>
             {state.partnerSelectionStatus === 'SUBMITTED'
               ? `${partnerName || 'Partner'} has submitted. Shared choices can now be reviewed.`
@@ -324,7 +341,7 @@ export function Stage4RedesignPanel({
             accessibilityRole="button"
             accessibilityState={{ disabled: !canCloseShared || isClosing }}
           >
-            <Send color={canCloseShared ? colors.textOnAccent : colors.textMuted} size={17} />
+            <Send color={canCloseShared ? TEXT_ON_ACCENT : palette.textFaint} size={17} />
             <Text style={[styles.closeButtonText, !canCloseShared && styles.disabledButtonText]}>
               Close with shared agreement
             </Text>
@@ -343,7 +360,7 @@ export function Stage4RedesignPanel({
               accessibilityRole="button"
               accessibilityState={{ disabled: noSharedCloseDisabled }}
             >
-              <MinusCircle color={canCloseNoShared ? colors.textPrimary : colors.textMuted} size={17} />
+              <MinusCircle color={canCloseNoShared ? palette.text : palette.textFaint} size={17} />
               <Text style={[
                 styles.secondaryCloseButtonText,
                 noSharedCloseDisabled && styles.disabledButtonText,
@@ -352,7 +369,7 @@ export function Stage4RedesignPanel({
               </Text>
             </TouchableOpacity>
           )}
-          {showNoSharedClose && partnerSelections.length === 0 && (
+          {showNoSharedClose && state.partnerSelectionStatus !== 'SUBMITTED' && (
             <Text style={styles.actionHint}>
               Available once both partners have made selections.
             </Text>
@@ -362,7 +379,7 @@ export function Stage4RedesignPanel({
 
       {state.phase === Stage4Phase.CLOSED_NO_SHARED_AGREEMENT && (
         <View style={styles.closedNote}>
-          <XCircle color={colors.warning} size={18} />
+          <XCircle color={palette.warning} size={18} />
           <Text style={styles.closedNoteText}>
             This is a valid close. Passive Tending re-entry remains available.
           </Text>
@@ -372,16 +389,21 @@ export function Stage4RedesignPanel({
   );
 }
 
-const styles = StyleSheet.create({
+type Palette = ReturnType<typeof useAppAppearance>['palette'];
+
+const TEXT_ON_ACCENT = '#0d0f12';
+const TEXT_ON_DANGER = '#ffffff';
+
+const makeStyles = (palette: Palette) => StyleSheet.create({
   container: {
     padding: 16,
     gap: 12,
   },
   card: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     padding: 14,
   },
   titleRow: {
@@ -392,13 +414,13 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 18,
     fontWeight: '700',
   },
   phasePill: {
-    color: colors.textOnAccent,
-    backgroundColor: colors.accent,
+    color: TEXT_ON_ACCENT,
+    backgroundColor: palette.accent,
     borderRadius: 999,
     overflow: 'hidden',
     paddingHorizontal: 10,
@@ -407,27 +429,27 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   subtitle: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,
   },
   sectionTitle: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 10,
   },
   emptyText: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },
   proposalCard: {
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bgPane,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     padding: 12,
     marginBottom: 10,
   },
@@ -438,22 +460,22 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   proposalKind: {
-    color: colors.accent,
+    color: palette.accentText,
     fontSize: 12,
     fontWeight: '700',
   },
   ownerLabel: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 12,
     fontWeight: '600',
   },
   proposalDescription: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 15,
     lineHeight: 21,
   },
   proposalMeta: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 6,
@@ -467,16 +489,16 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     padding: 8,
   },
   decisionLabel: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 11,
     fontWeight: '600',
   },
   decisionValue: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 13,
     fontWeight: '700',
     marginTop: 2,
@@ -490,37 +512,37 @@ const styles = StyleSheet.create({
   selectionButton: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   selectionButtonSelected: {
-    backgroundColor: colors.success,
-    borderColor: colors.success,
+    backgroundColor: palette.success,
+    borderColor: palette.success,
   },
   selectionButtonText: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 12,
     fontWeight: '700',
   },
   selectionButtonTextSelected: {
-    color: 'white',
+    color: TEXT_ON_DANGER,
   },
   unaddressedBox: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.warning,
+    borderColor: palette.warning,
     padding: 10,
     marginTop: 2,
   },
   unaddressedTitle: {
-    color: colors.warning,
+    color: palette.warning,
     fontSize: 13,
     fontWeight: '700',
     marginBottom: 6,
   },
   unaddressedNeed: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -528,7 +550,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   coverageTitle: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 13,
     fontWeight: '700',
     marginBottom: 6,
@@ -546,24 +568,24 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   coveredDot: {
-    backgroundColor: colors.success,
+    backgroundColor: palette.success,
   },
   partialDot: {
-    backgroundColor: colors.warning,
+    backgroundColor: palette.warning,
   },
   openDot: {
-    backgroundColor: colors.error,
+    backgroundColor: palette.danger,
   },
   needTextWrap: {
     flex: 1,
   },
   needLabel: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 14,
     lineHeight: 19,
   },
   needNote: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 12,
     lineHeight: 17,
     marginTop: 2,
@@ -576,34 +598,34 @@ const styles = StyleSheet.create({
   },
   receiptText: {
     flex: 1,
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 14,
     lineHeight: 20,
   },
   outcomeReason: {
-    color: colors.accent,
+    color: palette.accentText,
     fontSize: 13,
     fontWeight: '700',
     marginBottom: 6,
   },
   outcomeSummary: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 14,
     lineHeight: 20,
   },
   outcomeItem: {
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bgPane,
     borderRadius: 8,
     padding: 10,
     marginTop: 10,
   },
   outcomeItemText: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 14,
     lineHeight: 19,
   },
   outcomeMeta: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 10,
@@ -614,7 +636,7 @@ const styles = StyleSheet.create({
   closeButton: {
     minHeight: 44,
     borderRadius: 8,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -622,21 +644,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   closeButtonText: {
-    color: colors.textOnAccent,
+    color: TEXT_ON_ACCENT,
     fontSize: 14,
     fontWeight: '700',
   },
   disabledButton: {
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.chipBg,
   },
   disabledButtonText: {
-    color: colors.textMuted,
+    color: palette.textFaint,
   },
   secondaryCloseButton: {
     minHeight: 44,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -644,16 +666,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   disabledSecondaryButton: {
-    borderColor: colors.border,
-    backgroundColor: colors.bgTertiary,
+    borderColor: palette.border,
+    backgroundColor: palette.chipBg,
   },
   secondaryCloseButtonText: {
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 14,
     fontWeight: '700',
   },
   actionHint: {
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontSize: 12,
     lineHeight: 17,
     textAlign: 'center',
@@ -664,12 +686,12 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.warning,
+    borderColor: palette.warning,
     padding: 12,
   },
   closedNoteText: {
     flex: 1,
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 13,
     lineHeight: 18,
   },

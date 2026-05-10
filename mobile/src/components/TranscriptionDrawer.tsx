@@ -6,7 +6,7 @@
  *
  * Features:
  * - Slide-up animation using the project's Animated.Value spring pattern
- * - Semi-transparent black backdrop
+ * - Transparent backdrop
  * - Real-time transcript display with auto-scroll to bottom
  * - Recording timer (M:SS format) with pulsing red dot indicator
  * - "Connecting..." and "Start speaking..." placeholder states
@@ -14,18 +14,18 @@
  * - Safe area insets for bottom padding
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Animated,
-  Dimensions,
   ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createStyles } from '../theme/styled';
-import { colors } from '../theme';
+import { appWidthStyle, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -64,9 +64,10 @@ export function TranscriptionDrawer({
   onStopAndSend,
   onCancel,
 }: TranscriptionDrawerProps) {
-  const styles = useStyles();
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const insets = useSafeAreaInsets();
-  const screenHeight = Dimensions.get('window').height;
+  const { height: windowHeight } = useWindowDimensions();
 
   // ---- Slide-up animation --------------------------------------------------
   const sheetAnim = useRef(new Animated.Value(0)).current;
@@ -143,7 +144,7 @@ export function TranscriptionDrawer({
 
   return (
     <View style={styles.overlay} pointerEvents={visible ? 'box-none' : 'none'}>
-      {/* Semi-transparent backdrop — tap to cancel */}
+      {/* Transparent backdrop — tap to cancel */}
       <Animated.View
         style={[
           styles.backdrop,
@@ -168,13 +169,14 @@ export function TranscriptionDrawer({
       <Animated.View
         style={[
           styles.sheet,
+          appWidthStyle,
           {
             paddingBottom: insets.bottom + 16,
             transform: [
               {
                 translateY: sheetAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [screenHeight, 0],
+                  outputRange: [windowHeight, 0],
                 }),
               },
             ],
@@ -247,8 +249,11 @@ export function TranscriptionDrawer({
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+type Palette = ReturnType<typeof useAppAppearance>['palette'];
+
+const TEXT_ON_ACCENT = '#0d0f12';
+
+const makeStyles = (palette: Palette) => StyleSheet.create({
     overlay: {
       position: 'absolute',
       top: 0,
@@ -263,7 +268,7 @@ const useStyles = () =>
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: '#000',
+      backgroundColor: 'transparent',
     },
     backdropTouchable: {
       flex: 1,
@@ -275,7 +280,7 @@ const useStyles = () =>
       bottom: 0,
       // ~60% of screen height
       height: '60%',
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       overflow: 'hidden',
@@ -284,37 +289,37 @@ const useStyles = () =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.md,
+      paddingHorizontal: 24,
+      paddingVertical: 16,
       borderBottomWidth: 1,
-      borderBottomColor: t.colors.border,
-      backgroundColor: t.colors.bgSecondary,
+      borderBottomColor: palette.borderStrong,
+      backgroundColor: palette.bgElev,
     },
     headerTitle: {
       fontSize: 17,
       fontWeight: '600',
-      color: t.colors.textPrimary,
+      color: palette.text,
     },
     timerRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: t.spacing.sm,
+      gap: 8,
     },
     recordingDot: {
       width: 8,
       height: 8,
       borderRadius: 4,
-      backgroundColor: colors.error,
+      backgroundColor: palette.danger,
     },
     timerText: {
       fontSize: 14,
       fontWeight: '500',
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       fontVariant: ['tabular-nums'],
     },
     processingText: {
       fontSize: 13,
-      color: t.colors.textMuted,
+      color: palette.textFaint,
       fontStyle: 'italic',
     },
     transcriptScroll: {
@@ -322,50 +327,50 @@ const useStyles = () =>
     },
     transcriptContent: {
       flexGrow: 1,
-      padding: t.spacing.lg,
+      padding: 24,
     },
     transcriptText: {
-      fontSize: t.typography.fontSize.lg,
+      fontSize: 17,
       lineHeight: 26,
-      color: t.colors.textPrimary,
+      color: palette.text,
     },
     placeholderText: {
-      fontSize: t.typography.fontSize.lg,
+      fontSize: 17,
       lineHeight: 26,
-      color: t.colors.textMuted,
+      color: palette.textFaint,
       fontStyle: 'italic',
     },
     errorText: {
-      fontSize: t.typography.fontSize.lg,
+      fontSize: 17,
       lineHeight: 26,
-      color: colors.error,
+      color: palette.danger,
     },
     buttonRow: {
       flexDirection: 'row',
-      paddingHorizontal: t.spacing.lg,
-      paddingTop: t.spacing.md,
-      gap: t.spacing.md,
+      paddingHorizontal: 24,
+      paddingTop: 16,
+      gap: 16,
     },
     cancelButton: {
       flex: 1,
       paddingVertical: 14,
-      borderRadius: t.radius.lg,
-      backgroundColor: t.colors.bgSecondary,
+      borderRadius: 20,
+      backgroundColor: palette.bgElev,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1,
-      borderColor: t.colors.border,
+      borderColor: palette.borderStrong,
     },
     cancelButtonText: {
       fontSize: 16,
       fontWeight: '600',
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
     },
     stopAndSendButton: {
       flex: 2,
       paddingVertical: 14,
-      borderRadius: t.radius.lg,
-      backgroundColor: t.colors.accent,
+      borderRadius: 20,
+      backgroundColor: palette.accent,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -375,9 +380,9 @@ const useStyles = () =>
     stopAndSendButtonText: {
       fontSize: 16,
       fontWeight: '700',
-      color: t.colors.textOnAccent,
+      color: TEXT_ON_ACCENT,
     },
     stopAndSendButtonTextDisabled: {
-      color: t.colors.textOnAccent,
+      color: TEXT_ON_ACCENT,
     },
-  }));
+  });

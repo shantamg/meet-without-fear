@@ -3,7 +3,15 @@ import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { notifyPartner, notifyPartnerWithFallback, publishSessionCreated } from '../services/realtime';
 import { z } from 'zod';
-import { ApiResponse, ErrorCode, SessionStatus, StageStatus, Stage } from '@meet-without-fear/shared';
+import {
+  ApiResponse,
+  DEFAULT_PRIVACY_PREFERENCES,
+  ErrorCode,
+  PrivacyPreferencesDTO,
+  SessionStatus,
+  StageStatus,
+  Stage,
+} from '@meet-without-fear/shared';
 import { successResponse, errorResponse } from '../utils/response';
 import { generateSessionStatusSummary } from '../utils/session';
 import { createInvitationUrl } from '../utils/urls';
@@ -24,6 +32,7 @@ const createSessionSchema = z.object({
   inviteName: z.string().min(1).optional(),
   context: z.string().optional(),
   innerThoughtsId: z.string().optional(),
+  linkedAtMessageId: z.string().optional(),
 }).refine(
   (data) => data.personId || data.inviteName,
   { message: 'Must provide personId or inviteName' }
@@ -305,7 +314,7 @@ export async function createSession(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const { personId, inviteName, innerThoughtsId } = parseResult.data;
+    const { personId, inviteName, innerThoughtsId, linkedAtMessageId, context } = parseResult.data;
 
     // Create or find relationship
     let relationship;
@@ -423,11 +432,26 @@ export async function createSession(req: Request, res: Response): Promise<void> 
     // If originated from Inner Thoughts, link it back (non-critical, outside transaction)
     if (innerThoughtsId) {
       try {
+        const validLinkedAtMessage = linkedAtMessageId
+          ? await prisma.innerWorkMessage.findFirst({
+              where: {
+                id: linkedAtMessageId,
+                sessionId: innerThoughtsId,
+              },
+              select: { id: true },
+            })
+          : null;
+
         await prisma.innerWorkSession.updateMany({
-          where: { id: innerThoughtsId, userId: user.id },
+          where: {
+            id: innerThoughtsId,
+            userId: user.id,
+          },
           data: {
             linkedPartnerSessionId: session.id,
             linkedTrigger: 'suggestion_start',
+            ...(validLinkedAtMessage ? { linkedAtMessageId: validLinkedAtMessage.id } : {}),
+            ...(context ? { contextSummarySnapshot: context } : {}),
           },
         });
         logger.info(`[createSession] Linked session ${session.id} to origin inner thoughts ${innerThoughtsId}`);
@@ -600,6 +624,16 @@ export async function acceptInvitation(req: Request, res: Response): Promise<voi
       return;
     }
 
+    const acceptingUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { privacyPreferences: true } as any,
+    });
+    const privacyPreferences = ((acceptingUser as { privacyPreferences?: unknown } | null)?.privacyPreferences as PrivacyPreferencesDTO | null) ?? DEFAULT_PRIVACY_PREFERENCES;
+    if (!privacyPreferences.allowSessionInvites) {
+      errorResponse(res, 'VALIDATION_ERROR', 'You have disabled session invitations in Privacy settings', 403);
+      return;
+    }
+
     // Accept invitation, activate session, create stage progress + vessel atomically
     await prisma.$transaction(async (tx) => {
       // Join the relationship
@@ -680,6 +714,7 @@ export async function acceptInvitation(req: Request, res: Response): Promise<voi
     // Use notifyPartnerWithFallback to ensure Ably message is always published
     // and push is sent if user is offline
     await notifyPartnerWithFallback(invitation.sessionId, invitation.invitedById, 'session.joined', {
+      joinedBy: user.id,
       userId: user.id,
       userName: user.name,
     });

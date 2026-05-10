@@ -1,99 +1,117 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Heart, Shield, MessageCircle, Users } from "lucide-react";
+import { ArrowRight, LockKeyhole, MessageCircle, Pause, Sparkles } from "lucide-react";
 
-import { TransformationPairs } from "@/components/transformation-pairs";
+import { ChatExchange } from "@/components/chat-exchange";
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen overflow-hidden">
-      {/* Gradient Top Bar */}
-      <div className="h-1 bg-gradient-top" />
-
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
-        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.svg" alt="Meet Without Fear" width={44} height={36} />
-            <span className="hidden min-[430px]:inline font-display text-xl text-foreground">meet</span>
-            <span className="hidden min-[430px]:inline font-display text-xl text-brand-cyan">without fear</span>
+    <main className="min-h-screen bg-background text-foreground">
+      <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6">
+          <Link href="/" className="flex items-center gap-3" aria-label="Meet Without Fear home">
+            <Image src="/logo.svg" alt="" width={40} height={34} priority />
+            <span className="font-display text-xl italic text-foreground">meet without fear</span>
           </Link>
-          <nav className="flex items-center gap-4">
-            <Link
-              href="/app"
-              className="hidden min-[430px]:inline-flex items-center gap-1.5 rounded-full border border-brand-orange/40 bg-brand-orange/10 px-4 py-2 text-sm font-medium text-brand-orange transition-colors hover:bg-brand-orange/20"
-            >
-              Get Started
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </nav>
+          <Link
+            href="/app"
+            className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition hover:opacity-90"
+          >
+            Open app
+            <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
+          </Link>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative">
-        {/* Ambient color wash — two soft orbs drifting behind the hero. */}
-        <div className="aurora" aria-hidden />
-        <div className="grain" aria-hidden />
+      {/* HERO — asymmetric editorial layout: oversized display type left, live chat right. */}
+      <section className="paper-grain relative overflow-hidden">
+        {/* soft warm glow behind the type */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-32 left-1/2 h-[640px] w-[640px] -translate-x-[60%] rounded-full bg-[var(--accent-soft)] opacity-60 blur-3xl"
+        />
+        <div className="relative z-10 mx-auto grid min-h-[calc(100svh-4rem)] max-w-6xl content-center gap-x-12 gap-y-16 px-5 pb-24 pt-16 sm:px-6 lg:grid-cols-12 lg:gap-y-0 lg:pb-28 lg:pt-20">
+          {/* Left: title + lede + CTAs */}
+          <div className="text-center lg:col-span-7 lg:text-left">
+            <div className="mb-7 flex items-center justify-center gap-3 lg:justify-start">
+              <Image src="/logo.svg" alt="" width={56} height={48} priority />
+              <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
+                Guided conflict repair
+              </p>
+            </div>
 
-        <div className="container relative z-10 mx-auto px-6 pb-28 pt-20 text-center sm:pt-28">
-          {/* Small logo — it was a 220px anchor before; now it's a grace note. */}
-          <div className="mb-6 flex justify-center">
-            <Image src="/logo.svg" alt="" width={84} height={70} priority />
+            <h1 className="font-display text-[clamp(2rem,8.4vw,6.75rem)] leading-[0.92] tracking-[-0.01em] text-foreground">
+              <span className="lg:block">Meet </span>
+              <span className="italic text-accent-text lg:block">Without </span>
+              <span className="lg:block">Fear.</span>
+            </h1>
+
+            <p className="mx-auto mt-8 max-w-xl text-lg leading-8 text-muted-foreground sm:text-xl lg:mx-0">
+              A quieter way through the conversations that matter most. Start in
+              private, feel heard, and move toward repair without rushing into a
+              reactive exchange.
+            </p>
+
+            <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
+              <Link
+                href="/app"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-7 py-4 text-base font-medium text-accent-foreground transition hover:opacity-90"
+              >
+                Get started
+                <ArrowRight className="h-5 w-5" strokeWidth={1.8} />
+              </Link>
+            </div>
           </div>
 
-          {/* Wordmark in display serif — warm, human. */}
-          <h1 className="mb-3 font-display text-5xl leading-[0.95] text-foreground sm:text-6xl md:text-7xl">
-            Meet Without Fear
-          </h1>
+          {/* Mobile divider between title block and chat exchange */}
+          <div
+            aria-hidden
+            className="mx-auto h-px w-24 bg-border lg:hidden"
+          />
 
-          {/* Kicker under wordmark — quiet, italicized-feeling aside. */}
-          <p className="mx-auto mb-16 max-w-xl text-base text-muted-foreground sm:text-lg">
-            A quieter way through the conversations that matter most.
-          </p>
-
-          {/* Animated transformation pair — the real hero. */}
-          <div className="mb-20">
-            <TransformationPairs />
-          </div>
-
-          <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link
-              href="/app"
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-orange px-8 py-4 text-base font-semibold text-accent-foreground transition-all hover:scale-[1.02] hover:bg-brand-orange/90"
-            >
-              Get Started
-              <ArrowRight className="h-5 w-5" />
-            </Link>
-            <a
-              href="#how-it-feels"
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-8 py-4 text-base text-foreground/80 transition-colors hover:border-brand-cyan/60 hover:text-foreground"
-            >
-              See how it feels
-            </a>
+          {/* Right: live chat exchange — the visual proof */}
+          <div className="lg:col-span-5 lg:pl-4 lg:flex lg:items-center">
+            <div className="w-full px-2 py-4 sm:px-4 lg:-translate-y-10">
+              <ChatExchange />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* How a session feels — 3 beats in display serif. */}
-      <section id="how-it-feels" className="relative border-y border-border bg-background-elevated/40 py-24 sm:py-32">
-        <div className="container mx-auto max-w-5xl px-6">
-          <p className="mb-16 text-center font-mono text-xs uppercase tracking-[0.3em] text-muted-foreground">
-            How a session feels
-          </p>
+      {/* Process */}
+      <section id="process" className="bg-background-elevated py-24 sm:py-32">
+        <div className="mx-auto max-w-6xl px-5 sm:px-6">
+          <div className="mb-14 max-w-2xl">
+            <p className="mb-4 font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
+              The process
+            </p>
+            <h2 className="font-display text-4xl leading-[1.05] text-foreground sm:text-6xl">
+              A buffer between
+              <br />
+              <span className="italic text-accent-text">two people.</span>
+            </h2>
+            <p className="mt-6 text-base leading-7 text-muted-foreground">
+              Meet Without Fear helps each side settle, be heard, and move toward
+              a next step without rushing into a reactive conversation.
+            </p>
+          </div>
 
-          <ol className="grid gap-12 sm:grid-cols-3 sm:gap-10">
-            {SESSION_BEATS.map((beat, i) => (
-              <li key={beat.title} className="relative">
-                <div className="mb-5 font-display text-sm text-brand-orange">
-                  {String(i + 1).padStart(2, "0")}
-                </div>
-                <h3 className="mb-3 font-display text-2xl leading-tight text-foreground sm:text-3xl">
-                  {beat.title}
+          <ol className="grid gap-4 md:grid-cols-5">
+            {PROCESS_STEPS.map((step, index) => (
+              <li
+                key={step.title}
+                className="relative rounded-lg border border-border bg-card px-5 pb-6 pt-6"
+              >
+                {index < PROCESS_STEPS.length - 1 && (
+                  <span
+                    className="pointer-events-none absolute right-[-1rem] top-8 hidden h-px w-4 bg-border md:block"
+                    aria-hidden
+                  />
+                )}
+                <h3 className="mb-4 font-display text-2xl italic leading-tight text-accent-text md:text-[1.65rem]">
+                  {step.title}
                 </h3>
-                <p className="text-base leading-relaxed text-muted-foreground">
-                  {beat.body}
-                </p>
+                <p className="text-sm leading-6 text-muted-foreground">{step.body}</p>
               </li>
             ))}
           </ol>
@@ -101,109 +119,120 @@ export default function HomePage() {
       </section>
 
       {/* Features */}
-      <section className="py-24 sm:py-32">
-        <div className="container mx-auto px-6">
-          <div className="mx-auto mb-16 max-w-2xl text-center">
-            <p className="mb-4 font-mono text-xs uppercase tracking-[0.3em] text-muted-foreground">
-              Why Meet Without Fear
+      <section className="bg-background py-24 sm:py-32">
+        <div className="mx-auto max-w-6xl px-5 sm:px-6">
+          <div className="mb-12 max-w-2xl">
+            <p className="mb-4 font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
+              What stays protected
             </p>
-            <h2 className="font-display text-4xl leading-tight text-foreground sm:text-5xl">
-              Built for the conversations you've been avoiding.
+            <h2 className="font-display text-4xl leading-[1.05] text-foreground sm:text-6xl">
+              Built for
+              <br />
+              <span className="italic text-accent-text">emotional safety</span>
+              <br />
+              before progress.
             </h2>
           </div>
-          <div className="mx-auto grid max-w-6xl gap-6 sm:grid-cols-2 lg:grid-cols-4">
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <FeatureCard
-              icon={<Heart className="h-5 w-5" strokeWidth={1.75} />}
-              accent="text-brand-orange"
-              title="Feel heard"
-              description="Speak to the system, not across the table. Your words come back clearly and calmly."
+              icon={<LockKeyhole className="h-5 w-5" strokeWidth={1.7} />}
+              title="Private first"
+              description="Raw venting and reflection stay with you unless you explicitly approve sharing."
             />
             <FeatureCard
-              icon={<Shield className="h-5 w-5" strokeWidth={1.75} />}
-              accent="text-brand-blue"
-              title="Neutral ground"
-              description="The AI doesn't take sides. It helps both of you feel understood without judgment."
+              icon={<MessageCircle className="h-5 w-5" strokeWidth={1.7} />}
+              title="Being heard"
+              description="The AI reflects your side back clearly without taking sides or endorsing blame."
             />
             <FeatureCard
-              icon={<MessageCircle className="h-5 w-5" strokeWidth={1.75} />}
-              accent="text-brand-cream"
-              title="Your memory"
-              description="Your history stays with you. Switch models, change devices — the context follows."
+              icon={<Pause className="h-5 w-5" strokeWidth={1.7} />}
+              title="Paced by readiness"
+              description="Stage gates and emotional check-ins keep the process from moving too fast."
             />
             <FeatureCard
-              icon={<Users className="h-5 w-5" strokeWidth={1.75} />}
-              accent="text-brand-orange"
-              title="Shared understanding"
-              description="Move past blame and defensiveness. Find the needs underneath and a way forward."
+              icon={<Sparkles className="h-5 w-5" strokeWidth={1.7} />}
+              title="Small repair"
+              description="The goal is a small, reversible next step both people are willing to try."
             />
           </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="relative overflow-hidden py-24 sm:py-32">
-        <div className="aurora opacity-60" aria-hidden />
-        <div className="container relative z-10 mx-auto max-w-3xl px-6 text-center">
-          <h2 className="mb-6 font-display text-4xl leading-tight text-foreground sm:text-5xl">
-            Ready when you are.
+      {/* Final CTA */}
+      <section className="bg-background-elevated py-24">
+        <div className="mx-auto max-w-3xl px-5 text-center sm:px-6">
+          <h2 className="font-display text-4xl leading-[1.05] text-foreground sm:text-6xl">
+            Ready when the
+            <br />
+            <span className="italic text-accent-text">words are not.</span>
           </h2>
-          <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-muted-foreground">
-            Open Meet Without Fear and begin — no download, no setup. Just the conversation you've been putting off.
+          <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-muted-foreground">
+            Open the app and begin with what you can say. The process will slow
+            everything down from there.
           </p>
           <Link
             href="/app"
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-orange px-10 py-4 text-base font-semibold text-accent-foreground transition-all hover:scale-[1.02] hover:bg-brand-orange/90"
+            className="mt-9 inline-flex items-center justify-center gap-2 rounded-full bg-accent px-8 py-4 text-base font-medium text-accent-foreground transition hover:opacity-90"
           >
-            Get Started
-            <ArrowRight className="h-5 w-5" />
+            Open Meet Without Fear
+            <ArrowRight className="h-5 w-5" strokeWidth={1.8} />
           </Link>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-border py-10">
-        <div className="container mx-auto flex flex-col items-center justify-between gap-4 px-6 text-sm text-muted-foreground sm:flex-row">
+      <footer className="border-t border-border py-8">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 text-sm text-muted-foreground sm:flex-row sm:px-6">
           <p>&copy; {new Date().getFullYear()} Meet Without Fear</p>
-          <p className="font-display italic text-foreground/70">Heard. Human. Whole.</p>
+          <div className="flex gap-5">
+            <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
+            <Link href="/terms" className="hover:text-foreground">Terms</Link>
+          </div>
         </div>
       </footer>
     </main>
   );
 }
 
-const SESSION_BEATS = [
+const PROCESS_STEPS = [
   {
-    title: "You speak in full.",
-    body: "Type or speak, without being cut off. The system hears what you meant, not just what you said.",
+    title: "Start in private",
+    body: "Each person works with the AI separately. The app slows things down before anyone is asked to respond directly.",
   },
   {
-    title: "It reflects, softly.",
-    body: "Your words come back to you — gentler, clearer. You choose what to share, and how.",
+    title: "Be fully heard",
+    body: "You first tell your side without interruption. The AI reflects it back until you feel accurately understood.",
   },
   {
-    title: "They hear you.",
-    body: "Your partner receives what you chose, on their own time. No shouting over each other, no bracing.",
+    title: "Practice understanding",
+    body: "When both people are ready, the process helps each of you understand the other person without excusing or debating what happened.",
+  },
+  {
+    title: "Name what matters",
+    body: "You clarify the needs underneath the conflict, choose what to share, and only reveal it when both people have consented.",
+  },
+  {
+    title: "Try a small repair",
+    body: "The final step looks for small, reversible experiments both people are willing to try, then turns overlap into a clear next step.",
   },
 ] as const;
 
 function FeatureCard({
   icon,
-  accent,
   title,
   description,
 }: {
   icon: React.ReactNode;
-  accent: string;
   title: string;
   description: string;
 }) {
   return (
-    <div className="group relative rounded-2xl border border-border bg-card/60 p-7 transition-colors hover:border-brand-cyan/40">
-      <div className={`mb-5 inline-flex h-10 w-10 items-center justify-center rounded-full bg-background-elevated ${accent}`}>
+    <div className="rounded-lg border border-border bg-card p-6">
+      <div className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background-elevated text-brand-orange">
         {icon}
       </div>
-      <h3 className="mb-2 font-display text-xl text-foreground">{title}</h3>
-      <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+      <h3 className="mb-2 text-base font-semibold text-foreground">{title}</h3>
+      <p className="text-sm leading-6 text-muted-foreground">{description}</p>
     </div>
   );
 }

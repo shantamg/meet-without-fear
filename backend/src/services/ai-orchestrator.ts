@@ -94,6 +94,8 @@ export interface OrchestratorContext {
   sharedContextFromPartner?: string | null;
   /** Whether the user is in onboarding mode (compact not yet signed) */
   isOnboarding?: boolean;
+  /** Confirmed topic of the conversation (only set when topicFrameConfirmedAt is non-null) */
+  topicFrame?: string | null;
 }
 
 export interface OrchestratorResult {
@@ -371,6 +373,7 @@ export async function orchestrateResponse(
       invalidMemoryRequest: undefined,
       sharedContentHistory,
       milestoneContext,
+      topicFrame: context.topicFrame,
     },
     {
       isInvitationPhase: context.isInvitationPhase,

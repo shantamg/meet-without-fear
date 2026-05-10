@@ -80,6 +80,7 @@ export type SessionEventType =
   | 'partner.empathy_revealed' // Reconciler: empathy statement was revealed to recipient
   | 'partner.session_viewed' // Partner viewed the session (for delivery status updates)
   | 'partner.share_tab_viewed' // Partner viewed the Share tab (for "seen" delivery status)
+  | 'partner.activity' // Partner actively did something in the session
   | 'partner.skipped_refinement' // Partner skipped refinement (agreement to disagree)
   // Empathy reconciler events
   | 'empathy.share_suggestion' // Subject receives suggestion to share context with guesser

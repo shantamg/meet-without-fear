@@ -8,24 +8,26 @@
  */
 
 import { Stack } from 'expo-router';
-import { colors } from '@/theme';
+import { useAppAppearance } from '@/src/theme';
 
 export default function SelfReflectionLayout() {
+  const { palette } = useAppAppearance();
+
   return (
     <Stack
       screenOptions={{
         headerShown: true,
         headerBackTitle: 'Back',
         headerStyle: {
-          backgroundColor: colors.bgSecondary,
+          backgroundColor: palette.bg,
         },
-        headerTintColor: colors.textPrimary,
+        headerTintColor: palette.text,
         headerTitleStyle: {
-          color: colors.textPrimary,
+          color: palette.text,
         },
         headerShadowVisible: false,
         contentStyle: {
-          backgroundColor: colors.bgPrimary,
+          backgroundColor: palette.bg,
         },
         // Allow swipe back gesture
         gestureEnabled: true,

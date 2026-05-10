@@ -15,7 +15,7 @@
 import { Request, Response } from 'express';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { ApiResponse, ErrorCode, MessageRole, Stage } from '@meet-without-fear/shared';
+import { ApiResponse, DEFAULT_PRIVACY_PREFERENCES, ErrorCode, MessageRole, PrivacyPreferencesDTO, Stage } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent, publishMessageAIResponse, publishMessageError } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
@@ -23,6 +23,15 @@ import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
 import { embedSessionContent } from '../services/embedding';
 import { updateSessionSummary, getSessionSummary } from '../services/conversation-summarizer';
 import { updateContext } from '../lib/request-context';
+
+async function getShowActivityStatus(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { privacyPreferences: true } as any,
+  });
+  const preferences = ((user as { privacyPreferences?: unknown } | null)?.privacyPreferences as PrivacyPreferencesDTO | null) ?? DEFAULT_PRIVACY_PREFERENCES;
+  return preferences.showActivityStatus;
+}
 
 // ============================================================================
 // Controllers
@@ -973,6 +982,7 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
       isInvitationPhase: false,
       isStageTransition: true,
       previousStage: 0,
+      topicFrame: session.topicFrameConfirmedAt ? session.topicFrame : undefined,
     };
 
     // Notify session that invitation was confirmed
@@ -1091,12 +1101,14 @@ export async function markSessionViewed(req: Request, res: Response): Promise<vo
       },
       update: {
         lastViewedAt: now,
+        lastActiveAt: now,
         lastSeenChatItemId: lastSeenChatItemId ?? null,
       },
       create: {
         userId: user.id,
         sessionId,
         lastViewedAt: now,
+        lastActiveAt: now,
         lastSeenChatItemId: lastSeenChatItemId ?? null,
       },
     });
@@ -1107,8 +1119,11 @@ export async function markSessionViewed(req: Request, res: Response): Promise<vo
       try {
         const { buildEmpathyExchangeStatusForBothUsers } = await import('../services/empathy-status');
         const allStatuses = await buildEmpathyExchangeStatusForBothUsers(sessionId);
+        const showActivityStatus = await getShowActivityStatus(user.id);
         await publishSessionEvent(sessionId, 'partner.session_viewed', {
-          viewedAt: now.toISOString(),
+          viewedAt: showActivityStatus ? now.toISOString() : null,
+          activeAt: showActivityStatus ? now.toISOString() : null,
+          presenceVisible: showActivityStatus,
           empathyStatuses: allStatuses,
         }, user.id);
       } catch (err) {
@@ -1156,11 +1171,13 @@ export async function markShareTabViewed(req: Request, res: Response): Promise<v
       },
       update: {
         lastViewedShareTabAt: now,
+        lastActiveAt: now,
       },
       create: {
         userId: user.id,
         sessionId,
         lastViewedShareTabAt: now,
+        lastActiveAt: now,
       },
     });
 
@@ -1170,8 +1187,11 @@ export async function markShareTabViewed(req: Request, res: Response): Promise<v
       try {
         const { buildEmpathyExchangeStatusForBothUsers } = await import('../services/empathy-status');
         const allStatuses = await buildEmpathyExchangeStatusForBothUsers(sessionId);
+        const showActivityStatus = await getShowActivityStatus(user.id);
         await publishSessionEvent(sessionId, 'partner.share_tab_viewed', {
-          viewedAt: now.toISOString(),
+          viewedAt: showActivityStatus ? now.toISOString() : null,
+          activeAt: showActivityStatus ? now.toISOString() : null,
+          presenceVisible: showActivityStatus,
           empathyStatuses: allStatuses,
         }, user.id);
       } catch (err) {

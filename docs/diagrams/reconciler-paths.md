@@ -3,7 +3,7 @@ title: Reconciler Outcome Paths - State Diagrams
 sidebar_position: 4
 description: This document provides state diagrams for all reconciler outcome paths from both user perspectives (guesser and subject). These diagrams document the complet...
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-05-10
 status: living
 ---
 # Reconciler Outcome Paths - State Diagrams
@@ -31,7 +31,7 @@ Key reconciler-related events and their routing:
 |-------|----------|-------------|-------|
 | `empathy.status_updated` | `publishSessionEvent` (broadcast to session) OR `notifyPartner` (targeted) | Yes, when targeted via `notifyPartner`; absent when broadcast via `publishSessionEvent` | Broadcast variant includes `empathyStatuses` map for all users. Targeted variant (e.g., after validation) includes `forUserId` for filtering. |
 | `empathy.status_updated` with `status: 'AWAITING_SHARING'` | `notifyPartner` (targeted to subject) | Yes (`forUserId` = subject's user ID) | Replaces the old `empathy.share_suggestion` name. Message format: `"<name> is considering a suggestion to share more"`. Mobile filters on `data.forUserId === user?.id` to show the ShareTopicPanel only to the subject. |
-| `empathy.revealed` | `notifyPartner` (targeted per direction) | Yes — `forUserId` set per recipient | Each user gets an individual `empathy.revealed` event so the mobile can read their partner's statement; it is not a session-wide broadcast. |
+| `empathy.revealed` | `notifyPartner` (targeted per direction) | Yes — `forUserId` set per recipient | Each user gets an individual `empathy.revealed` event so the mobile can read their partner's statement; it is not a session-wide broadcast. At mutual reveal time, `checkAndRevealBothIfReady()` also creates an AI quality commentary message for each subject based on `gapSeverity` (see `reconciler-flow.md` — Quality Commentary at Reveal). |
 | `empathy.context_shared` | `notifyPartner` (targeted to guesser) | Yes | Guesser receives SHARED_CONTEXT notification. |
 
 ## 1. PROCEED Path (No Gaps Found)

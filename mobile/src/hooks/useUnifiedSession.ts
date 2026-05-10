@@ -53,6 +53,7 @@ import {
   useResubmitEmpathy,
   useSkipRefinement,
 } from './useStages';
+import { shouldFetchShareOffer } from '../utils/shareOfferEligibility';
 
 // ============================================================================
 // Types
@@ -260,6 +261,8 @@ export function useUnifiedSession(
 
   // Messages - use infinite scroll for pagination
   // The useSessionState hook hydrates the messages cache, so this will get a cache hit
+  // Gate behind !loadingState to prevent initial parallel burst before /state resolves (see #428)
+  const stateResolved = !loadingState;
   const {
     data: messagesData,
     isLoading: loadingMessages,
@@ -268,7 +271,7 @@ export function useUnifiedSession(
     isFetchingNextPage,
   } = useInfiniteMessages(
     { sessionId: sessionId!, limit: 25 },
-    { enabled: !!sessionId && !accessDenied }
+    { enabled: !!sessionId && !accessDenied && stateResolved }
   );
 
   // Stage-gated queries: only fetch data for the user's current stage to avoid
@@ -281,16 +284,16 @@ export function useUnifiedSession(
 
   // Stage 2: Empathy
   const { data: empathyDraftData } = useEmpathyDraft(sessionId, {
-    enabled: !!sessionId && !accessDenied && isStage2Plus,
+    enabled: !!sessionId && !accessDenied && stateResolved && isStage2Plus,
   });
   const { data: partnerEmpathyData } = usePartnerEmpathy(sessionId, {
-    enabled: !!sessionId && !accessDenied && isStage2Plus,
+    enabled: !!sessionId && !accessDenied && stateResolved && isStage2Plus,
   });
   const partnerEmpathy = partnerEmpathyData?.attempt ?? null;
 
   // Stage 3: Needs
   const { data: needsData } = useNeeds(sessionId, {
-    enabled: !!sessionId && !accessDenied && isStage3Plus,
+    enabled: !!sessionId && !accessDenied && stateResolved && isStage3Plus,
   });
 
   // Derive needs state for gating the side-by-side reveal query.
@@ -301,28 +304,34 @@ export function useUnifiedSession(
 
   const { data: needsComparisonData } = useNeedsComparison(
     sessionId,
-    !accessDenied && (allNeedsConfirmedForGating || myNeedsSharedForGating)
+    !accessDenied && stateResolved && (allNeedsConfirmedForGating || myNeedsSharedForGating)
   );
 
   // Stage 4: Strategies
   const { data: strategyData } = useStrategies(sessionId, {
-    enabled: !!sessionId && !accessDenied && isStage4,
+    enabled: !!sessionId && !accessDenied && stateResolved && isStage4,
   });
   const { data: revealData } = useStrategiesReveal(sessionId, {
-    enabled: !!sessionId && !accessDenied && isStage4,
+    enabled: !!sessionId && !accessDenied && stateResolved && isStage4,
   });
   const { data: agreementsData } = useAgreements(sessionId, {
-    enabled: !!sessionId && !accessDenied && isStage4,
+    enabled: !!sessionId && !accessDenied && stateResolved && isStage4,
   });
 
   // Empathy Reconciler Data — only active during Stage 2
   const { data: empathyStatusData } = useEmpathyStatus(sessionId, {
-    enabled: !!sessionId && !accessDenied && isStage2Plus,
+    enabled: !!sessionId && !accessDenied && stateResolved && isStage2Plus,
   });
   const { data: shareOfferData } = useShareOffer(sessionId, {
-    enabled: !!sessionId && !accessDenied && currentStage === Stage.PERSPECTIVE_STRETCH,
+    enabled: shouldFetchShareOffer({
+      sessionId,
+      accessDenied,
+      currentStage,
+      ownEmpathyAlreadyConsented: empathyDraftData?.alreadyConsented,
+      ownEmpathyAttempt: empathyStatusData?.myAttempt,
+    }),
   });
-  const { mutate: respondToShareOffer } = useRespondToShareOffer();
+  const { mutate: respondToShareOffer, isPending: isRespondingToShareOffer } = useRespondToShareOffer();
 
   // -------------------------------------------------------------------------
   // Mutation Hooks
@@ -414,6 +423,7 @@ export function useUnifiedSession(
     sendMessage: streamingSendMessage,
     isSending,
     isStreaming,
+    failedMessageContent,
   } = useStreamingMessage({
     onMetadata: handleStreamMetadata,
     onError: handleStreamError,
@@ -1203,6 +1213,7 @@ export function useUnifiedSession(
     inlineCards,
     isSending,
     isStreaming,
+    failedMessageContent,
     isSigningCompact,
     isConfirmingFeelHeard,
     isConfirmingInvitation,
@@ -1272,6 +1283,7 @@ export function useUnifiedSession(
     isSavingEmpathyDraft,
     isSharingEmpathy,
     isResubmittingEmpathy,
+    isRespondingToShareOffer,
     isProposing,
     isConfirmingNeeds,
 

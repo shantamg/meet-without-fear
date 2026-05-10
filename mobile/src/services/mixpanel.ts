@@ -10,8 +10,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 interface IMixpanel {
   init: () => Promise<void>;
   track: (eventName: string, properties?: Record<string, unknown>) => void;
-  identify: (userId: string) => void;
-  alias: (alias: string, distinctId?: string) => void;
+  identify: (userId: string) => void | Promise<void>;
+  alias: (alias: string, distinctId: string) => void;
+  getDistinctId: () => Promise<string>;
   getPeople: () => {
     set: (prop: string, to: unknown) => void;
     setOnce: (prop: string, to: unknown) => void;
@@ -36,6 +37,7 @@ const createNoOpClient = (): IMixpanel => {
     identify: (userId) => log('Identify:', userId),
     alias: (alias, distinctId) =>
       log('Alias:', alias, `(from_distinct_id: ${distinctId ?? 'CURRENT'})`),
+    getDistinctId: async () => 'dev-anonymous-distinct-id',
     getPeople: () => ({
       set: (prop, to) => log('Set User Property:', { [prop]: to }),
       setOnce: (prop, to) => log('Set User Property Once:', { [prop]: to }),
@@ -91,6 +93,14 @@ const assertInit = (): void => {
 
 export const track = (eventName: string, properties?: Record<string, unknown>): void => {
   assertInit();
+  if (__DEV__ && properties) {
+    if ('session_id' in properties && !properties.session_id) {
+      console.warn(`[Mixpanel DEV] "${eventName}" tracked with falsy session_id`);
+    }
+    if ('user_id' in properties && !properties.user_id) {
+      console.warn(`[Mixpanel DEV] "${eventName}" tracked with falsy user_id`);
+    }
+  }
   mixpanelClient?.track(eventName, properties);
 };
 
@@ -106,7 +116,7 @@ export const identify = (userId: string): void => {
   }
 
   try {
-    mixpanelClient?.identify(userId);
+    void mixpanelClient?.identify(userId);
     identifiedUserId = userId;
   } catch (error) {
     console.error('[Mixpanel] identify() failed:', error);
@@ -123,15 +133,35 @@ export const identify = (userId: string): void => {
  *
  * @param aliasId - The user's identifier (e.g., UUID)
  */
-export const alias = (aliasId: string): void => {
+const isValidDistinctId = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim().length > 0;
+
+export const alias = async (aliasId: string): Promise<boolean> => {
   assertInit();
-  // Pass only the new aliasId.
-  // The SDK will automatically merge from the current anonymous distinct_id.
+  if (!isValidDistinctId(aliasId)) {
+    console.warn('[Mixpanel] alias() skipped: aliasId is not a valid string');
+    return false;
+  }
+
   try {
-    mixpanelClient?.alias(aliasId);
+    const distinctId = await mixpanelClient?.getDistinctId();
+
+    if (!isValidDistinctId(distinctId)) {
+      console.warn('[Mixpanel] alias() skipped: current distinctId is not a valid string');
+      return false;
+    }
+
+    if (distinctId === aliasId) {
+      console.log('[Mixpanel] alias() skipped: distinctId already matches user');
+      return true;
+    }
+
+    mixpanelClient?.alias(aliasId, distinctId);
     console.log('[Mixpanel] alias() completed for user:', aliasId);
+    return true;
   } catch (error) {
     console.error('[Mixpanel] alias() failed:', error);
+    return false;
   }
 };
 

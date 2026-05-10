@@ -14,12 +14,14 @@ import {
   FlatList,
   Animated,
   PanResponder,
-  Dimensions,
   StyleSheet,
   BackHandler,
+  useWindowDimensions,
+  type FlatList as FlatListType,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '@/theme';
+import { appWidthStyle } from '@/theme';
+import { useAppAppearance } from '@/theme/appearance';
 import { TimelineItemCard, TimelineItem } from './TimelineItemCard';
 import { useSharingStatus } from '../hooks/useSharingStatus';
 import { usePendingActions, PendingAction } from '../hooks/usePendingActions';
@@ -52,15 +54,20 @@ export interface ActivityDrawerProps {
   partnerAccepted?: boolean;
   sessionStatus?: string;
   partnerEmpathyValidated?: boolean;
+  focusTarget?: ActivityDrawerFocusTarget | null;
   testID?: string;
+}
+
+export interface ActivityDrawerFocusTarget {
+  type: 'context' | 'empathy';
+  direction: 'sent' | 'received';
+  timestamp?: string;
 }
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-const POSITION_3Q = SCREEN_HEIGHT * 0.25; // 3/4 visible = top 25% hidden
 const SNAP_UP_THRESHOLD = 80; // px dragged up to snap to full
 const SNAP_DOWN_THRESHOLD = 100; // px dragged down to dismiss
 
@@ -222,10 +229,19 @@ export function ActivityDrawer({
   partnerAccepted = false,
   sessionStatus,
   partnerEmpathyValidated,
+  focusTarget,
   testID = 'activity-drawer',
 }: ActivityDrawerProps) {
   const insets = useSafeAreaInsets();
+  const { palette } = useAppAppearance();
+  const styles = makeStyles(palette);
+  const { height: windowHeight } = useWindowDimensions();
+  const position3Q = windowHeight * 0.25; // 3/4 visible = top 25% hidden
+  const windowHeightRef = useRef(windowHeight);
+  const position3QRef = useRef(position3Q);
   const positionFullRef = useRef(insets.top);
+  windowHeightRef.current = windowHeight;
+  position3QRef.current = position3Q;
   positionFullRef.current = insets.top; // Keep in sync (rotation, etc.)
 
   const isSessionActive =
@@ -241,8 +257,13 @@ export function ActivityDrawer({
     enabled: visible && isSessionActive,
   });
   const pendingActionsQuery = usePendingActions(sessionId);
-  const pendingActions = pendingActionsQuery.data?.actions ?? [];
+  const pendingActions = useMemo(
+    () => pendingActionsQuery.data?.actions ?? [],
+    [pendingActionsQuery.data?.actions],
+  );
   const { mutate: markShareTabViewed } = useMarkShareTabViewed(sessionId);
+  const listRef = useRef<FlatListType<TimelineItem>>(null);
+  const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
 
   // Mark as viewed when drawer opens
   useEffect(() => {
@@ -292,10 +313,29 @@ export function ActivityDrawer({
     [allItems],
   );
 
+  const focusMatch = useMemo(() => {
+    if (!focusTarget) return null;
+
+    const sameKindItems = allItems.filter(
+      (item) => item.type === focusTarget.type && item.direction === focusTarget.direction,
+    );
+    if (sameKindItems.length === 0) return null;
+    if (!focusTarget.timestamp) return sameKindItems[sameKindItems.length - 1];
+
+    const targetTime = new Date(focusTarget.timestamp).getTime();
+    if (Number.isNaN(targetTime)) return sameKindItems[sameKindItems.length - 1];
+
+    return sameKindItems.reduce((best, item) => {
+      const bestDelta = Math.abs(new Date(best.timestamp).getTime() - targetTime);
+      const itemDelta = Math.abs(new Date(item.timestamp).getTime() - targetTime);
+      return itemDelta < bestDelta ? item : best;
+    });
+  }, [allItems, focusTarget]);
+
   // -------------------------------------------------------------------------
   // Animation refs
   // -------------------------------------------------------------------------
-  const drawerTranslate = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const drawerTranslate = useRef(new Animated.Value(windowHeight)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const isDragging = useRef(false);
   const currentSnap = useRef<'3q' | 'full'>('3q');
@@ -304,12 +344,13 @@ export function ActivityDrawer({
   // FlatList can be constrained to the visible area of the drawer.
   const [headerAreaHeight, setHeaderAreaHeight] = useState(0);
   const [snapPosition, setSnapPosition] = useState<'3q' | 'full'>('3q');
+  const [isMounted, setIsMounted] = useState(visible);
 
   // The visible height for the FlatList: screen minus snap offset minus header area
   const listHeight = useMemo(() => {
-    const snapOffset = snapPosition === 'full' ? insets.top : POSITION_3Q;
-    return SCREEN_HEIGHT - snapOffset - headerAreaHeight;
-  }, [snapPosition, headerAreaHeight, insets.top]);
+    const snapOffset = snapPosition === 'full' ? insets.top : position3Q;
+    return windowHeight - snapOffset - headerAreaHeight;
+  }, [snapPosition, headerAreaHeight, insets.top, position3Q, windowHeight]);
 
   // -------------------------------------------------------------------------
   // Open / Close / Snap animations
@@ -333,13 +374,15 @@ export function ActivityDrawer({
   const openDrawer = useCallback(() => {
     currentSnap.current = '3q';
     setSnapPosition('3q');
-    snapTo(POSITION_3Q, 0.4);
-  }, [snapTo]);
+    drawerTranslate.setValue(windowHeightRef.current);
+    backdropOpacity.setValue(0);
+    snapTo(position3QRef.current, 0.4);
+  }, [backdropOpacity, drawerTranslate, snapTo]);
 
   const closeDrawer = useCallback(() => {
     Animated.parallel([
       Animated.timing(drawerTranslate, {
-        toValue: SCREEN_HEIGHT,
+        toValue: windowHeightRef.current,
         duration: 200,
         useNativeDriver: true,
       }),
@@ -350,6 +393,7 @@ export function ActivityDrawer({
       }),
     ]).start(() => {
       currentSnap.current = '3q';
+      setIsMounted(false);
       onClose();
     });
   }, [drawerTranslate, backdropOpacity, onClose]);
@@ -358,9 +402,36 @@ export function ActivityDrawer({
   // The else branch is unnecessary since the component returns null when !visible.
   useEffect(() => {
     if (visible) {
+      setIsMounted(true);
       openDrawer();
     }
   }, [visible, openDrawer]);
+
+  useEffect(() => {
+    if (!visible || !focusMatch) {
+      setHighlightedItemId(null);
+      return;
+    }
+
+    setHighlightedItemId(focusMatch.id);
+
+    const timeout = setTimeout(() => {
+      const historyIndex = historyItems.findIndex((item) => item.id === focusMatch.id);
+      if (historyIndex >= 0) {
+        listRef.current?.scrollToIndex({
+          index: historyIndex,
+          animated: true,
+          viewPosition: 0.35,
+        });
+        return;
+      }
+
+      // Attention items render in the list header, above history.
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }, 280);
+
+    return () => clearTimeout(timeout);
+  }, [visible, focusMatch, historyItems]);
 
   // -------------------------------------------------------------------------
   // Android back button
@@ -387,9 +458,9 @@ export function ActivityDrawer({
       },
       onPanResponderMove: (_, gestureState) => {
         const pFull = positionFullRef.current;
-        const base = currentSnap.current === 'full' ? pFull : POSITION_3Q;
+        const base = currentSnap.current === 'full' ? pFull : position3QRef.current;
         const newPos = base + gestureState.dy;
-        const clamped = Math.max(pFull, Math.min(newPos, SCREEN_HEIGHT));
+        const clamped = Math.max(pFull, Math.min(newPos, windowHeightRef.current));
         drawerTranslate.setValue(clamped);
       },
       onPanResponderRelease: (_, gestureState) => {
@@ -405,13 +476,13 @@ export function ActivityDrawer({
           } else if (dy > SNAP_DOWN_THRESHOLD || vy > 0.5) {
             closeDrawer();
           } else {
-            snapTo(POSITION_3Q, 0.4);
+            snapTo(position3QRef.current, 0.4);
           }
         } else {
           if (dy > SNAP_DOWN_THRESHOLD || vy > 0.5) {
             currentSnap.current = '3q';
             setSnapPosition('3q');
-            snapTo(POSITION_3Q, 0.4);
+            snapTo(position3QRef.current, 0.4);
           } else {
             snapTo(pFull, 0.6);
           }
@@ -427,6 +498,7 @@ export function ActivityDrawer({
     ({ item }: { item: TimelineItem }) => (
       <TimelineItemCard
         item={item}
+        highlighted={item.id === highlightedItemId}
         onOpenRefinement={onOpenRefinement}
         onShareAsIs={onShareAsIs}
         onOpenEmpathyDetail={onOpenEmpathyDetail}
@@ -434,7 +506,7 @@ export function ActivityDrawer({
         testID={`${testID}-item-${item.id}`}
       />
     ),
-    [onOpenRefinement, onShareAsIs, onOpenEmpathyDetail, onShareInvitation, testID],
+    [highlightedItemId, onOpenRefinement, onShareAsIs, onOpenEmpathyDetail, onShareInvitation, testID],
   );
 
   const keyExtractor = useCallback((item: TimelineItem) => item.id, []);
@@ -448,7 +520,7 @@ export function ActivityDrawer({
   // can override a parent's pointer-events:none with their own pointer-events:auto,
   // so the only reliable way to prevent the invisible backdrop from blocking clicks
   // is to remove it from the DOM entirely.
-  if (!visible) return null;
+  if (!isMounted) return null;
 
   return (
     <View
@@ -472,10 +544,12 @@ export function ActivityDrawer({
 
       {/* Drawer */}
       <Animated.View
+        pointerEvents={visible ? 'auto' : 'none'}
         style={[
           styles.drawer,
+          appWidthStyle,
           {
-            height: SCREEN_HEIGHT,
+            height: windowHeight,
             transform: [{ translateY: drawerTranslate }],
           },
         ]}
@@ -485,16 +559,6 @@ export function ActivityDrawer({
           <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
             <View style={styles.dragHandle} />
           </View>
-
-          <Pressable
-            style={styles.closeHistoryButton}
-            onPress={closeDrawer}
-            accessibilityRole="button"
-            accessibilityLabel="Close exchange history"
-            testID="activity-drawer-close"
-          >
-            <Text style={styles.closeHistoryText}>Close exchange history</Text>
-          </Pressable>
 
           {/* Header */}
           <Text
@@ -511,10 +575,17 @@ export function ActivityDrawer({
         {/* Wrapper constrains FlatList frame to the visible drawer area */}
         <View style={listHeight > 0 ? { height: listHeight, overflow: 'hidden' } : { flex: 1 }}>
           <FlatList
+            ref={listRef}
             style={{ flex: 1 }}
             data={historyItems}
             renderItem={renderTimelineItem}
             keyExtractor={keyExtractor}
+            onScrollToIndexFailed={({ index, averageItemLength }) => {
+              listRef.current?.scrollToOffset({
+                offset: Math.max(0, averageItemLength * index),
+                animated: true,
+              });
+            }}
             contentContainerStyle={[styles.listContent, { paddingBottom: 32 + insets.bottom }]}
             showsVerticalScrollIndicator={false}
             ListHeaderComponent={
@@ -555,6 +626,7 @@ export function ActivityDrawer({
                           key={item.id}
                           item={item}
                           centered
+                          highlighted={item.id === highlightedItemId}
                           onOpenRefinement={onOpenRefinement}
                           onShareAsIs={onShareAsIs}
                           onOpenEmpathyDetail={onOpenEmpathyDetail}
@@ -590,21 +662,23 @@ export function ActivityDrawer({
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   backdropPressable: {
     ...StyleSheet.absoluteFillObject,
   },
   backdrop: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
   },
   drawer: {
     position: 'absolute',
     left: 0,
     right: 0,
-    backgroundColor: colors.bgPrimary,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: palette.bg,
+    borderTopWidth: 1,
+    borderColor: palette.border,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
     overflow: 'hidden',
     elevation: 10,
   },
@@ -614,35 +688,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dragHandle: {
-    width: 36,
+    width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: palette.textFaint,
+    opacity: 0.45,
   },
   header: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
+    fontSize: 22,
+    fontWeight: '400',
+    color: palette.text,
     paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  closeHistoryButton: {
-    marginHorizontal: 16,
-    marginBottom: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderRadius: 8,
-    backgroundColor: colors.bgSecondary,
-  },
-  closeHistoryText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
+    paddingBottom: 14,
+    fontFamily: 'Lora',
   },
   sectionHeader: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
     paddingTop: 12,
@@ -658,40 +721,43 @@ const styles = StyleSheet.create({
   topicBlock: {
     marginTop: 4,
     marginBottom: 16,
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: palette.bgElev,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   topicLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.textSecondary,
+    color: palette.textMuted,
     letterSpacing: 1.2,
     marginBottom: 6,
   },
   topicText: {
     fontSize: 15,
-    color: colors.textPrimary,
+    color: palette.text,
     lineHeight: 20,
   },
   topicShareButton: {
-    marginTop: 10,
+    marginTop: 12,
     alignSelf: 'flex-start',
-    backgroundColor: 'transparent',
-    borderRadius: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: palette.accent,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
   },
   topicShareButtonPressed: {
     opacity: 0.6,
   },
   topicShareButtonText: {
-    color: colors.textSecondary,
+    color: palette.bg,
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '700',
   },
   emptyText: {
     fontSize: 14,
-    color: colors.textMuted,
+    color: palette.textFaint,
     textAlign: 'center',
     paddingVertical: 24,
     fontStyle: 'italic',

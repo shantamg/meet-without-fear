@@ -5,8 +5,9 @@
  * as an AI-triggered action. Shows a warm AI message with a "Ready" button.
  */
 
-import { View, Text, TouchableOpacity } from 'react-native';
-import { createStyles } from '../theme/styled';
+import { useMemo } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { radius, spacing, typography, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -71,35 +72,38 @@ export function InlineCompact({
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+
+  return useMemo(() => StyleSheet.create({
     container: {
-      backgroundColor: t.colors.bgSecondary,
-      borderRadius: t.radius.lg,
-      padding: t.spacing.xl,
-      marginVertical: t.spacing.md,
+      backgroundColor: palette.bgElev,
+      borderRadius: radius.lg,
+      padding: spacing.xl,
+      marginVertical: spacing.md,
       borderWidth: 1,
-      borderColor: t.colors.border,
+      borderColor: palette.border,
     },
     messageText: {
-      fontSize: t.typography.fontSize.md,
+      fontSize: typography.fontSize.md,
       lineHeight: 22,
-      color: t.colors.textPrimary,
-      marginBottom: t.spacing.lg,
+      color: palette.text,
+      marginBottom: spacing.lg,
     },
     readyButton: {
-      backgroundColor: 'rgb(59, 130, 246)',
-      paddingVertical: t.spacing.lg,
-      paddingHorizontal: t.spacing.xl,
-      borderRadius: t.radius.sm,
+      backgroundColor: palette.accent,
+      paddingVertical: spacing.lg,
+      paddingHorizontal: spacing.xl,
+      borderRadius: radius.sm,
       alignItems: 'center',
     },
     readyButtonDisabled: {
-      backgroundColor: t.colors.bgTertiary,
+      backgroundColor: palette.chipBg,
     },
     readyButtonText: {
-      color: 'white',
-      fontSize: t.typography.fontSize.md,
+      color: palette.bg,
+      fontSize: typography.fontSize.md,
       fontWeight: '600',
     },
-  }));
+  }), [palette]);
+};

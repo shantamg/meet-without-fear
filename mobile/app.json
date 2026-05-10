@@ -11,15 +11,16 @@
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F7F6F3"
+      "backgroundColor": "#f6f3ec"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.galuten.meetwithoutfear",
-      "buildNumber": "38",
+      "buildNumber": "40",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSMicrophoneUsageDescription": "This app needs access to your microphone to record audio sessions."
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone to record audio sessions.",
+        "NSFaceIDUsageDescription": "Meet Without Fear uses Face ID to protect your private sessions."
       },
       "appleTeamId": "446P429C8Q",
       "associatedDomains": [
@@ -28,17 +29,17 @@
       "splash": {
         "image": "./assets/images/icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#F7F6F3"
+        "backgroundColor": "#f6f3ec"
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#F7F6F3"
+        "backgroundColor": "#f6f3ec"
       },
       "icon": "./assets/images/icon.png",
       "package": "com.meetwithoutfear.app",
-      "versionCode": 37,
+      "versionCode": 39,
       "permissions": [
         "RECORD_AUDIO"
       ],
@@ -78,7 +79,17 @@
         {
           "image": "./assets/images/icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#F7F6F3"
+          "backgroundColor": "#f6f3ec",
+          "dark": {
+            "image": "./assets/images/icon.png",
+            "backgroundColor": "#0f172a"
+          }
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Meet Without Fear uses Face ID to protect your private sessions."
         }
       ]
     ],

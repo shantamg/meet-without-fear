@@ -5,21 +5,23 @@
  * Each session displays its date and AI-generated topic tag.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { View, Text, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ArrowLeft,
   Sparkles,
   MessageCircle,
   ChevronRight,
   Lock,
+  Plus,
 } from 'lucide-react-native';
 
 import { useInnerThoughtsSessions } from '../hooks';
 import { InnerWorkSessionSummaryDTO } from '@meet-without-fear/shared';
+import { HeaderBackButton } from '../components/HeaderBackButton';
+import { trackInnerWorkHubOpened } from '../services/analytics';
 import { createStyles } from '../theme/styled';
-import { colors } from '../theme';
+import { useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -27,7 +29,10 @@ import { colors } from '../theme';
 
 interface InnerWorkHubScreenProps {
   onBack?: () => void;
-  onNavigateToSelfReflection?: () => void;
+  onStartNewSession?: () => void;
+  onOpenSession?: (sessionId: string) => void;
+  /** How the user arrived at the hub (e.g. 'tab_press', 'post_session_prompt') */
+  source?: string;
 }
 
 interface SessionListItemProps {
@@ -40,6 +45,7 @@ interface SessionListItemProps {
 // ============================================================================
 
 function SessionListItem({ session, onPress }: SessionListItemProps) {
+  const { palette } = useAppAppearance();
   const formattedDate = new Date(session.createdAt).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -56,20 +62,30 @@ function SessionListItem({ session, onPress }: SessionListItemProps) {
   }
 
   return (
-    <TouchableOpacity style={styles.sessionItem} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={[
+        styles.sessionItem,
+        {
+          backgroundColor: palette.bgElev,
+          borderColor: palette.border,
+        },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
       <View style={styles.sessionContent}>
-        <Text style={styles.sessionDate}>{formattedDate}</Text>
+        <Text style={[styles.sessionDate, { color: palette.text }]}>{formattedDate}</Text>
         {session.theme != null && (
           <View style={styles.sessionThemeTag}>
-            <Sparkles size={11} color={colors.brandPurple} />
-            <Text style={styles.sessionThemeText}>{session.theme}</Text>
+            <Sparkles size={11} color={palette.accent} />
+            <Text style={[styles.sessionThemeText, { color: palette.accent }]}>{session.theme}</Text>
           </View>
         )}
-        <Text style={styles.sessionSummary} numberOfLines={2}>
+        <Text style={[styles.sessionSummary, { color: palette.textMuted }]} numberOfLines={2}>
           {secondaryText}
         </Text>
       </View>
-      <ChevronRight size={20} color={colors.textMuted} />
+      <ChevronRight size={20} color={palette.textFaint} />
     </TouchableOpacity>
   );
 }
@@ -80,31 +96,38 @@ function SessionListItem({ session, onPress }: SessionListItemProps) {
 
 export function InnerWorkHubScreen({
   onBack,
-  onNavigateToSelfReflection,
+  onStartNewSession,
+  onOpenSession,
+  source = 'tab_press',
 }: InnerWorkHubScreenProps) {
+  const { palette } = useAppAppearance();
   const { data, isLoading, error, refetch } = useInnerThoughtsSessions();
+
+  useEffect(() => {
+    trackInnerWorkHubOpened(source);
+  }, [source]);
 
   const handleBack = useCallback(() => {
     onBack?.();
   }, [onBack]);
 
   const handleNewSession = useCallback(() => {
-    onNavigateToSelfReflection?.();
-  }, [onNavigateToSelfReflection]);
+    onStartNewSession?.();
+  }, [onStartNewSession]);
 
-  const handleSessionPress = useCallback(() => {
-    onNavigateToSelfReflection?.();
-  }, [onNavigateToSelfReflection]);
+  const handleSessionPress = useCallback((sessionId: string) => {
+    onOpenSession?.(sessionId);
+  }, [onOpenSession]);
 
   const sessions = data?.sessions ?? [];
 
   // Loading state
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={styles.loadingText}>Opening your space...</Text>
+          <ActivityIndicator size="large" color={palette.accent} />
+          <Text style={[styles.loadingText, { color: palette.textMuted }]}>Opening your space...</Text>
         </View>
       </SafeAreaView>
     );
@@ -113,39 +136,33 @@ export function InnerWorkHubScreen({
   // Error state
   if (error) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={handleBack}
-            style={styles.backButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <ArrowLeft size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Inner Work</Text>
+      <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top']}>
+        <View style={[styles.header, { backgroundColor: palette.bg, borderBottomColor: palette.divider }]}>
+          <HeaderBackButton onPress={handleBack} />
+          <Text style={[styles.headerTitle, { color: palette.text }]}>Inner Thoughts</Text>
           <View style={styles.headerRight} />
         </View>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>
+          <Text style={[styles.errorText, { color: palette.text }]}>
             We're having trouble loading your space right now.
           </Text>
-          <Text style={styles.errorSubtext}>
+          <Text style={[styles.errorSubtext, { color: palette.textMuted }]}>
             Your reflections are safe — please try again in a moment.
           </Text>
           <View style={styles.errorActions}>
             <TouchableOpacity
-              style={styles.errorRetryButton}
+              style={[styles.errorRetryButton, { backgroundColor: palette.accent }]}
               onPress={() => refetch()}
               activeOpacity={0.7}
             >
-              <Text style={styles.errorRetryText}>Try Again</Text>
+              <Text style={[styles.errorRetryText, { color: palette.bg }]}>Try Again</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.errorHomeButton}
+              style={[styles.errorHomeButton, { backgroundColor: palette.bgElev }]}
               onPress={handleBack}
               activeOpacity={0.7}
             >
-              <Text style={styles.errorHomeText}>Go Home</Text>
+              <Text style={[styles.errorHomeText, { color: palette.text }]}>Go Home</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -154,24 +171,26 @@ export function InnerWorkHubScreen({
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleBack}
-          style={styles.backButton}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <ArrowLeft size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
+      <View style={[styles.header, { backgroundColor: palette.bg, borderBottomColor: palette.divider }]}>
+        <HeaderBackButton onPress={handleBack} />
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Inner Work</Text>
+          <Text style={[styles.headerTitle, { color: palette.text }]}>Inner Thoughts</Text>
           <View style={styles.privacyBadge}>
-            <Lock size={10} color={colors.textMuted} />
-            <Text style={styles.privacyText}>Your private space</Text>
+            <Lock size={10} color={palette.textMuted} />
+            <Text style={[styles.privacyText, { color: palette.textMuted }]}>Your private space</Text>
           </View>
         </View>
-        <View style={styles.headerRight} />
+        <TouchableOpacity
+          style={[styles.headerIconButton, { backgroundColor: palette.bgElev, borderColor: palette.border }]}
+          onPress={handleNewSession}
+          activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel="Start new Inner Thoughts session"
+        >
+          <Plus size={20} color={palette.text} />
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -179,27 +198,14 @@ export function InnerWorkHubScreen({
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <TouchableOpacity
-            style={styles.newSessionButton}
-            onPress={handleNewSession}
-            activeOpacity={0.8}
-          >
-            <View style={styles.newSessionIconContainer}>
-              <MessageCircle size={22} color={colors.brandPurple} />
-            </View>
-            <Text style={styles.newSessionText}>New Session</Text>
-            <ChevronRight size={20} color={colors.brandPurple} />
-          </TouchableOpacity>
-        }
         renderItem={({ item }) => (
-          <SessionListItem session={item} onPress={handleSessionPress} />
+          <SessionListItem session={item} onPress={() => handleSessionPress(item.id)} />
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <MessageCircle size={40} color={colors.textMuted} />
-            <Text style={styles.emptyStateText}>Start your first session</Text>
-            <Text style={styles.emptyStateSubtext}>
+            <MessageCircle size={40} color={palette.textMuted} />
+            <Text style={[styles.emptyStateText, { color: palette.text }]}>Start your first session</Text>
+            <Text style={[styles.emptyStateSubtext, { color: palette.textMuted }]}>
               This is your private space to reflect and process your thoughts.
             </Text>
           </View>
@@ -308,7 +314,15 @@ const styles = createStyles((t) => ({
     color: t.colors.textMuted,
   },
   headerRight: {
-    width: 32,
+    width: 36,
+  },
+  headerIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // List
@@ -316,41 +330,15 @@ const styles = createStyles((t) => ({
     padding: t.spacing.md,
   },
 
-  // New Session Button
-  newSessionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: t.colors.bgSecondary,
-    borderRadius: t.radius.lg,
-    padding: t.spacing.md,
-    marginBottom: t.spacing.md,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-  },
-  newSessionIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.brandPurple + '20',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: t.spacing.sm,
-  },
-  newSessionText: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: t.colors.textPrimary,
-  },
-
   // Session Item
   sessionItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: t.colors.bgSecondary,
-    borderRadius: t.radius.lg,
+    borderRadius: t.radius.sm,
     padding: t.spacing.md,
     marginBottom: t.spacing.sm,
+    borderWidth: 1,
   },
   sessionContent: {
     flex: 1,
@@ -370,7 +358,7 @@ const styles = createStyles((t) => ({
   },
   sessionThemeText: {
     fontSize: 12,
-    color: colors.brandPurple,
+    color: t.colors.accent,
     fontWeight: '500',
   },
   sessionSummary: {

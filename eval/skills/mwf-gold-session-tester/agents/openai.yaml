@@ -1,0 +1,3 @@
+display_name: MWF Gold Session Tester
+short_description: Test MWF sessions against golden flows.
+default_prompt: Use the MWF Gold Session Tester skill to drive this Meet Without Fear session, maintain a scratch issue log, triage any broken UI or state, check the database when needed, and evaluate the flow against the golden references.

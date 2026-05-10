@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
-import { colors } from '@/theme';
+import { appWidthStyle, modalPageStyle, useAppAppearance } from '@/theme';
 import { ChatInterface, ChatMessage } from './ChatInterface';
 
 export interface GuidedDraftMessage extends ChatMessage {
@@ -58,6 +58,8 @@ export function GuidedDraftChatModal({
   testID = 'guided-draft-chat-modal',
 }: GuidedDraftChatModalProps) {
   const insets = useSafeAreaInsets();
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const latestProposalMessageId = [...messages].reverse().find((message) => message.proposedContent)?.id ?? null;
 
   const renderMessageExtra = useCallback((message: ChatMessage) => {
@@ -80,7 +82,7 @@ export function GuidedDraftChatModal({
             testID={finalButtonTestID || `${testID}-final-button`}
           >
             {isFinalizing ? (
-              <ActivityIndicator size="small" color={colors.textPrimary} />
+              <ActivityIndicator size="small" color={palette.bg} />
             ) : (
               <Text style={styles.finalButtonText}>{finalActionLabel}</Text>
             )}
@@ -97,6 +99,15 @@ export function GuidedDraftChatModal({
     onFinalize,
     proposalSubtitle,
     proposalTitle,
+    styles.draftCard,
+    styles.draftContent,
+    styles.draftHeader,
+    styles.draftSubtitle,
+    styles.draftTitle,
+    styles.finalButton,
+    styles.finalButtonDisabled,
+    styles.finalButtonText,
+    palette.bg,
     testID,
   ]);
 
@@ -108,38 +119,44 @@ export function GuidedDraftChatModal({
       onRequestClose={onClose}
       testID={testID}
     >
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
-          <Text style={styles.headerTitle}>{title}</Text>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={onClose}
-            testID={`${testID}-close`}
-          >
-            <X color={colors.textPrimary} size={24} />
-          </TouchableOpacity>
-        </View>
+      <View style={styles.modalPage}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+          <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
+            <Text style={styles.headerTitle}>{title}</Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={onClose}
+              testID={`${testID}-close`}
+            >
+              <X color={palette.text} size={24} />
+            </TouchableOpacity>
+          </View>
 
-        <ChatInterface
-          sessionId={sessionKey}
-          messages={messages}
-          onSendMessage={onSendMessage}
-          isLoading={isLoading}
-          isInputDisabled={isFinalizing}
-          partnerName={partnerName}
-          renderMessageExtra={renderMessageExtra}
-          emptyStateTitle={emptyStateTitle}
-          emptyStateMessage={emptyStateMessage}
-        />
-      </SafeAreaView>
+          <ChatInterface
+            sessionId={sessionKey}
+            messages={messages}
+            onSendMessage={onSendMessage}
+            isLoading={isLoading}
+            isInputDisabled={isFinalizing}
+            partnerName={partnerName}
+            renderMessageExtra={renderMessageExtra}
+            emptyStateTitle={emptyStateTitle}
+            emptyStateMessage={emptyStateMessage}
+          />
+        </SafeAreaView>
+      </View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
+  modalPage: {
+    ...modalPageStyle,
+  },
   container: {
     flex: 1,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bg,
+    ...appWidthStyle,
   },
   header: {
     flexDirection: 'row',
@@ -148,12 +165,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: palette.border,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: palette.text,
   },
   closeButton: {
     padding: 4,
@@ -163,10 +180,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 4,
     padding: 12,
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: palette.accent,
   },
   draftHeader: {
     marginBottom: 10,
@@ -174,23 +191,23 @@ const styles = StyleSheet.create({
   draftTitle: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.accent,
+    color: palette.accent,
     textTransform: 'uppercase',
   },
   draftSubtitle: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginTop: 2,
   },
   draftContent: {
     fontSize: 15,
     lineHeight: 22,
-    color: colors.textPrimary,
+    color: palette.text,
     fontStyle: 'italic',
     marginBottom: 12,
   },
   finalButton: {
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -202,7 +219,7 @@ const styles = StyleSheet.create({
   finalButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.bg,
   },
 });
 

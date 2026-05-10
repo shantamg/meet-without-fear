@@ -7,19 +7,18 @@
 
 import { View, Text, TouchableOpacity } from 'react-native';
 import { createStyles } from '../theme/styled';
+import { designFonts, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Semantic Color System
 // ============================================================================
 
-const INDICATOR_COLORS = {
-  informational: { text: 'rgba(100, 149, 237, 0.9)', line: 'rgba(100, 149, 237, 0.2)' },
-  success: { text: 'rgba(34, 197, 94, 0.9)', line: 'rgba(34, 197, 94, 0.2)' },
-};
-
-function getSemanticCategory(type: ChatIndicatorType): 'informational' | 'success' {
+function getSemanticCategory(type: ChatIndicatorType): 'informational' | 'success' | 'warning' {
   switch (type) {
     case 'empathy-validated': return 'success';
+    case 'reconciler-gaps-found':
+    case 'strategies-ready':
+      return 'warning';
     case 'stage-chapter': return 'informational';
     default: return 'informational';
   }
@@ -75,6 +74,13 @@ interface ChatIndicatorProps {
 
 export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: ChatIndicatorProps) {
   const styles = useStyles();
+  const { palette } = useAppAppearance();
+
+  const semanticColors = {
+    informational: { text: palette.accentText, line: palette.borderStrong },
+    success: { text: palette.success, line: palette.borderStrong },
+    warning: { text: palette.accentText, line: palette.borderStrong },
+  };
 
   const getIndicatorText = (): string => {
     switch (type) {
@@ -140,6 +146,8 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
     || type === 'strategies-ready'
     || type === 'overlap-revealed'
     || type === 'agreement-reached';
+  const hasLeadingArrow = (type === 'context-shared' || type === 'empathy-shared')
+    && metadata?.isFromMe === false;
 
   const getLineStyle = () => {
     switch (type) {
@@ -177,7 +185,7 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
       case 'empathy-validated':
       case 'stage-chapter': {
         const category = getSemanticCategory(type);
-        return { backgroundColor: INDICATOR_COLORS[category].line };
+        return { backgroundColor: semanticColors[category].line };
       }
       default:
         return styles.defaultLine;
@@ -220,7 +228,7 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
       case 'empathy-validated':
       case 'stage-chapter': {
         const category = getSemanticCategory(type);
-        return { color: INDICATOR_COLORS[category].text };
+        return { color: semanticColors[category].text };
       }
       default:
         return styles.defaultText;
@@ -233,8 +241,9 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
       fontSize: 15,
       textTransform: 'none' as const,
       letterSpacing: 0,
-      fontWeight: '500' as const,
-      color: INDICATOR_COLORS.informational.text,
+      fontWeight: '400' as const,
+      color: semanticColors.informational.text,
+      fontFamily: designFonts.serif,
     };
 
     const chapterContent = (
@@ -258,8 +267,11 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
     <View style={styles.lineContainer}>
       <View style={[styles.line, getLineStyle()]} />
       <View style={styles.textContainer}>
+        {hasArrow && hasLeadingArrow && (
+          <Text style={[styles.arrow, getTextStyle()]}>→</Text>
+        )}
         <Text style={[styles.text, getTextStyle()]}>{getIndicatorText()}</Text>
-        {hasArrow && (
+        {hasArrow && !hasLeadingArrow && (
           <Text style={[styles.arrow, getTextStyle()]}>→</Text>
         )}
       </View>
@@ -291,8 +303,9 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+  return createStyles((t) => ({
     container: {
       paddingVertical: t.spacing.md,
       paddingHorizontal: t.spacing.lg,
@@ -305,8 +318,8 @@ const useStyles = () =>
     },
     line: {
       flex: 1,
-      height: 1,
-      backgroundColor: t.colors.border,
+      height: 1.5,
+      backgroundColor: palette.border,
     },
     textContainer: {
       flexDirection: 'row',
@@ -315,10 +328,11 @@ const useStyles = () =>
     },
     text: {
       fontSize: t.typography.fontSize.sm,
-      fontFamily: t.typography.fontFamily.regular,
-      color: t.colors.textMuted,
+      fontFamily: designFonts.mono,
+      color: palette.text,
       textTransform: 'uppercase',
       letterSpacing: 1,
+      fontWeight: '700',
     },
     arrow: {
       fontSize: 16,
@@ -326,96 +340,97 @@ const useStyles = () =>
     },
     // Invitation sent: yellow/amber tint - separate line and text styles
     invitationSentLine: {
-      backgroundColor: 'rgba(245, 158, 11, 0.3)',
+      backgroundColor: palette.borderStrong,
     },
     invitationSentText: {
-      color: 'rgba(245, 158, 11, 0.9)',
+      color: palette.accentText,
     },
     // Feel heard: teal/green tint for completion feeling
     feelHeardLine: {
-      backgroundColor: 'rgba(20, 184, 166, 0.3)',
+      backgroundColor: palette.borderStrong,
     },
     feelHeardText: {
-      color: 'rgba(20, 184, 166, 0.9)',
+      color: palette.success,
     },
     // Compact signed: dark blue tint for commitment
     compactSignedLine: {
-      backgroundColor: 'rgba(59, 130, 246, 0.3)',
+      backgroundColor: palette.borderStrong,
     },
     compactSignedText: {
-      color: 'rgba(59, 130, 246, 0.9)',
+      color: palette.accentText,
     },
     // Context shared: purple/accent tint for shared content
     contextSharedLine: {
-      backgroundColor: 'rgba(139, 92, 246, 0.3)',
+      backgroundColor: palette.borderStrong,
     },
     contextSharedText: {
-      color: 'rgba(139, 92, 246, 0.9)',
+      color: palette.accentText,
     },
     defaultLine: {
-      backgroundColor: t.colors.border,
+      backgroundColor: palette.borderStrong,
     },
     defaultText: {
-      color: t.colors.textMuted,
+      color: palette.textMuted,
     },
     // Reconciler analyzing: blue tint for in-progress
     reconcilerAnalyzingLine: {
-      backgroundColor: 'rgba(59, 130, 246, 0.3)',
+      backgroundColor: palette.infoSoft,
     },
     reconcilerAnalyzingText: {
-      color: 'rgba(59, 130, 246, 0.9)',
+      color: palette.info,
     },
     // Reconciler gaps found: orange/warning tint
     reconcilerGapsLine: {
-      backgroundColor: 'rgba(245, 158, 11, 0.3)',
+      backgroundColor: palette.warningSoft,
     },
     reconcilerGapsText: {
-      color: 'rgba(245, 158, 11, 0.9)',
+      color: palette.warning,
     },
     // Reconciler ready: green/success tint
     reconcilerReadyLine: {
-      backgroundColor: 'rgba(34, 197, 94, 0.3)',
+      backgroundColor: palette.successSoft,
     },
     reconcilerReadyText: {
-      color: 'rgba(34, 197, 94, 0.9)',
+      color: palette.success,
     },
     // Partner empathy held: blue/info tint
     partnerEmpathyHeldLine: {
-      backgroundColor: 'rgba(59, 130, 246, 0.3)',
+      backgroundColor: palette.infoSoft,
     },
     partnerEmpathyHeldText: {
-      color: 'rgba(59, 130, 246, 0.9)',
+      color: palette.info,
     },
     // Stage 3: Need Mapping - soft blue/teal theme
     needsIdentifiedLine: {
-      backgroundColor: 'rgba(94, 186, 183, 0.3)',
+      backgroundColor: palette.infoSoft,
     },
     needsIdentifiedText: {
-      color: 'rgba(94, 186, 183, 0.9)',
+      color: palette.info,
     },
     commonGroundFoundLine: {
-      backgroundColor: 'rgba(134, 197, 166, 0.3)',
+      backgroundColor: palette.successSoft,
     },
     commonGroundFoundText: {
-      color: 'rgba(134, 197, 166, 0.9)',
+      color: palette.success,
     },
     // Stage 4: Strategic Repair - amber/purple theme
     strategiesReadyLine: {
-      backgroundColor: 'rgba(245, 158, 11, 0.3)',
+      backgroundColor: palette.warningSoft,
     },
     strategiesReadyText: {
-      color: 'rgba(245, 158, 11, 0.9)',
+      color: palette.warning,
     },
     overlapRevealedLine: {
-      backgroundColor: 'rgba(139, 92, 246, 0.3)',
+      backgroundColor: palette.accentSoft,
     },
     overlapRevealedText: {
-      color: 'rgba(139, 92, 246, 0.9)',
+      color: palette.accentText,
     },
     agreementReachedLine: {
-      backgroundColor: 'rgba(34, 197, 94, 0.3)',
+      backgroundColor: palette.successSoft,
     },
     agreementReachedText: {
-      color: 'rgba(34, 197, 94, 0.9)',
+      color: palette.success,
     },
   }));
+};

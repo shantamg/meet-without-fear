@@ -8,7 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Platform, StyleSheet, View } from 'react-native';
 
-import { theme } from '@/src/theme';
+import { APP_MAX_WIDTH, AppearanceProvider, useAppAppearance } from '@/src/theme';
 import { SessionDrawerProvider } from '@/src/hooks/useSessionDrawer';
 import { useInvitationLink } from '@/src/hooks/useInvitation';
 import { QueryProvider } from '@/src/providers/QueryProvider';
@@ -80,8 +80,36 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
         outline: none !important;
         box-shadow: none !important;
       }
+      /* RN Web portals Modal content to document.body, outside our app-width frame. */
+      [aria-modal="true"] {
+        align-items: center !important;
+      }
+      [aria-modal="true"] > div {
+        width: 100% !important;
+        max-width: ${APP_MAX_WIDTH}px !important;
+        height: 100% !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        position: relative !important;
+        overflow: hidden !important;
+      }
     `;
     document.head.appendChild(style);
+  }
+
+  const FONT_LINK_ID = 'mwf-design-fonts';
+  if (!document.getElementById(FONT_LINK_ID)) {
+    const preconnectFonts = document.createElement('link');
+    preconnectFonts.rel = 'preconnect';
+    preconnectFonts.href = 'https://fonts.gstatic.com';
+    preconnectFonts.crossOrigin = 'anonymous';
+    document.head.appendChild(preconnectFonts);
+
+    const fontLink = document.createElement('link');
+    fontLink.id = FONT_LINK_ID;
+    fontLink.rel = 'stylesheet';
+    fontLink.href = 'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600;700&display=swap';
+    document.head.appendChild(fontLink);
   }
 }
 
@@ -101,22 +129,29 @@ function HideSplashOnReady() {
 function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
   // Capture invitation deep links to AsyncStorage (backup for home screen pickup)
   useInvitationLink();
+  const { palette, scheme } = useAppAppearance();
 
   return (
-    <View style={styles.webBackdrop}>
-      <View style={styles.webFrame}>
+    <View style={[styles.webBackdrop, { backgroundColor: palette.bg }]}>
+      <View style={[styles.webFrame, { backgroundColor: palette.bg }]}>
         <NativeAppBanner />
-        <GestureHandlerRootView style={styles.container}>
+        <GestureHandlerRootView style={[styles.container, { backgroundColor: palette.bg }]}>
           <SafeAreaProvider>
             <SessionDrawerProvider>
               <ToastProvider>
                 {includeMixpanel && <MixpanelInitializer />}
-                <Stack screenOptions={{ headerShown: false }}>
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    gestureEnabled: false,
+                    contentStyle: { backgroundColor: palette.bg },
+                  }}
+                >
                   <Stack.Screen name="(public)" />
                   <Stack.Screen name="(auth)" />
                   <Stack.Screen name="+not-found" options={{ headerShown: true }} />
                 </Stack>
-                <StatusBar style="light" />
+                <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
               </ToastProvider>
             </SessionDrawerProvider>
           </SafeAreaProvider>
@@ -134,7 +169,10 @@ function RootLayout() {
   // Without this, users stuck on a broken sign-in can never receive the fix via OTA.
   useOTAUpdate();
 
-  const [fontsLoaded, fontError] = useFonts({});
+  const [fontsLoaded, fontError] = useFonts({
+    InstrumentSerif: require('../assets/fonts/InstrumentSerif-Regular.ttf'),
+    InstrumentSerifItalic: require('../assets/fonts/InstrumentSerif-Italic.ttf'),
+  });
 
   // Keep showing splash screen until fonts are loaded
   if (!fontsLoaded && !fontError) {
@@ -147,7 +185,9 @@ function RootLayout() {
       <QueryProvider>
         <E2EAuthProvider>
           <HideSplashOnReady />
-          <AppShell includeMixpanel={false} />
+          <AppearanceProvider>
+            <AppShell includeMixpanel={false} />
+          </AppearanceProvider>
         </E2EAuthProvider>
       </QueryProvider>
     );
@@ -162,7 +202,9 @@ function RootLayout() {
       publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || ''}
       onReady={() => SplashScreen.hideAsync()}
     >
-      <AppShell />
+      <AppearanceProvider>
+        <AppShell />
+      </AppearanceProvider>
     </ClerkAuthFlow>
   );
 }
@@ -172,14 +214,11 @@ export default Sentry.wrap(RootLayout);
 // Phone-width shim for web: cap the app at a mobile column, center it, and
 // paint the viewport gutters with the app's deep page color so the browser's
 // default white doesn't bleed through. No-op on native.
-const MOBILE_MAX_WIDTH = 480;
-
 const styles = StyleSheet.create({
   webBackdrop: {
     flex: 1,
     ...Platform.select({
       web: {
-        backgroundColor: theme.colors.bgPage,
         alignItems: 'center',
       },
       default: {},
@@ -190,7 +229,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         width: '100%',
-        maxWidth: MOBILE_MAX_WIDTH,
+        maxWidth: APP_MAX_WIDTH,
         // Establish a positioning context and clip overflow so absolutely-positioned
         // descendants (Expo Router's Stack screens, the session drawer) anchor to the
         // column's edges instead of the viewport.
@@ -202,5 +241,14 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+    ...Platform.select({
+      web: {
+        // Establish a positioning context so Expo Router's absolutely-positioned
+        // Stack screens anchor here instead of webFrame, keeping the
+        // NativeAppBanner visible above them.
+        position: 'relative' as const,
+      },
+      default: {},
+    }),
   },
 });

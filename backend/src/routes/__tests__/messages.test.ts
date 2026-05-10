@@ -2,12 +2,14 @@ import { Request, Response } from 'express';
 import {
   // eslint-disable-next-line @typescript-eslint/no-deprecated
   sendMessage,
+  sendMessageStream,
   confirmFeelHeard,
   getConversationHistory,
   scrubVisibleAIText,
   isReadyForStage3RevealText,
 } from '../../controllers/messages';
 import { prisma } from '../../lib/prisma';
+import { getSonnetStreamingResponse } from '../../lib/bedrock';
 
 // Mock Prisma
 jest.mock('../../lib/prisma');
@@ -64,6 +66,27 @@ jest.mock('../../services/embedding', () => ({
 // Mock conversation summarizer
 jest.mock('../../services/conversation-summarizer', () => ({
   updateSessionSummary: jest.fn().mockResolvedValue(undefined),
+  getSessionSummary: jest.fn().mockResolvedValue(null),
+}));
+
+jest.mock('../../services/context-assembler', () => ({
+  assembleContextBundle: jest.fn().mockResolvedValue({ notableFacts: [] }),
+  formatContextForPrompt: jest.fn().mockReturnValue(''),
+}));
+
+jest.mock('../../services/shared-context', () => ({
+  getMilestoneContext: jest.fn().mockResolvedValue(null),
+  getSharedContentContext: jest.fn().mockResolvedValue(null),
+}));
+
+jest.mock('../../services/llm-telemetry', () => ({
+  estimateContextSizes: jest.fn().mockReturnValue({}),
+  finalizeTurnMetrics: jest.fn(),
+  recordContextSizes: jest.fn(),
+}));
+
+jest.mock('../../services/global-memory', () => ({
+  consolidateGlobalFacts: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock reconciler
@@ -89,6 +112,7 @@ function createMockRequest(options: {
     params: options.params || {},
     body: options.body || {},
     query: options.query || {},
+    on: jest.fn(),
   } as Partial<Request>;
 }
 
@@ -97,17 +121,27 @@ function createMockResponse(): {
   res: Partial<Response>;
   statusMock: jest.Mock;
   jsonMock: jest.Mock;
+  writeMock: jest.Mock;
+  endMock: jest.Mock;
 } {
   const jsonMock = jest.fn();
   const statusMock = jest.fn().mockReturnValue({ json: jsonMock });
+  const writeMock = jest.fn();
+  const endMock = jest.fn();
 
   return {
     res: {
       status: statusMock,
       json: jsonMock,
+      setHeader: jest.fn(),
+      flushHeaders: jest.fn(),
+      write: writeMock,
+      end: endMock,
     } as Partial<Response>,
     statusMock,
     jsonMock,
+    writeMock,
+    endMock,
   };
 }
 
@@ -164,6 +198,7 @@ describe('Messages API (Fire-and-Forget)', () => {
         expect(isReadyForStage3RevealText("Yes, I'm ready")).toBe(false);
       });
     });
+
   });
 
   describe('POST /sessions/:id/messages (sendMessage - DEPRECATED)', () => {
@@ -190,6 +225,118 @@ describe('Messages API (Fire-and-Forget)', () => {
           }),
         })
       );
+    });
+  });
+
+  describe('POST /sessions/:id/messages/stream (sendMessageStream)', () => {
+    it('does not auto-advance Stage 1 from LLM — feel-heard confirmation is button-only', async () => {
+      const stage1Progress = {
+        id: 'progress-1',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 1,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: { feelHeardCheckOffered: true },
+      };
+      const userMessage = {
+        id: 'msg-user-1',
+        sessionId: mockSessionId,
+        senderId: mockUser.id,
+        role: 'USER',
+        content: 'Yes. That captures it. I feel heard.',
+        stage: 1,
+        timestamp: new Date('2026-05-07T08:00:00Z'),
+      };
+      const aiMessage = {
+        id: 'msg-ai-1',
+        sessionId: mockSessionId,
+        senderId: null,
+        forUserId: mockUser.id,
+        role: 'AI',
+        content: 'That feels complete. Now let us turn toward what your partner might be experiencing in this.',
+        stage: 1,
+        timestamp: new Date('2026-05-07T08:00:01Z'),
+      };
+      const session = {
+        id: mockSessionId,
+        status: 'ACTIVE',
+        relationship: {
+          members: [{ userId: mockUser.id }, { userId: 'partner-1' }],
+        },
+      };
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(session);
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue(session);
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(stage1Progress);
+      (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
+        ...stage1Progress,
+        status: 'COMPLETED',
+      });
+      (prisma.stageProgress.upsert as jest.Mock).mockResolvedValue({
+        id: 'progress-2',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 2,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      });
+      (prisma.message.create as jest.Mock).mockImplementation(async ({ data }) => (
+        data.role === 'USER' ? userMessage : { ...aiMessage, content: data.content, stage: data.stage }
+      ));
+      (prisma.message.findMany as jest.Mock).mockResolvedValue([userMessage]);
+      (prisma.message.count as jest.Mock).mockResolvedValue(1);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ name: 'Partner' });
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue(null);
+
+      async function* llmStream() {
+        yield {
+          type: 'text',
+          text: 'Mode: WITNESS\nUserIntensity: 4\nFeelHeardCheck:Y\nFeelHeardConfirmed:Y\nStrategy: transition\n</thinking>\n',
+        };
+        yield {
+          type: 'text',
+          text: 'That feels complete. Now let us turn toward what your partner might be experiencing in this.',
+        };
+        yield { type: 'done' };
+      }
+      (getSonnetStreamingResponse as jest.Mock).mockReturnValue(llmStream());
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: { content: userMessage.content },
+      });
+      const { res, writeMock, endMock } = createMockResponse();
+
+      await sendMessageStream(req as Request, res as Response);
+
+      // AI message should stay on Stage 1 — no auto-advance
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            role: 'AI',
+            stage: 1,
+          }),
+        })
+      );
+      // Only feelHeardCheckOffered is set; stage is NOT completed
+      expect(prisma.stageProgress.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'progress-1' },
+          data: expect.objectContaining({
+            gatesSatisfied: expect.objectContaining({
+              feelHeardCheckOffered: true,
+            }),
+          }),
+        })
+      );
+      // Stage 2 progress should NOT be created by LLM
+      expect(prisma.stageProgress.upsert).not.toHaveBeenCalled();
+      // Metadata should NOT contain feelHeardConfirmed or advancedToStage
+      const sseOutput = writeMock.mock.calls.map(([chunk]) => String(chunk)).join('');
+      expect(sseOutput).not.toContain('"advancedToStage":2');
+      expect(endMock).toHaveBeenCalled();
     });
   });
 

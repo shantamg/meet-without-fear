@@ -70,6 +70,13 @@ jest.mock('expo-status-bar', () => ({
   StatusBar: 'StatusBar',
 }));
 
+jest.mock('@sentry/react-native', () => ({
+  init: jest.fn(),
+  addBreadcrumb: jest.fn(),
+  captureException: jest.fn(),
+  wrap: (component: unknown) => component,
+}));
+
 // Mock expo-router
 jest.mock('expo-router', () => {
   const React = require('react');

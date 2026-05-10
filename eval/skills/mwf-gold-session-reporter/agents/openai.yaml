@@ -1,0 +1,3 @@
+display_name: MWF Gold Session Reporter
+short_description: Write final MWF gold-session issue reports.
+default_prompt: Use the MWF Gold Session Reporter skill to synthesize this gold-session run into a durable issue report, compare against prior reports, inspect DB state where useful, assess the live flow against the gold-standard rubric, and output a handoff prompt for the other Codex session.

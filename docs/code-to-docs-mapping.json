@@ -19,6 +19,10 @@
     { "code": "backend/src/controllers/stage3.ts",       "label": "backend/src/controllers/stage3.ts", "docs": ["docs/backend/api/stage-3.md", "docs/product/stages/stage-3-what-matters.md"] },
     { "code": "backend/src/routes/stage4.ts",            "label": "backend/src/routes/stage4.ts",  "docs": ["docs/backend/api/stage-4.md", "docs/product/stages/stage-4-strategic-repair.md"] },
     { "code": "backend/src/controllers/stage4.ts",       "label": "backend/src/controllers/stage4.ts", "docs": ["docs/backend/api/stage-4.md", "docs/product/stages/stage-4-strategic-repair.md"] },
+    { "code": "backend/src/routes/tending.ts",           "label": "backend/src/routes/tending.ts",  "docs": ["docs/backend/api/tending.md"] },
+    { "code": "backend/src/controllers/tending.ts",      "label": "backend/src/controllers/tending.ts", "docs": ["docs/backend/api/tending.md"] },
+    { "code": "backend/src/services/tending.service.ts", "label": "backend/src/services/tending.service.ts", "docs": ["docs/backend/api/tending.md"] },
+    { "code": "backend/src/scripts/open-due-tending-entries.ts", "label": "backend/src/scripts/open-due-tending-entries.ts", "docs": ["docs/backend/api/tending.md"] },
     { "code": "backend/src/routes/consent.ts",           "label": "backend/src/routes/consent.ts", "docs": ["docs/backend/api/consent.md"] },
     { "code": "backend/src/controllers/consent.ts",      "label": "backend/src/controllers/consent.ts", "docs": ["docs/backend/api/consent.md"] },
     { "code": "backend/src/routes/invitations.ts",       "label": "backend/src/routes/invitations.ts", "docs": ["docs/backend/api/invitations.md"] },
@@ -60,6 +64,8 @@
     { "code": "scripts/ec2-bot/**",                      "label": "scripts/ec2-bot",               "docs": ["docs/infrastructure/index.md"] },
     { "code": "bot-workspaces/**",                       "label": "bot-workspaces",                "docs": ["docs/infrastructure/index.md"] },
     { "code": ".github/workflows/**",                    "label": ".github/workflows",             "docs": ["docs/infrastructure/index.md"] },
-    { "code": "tools/test-dashboard/**",                 "label": "tools/test-dashboard",           "docs": ["docs/e2e-testing/architecture.md", "docs/infrastructure/index.md"] }
+    { "code": "tools/test-dashboard/**",                 "label": "tools/test-dashboard",           "docs": ["docs/e2e-testing/architecture.md", "docs/infrastructure/index.md"] },
+    { "code": "eval/**",                                  "label": "eval",                           "docs": ["docs/e2e-testing/gold-loop-icm.md"] },
+    { "code": "scripts/mwf_*.py",                         "label": "scripts/mwf_*.py",               "docs": ["docs/e2e-testing/gold-loop-icm.md"] }
   ]
 }

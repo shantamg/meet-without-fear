@@ -10,18 +10,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Layers, MoreVertical, Lock, Sparkles } from 'lucide-react-native';
+import { ArrowUpRight, Layers, MoreVertical, Lock, Sparkles } from 'lucide-react-native';
 import { MessageRole, MemorySuggestion, SuggestedAction } from '@meet-without-fear/shared';
 
-import { ChatInterface, ChatMessage } from '../components/ChatInterface';
+import { ChatInterface, ChatCustomCardItem, ChatMessage } from '../components/ChatInterface';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 import { SuggestedActionButtons } from '../components/SuggestedActionButtons';
 import { TakeawayReviewSheet } from '../components/TakeawayReviewSheet';
 import { TranscriptionDrawer } from '../components/TranscriptionDrawer';
+import { HeaderBackButton } from '../components/HeaderBackButton';
 import { useInnerThoughtsSession, useSendInnerThoughtsMessage } from '../hooks';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { createStyles } from '../theme/styled';
-import { colors } from '../theme';
+import { colors, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -40,9 +41,17 @@ interface InnerThoughtsScreenProps {
   initialMessage?: string;
   /** Initial suggested actions from session creation (when user sent first message) */
   initialSuggestedActions?: SuggestedAction[];
+  /** AI message that produced the initial suggested actions */
+  initialSuggestedActionMessageId?: string;
   /** Hide chat content until transition completes (for fade-in effect) */
   hideContentUntilReady?: boolean;
+  /** Narrow URL-controlled fixture for visual audit surfaces. */
+  auditFixture?: string | null;
+  /** Temporary home-composer destination while standalone inner work is disabled. */
+  comingSoonMode?: boolean;
 }
+
+const INNER_WORK_COMING_SOON_MESSAGE = 'Doing inner work by yourself is a feature coming soon.';
 
 // ============================================================================
 // Component
@@ -56,9 +65,13 @@ export function InnerThoughtsScreen({
   isCreating = false,
   initialMessage,
   initialSuggestedActions,
+  initialSuggestedActionMessageId,
   hideContentUntilReady = false,
+  auditFixture = null,
+  comingSoonMode = false,
 }: InnerThoughtsScreenProps) {
   const styles = useStyles();
+  const { palette } = useAppAppearance();
   const router = useRouter();
 
   // Takeaways review sheet state
@@ -74,26 +87,48 @@ export function InnerThoughtsScreen({
   const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>(
     initialSuggestedActions || []
   );
+  const [suggestedActionMessageId, setSuggestedActionMessageId] = useState<string | undefined>(
+    initialSuggestedActionMessageId
+  );
 
   // Update suggested actions when they arrive from session creation
   // (useState default only applies on initial mount, so we need this effect)
   useEffect(() => {
     if (initialSuggestedActions && initialSuggestedActions.length > 0) {
       setSuggestedActions(initialSuggestedActions);
+      setSuggestedActionMessageId(initialSuggestedActionMessageId);
     }
-  }, [initialSuggestedActions]);
+  }, [initialSuggestedActions, initialSuggestedActionMessageId]);
 
   // Only fetch session if we have a valid sessionId (not creating)
   const { data, isLoading, error } = useInnerThoughtsSession(
-    isCreating ? undefined : sessionId
+    isCreating || comingSoonMode ? undefined : sessionId
   );
   const sendMessage = useSendInnerThoughtsMessage(sessionId);
 
   const session = data?.session;
 
+  useEffect(() => {
+    if (auditFixture === 'takeaway-review' && session?.distilledAt) {
+      setShowTakeaways(true);
+    }
+  }, [auditFixture, session?.distilledAt]);
+
   // Convert inner thoughts messages to ChatMessage format
   // When creating with an initial message, show it optimistically
   const messages: ChatMessage[] = useMemo(() => {
+    if (comingSoonMode) {
+      return [{
+        id: 'inner-work-coming-soon',
+        sessionId: sessionId || 'inner-work-coming-soon',
+        senderId: null,
+        role: MessageRole.AI,
+        content: INNER_WORK_COMING_SOON_MESSAGE,
+        stage: 1,
+        timestamp: new Date().toISOString(),
+      }];
+    }
+
     // If creating with initial message, show it optimistically
     if (isCreating && initialMessage) {
       return [{
@@ -118,7 +153,52 @@ export function InnerThoughtsScreen({
       stage: 1, // Inner thoughts doesn't use stages, but ChatMessage requires it
       timestamp: msg.timestamp,
     }));
-  }, [session?.messages, sessionId, isCreating, initialMessage]);
+  }, [session?.messages, sessionId, isCreating, initialMessage, comingSoonMode]);
+
+  const linkedAtMessage = useMemo(
+    () => messages.find((message) => message.id === session?.linkedAtMessageId),
+    [messages, session?.linkedAtMessageId]
+  );
+
+  const branchPointCards: ChatCustomCardItem[] = useMemo(() => {
+    if (!session?.linkedPartnerSessionId || !linkedAtMessage) {
+      return [];
+    }
+
+    const partnerLabel = linkedPartnerName || 'partner session';
+
+    return [{
+      id: `inner-thoughts-branch-${session.linkedPartnerSessionId}`,
+      type: 'custom-card',
+      timestamp: linkedAtMessage.timestamp,
+      animate: false,
+      render: () => (
+        <TouchableOpacity
+          style={[styles.branchMarker, { borderColor: palette.border, backgroundColor: palette.chipBg }]}
+          onPress={onNavigateToPartnerSession || (() => router.push(`/session/${session.linkedPartnerSessionId}`))}
+          accessibilityRole="button"
+          accessibilityLabel={`Open session with ${partnerLabel}`}
+        >
+          <ArrowUpRight color={palette.accent} size={16} />
+          <Text style={[styles.branchMarkerText, { color: palette.text }]} numberOfLines={2}>
+            Started a session with {partnerLabel}
+          </Text>
+        </TouchableOpacity>
+      ),
+    }];
+  }, [
+    linkedAtMessage,
+    linkedPartnerName,
+    onNavigateToPartnerSession,
+    palette.accent,
+    palette.border,
+    palette.chipBg,
+    palette.text,
+    router,
+    session?.linkedPartnerSessionId,
+    styles.branchMarker,
+    styles.branchMarkerText,
+  ]);
 
   const handleSendMessage = useCallback(
     async (content: string) => {
@@ -131,9 +211,11 @@ export function InnerThoughtsScreen({
         // Check for suggested actions in response
         if (result.suggestedActions && result.suggestedActions.length > 0) {
           setSuggestedActions(result.suggestedActions);
+          setSuggestedActionMessageId(result.aiMessage.id);
         } else {
           // Clear previous suggestions when no new ones
           setSuggestedActions([]);
+          setSuggestedActionMessageId(undefined);
         }
       } catch (err) {
         console.error('Failed to send inner thoughts message:', err);
@@ -148,6 +230,7 @@ export function InnerThoughtsScreen({
 
   const handleDismissSuggestedActions = useCallback(() => {
     setSuggestedActions([]);
+    setSuggestedActionMessageId(undefined);
   }, []);
 
   const handleActionPress = useCallback((action: SuggestedAction) => {
@@ -160,7 +243,11 @@ export function InnerThoughtsScreen({
         // Navigate to new session flow, optionally with person name pre-filled
         router.push({
           pathname: '/session/new',
-          params: action.personName ? { partnerName: action.personName, innerThoughtsId: sessionId } : { innerThoughtsId: sessionId },
+          params: {
+            ...(action.personName ? { partnerName: action.personName } : {}),
+            innerThoughtsId: sessionId,
+            ...(suggestedActionMessageId ? { linkedAtMessageId: suggestedActionMessageId } : {}),
+          },
         });
         break;
       case 'start_meditation':
@@ -173,7 +260,7 @@ export function InnerThoughtsScreen({
         router.push('/inner-work/needs');
         break;
     }
-  }, [router, sessionId]);
+  }, [router, sessionId, suggestedActionMessageId]);
 
   const handleBack = useCallback(() => {
     onNavigateBack?.();
@@ -217,9 +304,9 @@ export function InnerThoughtsScreen({
   }, [voice]);
 
   // Loading state - but NOT when creating (we show typing indicator instead)
-  if (isLoading && !isCreating) {
+  if (isLoading && !isCreating && !comingSoonMode) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>Loading...</Text>
@@ -229,9 +316,9 @@ export function InnerThoughtsScreen({
   }
 
   // Error state - but NOT when creating
-  if (!isCreating && (error || !session)) {
+  if (!isCreating && !comingSoonMode && (error || !session)) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
           <Text style={styles.errorText}>We couldn't load your reflection right now</Text>
           <TouchableOpacity style={styles.backButton} onPress={handleBack}>
@@ -242,44 +329,33 @@ export function InnerThoughtsScreen({
     );
   }
 
-  const title = isCreating ? 'Inner Thoughts' : (session?.title || session?.theme || 'Inner Thoughts');
-  const isLinked = !!linkedPartnerName;
-
+  const title = comingSoonMode
+    ? 'Inner Work'
+    : isCreating ? 'Inner Thoughts' : (session?.title || session?.theme || 'Inner Thoughts');
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top', 'bottom']}>
       {/* Header - styled like the rest of the app */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.headerBackButton}
-          onPress={handleBack}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <ArrowLeft color="#ececec" size={24} />
-        </TouchableOpacity>
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: palette.bg,
+            borderBottomColor: palette.border,
+          },
+        ]}
+      >
+        <HeaderBackButton onPress={handleBack} />
 
         <View style={styles.headerContent}>
           <View style={styles.headerTitleRow}>
-            <Layers color={colors.brandBlue} size={16} />
-            <Text style={styles.headerTitle} numberOfLines={1}>
+            <Layers color={palette.accent} size={16} />
+            <Text style={[styles.headerTitle, { color: palette.text }]} numberOfLines={1}>
               {title}
             </Text>
-            <Lock size={12} color={colors.textMuted} />
+            <Lock size={12} color={palette.textMuted} />
           </View>
-          {isLinked ? (
-            <>
-              <TouchableOpacity onPress={onNavigateToPartnerSession}>
-                <Text style={styles.linkedSubtitle} numberOfLines={1}>
-                  ↩ Back to session with {linkedPartnerName}
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.privacyNote}>
-                Private — {linkedPartnerName} cannot see this
-              </Text>
-            </>
-          ) : !isCreating && session?.theme && session?.title ? (
-            <Text style={styles.headerSubtitle} numberOfLines={1}>
+          {!isCreating && session?.theme && session?.title ? (
+            <Text style={[styles.headerSubtitle, { color: palette.textMuted }]} numberOfLines={1}>
               {session.theme}
             </Text>
           ) : null}
@@ -293,7 +369,7 @@ export function InnerThoughtsScreen({
             accessibilityRole="button"
             accessibilityLabel="View takeaways"
           >
-            <Sparkles color={colors.brandBlue} size={20} />
+            <Sparkles color={palette.accent} size={20} />
           </TouchableOpacity>
         )}
 
@@ -305,7 +381,7 @@ export function InnerThoughtsScreen({
             accessibilityRole="button"
             accessibilityLabel="End session"
           >
-            <MoreVertical color={colors.textMuted} size={20} />
+            <MoreVertical color={palette.textMuted} size={20} />
           </TouchableOpacity>
         )}
         {isCreating && <View style={{ width: 48 }} />}
@@ -317,9 +393,14 @@ export function InnerThoughtsScreen({
         onSendMessage={handleSendMessage}
         isLoading={hideContentUntilReady ? false : (isCreating || sendMessage.isPending)}
         disabled={isCreating || sendMessage.isPending}
-        emptyStateTitle="Inner Thoughts"
-        emptyStateMessage="A private space for reflection. Share what's on your mind."
+        hideInput={comingSoonMode}
+        emptyStateTitle={comingSoonMode ? 'Inner Work' : 'Inner Thoughts'}
+        emptyStateMessage={comingSoonMode ? '' : "A private space for reflection. Share what's on your mind."}
+        customEmptyState={hideContentUntilReady ? <View /> : undefined}
+        keyboardVerticalOffset={0}
         onVoicePress={Platform.OS !== 'web' ? handleVoicePress : undefined}
+        skipInitialHistory={comingSoonMode}
+        customCards={branchPointCards}
       />
 
       {/* Suggested Action Buttons - shown when AI suggests next steps */}
@@ -435,15 +516,23 @@ const useStyles = () =>
       color: t.colors.textMuted,
       marginTop: 2,
     },
-    linkedSubtitle: {
-      fontSize: 12,
-      color: t.colors.accent,
-      marginTop: 2,
+    branchMarker: {
+      alignSelf: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      maxWidth: '86%',
+      marginVertical: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: 8,
+      borderWidth: 1,
     },
-    privacyNote: {
-      fontSize: 11,
-      color: t.colors.textMuted,
-      marginTop: 2,
+    branchMarkerText: {
+      flexShrink: 1,
+      fontSize: 13,
+      fontWeight: '600',
+      lineHeight: 18,
     },
     memorySuggestionContainer: {
       position: 'absolute',

@@ -9,36 +9,38 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Meet Without Fear brand colors - warm dark theme
-        background: '#0b1220', // Deeper warm-navy (was #0f172a)
-        'background-elevated': '#121a2b',
-        foreground: '#f5ede0', // Cream-ish primary text (warmer than pure slate)
-        card: '#141c2d', // Slightly warmer card
-        'card-foreground': '#f5ede0',
-        border: '#283044',
-        muted: '#475569',
-        'muted-foreground': '#9aa4b8',
-        // Brand colors from palette
-        'brand-navy': '#2d4a7c', // Deep navy blue
-        'brand-blue': '#5ba4d9', // Sky blue (left bubble)
-        'brand-cyan': '#5ba4d9', // Alias for compatibility
-        'brand-orange': '#f5a623', // Amber orange (right bubble)
-        'brand-gold': '#f5a623', // Alias for compatibility
-        'brand-cream': '#f5e6d3', // Light cream accent
-        accent: '#f5a623',
-        'accent-foreground': '#0b1220',
-        success: '#22c55e',
-        warning: '#eab308',
-        error: '#ef4444',
+        background: 'var(--background)',
+        'background-elevated': 'var(--background-elevated)',
+        foreground: 'var(--foreground)',
+        card: 'var(--card)',
+        'card-foreground': 'var(--foreground)',
+        border: 'var(--border)',
+        muted: 'var(--muted)',
+        'muted-foreground': 'var(--muted-foreground)',
+        faint: 'var(--faint)',
+        'accent-soft': 'var(--accent-soft)',
+        'accent-text': 'var(--accent-text)',
+        'brand-navy': 'var(--info)',
+        'brand-blue': 'var(--info)',
+        'brand-cyan': 'var(--info)',
+        'brand-orange': 'var(--accent)',
+        'brand-gold': 'var(--accent)',
+        'brand-cream': 'var(--background-elevated)',
+        accent: 'var(--accent)',
+        'accent-foreground': 'var(--accent-foreground)',
+        success: 'var(--success)',
+        warning: 'var(--warning)',
+        error: 'var(--danger)',
       },
       fontFamily: {
-        sans: ['var(--font-inter)', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        display: ['var(--font-display)', 'Calistoga', 'Georgia', 'serif'],
+        sans: ['var(--font-geist)', 'Geist', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['var(--font-geist-mono)', 'Geist Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        display: ['var(--font-instrument-serif)', 'Instrument Serif', 'Georgia', 'serif'],
       },
       backgroundImage: {
-        'gradient-brand': 'linear-gradient(135deg, #2d4a7c 0%, #5ba4d9 25%, #f5a623 75%, #f5e6d3 100%)',
-        'gradient-top': 'linear-gradient(90deg, #2d4a7c 0%, #5ba4d9 30%, #f5a623 70%, #f5e6d3 100%)',
-        'gradient-swoosh': 'linear-gradient(90deg, #2d4a7c 0%, #5ba4d9 40%, #f5a623 100%)',
+        'gradient-brand': 'linear-gradient(135deg, var(--info) 0%, var(--accent) 100%)',
+        'gradient-top': 'linear-gradient(90deg, var(--info) 0%, var(--accent) 100%)',
+        'gradient-swoosh': 'linear-gradient(90deg, var(--info) 0%, var(--accent) 100%)',
       },
       keyframes: {
         'aurora-drift': {

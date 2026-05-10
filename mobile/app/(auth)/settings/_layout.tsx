@@ -11,35 +11,34 @@
  */
 
 import { Stack, useRouter } from 'expo-router';
-import { TouchableOpacity } from 'react-native';
-import { ChevronLeft } from 'lucide-react-native';
-import { colors } from '@/theme';
+import { designFonts, useAppAppearance } from '@/theme';
+import { HeaderBackButton } from '@/src/components/HeaderBackButton';
 
 function BackButton() {
   const router = useRouter();
-  return (
-    <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: -8, padding: 8 }}>
-      <ChevronLeft color={colors.textPrimary} size={28} />
-    </TouchableOpacity>
-  );
+  return <HeaderBackButton onPress={() => router.back()} />;
 }
 
 export default function SettingsLayout() {
+  const { palette } = useAppAppearance();
+
   return (
     <Stack
       screenOptions={{
         headerShown: true,
         headerBackTitle: 'Back',
         headerStyle: {
-          backgroundColor: colors.bgSecondary,
+          backgroundColor: palette.bg,
         },
-        headerTintColor: colors.textPrimary,
+        headerTintColor: palette.text,
         headerTitleStyle: {
-          color: colors.textPrimary,
+          color: palette.text,
+          fontFamily: designFonts.sans,
+          fontWeight: '700',
         },
         headerShadowVisible: false,
         contentStyle: {
-          backgroundColor: colors.bgPrimary,
+          backgroundColor: palette.bg,
         },
       }}
     >

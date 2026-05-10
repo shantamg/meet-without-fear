@@ -1,0 +1,12 @@
+{
+  "dimensions": {
+    "agreement_only_on_mutual": 1.0,
+    "captures_willingness": 1.0,
+    "waits_for_overlap": 1.0
+  },
+  "moment_id": "stage-4-willingness-selection",
+  "overall_score": 1.0,
+  "source": "alignment_loop_initial:autonomous-real-dry-run-20260506b",
+  "updated_at": "2026-05-06T09:08:32.495554Z",
+  "verdict": "eval_fail"
+}

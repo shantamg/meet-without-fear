@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { X, Send, MessageCircle } from 'lucide-react-native';
-import { colors } from '@/theme';
+import { appWidthStyle, modalPageStyle, useAppAppearance } from '@/theme';
 
 export interface ViewEmpathyStatementDrawerProps {
   /** Whether the drawer is visible */
@@ -48,6 +48,8 @@ export function ViewEmpathyStatementDrawer({
   onClose,
   onSendRefinement,
 }: ViewEmpathyStatementDrawerProps) {
+  const { palette } = useAppAppearance();
+  const styles = makeStyles(palette);
   const [isRefining, setIsRefining] = useState(false);
   const [refinementText, setRefinementText] = useState('');
   const scrollViewRef = useRef<ScrollView>(null);
@@ -89,6 +91,7 @@ export function ViewEmpathyStatementDrawer({
       onRequestClose={onClose}
     >
       <SafeAreaProvider>
+        <View style={styles.modalPage}>
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           <KeyboardAvoidingView
             style={styles.keyboardAvoid}
@@ -104,7 +107,7 @@ export function ViewEmpathyStatementDrawer({
               accessibilityLabel="Close"
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
             >
-              <X color={colors.textSecondary} size={24} />
+              <X color={palette.textMuted} size={24} />
             </TouchableOpacity>
           </View>
 
@@ -143,14 +146,14 @@ export function ViewEmpathyStatementDrawer({
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     testID="close-refine-composer"
                   >
-                    <X color={colors.textSecondary} size={20} />
+                    <X color={palette.textMuted} size={20} />
                   </TouchableOpacity>
                 </View>
                 <TextInput
                   style={styles.refineInput}
                   multiline
                   placeholder="Tell the AI what to change or add..."
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor={palette.textFaint}
                   value={refinementText}
                   onChangeText={setRefinementText}
                   autoFocus
@@ -167,7 +170,7 @@ export function ViewEmpathyStatementDrawer({
                   activeOpacity={0.8}
                   testID="send-refine-empathy-button"
                 >
-                  <Send color={refinementText.trim() ? 'white' : colors.textMuted} size={20} />
+                  <Send color={refinementText.trim() ? palette.bg : palette.textFaint} size={20} />
                   <Text
                     style={[
                       styles.sendRefineButtonText,
@@ -188,7 +191,7 @@ export function ViewEmpathyStatementDrawer({
                       testID="refine-empathy-button"
                       activeOpacity={0.8}
                     >
-                      <MessageCircle color={colors.textSecondary} size={20} />
+                      <MessageCircle color={palette.textMuted} size={20} />
                       <Text style={styles.refineButtonText}>Refine further</Text>
                     </TouchableOpacity>
                   )}
@@ -198,7 +201,7 @@ export function ViewEmpathyStatementDrawer({
                     testID="share-empathy-button"
                     activeOpacity={0.8}
                   >
-                    <Send color="white" size={20} />
+                    <Send color={palette.bg} size={20} />
                     <Text style={styles.shareButtonText}>{isRevising ? 'Resubmit' : 'Share'}</Text>
                   </TouchableOpacity>
                 </View>
@@ -207,15 +210,20 @@ export function ViewEmpathyStatementDrawer({
           </ScrollView>
           </KeyboardAvoidingView>
         </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
+  modalPage: {
+    ...modalPageStyle,
+  },
   container: {
     flex: 1,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bg,
+    ...appWidthStyle,
   },
   keyboardAvoid: {
     flex: 1,
@@ -229,7 +237,7 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: 12,
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 20,
   },
   scrollView: {
@@ -243,30 +251,30 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: palette.text,
     textAlign: 'center',
     marginBottom: 16,
     lineHeight: 36,
   },
   subtitle: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 24,
   },
   messageContainer: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     borderLeftWidth: 3,
-    borderLeftColor: colors.brandBlue,
+    borderLeftColor: palette.info,
     padding: 20,
     marginBottom: 32,
   },
   messageText: {
     fontSize: 17,
     fontStyle: 'italic',
-    color: colors.textPrimary,
+    color: palette.text,
     lineHeight: 26,
   },
   footer: {
@@ -278,7 +286,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   refineComposer: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 16,
     padding: 16,
     gap: 12,
@@ -291,48 +299,48 @@ const styles = StyleSheet.create({
   refineComposerTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
     flex: 1,
     marginRight: 12,
   },
   refineInput: {
     minHeight: 100,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bg,
     borderRadius: 12,
     padding: 12,
-    color: colors.textPrimary,
+    color: palette.text,
     fontSize: 15,
     textAlignVertical: 'top',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
   },
   sendRefineButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.brandBlue,
+    backgroundColor: palette.accent,
     borderRadius: 24,
     paddingVertical: 14,
     paddingHorizontal: 18,
     gap: 8,
   },
   sendRefineButtonDisabled: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
   },
   sendRefineButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: 'white',
+    color: palette.bg,
   },
   sendRefineButtonTextDisabled: {
-    color: colors.textMuted,
+    color: palette.textFaint,
   },
   refineButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 24,
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -341,14 +349,14 @@ const styles = StyleSheet.create({
   refineButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: palette.textMuted,
   },
   shareButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.brandBlue,
+    backgroundColor: palette.accent,
     borderRadius: 24,
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -357,7 +365,7 @@ const styles = StyleSheet.create({
   shareButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: 'white',
+    color: palette.bg,
   },
 });
 

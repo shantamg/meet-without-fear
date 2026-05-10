@@ -67,6 +67,35 @@ export interface GetPastSessionsResponse {
   sessions: PastSessionDTO[];
 }
 
+function isAfter(left?: string, right?: string) {
+  if (!left) return false;
+  if (!right) return true;
+  return new Date(left).getTime() > new Date(right).getTime();
+}
+
+export function dedupePeople(people: PersonSummaryDTO[]) {
+  const byId = new Map<string, PersonSummaryDTO>();
+
+  for (const person of people) {
+    const existing = byId.get(person.id);
+    if (!existing) {
+      byId.set(person.id, person);
+      continue;
+    }
+
+    byId.set(person.id, {
+      ...existing,
+      ...person,
+      lastSession: isAfter(person.lastSession?.updatedAt, existing.lastSession?.updatedAt)
+        ? person.lastSession
+        : existing.lastSession,
+      activeSessionCount: Math.max(existing.activeSessionCount, person.activeSessionCount),
+    });
+  }
+
+  return Array.from(byId.values());
+}
+
 // ============================================================================
 // Get Person Hook
 // ============================================================================
@@ -148,7 +177,7 @@ export function usePeople(
     queryKey: personKeys.lists(),
     queryFn: async () => {
       const response = await get<ListPeopleResponse>('/people');
-      return response.people;
+      return dedupePeople(response.people);
     },
     staleTime: 30_000, // 30 seconds
     ...options,

@@ -19,6 +19,9 @@ import {
   UpdatePushTokenRequest,
   UpdatePushTokenResponse,
   AblyTokenResponse,
+  GetPrivacyPreferencesResponse,
+  UpdatePrivacyPreferencesRequest,
+  UpdatePrivacyPreferencesResponse,
 } from '@meet-without-fear/shared';
 
 // ============================================================================
@@ -29,6 +32,7 @@ export const profileKeys = {
   all: ['profile'] as const,
   me: () => [...profileKeys.all, 'me'] as const,
   ablyToken: () => [...profileKeys.all, 'ably'] as const,
+  privacyPreferences: () => [...profileKeys.all, 'privacy-preferences'] as const,
 };
 
 // ============================================================================
@@ -88,6 +92,54 @@ export function useUpdateProfile(
           user: data.user,
         };
       });
+    },
+    ...options,
+  });
+}
+
+// ============================================================================
+// Privacy Preferences Hooks
+// ============================================================================
+
+/**
+ * Fetch current user's privacy preferences.
+ */
+export function usePrivacyPreferences(
+  options?: Omit<UseQueryOptions<GetPrivacyPreferencesResponse, ApiClientError>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: profileKeys.privacyPreferences(),
+    queryFn: async () => {
+      return get<GetPrivacyPreferencesResponse>('/auth/me/privacy-preferences');
+    },
+    staleTime: 5 * 60_000,
+    ...options,
+  });
+}
+
+/**
+ * Update current user's privacy preferences.
+ */
+export function useUpdatePrivacyPreferences(
+  options?: Omit<
+    UseMutationOptions<UpdatePrivacyPreferencesResponse, ApiClientError, UpdatePrivacyPreferencesRequest>,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (request: UpdatePrivacyPreferencesRequest) => {
+      return patch<UpdatePrivacyPreferencesResponse, UpdatePrivacyPreferencesRequest>(
+        '/auth/me/privacy-preferences',
+        request
+      );
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData<GetPrivacyPreferencesResponse>(
+        profileKeys.privacyPreferences(),
+        data
+      );
     },
     ...options,
   });

@@ -3,7 +3,7 @@ title: Architecture
 sidebar_position: 2
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-04-27
+updated: 2026-05-09
 status: living
 ---
 # Architecture
@@ -133,8 +133,9 @@ status: living
 **Backend API Server:**
 - Location: `backend/src/app.ts` (middleware + route mounting) and `backend/src/server.ts` (HTTP + WebSocket listener)
 - Triggers: `npm run dev:api` in development; PORT=3000 (default) in production
-- Responsibilities: Initializes Express app with middleware; mounts all route modules under both `/api` and `/api/v1` (dual-prefix for compatibility); attaches the `/realtime` WebSocket for real-time transcription via `attachRealtimeWebSocket(server)` (requires Clerk JWT via `?token=` query parameter on upgrade); handles errors consistently
+- Responsibilities: Initializes Express app with middleware; mounts all route modules under both `/api` and `/api/v1` (dual-prefix for compatibility); attaches the `/realtime` WebSocket for real-time transcription via `attachRealtimeWebSocket(server)` (requires Clerk JWT via `?token=` query parameter on upgrade); handles errors consistently; graceful shutdown on SIGTERM/SIGINT (closes HTTP server, disconnects Prisma, flushes Sentry, force-exits after 10 s timeout)
 - Compression: the compression middleware is explicitly disabled for `/messages/stream` paths to prevent SSE buffering
+- **Scanner Filter:** `backend/src/middleware/scanner-filter.ts` sits early in the middleware chain (before logging) and silently returns a plain 404 for known vulnerability-scanner paths (`.php`, `.asp`, `.aspx`, `.jsp`, `.cgi` extensions; `/wp-admin`, `/wp-login`, `/phpmyadmin`, etc.). This keeps application logs clean of automated probe noise without incurring any logging overhead.
 
 **Mobile App Entry:**
 - Location: `mobile/app/_layout.tsx` (Expo Router file-based routing)
@@ -190,7 +191,8 @@ status: living
 ## Cross-Cutting Concerns
 
 **Logging:**
-- Backend: Winston structured logger (`backend/src/lib/logger.ts`) with JSON output in production, pretty-print in development; automatically injects request context (turnId, sessionId, userId, requestId); Sentry transport forwards error-level logs; PII fields stripped via `beforeSend` hook before transmission
+- Backend: Winston structured logger (`backend/src/lib/logger.ts`) with JSON output in production, pretty-print in development; automatically injects request context (turnId, sessionId, userId, requestId); PII fields stripped via `beforeSend` hook before transmission
+- **4xx vs 5xx split:** Client errors (4xx) are logged at `warn` level and do NOT trigger Sentry; only server errors (5xx) and unhandled async errors are logged at `error` level and forwarded to Sentry. This keeps Sentry focused on true server failures rather than client mistakes.
 - Mobile: Handled by error tracking provider (Sentry integration possible); development console logs
 
 **Validation:**

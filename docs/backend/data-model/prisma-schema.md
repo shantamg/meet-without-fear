@@ -3,7 +3,7 @@ title: Prisma Schema
 sidebar_position: 1
 description: Core Vessel Architecture tables plus pointers to the rest of the Prisma schema (Inner Work, reconciler, memory, needs/people, telemetry).
 slug: /backend/data-model/prisma-schema
-updated: "2026-05-03"
+updated: "2026-05-10"
 ---
 # Prisma Schema
 
@@ -33,30 +33,28 @@ erDiagram
 
 ```prisma
 model User {
-  id                 String   @id @default(cuid())
-  clerkId            String   @unique  // Clerk user ID for auth
-  email              String   @unique
-  name               String?
-  firstName          String?
-  lastName           String?
-  pushToken          String?  // Expo push token for realtime fallbacks
-  biometricEnabled   Boolean  @default(false)
-  biometricEnrolledAt DateTime?
-  lastMoodIntensity  Int?
-  globalFacts        Json?    // Fact-Ledger: consolidated cross-session insights
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                      String    @id @default(cuid())
+  clerkId                 String?   @unique // Clerk authentication user ID
+  email                   String    @unique
+  name                    String?   // Full name (computed from firstName + lastName)
+  firstName               String?
+  lastName                String?
+  pushToken               String?   // Expo push token for realtime fallbacks
+  biometricEnabled        Boolean   @default(false)
+  biometricEnrolledAt     DateTime?
+  memoryPreferences       Json?     // MemoryPreferencesDTO - AI memory settings
+  notificationPreferences Json?     // NotificationPreferencesDTO - notification settings
+  privacyPreferences      Json?     // PrivacyPreferencesDTO - visibility and invitation settings
+  lastMoodIntensity       Int?      // Last mood intensity (1-10) for session entry default
+  globalFacts             Json?     // Fact-Ledger: consolidated cross-session insights
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   // Key relations (see schema.prisma for the full set)
   relationships      RelationshipMember[]
   vessels            UserVessel[]
   stageProgress      StageProgress[]
   messages           Message[]
-  consents           ConsentRecord[]
-  empathyDrafts      EmpathyDraft[]
-  empathyAttempts    EmpathyAttempt[]
-  strategyProposals  StrategyProposal[]
-  strategyRankings   StrategyRanking[]
   memories           UserMemory[]        // "Things to Always Remember"
   innerWorkSessions  InnerWorkSession[]
   gratitudeEntries   GratitudeEntry[]
@@ -167,14 +165,30 @@ model UserVessel {
   updatedAt DateTime @updatedAt
 
   // Private content
-  events           UserEvent[]
+  events            UserEvent[]
   emotionalReadings EmotionalReading[]
-  identifiedNeeds  IdentifiedNeed[]
-  boundaries       Boundary[]
-  documents        UserDocument[]
+  identifiedNeeds   IdentifiedNeed[]
+  boundaries        Boundary[]
+  documents         UserDocument[]
 
-  // Embedding for semantic search within user's own content
-  embedding        Unsupported("vector(1536)")?
+  // Rolling conversation summary for long sessions
+  // Stores JSON: { text, keyThemes, emotionalJourney, unresolvedTopics }
+  conversationSummary String? @db.Text
+
+  // Session-level content embedding (vector(1024)) for semantic search
+  // Embeds combined facts + summary; replaces message-level embedding
+  contentEmbedding Unsupported("vector(1024)")?
+
+  // === Session Read State ===
+  lastViewedAt         DateTime?  // When user last opened this session's chat
+  lastSeenChatItemId   String?    // ID of last chat item seen (for "new messages" line)
+  lastViewedShareTabAt DateTime?  // When user last viewed the Share/Partner tab
+  lastActiveAt         DateTime?  // When user last actively did something (presence indicator)
+  archivedAt           DateTime?  // When user removed session from their conversation list
+
+  // AI-extracted structured facts: [{ category: string, fact: string }]
+  // Updated by Haiku after each message; reduces chat history in prompts
+  notableFacts Json?
 
   @@unique([userId, sessionId])
 }
@@ -615,7 +629,7 @@ model ValidationFeedbackDraft {
 }
 ```
 
-## Stage 4: Strategies and Rankings
+## Stage 4: Strategies, Willingness Selection, and Closure
 
 ### StrategyProposal
 
@@ -630,13 +644,24 @@ model StrategyProposal {
   needsAddressed String[]
   duration    String?
   measureOfSuccess String?
-  source       StrategySource @default(USER_SUBMITTED) // For audit; not exposed to partner
+  source      StrategySource @default(USER_SUBMITTED) // For audit; not exposed to partner
+  // Redesign fields:
+  kind        Stage4ProposalKind @default(SHARED_PROPOSAL)
+  status      Stage4ProposalStatus @default(ACTIVE)
+  removedAt   DateTime?
+  removedByUserId String?
+  removalReason String? @db.Text
+  parentProposalId String?
+  coverageSummary Json?
+  capturedFromMessageId String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   consentRecord ConsentRecord? @relation(fields: [consentRecordId], references: [id])
   consentRecordId String?
 
-  rankings   StrategyRanking[]
+  rankings    StrategyRanking[]
+  selections  Stage4ProposalSelection[]
+  revisions   Stage4ProposalRevision[]
 }
 
 enum StrategySource {
@@ -644,9 +669,122 @@ enum StrategySource {
   AI_SUGGESTED
   CURATED
 }
+
+enum Stage4ProposalKind {
+  SHARED_PROPOSAL        // Proposed to both partners
+  INDIVIDUAL_COMMITMENT  // One partner's personal commitment
+}
+
+enum Stage4ProposalStatus {
+  ACTIVE
+  REVISED
+  REMOVED
+  CONVERTED_TO_AGREEMENT
+}
 ```
 
-### StrategyRanking
+### Stage4ProposalSelection
+
+Tracks each user's willingness decision on a proposal.
+
+```prisma
+model Stage4ProposalSelection {
+  id         String   @id @default(cuid())
+  proposal   StrategyProposal @relation(fields: [proposalId], references: [id])
+  proposalId String
+  session    Session  @relation(fields: [sessionId], references: [id])
+  sessionId  String
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  decision   Stage4SelectionDecision
+  note       String?
+  selectedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+enum Stage4SelectionDecision {
+  WILLING
+  NOT_WILLING
+  NEEDS_DISCUSSION
+}
+```
+
+### Stage4ProposalRevision
+
+Audit trail for all proposal changes.
+
+```prisma
+model Stage4ProposalRevision {
+  id           String   @id @default(cuid())
+  proposal     StrategyProposal @relation(fields: [proposalId], references: [id])
+  proposalId   String
+  sessionId    String
+  actorUserId  String
+  action       String
+  before       Json?
+  after        Json?
+  reason       String?
+  messageId    String?
+  createdAt    DateTime @default(now())
+}
+```
+
+### Stage4NeedCoverage
+
+Tracks which identified needs are addressed by proposals.
+
+```prisma
+model Stage4NeedCoverage {
+  id                  String   @id @default(cuid())
+  session             Session  @relation(fields: [sessionId], references: [id])
+  sessionId           String
+  needId              String?
+  needLabel           String
+  sourceUserId        String?
+  coverageStatus      String   // e.g. "COVERED", "PARTIAL", "UNCOVERED"
+  coveringProposalIds String[]
+  note                String?
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+}
+```
+
+### Stage4Closure
+
+Records the final outcome of Stage 4.
+
+```prisma
+model Stage4Closure {
+  id                   String   @id @default(cuid())
+  session              Session  @relation(fields: [sessionId], references: [id])
+  sessionId            String   @unique
+  kind                 Stage4ClosureKind
+  reason               Stage4ClosureReason
+  summary              String
+  sharedAgreementIds   String[]
+  individualProposalIds String[]
+  openNeedIds          String[]
+  closedByUserId       String
+  closedAt             DateTime @default(now())
+  createdAt            DateTime @default(now())
+}
+
+enum Stage4ClosureKind {
+  SHARED_AGREEMENT
+  NO_SHARED_AGREEMENT
+}
+
+enum Stage4ClosureReason {
+  MUTUAL_SELECTION
+  NO_OVERLAP
+  BOUNDARY_HONORED
+  USER_STOPPED
+}
+```
+
+### StrategyRanking (Legacy)
+
+Used by the legacy ranking flow only. Not consulted by the redesigned willingness-selection flow.
 
 ```prisma
 model StrategyRanking {
@@ -664,12 +802,16 @@ model StrategyRanking {
 
 ### Agreement Link (Stage 4 Outcome)
 
-Use existing `Agreement` records to persist chosen micro-experiments. `Agreement.type = MICRO_EXPERIMENT` links to the winning `StrategyProposal` via a nullable `proposalId` field (add this to Agreement):
+`Agreement.type = MICRO_EXPERIMENT` (or COMMITMENT / CHECK_IN / HYBRID) links to the chosen `StrategyProposal` via a nullable `proposalId` field. `duration` and `measureOfSuccess` are present on the model but currently returned as `null` by the API.
 
 ```prisma
   proposal    StrategyProposal? @relation(fields: [proposalId], references: [id])
   proposalId  String?
+  duration    String?
+  measureOfSuccess String?
 ```
+
+`AgreementType` enum also includes `HYBRID` (added alongside the redesign).
 
 ```prisma
 enum MessageRole {
@@ -686,6 +828,66 @@ enum MessageRole {
 ```
 
 `VALIDATION_FEEDBACK` is a targeted partner-visible chat message created when a Stage 2 validator sends Feedback Coach-approved feedback with `validated=false`. The other non-`USER`/`AI`/`SYSTEM` roles represent structured AI-generated messages used in specific stage flows (empathy exchange, reconciler suggestions).
+
+## Tending
+
+Post-resolution check-in and re-entry models. Created when Stage 4 closes with agreements that have follow-up dates, and on-demand when a user initiates passive re-entry on a resolved session. See [Tending API](../api/tending.md).
+
+### TendingEntry
+
+```prisma
+model TendingEntry {
+  id           String   @id @default(cuid())
+  session      Session  @relation(fields: [sessionId], references: [id])
+  sessionId    String
+  agreement    Agreement? @relation(fields: [agreementId], references: [id])
+  agreementId  String?
+  type         TendingEntryType
+  status       TendingEntryStatus @default(SCHEDULED)
+  scheduledFor DateTime?
+  openedAt     DateTime?
+  completedAt  DateTime?
+  summary      String?  @db.Text   // Context assembled at creation
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  responses    TendingResponse[]
+}
+
+enum TendingEntryType {
+  SCHEDULED_SHARED_AGREEMENT_CHECKIN
+  USER_INITIATED_REENTRY
+}
+
+enum TendingEntryStatus {
+  SCHEDULED
+  OPEN
+  PARTIAL      // At least one partner responded
+  COMPLETED    // All partners responded
+  EXPIRED
+  CANCELLED
+}
+```
+
+### TendingResponse
+
+One response per entry/user (enforced by upsert in the service).
+
+```prisma
+model TendingResponse {
+  id             String   @id @default(cuid())
+  tendingEntry   TendingEntry @relation(fields: [tendingEntryId], references: [id])
+  tendingEntryId String
+  user           User     @relation(fields: [userId], references: [id])
+  userId         String
+  status         String   // e.g. "WORKED", "PARTLY", "DID_NOT_WORK"
+  reflection     String?  @db.Text
+  continueChoice String?  // e.g. "CONTINUE", "ADJUST", "CLOSE"
+  submittedAt    DateTime @default(now())
+}
+```
+
+---
 
 ## Global Library (Stage 4 Suggestions)
 

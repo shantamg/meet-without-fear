@@ -30,11 +30,8 @@ export default function DownloadPage() {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Gradient Top Bar */}
-      <div className="h-1 bg-gradient-top" />
-
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-lg border-b border-border">
+      <header className="sticky top-0 z-50 bg-background backdrop-blur-lg border-b border-border">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-5 h-5" />
@@ -42,8 +39,7 @@ export default function DownloadPage() {
           </Link>
           <Link href="/" className="flex items-center gap-2">
             <Image src="/logo.svg" alt="Meet Without Fear" width={48} height={40} />
-            <span className="hidden min-[430px]:inline text-xl font-bold text-white">meet</span>
-            <span className="hidden min-[430px]:inline text-xl font-bold text-brand-cyan">without fear</span>
+            <span className="hidden min-[430px]:inline font-display text-xl italic text-foreground">meet without fear</span>
           </Link>
         </div>
       </header>
@@ -51,7 +47,7 @@ export default function DownloadPage() {
       <div className="container mx-auto px-6 py-16">
         <div className="max-w-2xl mx-auto text-center">
           {/* Title */}
-          <h1 className="text-3xl md:text-4xl font-bold mb-4">
+          <h1 className="font-display text-4xl md:text-5xl mb-4">
             Get the App
           </h1>
           <p className="text-muted-foreground text-lg mb-10">
@@ -64,8 +60,8 @@ export default function DownloadPage() {
               onClick={() => setSelectedPlatform("ios")}
               className={`flex items-center gap-3 px-6 py-4 rounded-xl font-semibold transition-all ${
                 selectedPlatform === "ios"
-                  ? "bg-brand-blue text-white"
-                  : "bg-card border border-border text-foreground hover:border-brand-blue/50"
+                  ? "bg-accent text-accent-foreground"
+                  : "bg-card border border-border text-foreground hover:border-accent"
               }`}
             >
               <Apple className="w-6 h-6" />
@@ -75,8 +71,8 @@ export default function DownloadPage() {
               onClick={() => setSelectedPlatform("android")}
               className={`flex items-center gap-3 px-6 py-4 rounded-xl font-semibold transition-all ${
                 selectedPlatform === "android"
-                  ? "bg-brand-blue text-white"
-                  : "bg-card border border-border text-foreground hover:border-brand-blue/50"
+                  ? "bg-accent text-accent-foreground"
+                  : "bg-card border border-border text-foreground hover:border-accent"
               }`}
             >
               <Smartphone className="w-6 h-6" />
@@ -107,7 +103,7 @@ export default function DownloadPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => handleDownloadClick("ios")}
-                    className="text-brand-blue hover:underline text-sm"
+                  className="text-brand-orange hover:underline text-sm"
                   >
                     Or open TestFlight link directly →
                   </a>
@@ -119,7 +115,7 @@ export default function DownloadPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => handleDownloadClick("ios")}
-                  className="md:hidden inline-flex items-center justify-center gap-3 bg-brand-orange text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-brand-orange/90 transition-all"
+                  className="md:hidden inline-flex items-center justify-center gap-3 bg-brand-orange text-accent-foreground px-8 py-4 rounded-full font-medium text-lg transition-all hover:opacity-90"
                 >
                   <Apple className="w-6 h-6" />
                   Download from TestFlight
@@ -144,7 +140,7 @@ export default function DownloadPage() {
                   rel="noopener noreferrer"
                   download
                   onClick={() => handleDownloadClick("android")}
-                  className="md:hidden inline-flex items-center justify-center gap-3 bg-brand-orange text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-brand-orange/90 transition-all"
+                  className="md:hidden inline-flex items-center justify-center gap-3 bg-brand-orange text-accent-foreground px-8 py-4 rounded-full font-medium text-lg transition-all hover:opacity-90"
                 >
                   <Smartphone className="w-6 h-6" />
                   Download APK

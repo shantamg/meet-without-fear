@@ -43,6 +43,8 @@ import { isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivac
 export interface RealtimeConfig {
   /** Session ID to subscribe to */
   sessionId: string;
+  /** Whether to enable the realtime subscription (default: true). Set false to pause. */
+  enabled?: boolean;
   /** Whether to enable presence tracking */
   enablePresence?: boolean;
   /** Callback when connection state changes */
@@ -127,6 +129,7 @@ function mapAblyState(state: string): ConnectionStatus {
 export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeActions {
   const {
     sessionId,
+    enabled: realtimeEnabled = true,
     enablePresence = true,
     onConnectionChange,
     onPresenceChange,
@@ -316,7 +319,7 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
   // ============================================================================
 
   useEffect(() => {
-    if (!sessionId || !user?.id) return;
+    if (!sessionId || !user?.id || !realtimeEnabled) return;
 
     let isCleanedUp = false;
     let channel: AblyRealtimeChannel | null = null;
@@ -487,7 +490,7 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
         typingTimeoutRef.current = null;
       }
     };
-  }, [sessionId, user?.id, user?.name, enablePresence, handleMessage, handleConnectionStateChange]);
+  }, [sessionId, user?.id, user?.name, enablePresence, realtimeEnabled, handleMessage, handleConnectionStateChange]);
 
   // ============================================================================
   // Track Mounted State

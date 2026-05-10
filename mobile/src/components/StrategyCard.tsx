@@ -5,9 +5,10 @@
  * Strategies are intentionally shown unlabeled to focus on the ideas themselves.
  */
 
+import { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Check, Circle } from 'lucide-react-native';
-import { colors } from '@/theme';
+import { useAppAppearance } from '@/theme';
 
 // ============================================================================
 // Types
@@ -52,6 +53,8 @@ export function StrategyCard({
   onSelect,
   isOverlap,
 }: StrategyCardProps) {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const isSelectable = !!onSelect;
 
   const cardContent = (
@@ -63,7 +66,7 @@ export function StrategyCard({
               <Text style={styles.rankNumber}>{rank}</Text>
             </View>
           ) : (
-            <Circle color={colors.textSecondary} size={24} />
+            <Circle color={palette.textMuted} size={24} />
           )}
         </View>
       )}
@@ -77,7 +80,7 @@ export function StrategyCard({
 
       {isOverlap && (
         <View testID="overlap-badge" style={styles.overlapBadge}>
-          <Check color="white" size={16} />
+          <Check color={TEXT_ON_SUCCESS} size={16} />
         </View>
       )}
     </>
@@ -118,23 +121,28 @@ export function StrategyCard({
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
+type Palette = ReturnType<typeof useAppAppearance>['palette'];
+
+const TEXT_ON_ACCENT = '#0d0f12';
+const TEXT_ON_SUCCESS = '#ffffff';
+
+const makeStyles = (palette: Palette) => StyleSheet.create({
   card: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(147, 197, 253, 0.15)',
+    backgroundColor: palette.infoSoft,
     borderRadius: 20,
     padding: 16,
     marginBottom: 8,
     borderWidth: 2,
-    borderColor: 'rgba(147, 197, 253, 0.3)',
+    borderColor: palette.info,
   },
   selectedCard: {
-    borderColor: 'rgba(110, 231, 183, 0.5)',
-    backgroundColor: 'rgba(110, 231, 183, 0.2)',
+    borderColor: palette.success,
+    backgroundColor: palette.successSoft,
   },
   overlapCard: {
-    borderColor: colors.success,
-    backgroundColor: 'rgba(16, 163, 127, 0.15)',
+    borderColor: palette.success,
+    backgroundColor: palette.successSoft,
   },
   checkbox: {
     marginRight: 12,
@@ -144,12 +152,12 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     justifyContent: 'center',
     alignItems: 'center',
   },
   rankNumber: {
-    color: colors.textOnAccent,
+    color: TEXT_ON_ACCENT,
     fontWeight: '600',
     fontSize: 12,
   },
@@ -158,16 +166,16 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 16,
-    color: colors.textPrimary,
+    color: palette.text,
     lineHeight: 22,
   },
   duration: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginTop: 4,
   },
   overlapBadge: {
-    backgroundColor: colors.success,
+    backgroundColor: palette.success,
     borderRadius: 12,
     padding: 4,
     alignSelf: 'center',

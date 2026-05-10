@@ -814,7 +814,7 @@ export async function consentToShare(
 Generate a brief, warm message (2-3 sentences) for ${userName} that:
 1. Acknowledges the courage it took to share their attempt
 2. Notes that both empathy statements are now shared
-3. Clearly explains the next step: they'll read ${partner}'s empathy statement and mark whether it feels accurate (validation). If it feels inaccurate, they can give brief feedback; if accurate, they'll be able to advance to the next stage together.
+3. Clearly explains the next step: they'll read ${partner}'s empathy statement and mark whether it feels accurate (validation). If it feels inaccurate, they can give brief feedback; if accurate, the process can continue to the next private step.
 
 Keep it natural and conversational. Don't be overly effusive.
 
@@ -828,11 +828,11 @@ Respond in JSON format:
 
 Generate a brief, warm acknowledgment message (2-3 sentences) for ${userName} that:
 1. Acknowledges the courage it took to try to see things from ${partner}'s perspective
-2. Validates the importance of this step in building connection
+2. Validates the importance of this step in creating clearer understanding without deciding what happens next
 3. Gently prepares them for what comes next: now ${partner} will work on imagining what ${userName} might be feeling (not responding to what was shared, but creating their own empathy attempt)
 4. Suggest they can use Inner Thoughts to continue processing privately while they wait - a space for personal reflection that's connected to this conversation
 
-Keep it natural and conversational. Don't be overly effusive. Make it clear that both partners share empathy attempts before moving forward together.
+Keep it natural and conversational. Don't be overly effusive. Make it clear that both partners share empathy attempts before the process continues; do not imply repair, agreement, or a shared decision.
 
 Respond in JSON format:
 \`\`\`json
@@ -870,6 +870,12 @@ Respond in JSON format:
           ? `Thank you for sharing your attempt. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
           : `You've done something difficult — thank you for staying with it. You've completed your part for now. We'll notify you when ${partnerName || 'your partner'} has completed their side. Then you'll each see the other's attempt to understand.`;
       }
+
+      transitionContent = cleanVisibleAIText(transitionContent)
+        .replace(new RegExp(['once you both feel', 'move forward together'].join('[^.]*'), 'gi'),
+          'If something feels off, you can say what is missing before the process continues.')
+        .replace(new RegExp(['before', 'moving forward together'].join('\\s+'), 'gi'),
+          'before the process continues');
 
       // Save the transition message to the database
       const aiMessage = await prisma.message.create({
@@ -1017,6 +1023,7 @@ export async function getPartnerEmpathy(
           status: partnerAttempt.status,
           revealedAt: partnerAttempt.revealedAt?.toISOString() ?? null,
           revisionCount: partnerAttempt.revisionCount,
+          statusVersion: partnerAttempt.statusVersion,
         }
         : null,
       // Waiting if no attempt exists, or if it exists but isn't revealed yet

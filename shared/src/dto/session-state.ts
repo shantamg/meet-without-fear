@@ -42,8 +42,20 @@ export interface SessionStateResponse {
     resolvedAt: string | null;
     // When the user last viewed this session (for cross-device animation/read boundaries)
     lastViewedAt: string | null;
+    // When the other person last viewed this session (for presence details)
+    partnerLastViewedAt: string | null;
+    // When the other person last actively did something in this session
+    partnerLastActiveAt: string | null;
     // ID of last chat item seen (for "new messages" line placement)
     lastSeenChatItemId: string | null;
+    // Originating Inner Thoughts session, when this partner session was started from one.
+    sourceInnerThoughts: {
+      id: string;
+      title: string | null;
+      summary: string | null;
+      theme: string | null;
+      contextSummarySnapshot: string | null;
+    } | null;
   };
 
   // Stage progress

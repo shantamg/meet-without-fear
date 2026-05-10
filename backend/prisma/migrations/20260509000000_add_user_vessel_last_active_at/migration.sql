@@ -1,0 +1,2 @@
+ALTER TABLE "UserVessel"
+ADD COLUMN "lastActiveAt" TIMESTAMP(3);

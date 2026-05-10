@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 import { Heart, Check, RefreshCw } from 'lucide-react-native';
 import { createStyles } from '../theme/styled';
+import { useAppAppearance } from '../theme';
 
 // Enable LayoutAnimation on Android
 if (
@@ -255,15 +256,19 @@ export function EmpathyValidationCard({
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+
+  return createStyles((t) => ({
     container: {
       marginHorizontal: t.spacing.lg,
       marginVertical: t.spacing.sm,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderRadius: 12,
+      borderWidth: 1,
+      borderColor: palette.border,
       borderLeftWidth: 3,
-      borderLeftColor: t.colors.accent,
+      borderLeftColor: palette.accent,
       padding: t.spacing.md,
       minHeight: 180,
     },
@@ -274,19 +279,19 @@ const useStyles = () =>
       gap: t.spacing.sm,
     },
     headerIcon: {
-      color: t.colors.accent,
+      color: palette.accent,
     },
     headerText: {
       fontSize: t.typography.fontSize.base,
       fontFamily: t.typography.fontFamily.medium,
       fontWeight: '600' as const,
-      color: t.colors.textPrimary,
+      color: palette.text,
     },
     empathyContent: {
       fontSize: t.typography.fontSize.base,
       fontFamily: t.typography.fontFamily.regular,
       fontStyle: 'italic' as const,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       lineHeight: 20,
       marginBottom: t.spacing.sm,
     },
@@ -294,7 +299,7 @@ const useStyles = () =>
       fontSize: t.typography.fontSize.base,
       fontFamily: t.typography.fontFamily.medium,
       fontWeight: '500' as const,
-      color: t.colors.textPrimary,
+      color: palette.text,
       marginBottom: t.spacing.md,
     },
     buttonRow: {
@@ -304,9 +309,9 @@ const useStyles = () =>
     accurateButton: {
       flex: 1,
       minHeight: 44,
-      backgroundColor: 'rgba(34, 197, 94, 0.15)',
+      backgroundColor: palette.successSoft,
       borderWidth: 1,
-      borderColor: 'rgba(34, 197, 94, 0.3)',
+      borderColor: palette.success,
       borderRadius: 8,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
@@ -316,9 +321,9 @@ const useStyles = () =>
     notQuiteButton: {
       flex: 1,
       minHeight: 44,
-      backgroundColor: 'rgba(245, 158, 11, 0.15)',
+      backgroundColor: palette.warningSoft,
       borderWidth: 1,
-      borderColor: 'rgba(245, 158, 11, 0.3)',
+      borderColor: palette.warning,
       borderRadius: 8,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
@@ -329,13 +334,13 @@ const useStyles = () =>
       fontSize: t.typography.fontSize.base,
       fontFamily: t.typography.fontFamily.medium,
       fontWeight: '600' as const,
-      color: 'rgba(34, 197, 94, 1)',
+      color: palette.success,
     },
     notQuiteButtonText: {
       fontSize: t.typography.fontSize.base,
       fontFamily: t.typography.fontFamily.medium,
       fontWeight: '600' as const,
-      color: 'rgba(245, 158, 11, 1)',
+      color: palette.warning,
     },
     completedRow: {
       flexDirection: 'row' as const,
@@ -344,12 +349,12 @@ const useStyles = () =>
       marginTop: t.spacing.sm,
     },
     completedIcon: {
-      color: t.colors.success,
+      color: palette.success,
     },
     completedText: {
       fontSize: t.typography.fontSize.base,
       fontFamily: t.typography.fontFamily.regular,
-      color: t.colors.success,
+      color: palette.success,
     },
     supersededRow: {
       flexDirection: 'row' as const,
@@ -358,14 +363,15 @@ const useStyles = () =>
       marginTop: t.spacing.sm,
     },
     supersededIcon: {
-      color: t.colors.textMuted,
+      color: palette.textMuted,
     },
     supersededText: {
       fontSize: t.typography.fontSize.base,
       fontFamily: t.typography.fontFamily.regular,
       fontStyle: 'italic' as const,
-      color: t.colors.textMuted,
+      color: palette.textMuted,
     },
   }));
+};
 
 export default EmpathyValidationCard;

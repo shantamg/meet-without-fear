@@ -16,18 +16,24 @@ import {
   ChevronRight,
   Star,
   Volume2,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useClerk } from '@clerk/clerk-expo';
 
 import { useAuth } from '@/src/hooks/useAuth';
-import { colors } from '@/src/theme';
+import { designFonts, useAppAppearance, type AppearancePreference } from '@/src/theme';
+import { useMemo } from 'react';
 
 /**
  * Settings screen
  * User settings and account management
  */
 export default function SettingsScreen() {
+  const { palette, preference, setPreference } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { signOut: clerkSignOut } = useClerk();
@@ -114,13 +120,23 @@ export default function SettingsScreen() {
     },
   ];
 
+  const appearanceOptions: {
+    value: AppearancePreference;
+    label: string;
+    Icon: typeof Monitor;
+  }[] = [
+    { value: 'system', label: 'System', Icon: Monitor },
+    { value: 'light', label: 'Light', Icon: Sun },
+    { value: 'dark', label: 'Dark', Icon: Moon },
+  ];
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         {/* Profile header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
-            <User color={colors.textPrimary} size={40} />
+            <User color={palette.bg} size={40} />
           </View>
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{user?.name || 'User'}</Text>
@@ -141,12 +157,47 @@ export default function SettingsScreen() {
               onPress={item.onPress}
             >
               <View style={styles.menuItemLeft}>
-                <item.icon color={colors.accent} size={22} />
+                <item.icon color={palette.accent} size={22} />
                 <Text style={styles.menuItemLabel}>{item.label}</Text>
               </View>
-              <ChevronRight color={colors.textSecondary} size={20} />
+              <ChevronRight color={palette.textMuted} size={20} />
             </TouchableOpacity>
           ))}
+        </View>
+
+        <View style={styles.menuSection}>
+          <View style={[styles.menuItem, styles.menuItemFirst, styles.menuItemLast, styles.appearanceItem]}>
+            <Text style={styles.menuItemLabel}>Appearance</Text>
+            <View style={styles.appearanceControl}>
+              {appearanceOptions.map(({ value, label, Icon }) => {
+                const selected = preference === value;
+                return (
+                  <TouchableOpacity
+                    key={value}
+                    style={[
+                      styles.appearanceButton,
+                      selected && styles.appearanceButtonSelected,
+                    ]}
+                    onPress={() => {
+                      void setPreference(value);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use ${label} appearance`}
+                  >
+                    <Icon color={selected ? palette.bg : palette.textMuted} size={15} />
+                    <Text
+                      style={[
+                        styles.appearanceButtonText,
+                        selected && styles.appearanceButtonTextSelected,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
         </View>
 
         {/* Memory Menu items */}
@@ -162,10 +213,10 @@ export default function SettingsScreen() {
               onPress={item.onPress}
             >
               <View style={styles.menuItemLeft}>
-                <item.icon color={colors.accent} size={22} />
+                <item.icon color={palette.accent} size={22} />
                 <Text style={styles.menuItemLabel}>{item.label}</Text>
               </View>
-              <ChevronRight color={colors.textSecondary} size={20} />
+              <ChevronRight color={palette.textMuted} size={20} />
             </TouchableOpacity>
           ))}
         </View>
@@ -183,10 +234,10 @@ export default function SettingsScreen() {
               onPress={item.onPress}
             >
               <View style={styles.menuItemLeft}>
-                <item.icon color={colors.accent} size={22} />
+                <item.icon color={palette.accent} size={22} />
                 <Text style={styles.menuItemLabel}>{item.label}</Text>
               </View>
-              <ChevronRight color={colors.textSecondary} size={20} />
+              <ChevronRight color={palette.textMuted} size={20} />
             </TouchableOpacity>
           ))}
         </View>
@@ -198,7 +249,7 @@ export default function SettingsScreen() {
             onPress={handleSignOut}
           >
             <View style={styles.menuItemLeft}>
-              <LogOut color={colors.error} size={22} />
+              <LogOut color={palette.danger} size={22} />
               <Text style={[styles.menuItemLabel, styles.signOutLabel]}>
                 Sign Out
               </Text>
@@ -213,31 +264,35 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bg,
   },
   scrollView: {
     flex: 1,
   },
   content: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
     gap: 24,
   },
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
     gap: 16,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   avatarContainer: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -247,17 +302,21 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: palette.text,
+    fontFamily: designFonts.sans,
   },
   profileEmail: {
     fontSize: 15,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginTop: 4,
+    fontFamily: designFonts.sans,
   },
   menuSection: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   menuItem: {
     flexDirection: 'row',
@@ -265,7 +324,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: palette.divider,
   },
   menuItemFirst: {
     borderTopLeftRadius: 12,
@@ -283,15 +342,53 @@ const styles = StyleSheet.create({
   },
   menuItemLabel: {
     fontSize: 17,
-    color: colors.textPrimary,
+    color: palette.text,
+    fontFamily: designFonts.sans,
   },
   signOutLabel: {
-    color: colors.error,
+    color: palette.danger,
+  },
+  appearanceItem: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 14,
+    paddingVertical: 18,
+  },
+  appearanceControl: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: palette.chipBg,
+    borderRadius: 14,
+    padding: 5,
+    width: '100%',
+  },
+  appearanceButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 7,
+    paddingHorizontal: 8,
+  },
+  appearanceButtonSelected: {
+    backgroundColor: palette.accent,
+  },
+  appearanceButtonText: {
+    color: palette.textMuted,
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: designFonts.sans,
+  },
+  appearanceButtonTextSelected: {
+    color: palette.bg,
   },
   version: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textAlign: 'center',
     marginTop: 8,
+    fontFamily: designFonts.sans,
   },
 });

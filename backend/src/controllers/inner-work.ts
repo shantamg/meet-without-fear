@@ -74,6 +74,8 @@ function mapSessionToSummary(
     updatedAt: Date;
     distilledAt?: Date | null;
     linkedPartnerSessionId?: string | null;
+    linkedAtMessageId?: string | null;
+    contextSummarySnapshot?: string | null;
     _count?: { messages: number };
   }
 ): InnerWorkSessionSummaryDTO {
@@ -88,6 +90,8 @@ function mapSessionToSummary(
     distilledAt: session.distilledAt?.toISOString() ?? null,
     messageCount: session._count?.messages ?? 0,
     linkedPartnerSessionId: session.linkedPartnerSessionId ?? null,
+    linkedAtMessageId: session.linkedAtMessageId ?? null,
+    contextSummarySnapshot: session.contextSummarySnapshot ?? null,
   };
 }
 
@@ -881,7 +885,7 @@ export const sendInnerWorkMessage = asyncHandler(
       try {
         // Include recent conversation history for context (last 5 messages to resolve pronouns/references)
         const recentMessagesForMemory = history.slice(-5);
-        const memoryResult = await detectMemoryIntent(content, sessionId, undefined, 'inner-thoughts', recentMessagesForMemory);
+        const memoryResult = await detectMemoryIntent(content, sessionId, turnId, 'inner-thoughts', recentMessagesForMemory);
         if (memoryResult.hasMemoryIntent && memoryResult.suggestions.length > 0) {
           memorySuggestion = memoryResult.suggestions[0];
           logger.info(`[Inner Thoughts] Memory suggestion detected:`, {

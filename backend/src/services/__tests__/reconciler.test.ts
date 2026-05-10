@@ -96,7 +96,8 @@ jest.mock('../../lib/request-context', () => ({
 
 // Mock stage-prompts
 jest.mock('../../services/stage-prompts', () => ({
-  buildReconcilerPrompt: jest.fn().mockReturnValue('Mock reconciler prompt'),
+  buildReconcilerPrompt: jest.fn().mockReturnValue({ staticBlock: 'Mock reconciler prompt', dynamicBlock: '' }),
+  buildReconcilerEvidencePacket: jest.fn().mockReturnValue('Mock reconciler evidence packet'),
   buildShareOfferPrompt: jest.fn().mockReturnValue('Mock share offer prompt'),
   buildReconcilerSummaryPrompt: jest.fn().mockReturnValue('Mock summary prompt'),
   buildStagePrompt: jest.fn().mockReturnValue('Mock stage prompt'),
@@ -119,17 +120,22 @@ jest.mock('../../services/stage-prompts', () => ({
 
 // Import after mocks
 import {
+  analyzeEmpathyGap,
   checkAttempts,
   incrementAttempts,
   hasContextAlreadyBeenShared,
   getFallbackContinuation,
+  generatePostShareContinuation,
   generateShareSuggestionForDirection,
   checkAndRevealBothIfReady,
+  loadRecentSubjectStage2Turns,
   runReconciler,
   respondToShareSuggestion,
   runReconcilerForDirection,
 } from '../reconciler';
 import { transition } from '../empathy-state-machine';
+import { getSonnetResponse } from '../../lib/bedrock';
+import { buildReconcilerEvidencePacket, buildReconcilerPrompt } from '../../services/stage-prompts';
 
 describe('Reconciler Service', () => {
   beforeEach(() => {
@@ -278,6 +284,98 @@ describe('Reconciler Service', () => {
     });
   });
 
+  describe('Hybrid reconciler evidence loading', () => {
+    it('loads recent Stage 2 subject-owned turns with immediately preceding AI referent prompts', async () => {
+      (prisma.message.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'ai-1',
+          role: 'AI',
+          content: 'Did you actually do X?',
+          stage: 2,
+        },
+        {
+          id: 'user-1',
+          role: 'USER',
+          content: 'Yeah, I did.',
+          stage: 2,
+        },
+        {
+          id: 'ai-2',
+          role: 'AI',
+          content: 'What changed for you?',
+          stage: 2,
+        },
+        {
+          id: 'user-2',
+          role: 'USER',
+          content: 'I can see why that landed badly.',
+          stage: 2,
+        },
+      ]);
+
+      const turns = await loadRecentSubjectStage2Turns('session-1', 'subject-1');
+
+      expect(prisma.message.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: {
+          sessionId: 'session-1',
+          stage: 2,
+          OR: [
+            { senderId: 'subject-1', role: 'USER' },
+            { forUserId: 'subject-1', role: 'AI' },
+          ],
+        },
+      }));
+      expect(turns).toEqual([
+        { role: 'assistant', content: 'Did you actually do X?', stage: 2 },
+        { role: 'user', content: 'Yeah, I did.', stage: 2 },
+        { role: 'assistant', content: 'What changed for you?', stage: 2 },
+        { role: 'user', content: 'I can see why that landed badly.', stage: 2 },
+      ]);
+    });
+
+    it('passes PromptBlocks plus evidence packet to Sonnet, including facts and hot buffer in context', async () => {
+      (prisma.reconcilerResult.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue({
+        notableFacts: [
+          { category: 'Conflict', fact: 'Subject now acknowledges doing X.' },
+        ],
+      });
+      (prisma.message.findMany as jest.Mock).mockResolvedValue([
+        { id: 'ai-1', role: 'AI', content: 'Did you do X?', stage: 2 },
+        { id: 'user-1', role: 'USER', content: 'Yeah, I did.', stage: 2 },
+      ]);
+
+      await analyzeEmpathyGap({
+        sessionId: 'session-1',
+        guesser: { id: 'guesser-1', name: 'Adam' },
+        subject: { id: 'subject-1', name: 'Eve' },
+        empathyStatement: 'I think you felt wrongly accused.',
+        witnessingContent: {
+          userMessages: 'I did not do X.',
+          themes: ['defensive'],
+        },
+      });
+
+      expect(buildReconcilerPrompt).toHaveBeenCalledWith(expect.objectContaining({
+        subjectFacts: [
+          { category: 'Conflict', fact: 'Subject now acknowledges doing X.' },
+        ],
+        recentSubjectTurns: [
+          { role: 'assistant', content: 'Did you do X?', stage: 2 },
+          { role: 'user', content: 'Yeah, I did.', stage: 2 },
+        ],
+      }));
+      expect(buildReconcilerEvidencePacket).toHaveBeenCalledWith(expect.objectContaining({
+        subjectFacts: expect.any(Array),
+        recentSubjectTurns: expect.any(Array),
+      }));
+      expect(getSonnetResponse).toHaveBeenCalledWith(expect.objectContaining({
+        systemPrompt: { staticBlock: 'Mock reconciler prompt', dynamicBlock: '' },
+        messages: [{ role: 'user', content: 'Mock reconciler evidence packet' }],
+      }));
+    });
+  });
+
   describe('Circuit Breaker - incrementAttempts', () => {
     it('upserts the counter with increment', async () => {
       await incrementAttempts('session-1', 'guesser-1', 'subject-1');
@@ -364,11 +462,13 @@ describe('Reconciler Service', () => {
       expect(result).toContain('how this situation has affected you');
     });
 
-    it('returns stage 2 fallback referencing partner perspective', () => {
+    it('returns stage 2 fallback without restarting perspective exploration', () => {
       const result = getFallbackContinuation(2, 'Jordan');
 
       expect(result).toContain('Thank you for sharing that with Jordan');
-      expect(result).toContain("Jordan's perspective");
+      expect(result).toContain("Revisit what you'll share");
+      expect(result).toContain("don't need to do anything more on their behalf");
+      expect(result).not.toContain("Jordan's perspective");
     });
 
     it('returns stage 3 fallback about needs', () => {
@@ -402,7 +502,59 @@ describe('Reconciler Service', () => {
   });
 
   // ==========================================================================
-  // 5. generateShareSuggestionForDirection
+  // 5. Post-share Continuation
+  // ==========================================================================
+
+  describe('generatePostShareContinuation', () => {
+    it('tells stage 2 users to review their own draft when their attempt is still refining', async () => {
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({ stage: 2 });
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
+        status: EmpathyStatus.REFINING,
+      });
+
+      const result = await generatePostShareContinuation(
+        'session-1',
+        'adam-id',
+        'Adam',
+        'Eve',
+        'Shared context'
+      );
+
+      expect(prisma.empathyAttempt.findFirst).toHaveBeenCalledWith({
+        where: {
+          sessionId: 'session-1',
+          sourceUserId: 'adam-id',
+        },
+        select: {
+          status: true,
+        },
+      });
+      expect(result).toContain("Revisit what you'll share");
+      expect(result).toContain('resubmit it');
+      expect(result).not.toContain("For now, you don't need to do anything more");
+    });
+
+    it('keeps stage 2 post-share waiting copy when the sender has no draft refinement pending', async () => {
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({ stage: 2 });
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
+        status: EmpathyStatus.READY,
+      });
+
+      const result = await generatePostShareContinuation(
+        'session-1',
+        'adam-id',
+        'Adam',
+        'Eve',
+        'Shared context'
+      );
+
+      expect(result).toContain('If your own empathy draft asks for review');
+      expect(result).toContain("don't need to do anything more on their behalf");
+    });
+  });
+
+  // ==========================================================================
+  // 6. generateShareSuggestionForDirection
   // ==========================================================================
 
   describe('generateShareSuggestionForDirection', () => {
@@ -609,6 +761,27 @@ describe('Reconciler Service', () => {
       });
     });
 
+    it('reveals a READY revision when the other direction was already VALIDATED', async () => {
+      (prisma.empathyAttempt.findMany as jest.Mock).mockResolvedValue([
+        { id: 'attempt-1', sessionId: 'session-1', sourceUserId: 'user-1', status: 'READY' },
+        { id: 'attempt-2', sessionId: 'session-1', sourceUserId: 'user-2', status: 'VALIDATED' },
+      ]);
+
+      const result = await checkAndRevealBothIfReady('session-1');
+
+      expect(result).toBe(true);
+      expect(prisma.empathyAttempt.updateMany).toHaveBeenCalledWith({
+        where: {
+          sessionId: 'session-1',
+          status: 'READY',
+        },
+        data: expect.objectContaining({
+          status: 'REVEALED',
+          statusVersion: { increment: 1 },
+        }),
+      });
+    });
+
     it('sets revealedAt and delivery status when revealing', async () => {
       (prisma.empathyAttempt.findMany as jest.Mock).mockResolvedValue([
         { id: 'attempt-1', sessionId: 'session-1', sourceUserId: 'user-1', status: 'READY' },
@@ -659,6 +832,96 @@ describe('Reconciler Service', () => {
           guesserUserId: 'user-2',
           forUserId: 'user-2',
         })
+      );
+    });
+
+    it('creates subject-specific quality commentary messages when revealing', async () => {
+      (prisma.empathyAttempt.findMany as jest.Mock).mockResolvedValue([
+        { id: 'attempt-1', sessionId: 'session-1', sourceUserId: 'user-1', status: 'READY' },
+        { id: 'attempt-2', sessionId: 'session-1', sourceUserId: 'user-2', status: 'READY' },
+      ]);
+      (prisma.reconcilerResult.findMany as jest.Mock).mockResolvedValue([
+        {
+          sessionId: 'session-1',
+          guesserId: 'user-1',
+          subjectId: 'user-2',
+          gapSeverity: 'moderate',
+        },
+        {
+          sessionId: 'session-1',
+          guesserId: 'user-2',
+          subjectId: 'user-1',
+          gapSeverity: 'minor',
+        },
+      ]);
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([
+        { id: 'user-1', firstName: 'Ava', name: 'Ava Example' },
+        { id: 'user-2', firstName: 'Ben', name: 'Ben Example' },
+      ]);
+
+      await checkAndRevealBothIfReady('session-1');
+
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId: 'session-1',
+          senderId: null,
+          forUserId: 'user-2',
+          role: 'AI',
+          stage: 2,
+          content: expect.stringContaining("Ava's attempt to understand your experience"),
+        }),
+      });
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId: 'session-1',
+          senderId: null,
+          forUserId: 'user-2',
+          role: 'AI',
+          stage: 2,
+          content: expect.stringContaining('may not fully capture everything you shared'),
+        }),
+      });
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId: 'session-1',
+          senderId: null,
+          forUserId: 'user-1',
+          role: 'AI',
+          stage: 2,
+          content: expect.stringContaining("Ben's attempt to understand your experience"),
+        }),
+      });
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId: 'session-1',
+          senderId: null,
+          forUserId: 'user-1',
+          role: 'AI',
+          stage: 2,
+          content: expect.not.stringContaining('may not fully capture everything you shared'),
+        }),
+      });
+
+      const { publishMessageAIResponse } = require('../../services/realtime');
+      expect(publishMessageAIResponse).toHaveBeenCalledWith(
+        'session-1',
+        'user-2',
+        expect.objectContaining({
+          role: MessageRole.AI,
+          stage: 2,
+          content: expect.stringContaining('may not fully capture everything you shared'),
+        }),
+        {}
+      );
+      expect(publishMessageAIResponse).toHaveBeenCalledWith(
+        'session-1',
+        'user-1',
+        expect.objectContaining({
+          role: MessageRole.AI,
+          stage: 2,
+          content: expect.not.stringContaining('may not fully capture everything you shared'),
+        }),
+        {}
       );
     });
 

@@ -5,7 +5,7 @@
  * Uses the same AI-assisted flow as the EditMemoryModal on the memories page.
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { X, Check } from 'lucide-react-native';
-import { colors, spacing, radius } from '../theme';
+import { useAppAppearance } from '../theme';
 import { useFormatMemory } from '../hooks/useMemories';
 import type { MemorySuggestion, MemoryCategory } from '@meet-without-fear/shared';
 
@@ -34,6 +34,8 @@ const CATEGORY_LABELS: Record<MemoryCategory, string> = {
   RELATIONSHIP: 'Relationship',
   PREFERENCE: 'Preference',
 };
+
+const TEXT_ON_ACCENT = '#0d0f12';
 
 // ============================================================================
 // Types
@@ -69,6 +71,8 @@ export function EditSuggestionModal({
   onSave,
   testID = 'edit-suggestion-modal',
 }: EditSuggestionModalProps) {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const [changeRequest, setChangeRequest] = useState('');
   const [editedSuggestion, setEditedSuggestion] = useState<FormattedSuggestion | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -135,7 +139,7 @@ export function EditSuggestionModal({
               style={styles.modalCloseButton}
               testID={`${testID}-close`}
             >
-              <X color={colors.textSecondary} size={24} />
+              <X color={palette.textMuted} size={24} />
             </TouchableOpacity>
           </View>
 
@@ -160,7 +164,7 @@ export function EditSuggestionModal({
               setError(null);
             }}
             placeholder="e.g., Make it more casual"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={palette.textFaint}
             multiline
             editable={!isProcessing}
             testID={`${testID}-input`}
@@ -203,7 +207,7 @@ export function EditSuggestionModal({
                   testID={`${testID}-preview`}
                 >
                   {formatMemory.isPending ? (
-                    <ActivityIndicator color={colors.textOnAccent} size="small" />
+                    <ActivityIndicator color={TEXT_ON_ACCENT} size="small" />
                   ) : (
                     <Text style={styles.modalSaveButtonText}>Preview</Text>
                   )}
@@ -228,7 +232,7 @@ export function EditSuggestionModal({
                   disabled={isProcessing}
                   testID={`${testID}-save`}
                 >
-                  <Check color={colors.textOnAccent} size={18} />
+                  <Check color={TEXT_ON_ACCENT} size={18} />
                   <Text style={styles.modalSaveButtonText}>Save</Text>
                 </TouchableOpacity>
               </>
@@ -244,18 +248,20 @@ export function EditSuggestionModal({
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
+type Palette = ReturnType<typeof useAppAppearance>['palette'];
+
+const makeStyles = (palette: Palette) => StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: palette.scrim,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: spacing.xl,
+    padding: 24,
   },
   modalContainer: {
-    backgroundColor: colors.bgSecondary,
-    borderRadius: radius.lg,
-    padding: spacing.xl,
+    backgroundColor: palette.bgElev,
+    borderRadius: 20,
+    padding: 24,
     width: '100%',
     maxWidth: 400,
     maxHeight: '80%',
@@ -264,125 +270,129 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: 16,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
   },
   modalCloseButton: {
-    padding: spacing.xs,
+    padding: 4,
   },
   modalDescription: {
     fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
+    color: palette.textMuted,
+    marginBottom: 16,
     lineHeight: 20,
   },
   modalInput: {
-    backgroundColor: colors.bgTertiary,
-    borderRadius: radius.sm,
+    backgroundColor: palette.bgPane,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
+    borderColor: palette.borderStrong,
+    padding: 16,
     fontSize: 16,
-    color: colors.textPrimary,
+    color: palette.text,
     minHeight: 80,
     textAlignVertical: 'top',
-    marginBottom: spacing.md,
+    marginBottom: 16,
   },
   currentMemoryContainer: {
-    backgroundColor: colors.bgTertiary,
-    borderRadius: radius.sm,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
+    backgroundColor: palette.bgPane,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   currentMemoryLabel: {
     fontSize: 12,
-    color: colors.textMuted,
-    marginBottom: spacing.xs,
+    color: palette.textFaint,
+    marginBottom: 4,
   },
   currentMemoryContent: {
     fontSize: 15,
-    color: colors.textPrimary,
+    color: palette.text,
     fontStyle: 'italic',
     lineHeight: 22,
   },
   memoryCategoryLabel: {
     fontSize: 12,
-    color: colors.textMuted,
-    marginTop: spacing.xs,
+    color: palette.textFaint,
+    marginTop: 4,
   },
   errorContainer: {
-    backgroundColor: colors.error + '20',
-    borderRadius: radius.sm,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    backgroundColor: palette.dangerSoft,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
   },
   errorText: {
     fontSize: 14,
-    color: colors.error,
+    color: palette.danger,
     textAlign: 'center',
   },
   suggestionContainer: {
-    backgroundColor: colors.accent + '15',
-    borderRadius: radius.sm,
+    backgroundColor: palette.accentSoft,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.accent + '40',
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    borderColor: palette.accent,
+    padding: 16,
+    marginBottom: 16,
   },
   suggestionLabel: {
     fontSize: 12,
-    color: colors.accent,
+    color: palette.accentText,
     fontWeight: '600',
-    marginBottom: spacing.xs,
+    marginBottom: 4,
   },
   suggestionContent: {
     fontSize: 15,
-    color: colors.textPrimary,
+    color: palette.text,
     fontStyle: 'italic',
     lineHeight: 22,
   },
   suggestionReasoning: {
     fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
+    color: palette.textMuted,
+    marginTop: 8,
     fontStyle: 'italic',
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: 16,
   },
   modalCancelButton: {
     flex: 1,
-    backgroundColor: colors.bgTertiary,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.md,
+    backgroundColor: palette.bgPane,
+    borderRadius: 8,
+    paddingVertical: 16,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   modalCancelButtonText: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontWeight: '600',
   },
   modalSaveButton: {
     flex: 1,
-    backgroundColor: colors.accent,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.md,
+    backgroundColor: palette.accent,
+    borderRadius: 8,
+    paddingVertical: 16,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: spacing.xs,
+    gap: 4,
   },
   modalSaveButtonDisabled: {
     opacity: 0.5,
   },
   modalSaveButtonText: {
     fontSize: 16,
-    color: colors.textOnAccent,
+    color: TEXT_ON_ACCENT,
     fontWeight: '600',
   },
 });

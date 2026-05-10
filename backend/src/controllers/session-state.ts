@@ -20,7 +20,7 @@
 import { Request, Response } from 'express';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { ErrorCode } from '@meet-without-fear/shared';
+import { DEFAULT_PRIVACY_PREFERENCES, ErrorCode, PrivacyPreferencesDTO } from '@meet-without-fear/shared';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
 
@@ -33,10 +33,18 @@ interface CompactGates {
   signedAt?: string;
 }
 
-async function acceptPendingInvitationForE2ESession(
-  sessionId: string,
-  userId: string
-): Promise<boolean> {
+function latestDate(...values: Array<Date | null | undefined>): Date | null {
+  let latest: Date | null = null;
+  for (const value of values) {
+    if (!value) continue;
+    if (!latest || value > latest) {
+      latest = value;
+    }
+  }
+  return latest;
+}
+
+async function acceptPendingInvitationForE2ESession(sessionId: string, userId: string): Promise<boolean> {
   if (process.env.E2E_AUTH_BYPASS !== 'true' || process.env.NODE_ENV === 'production') {
     return false;
   }
@@ -63,7 +71,7 @@ async function acceptPendingInvitationForE2ESession(
     return false;
   }
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async tx => {
     await tx.relationshipMember.upsert({
       where: {
         relationshipId_userId: {
@@ -164,6 +172,22 @@ export async function getSessionState(req: Request, res: Response): Promise<void
             orderBy: { createdAt: 'desc' },
             take: 1,
           },
+          linkedInnerThoughts: {
+            where: {
+              userId: user.id,
+              linkedTrigger: 'suggestion_start',
+              status: { not: 'ARCHIVED' },
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              title: true,
+              summary: true,
+              theme: true,
+              contextSummarySnapshot: true,
+            },
+          },
         },
       }),
 
@@ -195,6 +219,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
         },
         select: {
           lastViewedAt: true,
+          lastActiveAt: true,
           lastSeenChatItemId: true,
         },
       }),
@@ -212,30 +237,23 @@ export async function getSessionState(req: Request, res: Response): Promise<void
     }
 
     const session = sessionWithRelations;
+    const sourceInnerThoughts = session.linkedInnerThoughts[0] ?? null;
     const partnerId = await getPartnerUserId(sessionId, user.id);
 
     // Get my membership (for nickname I use for partner)
-    const myMember = session.relationship.members.find(
-      (m) => m.userId === user.id
-    );
-    const partnerMember = session.relationship.members.find(
-      (m) => m.userId !== user.id
-    );
+    const myMember = session.relationship.members.find(m => m.userId === user.id);
+    const partnerMember = session.relationship.members.find(m => m.userId !== user.id);
 
     // Build progress response
     const myProgressRecord = session.stageProgress
-      .filter((sp) => sp.userId === user.id)
+      .filter(sp => sp.userId === user.id)
       .sort((a, b) => b.stage - a.stage)[0];
     const partnerProgressRecord = partnerId
-      ? session.stageProgress
-          .filter((sp) => sp.userId === partnerId)
-          .sort((a, b) => b.stage - a.stage)[0]
+      ? session.stageProgress.filter(sp => sp.userId === partnerId).sort((a, b) => b.stage - a.stage)[0]
       : null;
 
     // Get Stage 1 record for milestones
-    const myStage1Record = session.stageProgress.find(
-      (sp) => sp.userId === user.id && sp.stage === 1
-    );
+    const myStage1Record = session.stageProgress.find(sp => sp.userId === user.id && sp.stage === 1);
 
     const defaultProgress = {
       stage: 0,
@@ -273,17 +291,65 @@ export async function getSessionState(req: Request, res: Response): Promise<void
     };
 
     // Partner display name
-    const partnerDisplayName =
-      myMember?.nickname ||
-      partnerMember?.user.firstName ||
-      partnerMember?.user.name ||
-      null;
+    const partnerDisplayName = myMember?.nickname || partnerMember?.user.firstName || partnerMember?.user.name || null;
+    const partnerVessel = partnerId
+      ? await prisma.userVessel.findUnique({
+          where: {
+            userId_sessionId: {
+              userId: partnerId,
+              sessionId,
+            },
+          },
+          select: {
+            lastViewedAt: true,
+            lastActiveAt: true,
+          },
+        })
+      : null;
+    const partnerLastMessage = partnerId
+      ? await prisma.message.findFirst({
+          where: {
+            sessionId,
+            senderId: partnerId,
+            role: 'USER',
+          },
+          orderBy: { timestamp: 'desc' },
+          select: { timestamp: true },
+        })
+      : null;
+    const partnerLastStageProgress = partnerId
+      ? await prisma.stageProgress.findFirst({
+          where: { sessionId, userId: partnerId },
+          orderBy: [
+            { completedAt: 'desc' },
+            { startedAt: 'desc' },
+          ],
+          select: {
+            startedAt: true,
+            completedAt: true,
+          },
+        })
+      : null;
+    const partnerPrivacyUser = partnerId
+      ? await prisma.user.findUnique({
+          where: { id: partnerId },
+          select: { privacyPreferences: true } as any,
+        })
+      : null;
+    const partnerPrivacyPreferences = (partnerPrivacyUser as { privacyPreferences?: unknown } | null)?.privacyPreferences as PrivacyPreferencesDTO | null;
+    const partnerShowsActivity = (partnerPrivacyPreferences ?? DEFAULT_PRIVACY_PREFERENCES).showActivityStatus;
+    const partnerLastActiveAt = partnerShowsActivity ? latestDate(
+      partnerVessel?.lastActiveAt,
+      partnerLastMessage?.timestamp,
+      partnerLastStageProgress?.completedAt,
+      partnerLastStageProgress?.startedAt
+    ) : null;
 
     // Build messages response (reverse to chronological order)
     const hasMoreMessages = messages.length > 25;
     const messageSlice = hasMoreMessages ? messages.slice(0, 25) : messages;
     const messagesResponse = {
-      messages: messageSlice.reverse().map((m) => ({
+      messages: messageSlice.reverse().map(m => ({
         id: m.id,
         sessionId: m.sessionId,
         senderId: m.senderId,
@@ -320,13 +386,9 @@ export async function getSessionState(req: Request, res: Response): Promise<void
       : null;
 
     // Build compact status from Stage 0 progress gatesSatisfied
-    const myStage0Record = session.stageProgress.find(
-      (sp) => sp.userId === user.id && sp.stage === 0
-    );
+    const myStage0Record = session.stageProgress.find(sp => sp.userId === user.id && sp.stage === 0);
     const partnerStage0Record = partnerId
-      ? session.stageProgress.find(
-          (sp) => sp.userId === partnerId && sp.stage === 0
-        )
+      ? session.stageProgress.find(sp => sp.userId === partnerId && sp.stage === 0)
       : null;
 
     const myGates = myStage0Record?.gatesSatisfied as CompactGates | null;
@@ -373,7 +435,18 @@ export async function getSessionState(req: Request, res: Response): Promise<void
         createdAt: session.createdAt.toISOString(),
         resolvedAt: session.resolvedAt?.toISOString() ?? null,
         lastViewedAt: userVessel?.lastViewedAt?.toISOString() ?? null,
+        partnerLastViewedAt: partnerShowsActivity ? partnerVessel?.lastViewedAt?.toISOString() ?? null : null,
+        partnerLastActiveAt: partnerLastActiveAt?.toISOString() ?? null,
         lastSeenChatItemId: userVessel?.lastSeenChatItemId ?? null,
+        sourceInnerThoughts: sourceInnerThoughts
+          ? {
+              id: sourceInnerThoughts.id,
+              title: sourceInnerThoughts.title,
+              summary: sourceInnerThoughts.summary,
+              theme: sourceInnerThoughts.theme,
+              contextSummarySnapshot: sourceInnerThoughts.contextSummarySnapshot,
+            }
+          : null,
       },
 
       // Stage progress

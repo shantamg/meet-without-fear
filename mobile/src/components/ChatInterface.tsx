@@ -3,6 +3,7 @@ import {
   View,
   Text,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ListRenderItem,
@@ -19,7 +20,9 @@ import { EmotionSlider } from './EmotionSlider';
 import { ChatIndicator, ChatIndicatorType } from './ChatIndicator';
 import { EmpathyValidationCard } from './EmpathyValidationCard';
 import { createStyles } from '../theme/styled';
+import { designFonts, useAppAppearance } from '../theme';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
+import { isPreRegisteredAnimatedId } from '../utils/animationBridge';
 
 // ============================================================================
 // Types
@@ -29,6 +32,8 @@ export interface ChatMessage extends MessageDTO {
   status?: MessageDeliveryStatus;
   /** Delivery status for shared content (empathy statements, shared context) */
   sharedContentDeliveryStatus?: SharedContentDeliveryStatus;
+  /** Whether the shared artifact was sent by the current user or received from partner */
+  sharedContentDirection?: 'sent' | 'received';
 }
 
 export { ChatIndicatorType } from './ChatIndicator';
@@ -126,6 +131,7 @@ interface ChatInterfaceProps {
   onEmotionChange?: (value: number) => void;
   onHighEmotion?: (value: number) => void;
   compactEmotionSlider?: boolean;
+  /** Render guided action content after the input so chat remains attached to the transcript. */
   renderAboveInput?: () => React.ReactNode;
   /** Render content below the input area (e.g., persistent review affordances) */
   renderBelowInput?: () => React.ReactNode;
@@ -152,6 +158,8 @@ interface ChatInterfaceProps {
   partnerName?: string;
   /** Optional voice press handler -- passed through to ChatInput; renders mic button when provided */
   onVoicePress?: () => void;
+  /** Content of a failed message to restore to the input field */
+  failedMessage?: string | null;
   /** ID of the last chat item the user has seen - used to show "New messages" separator */
   lastSeenChatItemId?: string | null;
   /** Server-backed timestamp from before this screen marked the session viewed. */
@@ -159,7 +167,11 @@ interface ChatInterfaceProps {
   /** Callback when "Context shared" indicator is tapped - navigates to Sharing Status
    * @param timestamp - The timestamp of the shared context (for scrolling to it)
    */
-  onContextSharedPress?: (timestamp?: string, isFromMe?: boolean) => void;
+  onContextSharedPress?: (
+    timestamp?: string,
+    isFromMe?: boolean,
+    indicatorType?: ChatIndicatorType,
+  ) => void;
   /** Validation cards to render inline (e.g., partner's empathy attempt for validation) */
   validationCards?: ChatValidationCardItem[];
   /** Callback when user taps "Yes, mostly" on a validation card */
@@ -230,6 +242,7 @@ export function ChatInterface({
   onValidateAccurate,
   onValidateNotQuite,
   onVoicePress,
+  failedMessage,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -240,11 +253,25 @@ export function ChatInterface({
   const animationScope = sessionId || localAnimationScopeRef.current;
   const animationScopeRef = useRef(animationScope);
   const seenAnimatedItemIdsRef = useRef(getSeenAnimatedItemIds(animationScope));
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   if (animationScopeRef.current !== animationScope) {
     animationScopeRef.current = animationScope;
     seenAnimatedItemIdsRef.current = getSeenAnimatedItemIds(animationScope);
   }
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, () => setIsKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setIsKeyboardVisible(false));
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Cache-First Architecture: Derive "waiting for AI" from last message role
@@ -460,6 +487,7 @@ export function ChatInterface({
     if (isIndicator(item) || isValidationCard(item) || isCustomEmptyState(item)) return false;
     if (animatedItemIdsRef.current.has(item.id)) return false;
     if (seenAnimatedItemIdsRef.current.has(item.id)) return false;
+    if (isPreRegisteredAnimatedId(item.id)) return false;
     if (isAtOrBeforeSeenBoundary(item, index)) return false;
 
     if (isCustomCard(item)) {
@@ -470,6 +498,17 @@ export function ChatInterface({
     if (message.role === MessageRole.USER) return false;
     if (message.id.startsWith('optimistic-')) return false;
 
+    // If the user has already replied after this assistant/system message,
+    // the message must be visible immediately. It is no longer a live pending
+    // animation candidate, and hiding it leaves blank transcript gaps.
+    for (let i = index - 1; i >= 0; i--) {
+      const laterItem = listItems[i];
+      if (isIndicator(laterItem) || isValidationCard(laterItem) || isCustomEmptyState(laterItem) || isCustomCard(laterItem)) continue;
+      if ((laterItem as ChatMessage).role === MessageRole.USER) {
+        return false;
+      }
+    }
+
     // If there is no server read boundary yet, fall back to the original
     // mount snapshot so loaded history does not animate on first render.
     if (lastSeenItemIndex < 0 && lastViewedAtTime === null && mountSnapshotIdsRef.current.has(message.id)) {
@@ -477,7 +516,7 @@ export function ChatInterface({
     }
 
     return true;
-  }, [isAtOrBeforeSeenBoundary, lastSeenItemIndex, lastViewedAtTime]);
+  }, [isAtOrBeforeSeenBoundary, lastSeenItemIndex, lastViewedAtTime, listItems]);
 
   // Auto-speech: speak new AI messages when enabled
   useEffect(() => {
@@ -545,6 +584,15 @@ export function ChatInterface({
   // a later typewriter pass. This prevents refetches/status changes after
   // button-only actions from replaying older visible messages one by one.
   useEffect(() => {
+    if (animatingItemId !== null) {
+      const animatingIndex = listItems.findIndex((item) => item.id === animatingItemId);
+      const animatingItem = animatingIndex >= 0 ? listItems[animatingIndex] : null;
+      if (!animatingItem || !shouldAnimateItem(animatingItem, animatingIndex)) {
+        markItemAnimationSeen(animatingItemId);
+        setAnimatingItemId(null);
+      }
+    }
+
     listItems.forEach((item, index) => {
       if (isIndicator(item) || isValidationCard(item) || isCustomEmptyState(item)) return;
       if (item.id === nextAnimatableMessageId || item.id === animatingItemId) return;
@@ -587,7 +635,7 @@ export function ChatInterface({
       const isTappableIndicator = item.indicatorType === 'context-shared'
         || item.indicatorType === 'empathy-shared';
       const onPress = isTappableIndicator && onContextSharedPress
-        ? () => onContextSharedPress(item.timestamp, item.metadata?.isFromMe)
+        ? () => onContextSharedPress(item.timestamp, item.metadata?.isFromMe, item.indicatorType)
         : undefined;
       return (
         <ChatIndicator
@@ -652,9 +700,11 @@ export function ChatInterface({
       role: message.role,
       content: message.content,
       timestamp: message.timestamp,
+      senderId: message.senderId,
       status: message.status,
       skipTypewriter: !shouldAnimateTypewriter,
       sharedContentDeliveryStatus: message.sharedContentDeliveryStatus,
+      sharedContentDirection: message.sharedContentDirection,
     };
 
     return (
@@ -674,7 +724,7 @@ export function ChatInterface({
         {renderMessageExtra?.(message)}
       </>
     );
-  }, [listItems, shouldAnimateItem, nextAnimatableMessageId, animatingItemId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra, onValidateAccurate, onValidateNotQuite, markItemAnimationSeen]);
+  }, [listItems, shouldAnimateItem, nextAnimatableMessageId, animatingItemId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra, onContextSharedPress, onValidateAccurate, onValidateNotQuite, markItemAnimationSeen]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 
@@ -815,7 +865,12 @@ export function ChatInterface({
           styles.messageList,
           listItems.length === 0 && (customEmptyState ? styles.customMessageListEmpty : styles.messageListEmpty),
         ]}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={
+          <>
+            {renderBelowChat?.()}
+            {renderHeader?.()}
+          </>
+        }
         ListFooterComponent={renderFooter}
         ListEmptyComponent={emptyStateElement}
         showsVerticalScrollIndicator={false}
@@ -827,7 +882,6 @@ export function ChatInterface({
         onContentSizeChange={handleContentSizeChange}
       />
       <View style={styles.bottomContainer}>
-        {renderBelowChat?.()}
         {showEmotionSlider && onEmotionChange && (
           <EmotionSlider
             value={emotionValue}
@@ -837,15 +891,16 @@ export function ChatInterface({
             testID="chat-emotion-slider"
           />
         )}
-        {renderAboveInput?.()}
         {!hideInput && (
           <ChatInput
             onSend={onSendMessage}
             disabled={disabled || isInputDisabled || isLoading}
             onVoicePress={onVoicePress}
+            failedMessage={failedMessage}
           />
         )}
-        {renderBelowInput?.()}
+        {!isKeyboardVisible && renderAboveInput?.()}
+        {!isKeyboardVisible && renderBelowInput?.()}
       </View>
     </KeyboardAvoidingView>
   );
@@ -855,19 +910,20 @@ export function ChatInterface({
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+  return createStyles((t) => ({
     container: {
       flex: 1,
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
     },
     flatList: {
       flex: 1,
     },
     messageList: {
-      paddingVertical: t.spacing.lg,
+      paddingVertical: 18,
       flexGrow: 1,
-      gap: t.spacing.xs,
+      gap: 2,
     },
     messageListEmpty: {
       flexGrow: 1,
@@ -887,7 +943,7 @@ const useStyles = () =>
       // Reserve space for typing indicator to prevent layout shift
       // when it disappears and AI message appears
       // Height: padding (12*2) + dot (8) + border (2) + margin (4*2) = 42
-      minHeight: 42,
+      minHeight: 36,
     },
     customEmptyStateItem: {
       // Add padding to separate it from the input or the item above it
@@ -895,7 +951,7 @@ const useStyles = () =>
       paddingBottom: t.spacing.md,
     },
     loadingSpinner: {
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
     },
     emptyState: {
       flex: 1,
@@ -914,22 +970,25 @@ const useStyles = () =>
       justifyContent: 'flex-start',
     },
     emptyStateTitle: {
-      fontSize: 28,
-      fontWeight: '600',
-      color: t.colors.textPrimary,
+      fontSize: 32,
+      color: palette.text,
       textAlign: 'center',
       lineHeight: 36,
+      fontFamily: designFonts.serif,
     },
     emptyStateMessage: {
       fontSize: t.typography.fontSize.lg,
       lineHeight: 24,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       textAlign: 'center',
       marginTop: t.spacing.md,
+      fontFamily: designFonts.sans,
     },
     bottomContainer: {
       // Container for emotion slider, panels above input, and input
       // This ensures KeyboardAvoidingView adjusts relative to this container's bottom
       // rather than just the input field itself
+      paddingBottom: t.spacing.sm,
     },
   }));
+};

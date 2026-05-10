@@ -95,8 +95,10 @@ export function MixpanelInitializer() {
 
         if (!hasAliased && !wasResetThisSession) {
           // First-time login: create alias to merge anonymous events
-          alias(userId);
-          await AsyncStorage.setItem(aliasFlag, 'true');
+          const didAlias = await alias(userId);
+          if (didAlias) {
+            await AsyncStorage.setItem(aliasFlag, 'true');
+          }
         }
 
         // Clear the reset flag now that we've handled the login

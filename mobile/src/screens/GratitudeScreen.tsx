@@ -20,7 +20,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ArrowLeft,
   Heart,
   Plus,
   Calendar,
@@ -42,6 +41,8 @@ import {
 } from '../hooks';
 import { useToast } from '../contexts/ToastContext';
 import { GratitudeEntryDTO } from '@meet-without-fear/shared';
+import { HeaderBackButton } from '../components/HeaderBackButton';
+import { trackGratitudeStarted, trackGratitudeCompleted } from '../services/analytics';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 
@@ -200,6 +201,7 @@ export function GratitudeScreen({ onNavigateBack }: GratitudeScreenProps) {
   }, [onNavigateBack]);
 
   const handleAddEntry = useCallback(() => {
+    trackGratitudeStarted();
     setIsAddingEntry(true);
   }, []);
 
@@ -214,6 +216,7 @@ export function GratitudeScreen({ onNavigateBack }: GratitudeScreenProps) {
         {
           onSuccess: () => {
             setIsAddingEntry(false);
+            trackGratitudeCompleted(content.length);
             showSuccess('Gratitude Saved', 'Your gratitude entry has been recorded.');
           },
           onError: () => {
@@ -245,9 +248,7 @@ export function GratitudeScreen({ onNavigateBack }: GratitudeScreenProps) {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <ArrowLeft size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <HeaderBackButton onPress={handleBack} />
           <Text style={styles.headerTitle}>See the Positive</Text>
           <TouchableOpacity onPress={handleAddEntry} style={styles.addButton}>
             <Plus size={24} color={colors.accent} />

@@ -29,6 +29,10 @@ echo "Installing systemd service..."
 scp -q "$SCRIPT_DIR/slam-bot-socket.service" "$HOST":/tmp/slam-bot-socket.service
 ssh "$HOST" 'sudo mv /tmp/slam-bot-socket.service /etc/systemd/system/slam-bot-socket.service && sudo chown root:root /etc/systemd/system/slam-bot-socket.service && sudo systemctl daemon-reload && sudo systemctl enable slam-bot-socket'
 
+echo "Installing durable worker systemd service..."
+scp -q "$SCRIPT_DIR/slam-bot-worker.service" "$HOST":/tmp/slam-bot-worker.service
+ssh "$HOST" 'sudo mv /tmp/slam-bot-worker.service /etc/systemd/system/slam-bot-worker.service && sudo chown root:root /etc/systemd/system/slam-bot-worker.service && sudo systemctl daemon-reload && sudo systemctl enable slam-bot-worker && sudo systemctl restart slam-bot-worker'
+
 # Install systemd unit file for the github-state scanner daemon (Phase 1
 # of the GitHub API budget reduction plan). The daemon owns the
 # consolidated GraphQL state file under /opt/slam-bot/state/, which

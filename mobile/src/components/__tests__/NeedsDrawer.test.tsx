@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { NeedsDrawer } from '../NeedsDrawer';
 
 describe('NeedsDrawer', () => {
@@ -101,5 +102,23 @@ describe('NeedsDrawer', () => {
     );
 
     expect(screen.queryByText('Your Needs')).toBeNull();
+  });
+
+  it('sizes the sheet from its rendered host height', () => {
+    render(
+      <NeedsDrawer
+        visible
+        onClose={jest.fn()}
+        mode="needs"
+        needs={needs}
+      />
+    );
+
+    fireEvent(screen.getByTestId('needs-drawer'), 'layout', {
+      nativeEvent: { layout: { height: 620 } },
+    });
+
+    expect(StyleSheet.flatten(screen.getByTestId('needs-drawer-sheet').props.style).height).toBe(620);
+    expect(StyleSheet.flatten(screen.getByTestId('needs-drawer-content').props.style).height).toBe(465);
   });
 });

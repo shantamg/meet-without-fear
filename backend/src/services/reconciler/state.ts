@@ -384,8 +384,9 @@ export async function hasPartnerCompletedStage1(
 // ============================================================================
 
 /**
- * Check if both empathy attempts are READY and if so, reveal both simultaneously.
- * This ensures neither user sees their partner's empathy until both have completed Stage 2.
+ * Check if both empathy attempts are ready for review and reveal any unrevealed
+ * READY attempt. This also handles the refinement path where one direction was
+ * already VALIDATED and the other partner resubmits a READY revision.
  *
  * @returns true if both were revealed, false otherwise
  */
@@ -406,22 +407,24 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
       return null;
     }
 
-    // Check if both are in READY status
-    const bothReady = attempts.every((a: EmpathyAttemptState) => a.status === 'READY');
-    if (!bothReady) {
+    const readyStatuses = new Set(['READY', 'VALIDATED']);
+    const readyForReview = attempts.every((a: EmpathyAttemptState) => readyStatuses.has(a.status));
+    const hasUnrevealedReadyAttempt = attempts.some((a: EmpathyAttemptState) => a.status === 'READY');
+    if (!readyForReview || !hasUnrevealedReadyAttempt) {
       const statuses = Object.fromEntries(attempts.map((a: EmpathyAttemptState) => [a.sourceUserId, a.status]));
-      logger.debug('Not both READY yet', { statuses });
+      logger.debug('Not ready to reveal empathy attempts yet', { statuses });
       return null;
     }
 
-    logger.info('Both empathy attempts READY, revealing simultaneously', { sessionId });
+    logger.info('Empathy attempts ready for review, revealing READY attempts', { sessionId });
 
-    // Validate state transition for both attempts
-    for (const attempt of attempts) {
+    // Validate state transition for unrevealed attempts.
+    for (const attempt of attempts.filter((a: EmpathyAttemptState) => a.status === 'READY')) {
       transition(attempt.status as EmpathyStatus, 'MUTUAL_REVEAL');
     }
 
-    // Reveal both attempts
+    // Reveal any READY attempt. VALIDATED attempts were already revealed and
+    // seen; leave their terminal state intact.
     const revealedNow = new Date();
     await tx.empathyAttempt.updateMany({
       where: {
@@ -462,6 +465,80 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
       forUserId: userId,
       empathyStatus: allStatuses[userId],
     });
+  }
+
+  // Create quality commentary messages so each subject knows what to expect
+  // when reviewing their partner's empathy attempt (issue #497)
+  try {
+    const justRevealed = revealed.filter((a: EmpathyAttemptState) => a.status === 'READY');
+    if (justRevealed.length > 0) {
+      const allUserIds = revealed.map((a: EmpathyAttemptState) => a.sourceUserId!);
+
+      // Get reconciler results and user names
+      const [reconcilerResults, users] = await Promise.all([
+        prisma.reconcilerResult.findMany({
+          where: { sessionId, supersededAt: null },
+        }),
+        prisma.user.findMany({
+          where: { id: { in: allUserIds } },
+          select: { id: true, firstName: true, name: true },
+        }),
+      ]);
+
+      const nameOf = (id: string) => {
+        const match = users.find((u: { id: string }) => u.id === id);
+        return match?.firstName || match?.name || 'Your partner';
+      };
+
+      for (const attempt of justRevealed) {
+        const guesserId = attempt.sourceUserId!;
+        const subjectId = allUserIds.find((uid: string) => uid !== guesserId);
+        if (!subjectId) continue;
+
+        // Find the reconciler result for this direction (guesser → subject)
+        const result = reconcilerResults.find(
+          (r: { guesserId: string; subjectId: string }) => r.guesserId === guesserId && r.subjectId === subjectId
+        );
+
+        const guesserName = nameOf(guesserId);
+        const hasGaps = result && (result.gapSeverity === 'moderate' || result.gapSeverity === 'significant');
+
+        const qualityMessage = hasGaps
+          ? `${guesserName}'s attempt to understand your experience is ready for you to review. It may not fully capture everything you shared — if something feels off or missing, you can share feedback to help them understand better.`
+          : `${guesserName}'s attempt to understand your experience is ready for you to review. Take a moment to read it and let us know how it feels.`;
+
+        const savedMsg = await prisma.message.create({
+          data: {
+            sessionId,
+            senderId: null,
+            forUserId: subjectId,
+            role: 'AI',
+            content: qualityMessage,
+            stage: 2,
+          },
+        });
+
+        await publishMessageAIResponse(
+          sessionId,
+          subjectId,
+          {
+            id: savedMsg.id,
+            sessionId,
+            senderId: null,
+            content: savedMsg.content,
+            timestamp: savedMsg.timestamp.toISOString(),
+            role: MessageRole.AI,
+            stage: savedMsg.stage,
+          },
+          {}
+        );
+
+        logger.debug('Created reveal quality message', { subjectId, gapSeverity: result?.gapSeverity ?? 'unknown' });
+      }
+    }
+  } catch (err) {
+    // Not critical — don't block the reveal flow
+    logger.warn('Failed to create reveal quality messages', { error: (err as Error).message });
   }
 
   logger.info('Both empathy attempts revealed and notifications sent', { sessionId });

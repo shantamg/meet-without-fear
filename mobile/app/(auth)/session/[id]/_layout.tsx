@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { colors } from '@/src/theme';
+import { useAppAppearance } from '@/src/theme';
 
 /**
  * Session detail layout
@@ -8,12 +8,15 @@ import { colors } from '@/src/theme';
  * The UnifiedSessionScreen handles all stage transitions internally.
  */
 export default function SessionLayout() {
+  const { palette } = useAppAppearance();
+
   return (
     <Stack
       screenOptions={{
         headerShown: false, // UnifiedSessionScreen has its own header
+        gestureEnabled: true,
         contentStyle: {
-          backgroundColor: colors.bgPrimary,
+          backgroundColor: palette.bg,
         },
       }}
     >
@@ -29,14 +32,16 @@ export default function SessionLayout() {
           title: 'Sharing Status',
           headerShown: true,
           headerStyle: {
-            backgroundColor: colors.bgSecondary,
+            backgroundColor: palette.bg,
           },
-          headerTintColor: colors.textPrimary,
+          headerTintColor: palette.text,
           headerTitleStyle: {
+            color: palette.text,
             fontWeight: '600',
           },
           headerBackTitle: 'Chat',
           presentation: 'card',
+          gestureEnabled: true,
         }}
       />
       <Stack.Screen

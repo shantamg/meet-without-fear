@@ -6,7 +6,7 @@
  * Features:
  * - Native drawer with gesture support (swipe to close)
  * - Sessions organized into sections (Needs Attention / In Progress / Completed)
- * - Swipe-to-delete and long-press to delete on session cards
+ * - Row overflow menu for secondary actions
  * - New session button in header
  * - Closes on session selection
  */
@@ -16,34 +16,31 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   SectionList,
   ActivityIndicator,
   Animated,
   Alert,
   Platform,
   useWindowDimensions,
+  TextInput,
+  StyleSheet,
 } from 'react-native';
-import type { PointerEvent as RNPointerEvent } from 'react-native';
 import { Drawer } from 'react-native-drawer-layout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { X, Plus, Trash2 } from 'lucide-react-native';
-import { Swipeable } from 'react-native-gesture-handler';
+import { X, Plus, Trash2, Search, MoreHorizontal } from 'lucide-react-native';
 
 import { useSessionDrawer } from '../../hooks/useSessionDrawer';
 import { useSessions, useDeleteSession } from '../../hooks/useSessions';
-import { SessionCard } from '../SessionCard';
-import { createStyles } from '../../theme/styled';
-import { colors } from '../../theme';
+import { designFonts, useAppAppearance } from '../../theme';
 import type { SessionSummaryDTO } from '@meet-without-fear/shared';
-import { SessionStatus } from '@meet-without-fear/shared';
+import { SessionStatus, Stage, StageStatus } from '@meet-without-fear/shared';
 
 // On web the app is constrained to a centered mobile column (see mobile/app/_layout.tsx).
 // The drawer must not exceed that column, or `react-native-drawer-layout`'s
 // `left: calc(width * -1)` offset pushes it off-screen.
 const WEB_COLUMN_MAX_WIDTH = 480;
-const SWIPE_PRESS_BLOCK_MS = 650;
-const SWIPE_CANCEL_DISTANCE = 8;
 
 // ============================================================================
 // Session Section Types
@@ -54,12 +51,68 @@ interface SessionSection {
   data: SessionSummaryDTO[];
 }
 
+const PROGRESS_STAGES = [
+  Stage.WITNESS,
+  Stage.PERSPECTIVE_STRETCH,
+  Stage.NEED_MAPPING,
+  Stage.STRATEGIC_REPAIR,
+] as const;
+
+function formatShortRelativeTime(dateString: string): string {
+  const diffMs = Date.now() - new Date(dateString).getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffMins < 1) return 'now';
+  if (diffMins < 60) return `${diffMins}m`;
+  if (diffHours < 24) return `${diffHours}h`;
+  return `${diffDays}d`;
+}
+
+function getPartnerDisplayName(session: SessionSummaryDTO): string {
+  return session.partner.nickname || session.partner.name || 'Partner';
+}
+
+function getTopicLine(session: SessionSummaryDTO): string {
+  const topicFrame = (session as SessionSummaryDTO & { topicFrame?: string }).topicFrame;
+  return (
+    topicFrame ||
+    session.statusSummary?.userStatus ||
+    session.statusSummary?.partnerStatus ||
+    'Conversation in progress'
+  );
+}
+
+function getBadgeLabel(session: SessionSummaryDTO): { label: string; kind: 'ready' | 'neutral' } {
+  if (session.status === SessionStatus.RESOLVED) return { label: 'Complete', kind: 'neutral' };
+  if (session.status === SessionStatus.PAUSED) return { label: 'Paused', kind: 'neutral' };
+  if (session.status === SessionStatus.CREATED || session.status === SessionStatus.INVITED) {
+    return { label: 'Invite pending', kind: 'ready' };
+  }
+  if (session.selfActionNeeded.length > 0) return { label: 'Ready for you', kind: 'ready' };
+  return { label: 'In progress', kind: 'neutral' };
+}
+
+function getSegmentFill(
+  segmentStage: Stage,
+  myStage: Stage,
+  myStatus: StageStatus
+): 'done' | 'now' | 'empty' {
+  if (segmentStage < myStage) return 'done';
+  if (segmentStage === myStage) {
+    if (myStatus === StageStatus.COMPLETED || myStatus === StageStatus.GATE_PENDING) return 'done';
+    if (myStatus === StageStatus.IN_PROGRESS) return 'now';
+  }
+  return 'empty';
+}
+
 // ============================================================================
 // Conversations List (formerly PartnerSessionsList)
 // ============================================================================
 
 function ConversationsList({ onClose }: { onClose: () => void }) {
   const styles = useStyles();
+  const { palette } = useAppAppearance();
   const router = useRouter();
   const { isOpen } = useSessionDrawer();
   const { data, isLoading, refetch } = useSessions();
@@ -71,10 +124,8 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
     }
   }, [isOpen, refetch]);
   const deleteSession = useDeleteSession();
-  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
-  const swipePressBlockUntilRef = useRef(0);
-  const swipeStartRefs = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const [openSwipeableId, setOpenSwipeableId] = useState<string | null>(null);
+  const [menuSessionId, setMenuSessionId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   // Animation refs for optimistic delete
   const animationRefs = useRef<Record<string, { opacity: Animated.Value; height: Animated.Value }>>({});
@@ -91,9 +142,20 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
     return animationRefs.current[sessionId];
   };
 
-  const sessions = (data?.items ?? []).filter(
-    (s) => s.status !== SessionStatus.ARCHIVED
-  );
+  const sessions = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const uniqueSessions = new Map<string, SessionSummaryDTO>();
+    for (const session of data?.items ?? []) {
+      uniqueSessions.set(session.id, session);
+    }
+
+    return Array.from(uniqueSessions.values()).filter((s) => {
+      if (s.status === SessionStatus.ARCHIVED) return false;
+      if (!normalizedQuery) return true;
+      const haystack = `${getPartnerDisplayName(s)} ${getTopicLine(s)}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [data?.items, query]);
 
   // Organize sessions into sections
   const sections: SessionSection[] = useMemo(() => {
@@ -120,43 +182,17 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
 
   const handleSessionPress = useCallback(
     (sessionId: string) => {
-      if (openSwipeableId === sessionId || Date.now() < swipePressBlockUntilRef.current) {
-        swipeableRefs.current.get(sessionId)?.close();
-        setOpenSwipeableId((current) => current === sessionId ? null : current);
+      if (menuSessionId === sessionId) {
+        setMenuSessionId(null);
         return;
       }
 
+      setMenuSessionId(null);
       onClose();
       router.push(`/session/${sessionId}`);
     },
-    [onClose, openSwipeableId, router]
+    [menuSessionId, onClose, router]
   );
-
-  const blockPressAfterSwipe = useCallback((sessionId?: string) => {
-    swipePressBlockUntilRef.current = Date.now() + SWIPE_PRESS_BLOCK_MS;
-    if (sessionId) {
-      setOpenSwipeableId(sessionId);
-    }
-  }, []);
-
-  const handleSwipePointerStart = useCallback((sessionId: string, x: number, y: number) => {
-    swipeStartRefs.current.set(sessionId, { x, y });
-  }, []);
-
-  const handleSwipePointerMove = useCallback((sessionId: string, x: number, y: number) => {
-    const start = swipeStartRefs.current.get(sessionId);
-    if (!start) return;
-
-    const dx = Math.abs(x - start.x);
-    const dy = Math.abs(y - start.y);
-    if (dx > SWIPE_CANCEL_DISTANCE && dx > dy) {
-      blockPressAfterSwipe(sessionId);
-    }
-  }, [blockPressAfterSwipe]);
-
-  const handleSwipePointerEnd = useCallback((sessionId: string) => {
-    swipeStartRefs.current.delete(sessionId);
-  }, []);
 
   const handleNewSession = useCallback(() => {
     onClose();
@@ -165,7 +201,7 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
 
   const handleDelete = useCallback(
     (session: SessionSummaryDTO) => {
-      swipeableRefs.current.get(session.id)?.close();
+      setMenuSessionId(null);
 
       const partnerName = session.partner.name || 'this person';
       const isActive = ['ACTIVE', 'WAITING', 'PAUSED'].includes(session.status);
@@ -229,74 +265,11 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
     [deleteSession]
   );
 
-  const renderRightActions = useCallback(
-    (
-      _progress: Animated.AnimatedInterpolation<number>,
-      dragX: Animated.AnimatedInterpolation<number>,
-      session: SessionSummaryDTO
-    ) => {
-      const scale = dragX.interpolate({
-        inputRange: [-100, 0],
-        outputRange: [1, 0.5],
-        extrapolate: 'clamp',
-      });
-
-      return (
-        <TouchableOpacity
-          style={styles.deleteAction}
-          onPress={() => handleDelete(session)}
-        >
-          <Animated.View style={{ transform: [{ scale }] }}>
-            <Trash2 color="#FFFFFF" size={20} />
-          </Animated.View>
-        </TouchableOpacity>
-      );
-    },
-    [handleDelete, styles]
-  );
-
   const renderItem = useCallback(
     ({ item }: { item: SessionSummaryDTO }) => {
       const isDeleting = deletingSessions.has(item.id);
-      const isSwipeOpen = openSwipeableId === item.id;
       const animationValues = getAnimationValues(item.id);
-
-      if (Platform.OS === 'web') {
-        return (
-          <Animated.View
-            onLayout={(e) => {
-              const h = e.nativeEvent.layout.height;
-              if (h > 0) layoutHeightsRef.current[item.id] = h;
-            }}
-            style={[
-              styles.webSessionRow,
-              {
-                opacity: animationValues.opacity,
-                ...(isDeleting ? { height: animationValues.height, overflow: 'hidden' as const } : {}),
-              },
-            ]}
-          >
-            <TouchableOpacity
-              style={styles.webSessionPressArea}
-              onPress={() => handleSessionPress(item.id)}
-              onLongPress={() => handleDelete(item)}
-              delayLongPress={500}
-              disabled={isDeleting}
-            >
-              <SessionCard session={item} noMargin />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.webDeleteButton}
-              onPress={() => handleDelete(item)}
-              disabled={isDeleting}
-              accessibilityRole="button"
-              accessibilityLabel="Delete conversation"
-            >
-              <Trash2 color="#FFFFFF" size={20} />
-            </TouchableOpacity>
-          </Animated.View>
-        );
-      }
+      const menuOpen = menuSessionId === item.id;
 
       return (
         <Animated.View
@@ -304,59 +277,20 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
             const h = e.nativeEvent.layout.height;
             if (h > 0) layoutHeightsRef.current[item.id] = h;
           }}
-          style={[
-            {
-              opacity: animationValues.opacity,
-              ...(isDeleting ? { height: animationValues.height, overflow: 'hidden' } : {}),
-            },
-          ]}
-          onPointerDownCapture={(e: RNPointerEvent) => {
-            handleSwipePointerStart(item.id, e.nativeEvent.pageX, e.nativeEvent.pageY);
+          style={{
+            opacity: animationValues.opacity,
+            ...(isDeleting ? { height: animationValues.height, overflow: 'hidden' as const } : {}),
           }}
-          onPointerMoveCapture={(e: RNPointerEvent) => {
-            handleSwipePointerMove(item.id, e.nativeEvent.pageX, e.nativeEvent.pageY);
-          }}
-          onPointerUpCapture={() => handleSwipePointerEnd(item.id)}
-          onPointerCancelCapture={() => handleSwipePointerEnd(item.id)}
         >
-          <Swipeable
-            ref={(ref) => {
-              if (ref) swipeableRefs.current.set(item.id, ref);
-              else swipeableRefs.current.delete(item.id);
-            }}
-            renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
-            overshootRight={false}
-            rightThreshold={40}
-            onSwipeableOpenStartDrag={() => {
-              blockPressAfterSwipe(item.id);
-            }}
-            onSwipeableWillOpen={() => {
-              blockPressAfterSwipe(item.id);
-              for (const [sessionId, ref] of swipeableRefs.current) {
-                if (sessionId !== item.id) ref.close();
-              }
-              setOpenSwipeableId(item.id);
-            }}
-            onSwipeableOpen={() => {
-              blockPressAfterSwipe(item.id);
-              setOpenSwipeableId(item.id);
-            }}
-            onSwipeableWillClose={() => {
-              blockPressAfterSwipe();
-            }}
-            onSwipeableClose={() => {
-              setOpenSwipeableId((current) => current === item.id ? null : current);
-            }}
-          >
-            <TouchableOpacity
-              onPress={() => handleSessionPress(item.id)}
-              onLongPress={() => handleDelete(item)}
-              delayLongPress={500}
-              disabled={isDeleting || isSwipeOpen}
-            >
-              <SessionCard session={item} noMargin />
-            </TouchableOpacity>
-          </Swipeable>
+          <ConversationRow
+            session={item}
+            palette={palette}
+            menuOpen={menuOpen}
+            disabled={isDeleting}
+            onPress={() => handleSessionPress(item.id)}
+            onMenuPress={() => setMenuSessionId((current) => current === item.id ? null : item.id)}
+            onDelete={() => handleDelete(item)}
+          />
         </Animated.View>
       );
     },
@@ -364,12 +298,8 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
       deletingSessions,
       handleSessionPress,
       handleDelete,
-      handleSwipePointerEnd,
-      handleSwipePointerMove,
-      handleSwipePointerStart,
-      blockPressAfterSwipe,
-      openSwipeableId,
-      renderRightActions,
+      menuSessionId,
+      palette,
     ]
   );
 
@@ -377,6 +307,7 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
     ({ section }: { section: SessionSection }) => (
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>{section.title}</Text>
+        <View style={styles.sectionRule} />
       </View>
     ),
     [styles]
@@ -385,7 +316,7 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color={colors.accent} />
+        <ActivityIndicator size="small" color={palette.accent} />
       </View>
     );
   }
@@ -403,15 +334,168 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <SectionList
-      sections={sections}
-      renderItem={renderItem}
-      renderSectionHeader={renderSectionHeader}
-      keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.listContent}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
-      stickySectionHeadersEnabled={false}
-    />
+    <View style={styles.conversationsShell}>
+      <View style={styles.searchBox}>
+        <Search color={palette.textFaint} size={15} />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search people, topics..."
+          placeholderTextColor={palette.textFaint}
+          style={styles.searchInput}
+        />
+      </View>
+      <SectionList
+        sections={sections}
+        renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        stickySectionHeadersEnabled={false}
+      />
+    </View>
+  );
+}
+
+function ConversationRow({
+  session,
+  palette,
+  menuOpen,
+  disabled,
+  onPress,
+  onMenuPress,
+  onDelete,
+}: {
+  session: SessionSummaryDTO;
+  palette: ReturnType<typeof useAppAppearance>['palette'];
+  menuOpen: boolean;
+  disabled: boolean;
+  onPress: () => void;
+  onMenuPress: () => void;
+  onDelete: () => void;
+}) {
+  const badge = getBadgeLabel(session);
+  const partnerName = getPartnerDisplayName(session);
+  const initial = partnerName.charAt(0).toUpperCase();
+  const needsAttention = session.selfActionNeeded.length > 0;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[
+        rowStyles.row,
+        { backgroundColor: needsAttention ? palette.selected : 'transparent' },
+        menuOpen && rowStyles.rowMenuOpen,
+      ]}
+    >
+      {needsAttention && <View style={[rowStyles.selectedStripe, { backgroundColor: palette.accent }]} />}
+      <View
+        style={[
+          rowStyles.avatar,
+          { backgroundColor: palette.chipBg, borderColor: palette.border },
+        ]}
+      >
+        <Text style={[rowStyles.avatarText, { color: palette.text }]}>{initial}</Text>
+        {session.hasUnread && <View style={[rowStyles.ping, { backgroundColor: palette.accent, borderColor: palette.bg }]} />}
+      </View>
+      <View style={rowStyles.body}>
+        <View style={rowStyles.topRow}>
+          <Text style={[rowStyles.name, { color: palette.text }]} numberOfLines={1}>
+            {partnerName}
+          </Text>
+          <Text style={[rowStyles.time, { color: palette.textFaint }]}>
+            {formatShortRelativeTime(session.updatedAt)}
+          </Text>
+        </View>
+        <Text style={[rowStyles.subject, { color: palette.textMuted }]} numberOfLines={1}>
+          {getTopicLine(session)}
+        </Text>
+        <View style={rowStyles.foot}>
+          <View
+            style={[
+              rowStyles.chip,
+              { backgroundColor: badge.kind === 'ready' ? palette.accentSoft : palette.chipBg },
+            ]}
+          >
+            <View
+              style={[
+                rowStyles.chipDot,
+                { backgroundColor: badge.kind === 'ready' ? palette.accentText : palette.textMuted },
+              ]}
+            />
+            <Text
+              style={[
+                rowStyles.chipText,
+                { color: badge.kind === 'ready' ? palette.accentText : palette.textMuted },
+              ]}
+            >
+              {badge.label}
+            </Text>
+          </View>
+          <View style={rowStyles.progress}>
+            {PROGRESS_STAGES.map((stage) => {
+              const fill = getSegmentFill(stage, session.myProgress.stage, session.myProgress.status as StageStatus);
+              return (
+                <View
+                  key={stage}
+                  style={[
+                    rowStyles.progressSegment,
+                    { backgroundColor: palette.progressPending },
+                    fill === 'done' && { backgroundColor: palette.success },
+                    fill === 'now' && { backgroundColor: palette.accent },
+                  ]}
+                />
+              );
+            })}
+          </View>
+        </View>
+      </View>
+      <TouchableOpacity
+        style={[
+          rowStyles.menuButton,
+          {
+            backgroundColor: menuOpen ? palette.chipBg : 'transparent',
+          },
+        ]}
+        onPress={(event) => {
+          event.stopPropagation();
+          onMenuPress();
+        }}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={`More actions for ${partnerName}`}
+      >
+        <MoreHorizontal color={palette.textFaint} size={16} />
+      </TouchableOpacity>
+      {menuOpen && (
+        <View
+          style={[
+            rowStyles.overflowMenu,
+            {
+              backgroundColor: palette.bgElev,
+              borderColor: palette.border,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={rowStyles.overflowItem}
+            onPress={(event) => {
+              event.stopPropagation();
+              onDelete();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Delete conversation with ${partnerName}`}
+          >
+            <Trash2 color={palette.danger} size={14} />
+            <Text style={[rowStyles.overflowText, { color: palette.danger }]}>
+              Delete
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -425,6 +509,7 @@ interface SessionDrawerProps {
 
 export function SessionDrawer({ children }: SessionDrawerProps) {
   const styles = useStyles();
+  const { palette } = useAppAppearance();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isOpen, closeDrawer, openDrawer } = useSessionDrawer();
@@ -441,21 +526,26 @@ export function SessionDrawer({ children }: SessionDrawerProps) {
 
   const renderDrawerContent = () => (
     <View style={[styles.drawerContent, { paddingTop: insets.top + 16, paddingBottom: insets.bottom }]}>
-      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Conversations</Text>
+        <View style={styles.headerTitleWrap}>
+          <Text style={styles.headerTitle}>Conversations</Text>
+        </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.headerButton}
             onPress={handleNewSession}
+            accessibilityRole="button"
+            accessibilityLabel="Start new session"
           >
-            <Plus color={colors.textPrimary} size={24} />
+            <Plus color={palette.textMuted} size={21} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerButton}
             onPress={closeDrawer}
+            accessibilityRole="button"
+            accessibilityLabel="Close drawer"
           >
-            <X color={colors.textPrimary} size={24} />
+            <X color={palette.textMuted} size={21} />
           </TouchableOpacity>
         </View>
       </View>
@@ -487,58 +577,104 @@ export function SessionDrawer({ children }: SessionDrawerProps) {
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+
+  return useMemo(() => StyleSheet.create({
     overlay: {
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      backgroundColor: 'rgba(0, 0, 0, 0.42)',
     },
     drawer: {
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
     },
     drawerContent: {
       flex: 1,
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
     },
     header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: t.spacing.lg,
-      paddingBottom: t.spacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: t.colors.border,
+      paddingHorizontal: 12,
+      paddingBottom: 8,
     },
     headerTitle: {
-      fontSize: 22,
-      fontWeight: '700',
-      color: t.colors.textPrimary,
+      fontSize: 34,
+      color: palette.text,
+      letterSpacing: -0.3,
+      fontFamily: designFonts.serif,
+    },
+    headerTitleWrap: {
+      flex: 1,
+      minWidth: 0,
+      paddingHorizontal: 4,
+      paddingVertical: 8,
     },
     headerActions: {
       flexDirection: 'row',
-      gap: t.spacing.sm,
+      gap: 4,
     },
     headerButton: {
-      padding: t.spacing.sm,
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     sectionHeader: {
-      paddingTop: t.spacing.md,
-      paddingBottom: t.spacing.xs,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 8,
+      paddingTop: 14,
+      paddingBottom: 8,
     },
     sectionTitle: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: t.colors.textMuted,
+      fontSize: 10.5,
+      fontWeight: '700',
+      color: palette.textFaint,
       textTransform: 'uppercase',
-      letterSpacing: 0.5,
+      letterSpacing: 1,
+      fontFamily: designFonts.mono,
+    },
+    sectionRule: {
+      flex: 1,
+      height: 1,
+      backgroundColor: palette.divider,
     },
     listContainer: {
       flex: 1,
     },
+    conversationsShell: {
+      flex: 1,
+    },
+    searchBox: {
+      marginHorizontal: 16,
+      marginTop: 4,
+      marginBottom: 6,
+      minHeight: 42,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.bgElev,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+    },
+    searchInput: {
+      flex: 1,
+      color: palette.text,
+      fontSize: 13.5,
+      paddingVertical: 10,
+      fontFamily: designFonts.sans,
+    },
     listContent: {
-      padding: t.spacing.lg,
+      paddingHorizontal: 8,
+      paddingBottom: 24,
     },
     separator: {
-      height: t.spacing.sm,
+      height: 1,
     },
     loadingContainer: {
       flex: 1,
@@ -549,49 +685,173 @@ const useStyles = () =>
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
-      padding: t.spacing.xl,
+      padding: 20,
     },
     emptyText: {
       fontSize: 16,
-      color: t.colors.textSecondary,
-      marginBottom: t.spacing.lg,
+      color: palette.textMuted,
+      marginBottom: 16,
+      fontFamily: designFonts.sans,
     },
     newButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: t.colors.accent,
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.md,
-      borderRadius: 8,
-      gap: t.spacing.sm,
+      backgroundColor: palette.accent,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 999,
+      gap: 8,
     },
     newButtonText: {
       fontSize: 15,
       fontWeight: '600',
-      color: '#FFFFFF',
+      color: palette.bg,
+      fontFamily: designFonts.sans,
     },
-    deleteAction: {
-      backgroundColor: '#E53935',
-      justifyContent: 'center',
-      alignItems: 'center',
-      width: 70,
-      borderTopRightRadius: t.radius.lg,
-      borderBottomRightRadius: t.radius.lg,
-    },
-    webSessionRow: {
-      flexDirection: 'row',
-      alignItems: 'stretch',
-      gap: t.spacing.xs,
-    },
-    webSessionPressArea: {
-      flex: 1,
-      minWidth: 0,
-    },
-    webDeleteButton: {
-      width: 48,
-      borderRadius: t.radius.lg,
-      backgroundColor: '#E53935',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-  }));
+  }), [palette]);
+};
+
+const rowStyles = StyleSheet.create({
+  row: {
+    minHeight: 78,
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  rowMenuOpen: {
+    zIndex: 30,
+  },
+  selectedStripe: {
+    position: 'absolute',
+    left: 2,
+    top: 14,
+    bottom: 14,
+    width: 2,
+    borderRadius: 2,
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 13,
+    fontWeight: '500',
+    fontFamily: designFonts.sans,
+  },
+  ping: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 2,
+  },
+  body: {
+    flex: 1,
+    minWidth: 0,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  name: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+    fontFamily: designFonts.sans,
+  },
+  time: {
+    fontSize: 10.5,
+    fontWeight: '500',
+    fontFamily: designFonts.mono,
+  },
+  subject: {
+    fontSize: 13,
+    marginTop: 2,
+    marginBottom: 8,
+    fontFamily: designFonts.sans,
+  },
+  foot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    maxWidth: 130,
+  },
+  chipDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  chipText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    fontFamily: designFonts.sans,
+  },
+  progress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  progressSegment: {
+    width: 12,
+    height: 3,
+    borderRadius: 2,
+  },
+  menuButton: {
+    width: 24,
+    height: 20,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -1,
+  },
+  overflowMenu: {
+    position: 'absolute',
+    top: 40,
+    right: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 4,
+    minWidth: 118,
+    zIndex: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  overflowItem: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  overflowText: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: designFonts.sans,
+  },
+});

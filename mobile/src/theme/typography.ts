@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-const webFontStack = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+const webFontStack = 'Geist, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 const fontFamily = Platform.OS === 'web' ? webFontStack : 'System';
 
 export const typography = {

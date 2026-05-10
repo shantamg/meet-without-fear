@@ -4,7 +4,7 @@
  * Allows users to manage their profile: edit profile, export data, delete account.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,11 +18,13 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { User, Trash2, Save } from 'lucide-react-native';
 import { useClerk } from '@clerk/clerk-expo';
-import { colors } from '@/src/theme';
+import { designFonts, useAppAppearance } from '@/src/theme';
 import { useProfile, useUpdateProfile, useDeleteAccount } from '@/src/hooks/useProfile';
 import { useAuth } from '@/src/hooks/useAuth';
 
 export default function AccountSettingsScreen() {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const { data: profileData } = useProfile();
   const user = profileData?.user;
   const updateProfile = useUpdateProfile();
@@ -117,12 +119,13 @@ export default function AccountSettingsScreen() {
           headerShown: true,
           headerBackTitle: 'Back',
           headerStyle: {
-            backgroundColor: colors.bgPrimary,
+            backgroundColor: palette.bg,
           },
-          headerTintColor: colors.textPrimary,
+          headerTintColor: palette.text,
           headerTitleStyle: {
             fontWeight: '600',
-            color: colors.textPrimary,
+            color: palette.text,
+            fontFamily: designFonts.sans,
           },
         }}
       />
@@ -133,7 +136,7 @@ export default function AccountSettingsScreen() {
           <Text style={styles.sectionTitle}>Profile</Text>
           <View style={styles.card}>
             <View style={styles.avatarContainer}>
-              <User color={colors.textPrimary} size={32} />
+              <User color={palette.bg} size={32} />
             </View>
             <View style={styles.profileInfo}>
               {isEditing ? (
@@ -144,7 +147,7 @@ export default function AccountSettingsScreen() {
                     value={firstName}
                     onChangeText={setFirstName}
                     placeholder="First name"
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor={palette.textFaint}
                     autoFocus
                   />
                   <Text style={styles.label}>Last Name</Text>
@@ -153,7 +156,7 @@ export default function AccountSettingsScreen() {
                     value={lastName}
                     onChangeText={setLastName}
                     placeholder="Last name (optional)"
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor={palette.textFaint}
                   />
                 </>
               ) : (
@@ -186,10 +189,10 @@ export default function AccountSettingsScreen() {
                 disabled={updateProfile.isPending}
               >
                 {updateProfile.isPending ? (
-                  <ActivityIndicator color={colors.textPrimary} size="small" />
+                  <ActivityIndicator color={palette.bg} size="small" />
                 ) : (
                   <>
-                    <Save color={colors.textPrimary} size={18} />
+                    <Save color={palette.bg} size={18} />
                     <Text style={styles.saveButtonText}>Save</Text>
                   </>
                 )}
@@ -213,7 +216,7 @@ export default function AccountSettingsScreen() {
             onPress={handleDeleteAccount}
           >
             <View style={styles.menuItemLeft}>
-              <Trash2 color={colors.error} size={22} />
+              <Trash2 color={palette.danger} size={22} />
               <View>
                 <Text style={[styles.menuItemLabel, styles.dangerLabel]}>
                   Delete Account
@@ -230,10 +233,10 @@ export default function AccountSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bgPage,
+    backgroundColor: palette.bg,
   },
   content: {
     padding: 16,
@@ -246,26 +249,29 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginLeft: 4,
+    fontFamily: designFonts.sans,
   },
   dangerTitle: {
-    color: colors.error,
+    color: palette.danger,
   },
   card: {
     flexDirection: 'row',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
     gap: 16,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   avatarContainer: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -275,54 +281,63 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: palette.textMuted,
     marginTop: 8,
+    fontFamily: designFonts.sans,
   },
   value: {
     fontSize: 16,
-    color: colors.textPrimary,
+    color: palette.text,
+    fontFamily: designFonts.sans,
   },
   input: {
     fontSize: 16,
-    color: colors.textPrimary,
-    backgroundColor: colors.bgTertiary,
+    color: palette.text,
+    backgroundColor: palette.bgPane,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: palette.borderStrong,
+    fontFamily: designFonts.sans,
   },
   buttonRow: {
     flexDirection: 'row',
     gap: 12,
   },
   editButton: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   editButtonText: {
     fontSize: 16,
-    color: colors.accent,
+    color: palette.accentText,
     fontWeight: '600',
+    fontFamily: designFonts.sans,
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   cancelButtonText: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     fontWeight: '600',
+    fontFamily: designFonts.sans,
   },
   saveButton: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
@@ -331,20 +346,23 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     fontSize: 16,
-    color: colors.textPrimary,
+    color: palette.bg,
     fontWeight: '600',
+    fontFamily: designFonts.sans,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: palette.bgElev,
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   dangerItem: {
     borderWidth: 1,
-    borderColor: colors.error,
+    borderColor: palette.danger,
   },
   menuItemLeft: {
     flexDirection: 'row',
@@ -354,15 +372,17 @@ const styles = StyleSheet.create({
   },
   menuItemLabel: {
     fontSize: 17,
-    color: colors.textPrimary,
+    color: palette.text,
     fontWeight: '500',
+    fontFamily: designFonts.sans,
   },
   dangerLabel: {
-    color: colors.error,
+    color: palette.danger,
   },
   menuItemDescription: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     marginTop: 2,
+    fontFamily: designFonts.sans,
   },
 });

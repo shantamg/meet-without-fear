@@ -25,24 +25,40 @@ const FADE_DURATION = 300; // Match the fade animation duration
 
 export default function SelfReflectionChatScreen() {
   const router = useRouter();
-  const { id, partnerSessionId, partnerName, linkedTrigger, initialMessage } = useLocalSearchParams<{
+  const {
+    id,
+    partnerSessionId,
+    partnerName,
+    linkedTrigger,
+    initialMessage,
+    comingSoon,
+  } = useLocalSearchParams<{
     id: string;
     partnerSessionId?: string;
     partnerName?: string;
     linkedTrigger?: string;
     initialMessage?: string;
+    comingSoon?: string;
   }>();
 
   const isNewSession = id === 'new';
+  const isComingSoon = comingSoon === '1';
+  const hasInitialMessage =
+    typeof initialMessage === 'string' && initialMessage.trim().length > 0;
 
   // Track the created session ID in state to avoid route replacement remounting
   const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
   // Store suggested actions from session creation (e.g., "Start conversation with Jason")
   const [initialSuggestedActions, setInitialSuggestedActions] = useState<SuggestedAction[] | undefined>(undefined);
+  const [initialSuggestedActionMessageId, setInitialSuggestedActionMessageId] = useState<string | undefined>(undefined);
   // Track when the fade transition has completed (only for new sessions)
-  const [transitionComplete, setTransitionComplete] = useState(!isNewSession);
+  const [transitionComplete, setTransitionComplete] = useState(!isNewSession || hasInitialMessage);
   const createSession = useCreateInnerThoughtsSession();
   const hasStartedCreation = useRef(false);
+
+  const handleNavigateBack = () => {
+    router.replace('/inner-work');
+  };
 
   // Wait for fade transition to complete before showing content (new sessions only)
   useEffect(() => {
@@ -56,7 +72,7 @@ export default function SelfReflectionChatScreen() {
 
   // Handle creating a new session when id="new"
   useEffect(() => {
-    if (id === 'new' && !hasStartedCreation.current) {
+    if (id === 'new' && !isComingSoon && !hasStartedCreation.current) {
       hasStartedCreation.current = true;
       createSession.mutate(
         {
@@ -77,6 +93,7 @@ export default function SelfReflectionChatScreen() {
             // Capture suggested actions from the AI response (e.g., "Start conversation with Jason")
             if (result.suggestedActions && result.suggestedActions.length > 0) {
               setInitialSuggestedActions(result.suggestedActions);
+              setInitialSuggestedActionMessageId(result.initialMessage.id);
             }
 
             // Update state instead of router.replace() to avoid component remount
@@ -84,16 +101,18 @@ export default function SelfReflectionChatScreen() {
           },
           onError: (err) => {
             console.error('Failed to create self-reflection session:', err);
-            router.back();
+            handleNavigateBack();
           },
         }
       );
     }
-  }, [id, partnerSessionId, linkedTrigger, initialMessage, createSession, router]);
+  }, [id, isComingSoon, partnerSessionId, linkedTrigger, initialMessage, createSession, router]);
 
   // Use created session ID if available, otherwise use URL id
-  const effectiveSessionId = createdSessionId || (id === 'new' ? '' : (id || ''));
-  const isCreating = id === 'new' && !createdSessionId;
+  const effectiveSessionId = isComingSoon
+    ? 'inner-work-coming-soon'
+    : createdSessionId || (id === 'new' ? '' : (id || ''));
+  const isCreating = id === 'new' && !isComingSoon && !createdSessionId;
 
   return (
     <>
@@ -101,7 +120,7 @@ export default function SelfReflectionChatScreen() {
         options={{
           headerShown: false,
           // Use fade for new sessions, slide for existing
-          animation: isNewSession ? 'fade' : 'slide_from_right',
+          animation: isComingSoon ? 'slide_from_right' : isNewSession ? 'fade' : 'slide_from_right',
           // Ensure swipe back works
           gestureEnabled: true,
         }}
@@ -109,7 +128,7 @@ export default function SelfReflectionChatScreen() {
       <InnerThoughtsScreen
         sessionId={effectiveSessionId}
         linkedPartnerName={partnerName}
-        onNavigateBack={() => router.back()}
+        onNavigateBack={handleNavigateBack}
         onNavigateToPartnerSession={
           partnerSessionId
             ? () => router.replace(`/session/${partnerSessionId}`)
@@ -118,7 +137,9 @@ export default function SelfReflectionChatScreen() {
         isCreating={isCreating}
         initialMessage={initialMessage}
         initialSuggestedActions={initialSuggestedActions}
-        hideContentUntilReady={!transitionComplete}
+        initialSuggestedActionMessageId={initialSuggestedActionMessageId}
+        hideContentUntilReady={!isComingSoon && !transitionComplete}
+        comingSoonMode={isComingSoon}
       />
     </>
   );

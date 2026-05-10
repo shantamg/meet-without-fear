@@ -9,6 +9,7 @@ import { View, Text, ActivityIndicator, Animated, Pressable } from 'react-native
 import { createStyles } from '../theme/styled';
 import type { WaitingStatusState } from '../utils/getWaitingStatus';
 import { getWaitingStatusConfig } from '../config/waitingStatusConfig';
+import { designFonts, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -121,11 +122,13 @@ export function WaitingBanner({
 // ============================================================================
 
 const useStyles = () =>
-  createStyles((t) => ({
+  {
+    const { palette } = useAppAppearance();
+    return createStyles((t) => ({
     container: {
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bg,
       borderTopWidth: 1,
-      borderTopColor: t.colors.border,
+      borderTopColor: palette.border,
     },
     content: {
       alignItems: 'center',
@@ -136,20 +139,22 @@ const useStyles = () =>
       marginBottom: t.spacing.xs,
     },
     spinnerColor: {
-      color: t.colors.brandBlue,
+      color: palette.info,
     },
     text: {
       fontSize: t.typography.fontSize.md,
       lineHeight: 22,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       textAlign: 'center',
+      fontFamily: designFonts.sans,
     },
     subtext: {
       fontSize: 12,
       lineHeight: 18,
-      color: t.colors.textMuted,
+      color: palette.textFaint,
       textAlign: 'center',
       marginTop: 2,
+      fontFamily: designFonts.sans,
     },
     exerciseLink: {
       marginTop: t.spacing.sm,
@@ -158,9 +163,11 @@ const useStyles = () =>
     },
     exerciseLinkText: {
       fontSize: t.typography.fontSize.sm,
-      color: t.colors.accent,
+      color: palette.accent,
       textDecorationLine: 'underline',
+      fontFamily: designFonts.sans,
     },
   }));
+  };
 
 export default WaitingBanner;

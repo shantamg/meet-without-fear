@@ -3,7 +3,7 @@ title: "Stage 2: Perspective Stretch - Empathy Exchange Flow"
 sidebar_position: 6
 description: This document describes the empathy exchange flow in Stage 2, including the reconciler system that analyzes empathy accuracy and manages the sharing of addit...
 created: 2026-03-11
-updated: 2026-05-02
+updated: 2026-05-10
 status: living
 ---
 # Stage 2: Perspective Stretch - Empathy Exchange Flow
@@ -60,6 +60,8 @@ stateDiagram-v2
 
 > **Mutual Reveal**: Empathy statements are only revealed when BOTH users have completed Stage 2 and had their empathy analyzed. The `READY` status means "reconciler complete, waiting for partner to also finish Stage 2".
 
+> **Quality Commentary at Reveal**: At mutual reveal time, `checkAndRevealBothIfReady()` also creates an AI quality message for each subject (the person reviewing their partner's empathy attempt). The message is tailored to the `gapSeverity` from the latest non-superseded `ReconcilerResult` for that direction (guesser → subject): moderate/significant gaps generate a message noting the attempt may not fully capture everything and encouraging feedback; no/minor gaps generate a simpler "ready to review" prompt. This runs as a best-effort side effect — errors are logged as warnings and do not block the reveal.
+
 ## Share Offer States
 
 The `ReconcilerShareOffer` tracks the suggestion lifecycle:
@@ -92,7 +94,7 @@ The reconciler runs when one user confirms "feel heard" (completing Stage 1) and
 
 > **Implementation Note:** The reconciler has been refactored into a modular `backend/src/services/reconciler/` directory:
 > - `state.ts` — Empathy status transitions, reveal logic. Contains `runReconcilerForDirection()` (asymmetric) and `checkAndRevealBothIfReady()` (serializable transaction for mutual reveal).
-> - `analysis.ts` — Core AI gap analysis (`analyzeEmpathyGap()`), theme extraction, witnessing content retrieval.
+> - `analysis.ts` — Core AI gap analysis (`analyzeEmpathyGap()`), theme extraction, witnessing content retrieval. It also loads the subject's `notableFacts` from UserVessel and a scoped Stage 2 subject hot buffer so later subject-owned shifts (for example, denial → confession) can update stale Stage 1 factual framing while preserving Stage 1 as the emotional anchor.
 > - `sharing.ts` — Share suggestion generation, refinement, and response handling.
 > - `circuit-breaker.ts` — Attempt counting to prevent infinite refinement loops (max 3 per direction).
 > - `index.ts` — Barrel re-exports.
@@ -117,7 +119,7 @@ flowchart TB
     B -->|No| C[No action needed]
     B -->|Yes| D[Run Reconciler Analysis]
 
-    D --> E{Analyze gaps in<br/>partner's empathy attempt}
+    D --> E{Analyze gaps using<br/>witnessing + notableFacts<br/>+ Stage 2 subject hot buffer}
 
     E --> F{Gap Severity?}
 
@@ -379,7 +381,7 @@ Only one panel shows at a time, in this priority order:
 |-------|---------|-------------------|-----------|
 | `empathy.status_updated` (status=`AWAITING_SHARING`) | Reconciler offers a share prompt (Moderate+focus or Significant gap) | `shareOffer`, `empathyStatus` | Show share suggestion panel (message: "&lt;name&gt; is considering a suggestion to share more") |
 | `empathy.context_shared` | Subject shares additional context | `empathyStatus`, `shareOffer`, `messages` | Guesser sees shared context |
-| `empathy.revealed` | Empathy revealed (no significant gaps) | `empathyStatus`, `partnerEmpathy` | Subject can validate |
+| `empathy.revealed` | Empathy revealed (mutual reveal — both directions READY) | `empathyStatus`, `partnerEmpathy` | Subject can validate; also triggers an AI quality commentary message for each subject based on `gapSeverity` of the corresponding reconciler result |
 | `partner.stage_completed` | Partner completes a stage; Stage 2 validation emits this only for `validated=true` | `empathyStatus`, `progress` | Update waiting status |
 | `partner.session_viewed` | Partner views session | `empathyStatus` (delivery status) | Update delivery indicator |
 | `empathy.validated` | Partner validates empathy | `empathyStatus` | Show validation result |

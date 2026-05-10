@@ -12,7 +12,7 @@
  * and pre-fills the partner name if available.
  */
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -30,10 +30,15 @@ import { Send, User, UserPlus, Check, Layers } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useCreateSession } from '@/src/hooks/useSessions';
-import { usePeople } from '@/src/hooks/usePerson';
+import { dedupePeople, usePeople } from '@/src/hooks/usePerson';
 import { useGenerateContext } from '@/src/hooks/useInnerThoughts';
-import { colors } from '@/src/theme';
+import { NotificationPermissionDrawer } from '@/src/components/NotificationPermissionDrawer';
+import { useAppAppearance } from '@/src/theme';
 import { trackSessionCreated, trackPersonSelected } from '@/src/services/analytics';
+import {
+  getNotificationPermissionStatus,
+  requestAndRegisterForPushNotifications,
+} from '@/src/services/notifications';
 import type { PersonSummaryDTO, GenerateContextResponse } from '@meet-without-fear/shared';
 
 // ============================================================================
@@ -42,9 +47,12 @@ import type { PersonSummaryDTO, GenerateContextResponse } from '@meet-without-fe
 
 export default function NewSessionScreen() {
   const router = useRouter();
-  const { partnerName, innerThoughtsId } = useLocalSearchParams<{
+  const { palette } = useAppAppearance();
+  const styles = useStyles();
+  const { partnerName, innerThoughtsId, linkedAtMessageId } = useLocalSearchParams<{
     partnerName?: string;
     innerThoughtsId?: string;
+    linkedAtMessageId?: string;
   }>();
 
   const [mode, setMode] = useState<'pick' | 'new'>('pick');
@@ -53,8 +61,13 @@ export default function NewSessionScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [innerThoughtsContext, setInnerThoughtsContext] = useState<GenerateContextResponse | null>(null);
+  const hasPreFilledPartnerName = useRef(false);
+  const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState<(() => Promise<void>) | null>(null);
 
-  const { data: people = [], isLoading: peopleLoading } = usePeople();
+  const { data: rawPeople = [], isLoading: peopleLoading } = usePeople();
+  const people = useMemo(() => dedupePeople(rawPeople), [rawPeople]);
   const { mutateAsync: createSession, isPending } = useCreateSession();
   const { mutateAsync: generateContext, isPending: isGeneratingContext } = useGenerateContext();
 
@@ -80,13 +93,14 @@ export default function NewSessionScreen() {
 
   // Pre-fill partner name from query params (from InnerThoughtsScreen navigation)
   useEffect(() => {
-    if (partnerName && !firstName) {
+    if (partnerName && !hasPreFilledPartnerName.current) {
+      hasPreFilledPartnerName.current = true;
       const nameParts = partnerName.split(' ');
       setFirstName(nameParts[0] || '');
       setLastName(nameParts.slice(1).join(' ') || '');
       setMode('new'); // Switch to new person mode since we have a name
     }
-  }, [partnerName, firstName]);
+  }, [partnerName]);
 
   // Determine if we have people to pick from
   const hasPeople = people.length > 0;
@@ -94,7 +108,7 @@ export default function NewSessionScreen() {
   // Effective mode: if no people exist, treat as 'new' regardless of state
   const effectiveMode = hasPeople ? mode : 'new';
 
-  const handleSubmit = async () => {
+  const createSessionFromForm = async () => {
     // Build optional context and innerThoughtsId for session creation
     const context = innerThoughtsContext?.contextSummary;
     const linkedInnerThoughtsId = innerThoughtsId;
@@ -108,6 +122,7 @@ export default function NewSessionScreen() {
           personId: selectedPerson.id,
           ...(context && { context }),
           ...(linkedInnerThoughtsId && { innerThoughtsId: linkedInnerThoughtsId }),
+          ...(linkedAtMessageId && { linkedAtMessageId }),
         });
         // Handle existing active session response
         if ('existingActiveSession' in response && !bypassDuplicateCheck) {
@@ -134,7 +149,11 @@ export default function NewSessionScreen() {
         }
         // Track session creation
         trackSessionCreated(response.session.id, selectedPerson.id);
-        router.replace(`/session/${response.session.id}`);
+        router.replace(
+          linkedInnerThoughtsId
+            ? `/session/${response.session.id}?fromInnerThoughtsCreate=1`
+            : `/session/${response.session.id}`
+        );
       } catch (error) {
         console.error('Failed to create session:', error);
         Alert.alert('Error', 'Failed to create session. Please try again.');
@@ -154,12 +173,17 @@ export default function NewSessionScreen() {
           inviteName,
           ...(context && { context }),
           ...(linkedInnerThoughtsId && { innerThoughtsId: linkedInnerThoughtsId }),
+          ...(linkedAtMessageId && { linkedAtMessageId }),
         });
         // Track person selection (new person) and session creation
         // Note: personId not available in response, using relationshipId
         trackPersonSelected(response.session.relationshipId, true);
         trackSessionCreated(response.session.id, response.session.relationshipId);
-        router.replace(`/session/${response.session.id}`);
+        router.replace(
+          linkedInnerThoughtsId
+            ? `/session/${response.session.id}?fromInnerThoughtsCreate=1`
+            : `/session/${response.session.id}`
+        );
       } catch (error) {
         console.error('Failed to create session:', error);
         Alert.alert('Error', 'Failed to create session. Please try again.');
@@ -167,10 +191,49 @@ export default function NewSessionScreen() {
     }
   };
 
+  const handleSubmit = async () => {
+    try {
+      if ((await getNotificationPermissionStatus()) === 'undetermined') {
+        setPendingSubmit(() => createSessionFromForm);
+        setShowNotificationDrawer(true);
+        return;
+      }
+    } catch (error) {
+      console.warn('Failed to check notification permission:', error);
+    }
+
+    await createSessionFromForm();
+  };
+
+  const continueAfterNotificationChoice = async () => {
+    const submit = pendingSubmit;
+    setPendingSubmit(null);
+    setShowNotificationDrawer(false);
+    if (submit) {
+      await submit();
+    }
+  };
+
+  const handleEnableNotifications = async () => {
+    setNotificationLoading(true);
+    try {
+      await requestAndRegisterForPushNotifications();
+    } finally {
+      setNotificationLoading(false);
+    }
+    await continueAfterNotificationChoice();
+  };
+
   const canSubmit = effectiveMode === 'pick' ? !!selectedPerson : !!firstName.trim();
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      <NotificationPermissionDrawer
+        visible={showNotificationDrawer}
+        loading={notificationLoading}
+        onEnable={handleEnableNotifications}
+        onSkip={continueAfterNotificationChoice}
+      />
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -192,12 +255,12 @@ export default function NewSessionScreen() {
             {innerThoughtsId && (
               <View style={styles.contextBanner}>
                 <View style={styles.contextBannerHeader}>
-                  <Layers size={16} color={colors.brandBlue} />
+                  <Layers size={16} color={palette.accent} />
                   <Text style={styles.contextBannerTitle}>From Inner Thoughts</Text>
                 </View>
                 {isGeneratingContext ? (
                   <View style={styles.contextLoading}>
-                    <ActivityIndicator size="small" color={colors.brandBlue} />
+                    <ActivityIndicator size="small" color={palette.accent} />
                     <Text style={styles.contextLoadingText}>Preparing context...</Text>
                   </View>
                 ) : innerThoughtsContext ? (
@@ -219,7 +282,7 @@ export default function NewSessionScreen() {
                 >
                   <User
                     size={18}
-                    color={mode === 'pick' ? colors.brandBlue : colors.textSecondary}
+                    color={mode === 'pick' ? palette.accent : palette.textMuted}
                   />
                   <Text
                     style={[styles.tabText, mode === 'pick' && styles.tabTextActive]}
@@ -235,7 +298,7 @@ export default function NewSessionScreen() {
                 >
                   <UserPlus
                     size={18}
-                    color={mode === 'new' ? colors.brandBlue : colors.textSecondary}
+                    color={mode === 'new' ? palette.accent : palette.textMuted}
                   />
                   <Text
                     style={[styles.tabText, mode === 'new' && styles.tabTextActive]}
@@ -250,7 +313,7 @@ export default function NewSessionScreen() {
             {effectiveMode === 'pick' && hasPeople && (
               <View style={styles.peopleList}>
                 {peopleLoading ? (
-                  <ActivityIndicator color={colors.brandBlue} />
+                  <ActivityIndicator color={palette.accent} />
                 ) : (
                   people.map((person) => (
                     <TouchableOpacity
@@ -286,7 +349,7 @@ export default function NewSessionScreen() {
                       </View>
                       {selectedPerson?.id === person.id && (
                         <View style={styles.checkIcon}>
-                          <Check size={20} color={colors.brandBlue} />
+                          <Check size={20} color={palette.accent} />
                         </View>
                       )}
                     </TouchableOpacity>
@@ -322,7 +385,7 @@ export default function NewSessionScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="Enter their first name"
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor={palette.textFaint}
                     value={firstName}
                     onChangeText={setFirstName}
                     autoCapitalize="words"
@@ -337,7 +400,7 @@ export default function NewSessionScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="Enter their last name"
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor={palette.textFaint}
                     value={lastName}
                     onChangeText={setLastName}
                     autoCapitalize="words"
@@ -363,11 +426,11 @@ export default function NewSessionScreen() {
               accessibilityLabel="Create session"
             >
               {isPending ? (
-                <ActivityIndicator color={colors.textPrimary} size="small" />
+                <ActivityIndicator color={palette.bg} size="small" />
               ) : (
                 <>
                   <Text style={styles.submitButtonText}>Create Session</Text>
-                  <Send color={colors.textPrimary} size={20} />
+                  <Send color={palette.bg} size={20} />
                 </>
               )}
             </TouchableOpacity>
@@ -402,223 +465,227 @@ function formatRelativeTime(dateString: string): string {
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bgPrimary,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    justifyContent: 'space-between',
-  },
-  form: {
-    padding: 16,
-    gap: 20,
-  },
-  heading: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 4,
-  },
-  subheading: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    lineHeight: 24,
-    marginBottom: 8,
-  },
-  // Tabs
-  tabs: {
-    flexDirection: 'row',
-    backgroundColor: colors.bgSecondary,
-    borderRadius: 12,
-    padding: 4,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    gap: 8,
-  },
-  tabActive: {
-    backgroundColor: colors.bgPrimary,
-  },
-  tabText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  tabTextActive: {
-    color: colors.brandBlue,
-  },
-  // People list
-  peopleList: {
-    gap: 12,
-  },
-  personCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.bgSecondary,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  personCardSelected: {
-    borderColor: colors.brandBlue,
-    backgroundColor: `${colors.brandBlue}10`,
-  },
-  personAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.bgTertiary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  personAvatarText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  personInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  personNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  personName: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  activeBadge: {
-    backgroundColor: `${colors.brandBlue}20`,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  activeBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.brandBlue,
-  },
-  personMeta: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  checkIcon: {
-    marginLeft: 8,
-  },
-  activeWarningBanner: {
-    backgroundColor: `${colors.warning}15`,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: `${colors.warning}30`,
-    gap: 12,
-  },
-  activeWarningText: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    lineHeight: 22,
-  },
-  continueExistingButton: {
-    backgroundColor: colors.brandBlue,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  continueExistingButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  // Input group
-  inputGroup: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  input: {
-    backgroundColor: colors.bgSecondary,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 17,
-    borderWidth: 1,
-    borderColor: colors.border,
-    color: colors.textPrimary,
-  },
-  footer: {
-    padding: 16,
-    paddingBottom: 24,
-  },
-  submitButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.brandBlue,
-    borderRadius: 12,
-    padding: 16,
-    gap: 8,
-  },
-  submitButtonDisabled: {
-    backgroundColor: colors.bgTertiary,
-  },
-  submitButtonText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  // Context banner (from Inner Thoughts)
-  contextBanner: {
-    backgroundColor: `${colors.brandBlue}15`,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: `${colors.brandBlue}30`,
-  },
-  contextBannerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  contextBannerTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.brandBlue,
-  },
-  contextBannerText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
-  contextLoading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  contextLoadingText: {
-    fontSize: 13,
-    color: colors.textMuted,
-  },
-});
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+
+  return useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: palette.bg,
+    },
+    keyboardView: {
+      flex: 1,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    content: {
+      flexGrow: 1,
+      justifyContent: 'space-between',
+    },
+    form: {
+      padding: 16,
+      gap: 20,
+    },
+    heading: {
+      fontSize: 24,
+      fontWeight: '700',
+      color: palette.text,
+      marginBottom: 4,
+    },
+    subheading: {
+      fontSize: 16,
+      color: palette.textMuted,
+      lineHeight: 24,
+      marginBottom: 8,
+    },
+    // Tabs
+    tabs: {
+      flexDirection: 'row',
+      backgroundColor: palette.chipBg,
+      borderRadius: 12,
+      padding: 4,
+    },
+    tab: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      gap: 8,
+    },
+    tabActive: {
+      backgroundColor: palette.bgElev,
+    },
+    tabText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: palette.textMuted,
+    },
+    tabTextActive: {
+      color: palette.accent,
+    },
+    // People list
+    peopleList: {
+      gap: 12,
+    },
+    personCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: palette.bgElev,
+      borderRadius: 12,
+      padding: 12,
+      borderWidth: 2,
+      borderColor: palette.border,
+    },
+    personCardSelected: {
+      borderColor: palette.accent,
+      backgroundColor: palette.accentSoft,
+    },
+    personAvatar: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: palette.chipBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    personAvatarText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: palette.text,
+    },
+    personInfo: {
+      flex: 1,
+      marginLeft: 12,
+    },
+    personNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    personName: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: palette.text,
+    },
+    activeBadge: {
+      backgroundColor: palette.accentSoft,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 8,
+    },
+    activeBadgeText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: palette.accentText,
+    },
+    personMeta: {
+      fontSize: 13,
+      color: palette.textMuted,
+      marginTop: 2,
+    },
+    checkIcon: {
+      marginLeft: 8,
+    },
+    activeWarningBanner: {
+      backgroundColor: palette.warningSoft,
+      borderRadius: 12,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: palette.borderStrong,
+      gap: 12,
+    },
+    activeWarningText: {
+      fontSize: 15,
+      color: palette.textMuted,
+      lineHeight: 22,
+    },
+    continueExistingButton: {
+      backgroundColor: palette.accent,
+      borderRadius: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      alignItems: 'center',
+    },
+    continueExistingButtonText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: palette.bg,
+    },
+    // Input group
+    inputGroup: {
+      gap: 8,
+    },
+    label: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: palette.textMuted,
+    },
+    input: {
+      backgroundColor: palette.bgElev,
+      borderRadius: 12,
+      padding: 16,
+      fontSize: 17,
+      borderWidth: 1,
+      borderColor: palette.border,
+      color: palette.text,
+    },
+    footer: {
+      padding: 16,
+      paddingBottom: 24,
+    },
+    submitButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.accent,
+      borderRadius: 12,
+      padding: 16,
+      gap: 8,
+    },
+    submitButtonDisabled: {
+      backgroundColor: palette.chipBg,
+    },
+    submitButtonText: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: palette.bg,
+    },
+    // Context banner (from Inner Thoughts)
+    contextBanner: {
+      backgroundColor: palette.accentSoft,
+      borderRadius: 12,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: palette.borderStrong,
+    },
+    contextBannerHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 8,
+    },
+    contextBannerTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: palette.accentText,
+    },
+    contextBannerText: {
+      fontSize: 14,
+      color: palette.textMuted,
+      lineHeight: 20,
+    },
+    contextLoading: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    contextLoadingText: {
+      fontSize: 13,
+      color: palette.textFaint,
+    },
+  }), [palette]);
+};

@@ -17,11 +17,12 @@ import { trackInnerThoughtsCreated, trackInnerThoughtsLinked } from '@/src/servi
 
 export default function InnerThoughtsChatScreen() {
   const router = useRouter();
-  const { id, partnerSessionId, partnerName, linkedTrigger } = useLocalSearchParams<{
+  const { id, partnerSessionId, partnerName, linkedTrigger, auditFixture } = useLocalSearchParams<{
     id: string;
     partnerSessionId?: string;
     partnerName?: string;
     linkedTrigger?: string;
+    auditFixture?: string;
   }>();
 
   // Track the created session ID in state to avoid route replacement remounting
@@ -78,6 +79,7 @@ export default function InnerThoughtsChatScreen() {
             : undefined
         }
         isCreating={isCreating}
+        auditFixture={typeof auditFixture === 'string' ? auditFixture : null}
       />
     </>
   );

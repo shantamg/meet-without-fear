@@ -179,7 +179,7 @@ const redesignedStage4State: GetStage4StateResponse = {
   },
   mySelections: [],
   partnerSelections: [],
-  partnerSelectionStatus: 'NOT_STARTED',
+  partnerSelectionStatus: 'SUBMITTED',
   outcome: null,
   tendingPreview: null,
 };

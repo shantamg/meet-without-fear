@@ -66,6 +66,11 @@ type Stage4ClosureRow = {
   closedAt: Date;
 };
 
+type Stage4ProgressRow = {
+  userId: string;
+  gatesSatisfied: unknown;
+};
+
 type AgreementRow = {
   id: string;
   proposalId: string | null;
@@ -214,6 +219,38 @@ function buildProposalCard(
   };
 }
 
+function requiresSharedSelection(proposal: Stage4ProposalRow): boolean {
+  return proposal.kind === Stage4ProposalKind.SHARED_PROPOSAL && proposal.status === Stage4ProposalStatus.ACTIVE;
+}
+
+function hasSelectionForEveryActiveSharedProposal(
+  userId: string | null,
+  proposals: Stage4ProposalRow[],
+  selections: Stage4SelectionRow[]
+): boolean {
+  if (!userId) return false;
+
+  const sharedProposalIds = proposals.filter(requiresSharedSelection).map((proposal) => proposal.id);
+  if (sharedProposalIds.length === 0) return false;
+
+  return sharedProposalIds.every((proposalId) =>
+    selections.some((selection) => selection.proposalId === proposalId && selection.userId === userId)
+  );
+}
+
+function hasSubmittedSelectionGate(progressRows: Stage4ProgressRow[], userId: string | null): boolean {
+  if (!userId) return false;
+
+  const progress = progressRows.find((row) => row.userId === userId);
+  const gates = progress?.gatesSatisfied;
+  return Boolean(
+    gates &&
+      typeof gates === 'object' &&
+      !Array.isArray(gates) &&
+      (gates as Record<string, unknown>).selectionSubmitted === true
+  );
+}
+
 function buildAgreementDTO(agreement: AgreementRow, userIsA: boolean): AgreementDTO {
   return {
     id: agreement.id,
@@ -236,6 +273,8 @@ function derivePhase(args: {
   coverageRows: Stage4NeedCoverageRow[];
   mySelections: Stage4SelectionRow[];
   partnerSelections: Stage4SelectionRow[];
+  mySelectionSubmitted: boolean;
+  partnerSelectionSubmitted: boolean;
 }): Stage4Phase {
   if (args.closure?.kind === Stage4ClosureKind.SHARED_AGREEMENT) {
     return Stage4Phase.CLOSED_SHARED_AGREEMENT;
@@ -249,11 +288,16 @@ function derivePhase(args: {
     return Stage4Phase.CLOSING;
   }
 
-  if (args.mySelections.length > 0 && args.partnerSelections.length > 0) {
+  if (args.mySelectionSubmitted && args.partnerSelectionSubmitted) {
     return Stage4Phase.OUTCOME_REVIEW;
   }
 
-  if (args.mySelections.length > 0 || args.partnerSelections.length > 0) {
+  if (
+    args.mySelectionSubmitted ||
+    args.partnerSelectionSubmitted ||
+    args.mySelections.length > 0 ||
+    args.partnerSelections.length > 0
+  ) {
     return Stage4Phase.SELECTION;
   }
 
@@ -329,6 +373,7 @@ export async function getStage4State(
     closure,
     agreements,
     tendingEntries,
+    progressRows,
   ] = await Promise.all([
     prisma.strategyProposal.findMany({
       where: { sessionId },
@@ -353,12 +398,26 @@ export async function getStage4State(
       where: { sessionId },
       orderBy: [{ scheduledFor: 'asc' }, { createdAt: 'asc' }],
     }) as Promise<TendingEntryRow[]>,
+    prisma.stageProgress.findMany({
+      where: { sessionId, stage: 4 },
+      select: { userId: true, gatesSatisfied: true },
+    }) as Promise<Stage4ProgressRow[]>,
   ]);
 
   const mySelections = selections.filter((selection) => selection.userId === userId);
   const partnerSelections = selections.filter((selection) => selection.userId === partnerUserId);
-  const revealPartnerSelections = mySelections.length > 0 && partnerSelections.length > 0;
-  const activeProposals = proposals.filter((proposal) => proposal.status !== Stage4ProposalStatus.REMOVED);
+  const activeProposals = proposals.filter((proposal) => proposal.status === Stage4ProposalStatus.ACTIVE);
+  const myActiveSharedSelectionComplete = hasSelectionForEveryActiveSharedProposal(userId, activeProposals, selections);
+  const partnerActiveSharedSelectionComplete = hasSelectionForEveryActiveSharedProposal(
+    partnerUserId,
+    activeProposals,
+    selections
+  );
+  const mySelectionSubmitted =
+    hasSubmittedSelectionGate(progressRows ?? [], userId) || myActiveSharedSelectionComplete;
+  const partnerSelectionSubmitted =
+    hasSubmittedSelectionGate(progressRows ?? [], partnerUserId) || partnerActiveSharedSelectionComplete;
+  const revealPartnerSelections = mySelectionSubmitted && partnerSelectionSubmitted;
   const proposalCards = activeProposals.map((proposal) =>
     buildProposalCard(proposal, userId, partnerUserId, selections, coverageRows, revealPartnerSelections)
   );
@@ -379,6 +438,8 @@ export async function getStage4State(
       coverageRows,
       mySelections,
       partnerSelections,
+      mySelectionSubmitted,
+      partnerSelectionSubmitted,
     }),
     inventory: {
       sharedProposals: proposalCards.filter(
@@ -408,7 +469,7 @@ export async function getStage4State(
           updatedAt: selection.updatedAt.toISOString(),
         }))
       : [],
-    partnerSelectionStatus: partnerSelections.length > 0 ? 'SUBMITTED' : 'NOT_STARTED',
+    partnerSelectionStatus: partnerSelectionSubmitted ? 'SUBMITTED' : 'NOT_STARTED',
     outcome: closure
       ? {
           kind: closure.kind,
