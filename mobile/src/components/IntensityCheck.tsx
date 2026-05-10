@@ -7,31 +7,40 @@
 
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { useCallback } from 'react';
-import { colors } from '@/theme';
+import { useCallback, useMemo } from 'react';
+import { appWidthStyle, designFonts, useAppAppearance } from '@/theme';
+
+type Palette = ReturnType<typeof useAppAppearance>['palette'];
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace('#', '');
+  return {
+    r: parseInt(normalized.slice(0, 2), 16),
+    g: parseInt(normalized.slice(2, 4), 16),
+    b: parseInt(normalized.slice(4, 6), 16),
+  };
+}
+
+function interpolateColor(from: string, to: string, amount: number): string {
+  const start = hexToRgb(from);
+  const end = hexToRgb(to);
+  const r = Math.round(start.r + (end.r - start.r) * amount);
+  const g = Math.round(start.g + (end.g - start.g) * amount);
+  const b = Math.round(start.b + (end.b - start.b) * amount);
+  return `rgb(${r}, ${g}, ${b})`;
+}
 
 /**
- * Get interpolated color between green and red based on value (1-10)
- * Matches the EmotionalBarometer gradient
+ * Get interpolated color between theme semantic colors based on value (1-10).
  */
-function getGradientColor(value: number): string {
+function getGradientColor(value: number, palette: Palette): string {
   const t = (value - 1) / 9;
 
   if (t <= 0.5) {
-    // Calm (#10a37f) to Elevated (#f59e0b)
-    const localT = t * 2;
-    const r = Math.round(16 + (245 - 16) * localT);
-    const g = Math.round(163 + (158 - 163) * localT);
-    const b = Math.round(127 + (11 - 127) * localT);
-    return `rgb(${r}, ${g}, ${b})`;
-  } else {
-    // Elevated (#f59e0b) to Intense (#ef4444)
-    const localT = (t - 0.5) * 2;
-    const r = Math.round(245 + (239 - 245) * localT);
-    const g = Math.round(158 + (68 - 158) * localT);
-    const b = Math.round(11 + (68 - 11) * localT);
-    return `rgb(${r}, ${g}, ${b})`;
+    return interpolateColor(palette.success, palette.warning, t * 2);
   }
+
+  return interpolateColor(palette.warning, palette.danger, (t - 0.5) * 2);
 }
 
 /**
@@ -66,7 +75,9 @@ export function IntensityCheck({
   onDone,
   doneButtonLabel = 'Back to chat',
 }: IntensityCheckProps) {
-  const currentColor = getGradientColor(value);
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
+  const currentColor = getGradientColor(value, palette);
   const currentLabel = getIntensityLabel(value);
 
   const handleValueChange = useCallback(
@@ -96,7 +107,7 @@ export function IntensityCheck({
           value={value}
           onValueChange={handleValueChange}
           minimumTrackTintColor={currentColor}
-          maximumTrackTintColor={colors.bgTertiary}
+          maximumTrackTintColor={palette.progressPending}
           thumbTintColor={currentColor}
         />
 
@@ -118,8 +129,9 @@ export function IntensityCheck({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   container: {
+    ...appWidthStyle,
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -127,10 +139,11 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: '600',
-    color: colors.textPrimary,
+    fontWeight: '500',
+    color: palette.text,
     marginBottom: 16,
     textAlign: 'center',
+    fontFamily: designFonts.serif,
   },
   currentContainer: {
     alignItems: 'center',
@@ -139,12 +152,15 @@ const styles = StyleSheet.create({
   currentValue: {
     fontSize: 32,
     fontWeight: '700',
+    fontFamily: designFonts.serif,
   },
   sliderContainer: {
     width: '100%',
     marginBottom: 40,
-    backgroundColor: colors.bgSecondary,
-    borderRadius: 12,
+    backgroundColor: palette.bgPane,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: 8,
     paddingVertical: 16,
     paddingHorizontal: 8,
   },
@@ -160,18 +176,20 @@ const styles = StyleSheet.create({
   },
   scaleLabel: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: palette.textFaint,
+    fontFamily: designFonts.mono,
   },
   doneButton: {
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     paddingVertical: 16,
     paddingHorizontal: 64,
-    borderRadius: 12,
+    borderRadius: 8,
   },
   doneButtonText: {
-    color: colors.textOnAccent,
+    color: '#fffaf0',
     fontSize: 18,
     fontWeight: '600',
+    fontFamily: designFonts.sans,
   },
 });
 

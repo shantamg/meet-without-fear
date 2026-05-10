@@ -14,9 +14,9 @@
  */
 
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@/theme';
+import { appWidthStyle, designFonts, useAppAppearance } from '@/theme';
 import { IntensityCheck } from './IntensityCheck';
 
 interface BodyScanStep {
@@ -68,6 +68,8 @@ export function BodyScanExercise({
   onComplete,
   onClose,
 }: BodyScanExerciseProps) {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const [currentStepIndex, setCurrentStepIndex] = useState(-1); // -1 = not started
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [showIntensityCheck, setShowIntensityCheck] = useState(false);
@@ -217,10 +219,10 @@ export function BodyScanExercise({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   fullScreen: {
     flex: 1,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: palette.bg,
   },
   header: {
     paddingHorizontal: 16,
@@ -231,40 +233,46 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: palette.textMuted,
+    fontFamily: designFonts.sans,
   },
   titleContainer: {
+    ...appWidthStyle,
     paddingHorizontal: 24,
     paddingBottom: 16,
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
-    color: colors.textPrimary,
+    fontWeight: '500',
+    color: palette.text,
     marginBottom: 8,
     textAlign: 'center',
+    fontFamily: designFonts.serif,
   },
   subtitle: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     textAlign: 'center',
+    fontFamily: designFonts.sans,
   },
   stepsContainer: {
     flex: 1,
   },
   stepsContent: {
+    ...appWidthStyle,
     paddingHorizontal: 16,
     paddingBottom: 24,
   },
   step: {
-    backgroundColor: colors.bgTertiary,
-    borderRadius: 12,
+    backgroundColor: palette.bgPane,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: 8,
     padding: 16,
     marginBottom: 12,
   },
   stepActive: {
-    borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: palette.accent,
   },
   stepCompleted: {
     opacity: 0.7,
@@ -279,40 +287,48 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
     justifyContent: 'center',
     alignItems: 'center',
   },
   stepNumberCompleted: {
-    backgroundColor: colors.success,
+    backgroundColor: palette.success,
   },
   stepNumberText: {
     fontSize: 14,
     fontWeight: '600',
-    color: 'white',
+    color: '#fffaf0',
+    fontFamily: designFonts.mono,
   },
   stepArea: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.text,
+    fontFamily: designFonts.sans,
   },
   stepPrompt: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: palette.textMuted,
     lineHeight: 20,
+    fontFamily: designFonts.sans,
   },
   primaryButton: {
-    backgroundColor: colors.accent,
+    backgroundColor: palette.accent,
+    width: '100%',
+    maxWidth: 380,
+    minWidth: 220,
     paddingVertical: 16,
     paddingHorizontal: 32,
-    borderRadius: 12,
+    borderRadius: 8,
     alignItems: 'center',
+    alignSelf: 'center',
     marginTop: 16,
   },
   primaryButtonText: {
-    color: colors.textOnAccent,
+    color: '#fffaf0',
     fontSize: 18,
     fontWeight: '600',
+    fontFamily: designFonts.sans,
   },
 });
 
