@@ -230,5 +230,14 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+    ...Platform.select({
+      web: {
+        // Establish a positioning context so Expo Router's absolutely-positioned
+        // Stack screens anchor here instead of webFrame, keeping the
+        // NativeAppBanner visible above them.
+        position: 'relative' as const,
+      },
+      default: {},
+    }),
   },
 });

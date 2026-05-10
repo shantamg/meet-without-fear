@@ -1986,41 +1986,15 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       }
 
       // Guard: empty AI response after parsing + dispatch means the model emitted
-      // content entirely inside tags we couldn't route (e.g. an unknown dispatch
-      // tag with no user-facing text). Try a contextual dispatch as EXPLAIN_PROCESS
-      // before falling back to a static message (issue #312 — static fallback was
-      // producing response loops).
+      // no usable user-facing text, or the upstream stream failed without
+      // producing text. Treat this as a failed turn so the frontend can show its
+      // retry/error state instead of saving a misleading canned response.
       if (!accumulatedText.trim()) {
-        logger.warn(`[sendMessageStream:${requestId}] Empty AI response after tag stripping — attempting contextual fallback`, {
+        logger.error(`[sendMessageStream:${requestId}] Empty AI response after tag stripping`, {
           dispatchTag: dispatchTag ?? null,
           scrubbedPlannerText: scrubbedResponse.scrubbed,
         });
-        // Try to generate a context-aware response via the process explainer
-        let fallback: string | null = null;
-        try {
-          const fallbackContext: DispatchContext = {
-            userMessage: content,
-            conversationHistory: history.map((m) => ({
-              role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
-              content: m.content,
-            })),
-            userName,
-            partnerName,
-            sessionId,
-            turnId,
-            currentStage,
-            invitationSent: session.status !== 'CREATED',
-            partnerJoined: session.status === 'ACTIVE',
-          };
-          fallback = await handleDispatch('EXPLAIN_PROCESS', fallbackContext);
-        } catch (err) {
-          logger.error(`[sendMessageStream:${requestId}] Contextual fallback failed`, err);
-        }
-        if (!fallback) {
-          fallback = 'I hear you. Could you say a bit more about what\'s on your mind?';
-        }
-        sendSSE(res, { event: 'chunk', data: { text: fallback } });
-        accumulatedText = fallback;
+        throw new Error('AI response was empty after tag stripping');
       }
 
       finalizeTurnMetrics(turnId);
