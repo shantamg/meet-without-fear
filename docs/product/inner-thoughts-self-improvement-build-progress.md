@@ -30,6 +30,10 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `backend/src/services/__tests__/stage-prompts.test.ts`
 - `backend/src/controllers/invitations.ts`
 - `backend/src/routes/__tests__/invitations.test.ts`
+- `docs/product/inner-thoughts-scratch/2026-05-10-local-journal-organize-ambition.md`
+- `eval/inner-thoughts/stages/01-intake/output/latest-artifact-index.md`
+- `eval/inner-thoughts/stages/06-rerun/output/rerun-results.md`
+- `eval/inner-thoughts/stages/07-judge/output/readiness-judgment.md`
 - `docs/product/inner-thoughts-self-improvement-build-progress.md`
 
 ## Commands Run
@@ -45,6 +49,8 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `npm --workspace backend run check` initially failed in the fresh worktree because Prisma client generation was stale/missing; after `npm --workspace backend run prisma:generate`, rerun passed.
 - `npm --workspace backend test -- --runTestsByPath src/routes/__tests__/invitations.test.ts --runInBand` (passed: 14 tests)
 - `npm --workspace backend run check` (passed)
+- `npm --workspace mobile run start:e2e` (started local web app on `localhost:8082`)
+- `agent-browser --session mwf-inner-journal ...` drove `journal-organize-ambition` through the home composer and first follow-up turn.
 
 ## Current Evidence
 
@@ -53,6 +59,7 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `mobile/app/(auth)/inner-work/self-reflection/[id].tsx` already creates a real session when `id === 'new'` and `comingSoon` is absent.
 - Prompt patch replaces over-eager partner-session CTA guidance with an earned, low-pressure, named-person rule and explicit ambiguous-person/workplace-boundary guardrails. This is prompt-contract progress only; live scenario evidence is still required before checking the CTA criteria complete.
 - Handoff patch preserves `innerThoughtsId` traceability even when the new-session flow returns an existing active session instead of creating a new one.
+- Local `journal-organize-ambition` browser run passed creation evidence but did not pass reflection quality because AI responses were generic fallback prompts.
 
 ## Decisions
 
@@ -62,4 +69,4 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 ## Unresolved Questions
 
 - Whether live actor runs should use the existing `localhost:8082` E2E app as-is or need a dedicated Inner Thoughts no-Clerk fixture.
-- Whether `innerThoughtsId` traceability is already persisted during session creation or needs a schema/controller patch.
+- Whether the generic AI fallback in the local browser run was caused by backend model configuration, response parsing, or prompt behavior.
