@@ -13,6 +13,7 @@ import {
   MessageCircle,
   ChevronRight,
   Lock,
+  Plus,
 } from 'lucide-react-native';
 
 import { useInnerThoughtsSessions } from '../hooks';
@@ -138,7 +139,7 @@ export function InnerWorkHubScreen({
       <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]} edges={['top']}>
         <View style={[styles.header, { backgroundColor: palette.bg, borderBottomColor: palette.divider }]}>
           <HeaderBackButton onPress={handleBack} />
-          <Text style={[styles.headerTitle, { color: palette.text }]}>Inner Work</Text>
+          <Text style={[styles.headerTitle, { color: palette.text }]}>Inner Thoughts</Text>
           <View style={styles.headerRight} />
         </View>
         <View style={styles.errorContainer}>
@@ -175,13 +176,21 @@ export function InnerWorkHubScreen({
       <View style={[styles.header, { backgroundColor: palette.bg, borderBottomColor: palette.divider }]}>
         <HeaderBackButton onPress={handleBack} />
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerTitle, { color: palette.text }]}>Inner Work</Text>
+          <Text style={[styles.headerTitle, { color: palette.text }]}>Inner Thoughts</Text>
           <View style={styles.privacyBadge}>
             <Lock size={10} color={palette.textMuted} />
             <Text style={[styles.privacyText, { color: palette.textMuted }]}>Your private space</Text>
           </View>
         </View>
-        <View style={styles.headerRight} />
+        <TouchableOpacity
+          style={[styles.headerIconButton, { backgroundColor: palette.bgElev, borderColor: palette.border }]}
+          onPress={handleNewSession}
+          activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel="Start new Inner Thoughts session"
+        >
+          <Plus size={20} color={palette.text} />
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -189,25 +198,6 @@ export function InnerWorkHubScreen({
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <TouchableOpacity
-            style={[
-              styles.newSessionButton,
-              {
-                backgroundColor: palette.bgElev,
-                borderColor: palette.border,
-              },
-            ]}
-            onPress={handleNewSession}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.newSessionIconContainer, { backgroundColor: palette.accentSoft }]}>
-              <MessageCircle size={22} color={palette.accent} />
-            </View>
-            <Text style={[styles.newSessionText, { color: palette.text }]}>New Session</Text>
-            <ChevronRight size={20} color={palette.accent} />
-          </TouchableOpacity>
-        }
         renderItem={({ item }) => (
           <SessionListItem session={item} onPress={() => handleSessionPress(item.id)} />
         )}
@@ -324,38 +314,20 @@ const styles = createStyles((t) => ({
     color: t.colors.textMuted,
   },
   headerRight: {
-    width: 32,
+    width: 36,
+  },
+  headerIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // List
   listContent: {
     padding: t.spacing.md,
-  },
-
-  // New Session Button
-  newSessionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: t.colors.bgSecondary,
-    borderRadius: t.radius.sm,
-    padding: t.spacing.md,
-    marginBottom: t.spacing.md,
-    borderWidth: 1,
-    borderColor: t.colors.border,
-  },
-  newSessionIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: t.radius.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: t.spacing.sm,
-  },
-  newSessionText: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: t.colors.textPrimary,
   },
 
   // Session Item

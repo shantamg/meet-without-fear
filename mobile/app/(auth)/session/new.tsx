@@ -49,9 +49,10 @@ export default function NewSessionScreen() {
   const router = useRouter();
   const { palette } = useAppAppearance();
   const styles = useStyles();
-  const { partnerName, innerThoughtsId } = useLocalSearchParams<{
+  const { partnerName, innerThoughtsId, linkedAtMessageId } = useLocalSearchParams<{
     partnerName?: string;
     innerThoughtsId?: string;
+    linkedAtMessageId?: string;
   }>();
 
   const [mode, setMode] = useState<'pick' | 'new'>('pick');
@@ -121,6 +122,7 @@ export default function NewSessionScreen() {
           personId: selectedPerson.id,
           ...(context && { context }),
           ...(linkedInnerThoughtsId && { innerThoughtsId: linkedInnerThoughtsId }),
+          ...(linkedAtMessageId && { linkedAtMessageId }),
         });
         // Handle existing active session response
         if ('existingActiveSession' in response && !bypassDuplicateCheck) {
@@ -147,7 +149,11 @@ export default function NewSessionScreen() {
         }
         // Track session creation
         trackSessionCreated(response.session.id, selectedPerson.id);
-        router.replace(`/session/${response.session.id}`);
+        router.replace(
+          linkedInnerThoughtsId
+            ? `/session/${response.session.id}?fromInnerThoughtsCreate=1`
+            : `/session/${response.session.id}`
+        );
       } catch (error) {
         console.error('Failed to create session:', error);
         Alert.alert('Error', 'Failed to create session. Please try again.');
@@ -167,12 +173,17 @@ export default function NewSessionScreen() {
           inviteName,
           ...(context && { context }),
           ...(linkedInnerThoughtsId && { innerThoughtsId: linkedInnerThoughtsId }),
+          ...(linkedAtMessageId && { linkedAtMessageId }),
         });
         // Track person selection (new person) and session creation
         // Note: personId not available in response, using relationshipId
         trackPersonSelected(response.session.relationshipId, true);
         trackSessionCreated(response.session.id, response.session.relationshipId);
-        router.replace(`/session/${response.session.id}`);
+        router.replace(
+          linkedInnerThoughtsId
+            ? `/session/${response.session.id}?fromInnerThoughtsCreate=1`
+            : `/session/${response.session.id}`
+        );
       } catch (error) {
         console.error('Failed to create session:', error);
         Alert.alert('Error', 'Failed to create session. Please try again.');

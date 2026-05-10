@@ -4,11 +4,10 @@
  * Simplified landing page with:
  * - Big greeting: "Hi [username]"
  * - Main question: "What can I help you work through today?"
- * - Low-profile quick actions: Continue with [nickname], New Session, Inner Work
+ * - Low-profile quick actions: Continue with [nickname], New Session, Inner Thoughts
  * - Pending invitation CTA: "Accept [name]'s invitation" (if invited)
  *
- * Inner Work navigates to the hub for all inner work features:
- * - Self-Reflection, Needs Assessment, Gratitude, Meditation
+ * Inner Thoughts navigates to the private reflection list.
  */
 
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
@@ -29,6 +28,7 @@ import {
 import { useRouter } from 'expo-router';
 import { ArrowRight, ArrowUp, Plus, Layers, UserPlus, Menu, Settings, X } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { SessionStatus, type SessionSummaryDTO } from '@meet-without-fear/shared';
 
 import { useAuth } from '@/src/hooks/useAuth';
 import { useBiometricAuth, usePendingInvitation, useSessionDrawer } from '@/src/hooks';
@@ -132,6 +132,10 @@ export default function HomeScreen() {
 
   // Get the partner's nickname or name for the continue button
   const partnerDisplayName = mostRecentSession?.partner?.nickname || mostRecentSession?.partner?.name;
+  const continueCopy = useMemo(() => {
+    if (!mostRecentSession || !partnerDisplayName) return null;
+    return getContinueSessionCopy(mostRecentSession, partnerDisplayName);
+  }, [mostRecentSession, partnerDisplayName]);
 
   // Handle sending a message from the home page chat input.
   const handleHomeChat = useCallback((message: string) => {
@@ -165,7 +169,7 @@ export default function HomeScreen() {
   };
 
   const handleInnerWork = () => {
-    // Navigate to Inner Work hub
+    // Navigate to the Inner Thoughts list.
     router.push('/inner-work');
   };
 
@@ -280,7 +284,7 @@ export default function HomeScreen() {
                   )}
 
                   {/* Continue with partner - only show if there's a recent session and no pending invitation */}
-                  {!hasPendingInvitation && mostRecentSession && partnerDisplayName && (
+                  {!hasPendingInvitation && mostRecentSession && partnerDisplayName && continueCopy && (
                     <TouchableOpacity
                       style={[styles.actionCard, styles.primaryActionCard]}
                       onPress={handleContinueSession}
@@ -292,48 +296,41 @@ export default function HomeScreen() {
                         <View style={styles.actionPing} />
                       </View>
                       <View style={styles.actionTextBlock}>
-                        <Text style={styles.actionEyebrow}>Continue</Text>
-                        <Text style={styles.actionTitle}>A note for {partnerDisplayName}</Text>
-                        <Text style={styles.actionSub}>Pick up where you left off</Text>
+                        <Text style={styles.actionEyebrow}>{continueCopy.eyebrow}</Text>
+                        <Text style={styles.actionTitle}>{continueCopy.title}</Text>
+                        <Text style={styles.actionSub}>{continueCopy.subtitle}</Text>
                       </View>
                       <ArrowRight color={palette.textFaint} size={16} />
                     </TouchableOpacity>
                   )}
 
-                  {/* New Session */}
-                  <TouchableOpacity
-                    style={styles.actionCard}
-                    onPress={handleNewSession}
-                    accessibilityRole="button"
-                    accessibilityLabel="Start new session"
-                  >
-                    <View style={styles.actionIcon}>
-                      <Plus color={palette.textMuted} size={18} />
-                    </View>
-                    <View style={styles.actionTextBlock}>
-                      <Text style={styles.actionTitle}>New conversation</Text>
-                      <Text style={styles.actionSub}>Start with someone close to you</Text>
-                    </View>
-                    <ArrowRight color={palette.textFaint} size={16} />
-                  </TouchableOpacity>
+                  <View style={styles.secondaryActionsGroup}>
+                    <View style={styles.secondaryActionsRule} />
+                    <View style={styles.secondaryActionsRow}>
+                      {/* New Session */}
+                      <TouchableOpacity
+                        style={styles.secondaryButton}
+                        onPress={handleNewSession}
+                        accessibilityRole="button"
+                        accessibilityLabel="Start new session"
+                      >
+                        <Plus color={palette.accentText} size={18} />
+                        <Text style={styles.secondaryButtonText}>New conversation</Text>
+                      </TouchableOpacity>
 
-                  {SHOW_INNER_WORK_BUTTON && (
-                    <TouchableOpacity
-                      style={styles.actionCard}
-                      onPress={handleInnerWork}
-                      accessibilityRole="button"
-                      accessibilityLabel="Inner Work"
-                    >
-                      <View style={styles.actionIcon}>
-                        <Layers color={palette.textMuted} size={18} />
-                      </View>
-                      <View style={styles.actionTextBlock}>
-                        <Text style={styles.actionTitle}>Inner work</Text>
-                        <Text style={styles.actionSub}>Sit with what came up, just for you</Text>
-                      </View>
-                      <ArrowRight color={palette.textFaint} size={16} />
-                    </TouchableOpacity>
-                  )}
+                      {SHOW_INNER_WORK_BUTTON && (
+                        <TouchableOpacity
+                          style={styles.secondaryButton}
+                          onPress={handleInnerWork}
+                          accessibilityRole="button"
+                          accessibilityLabel="Inner Thoughts"
+                        >
+                          <Layers color={palette.textMuted} size={17} />
+                          <Text style={styles.secondaryButtonText}>Inner thoughts</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
                 </View>
 
                 <View style={styles.whisper}>
@@ -390,6 +387,52 @@ function getGreetingLabel() {
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
   return 'Good evening';
+}
+
+function getContinueSessionCopy(session: SessionSummaryDTO, partnerName: string) {
+  const userStatus = session.statusSummary?.userStatus;
+  const partnerStatus = session.statusSummary?.partnerStatus;
+
+  switch (session.status) {
+    case SessionStatus.CREATED:
+      return {
+        eyebrow: 'Draft',
+        title: `Finish inviting ${partnerName}`,
+        subtitle: userStatus || 'Prepare the invitation when you are ready',
+      };
+    case SessionStatus.INVITED:
+      return {
+        eyebrow: 'Invitation sent',
+        title: `Waiting for ${partnerName}`,
+        subtitle: partnerStatus || `${partnerName} can join when ready`,
+      };
+    case SessionStatus.PAUSED:
+      return {
+        eyebrow: 'Paused',
+        title: `Return to ${partnerName}`,
+        subtitle: userStatus || 'Take your time and continue when ready',
+      };
+    case SessionStatus.RESOLVED:
+      return {
+        eyebrow: 'Resolved',
+        title: `Review session with ${partnerName}`,
+        subtitle: userStatus || 'Look back at what you worked through',
+      };
+    case SessionStatus.ABANDONED:
+      return {
+        eyebrow: 'Ended',
+        title: `View session with ${partnerName}`,
+        subtitle: partnerStatus || 'This conversation was not completed',
+      };
+    case SessionStatus.ACTIVE:
+    case SessionStatus.WAITING:
+    default:
+      return {
+        eyebrow: 'Continue',
+        title: `Continue with ${partnerName}`,
+        subtitle: userStatus || partnerStatus || 'Pick up where you left off',
+      };
+  }
 }
 
 function HomeComposer({
@@ -685,7 +728,7 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) =>
       fontFamily: designFonts.sans,
     },
     actionsSection: {
-      gap: 8,
+      gap: 6,
     },
     chatInputSection: {
       borderTopWidth: 1,
@@ -706,6 +749,37 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) =>
     primaryActionCard: {
       borderLeftWidth: 3,
       borderLeftColor: palette.accent,
+    },
+    secondaryActionsGroup: {
+      marginTop: 18,
+      marginBottom: 16,
+    },
+    secondaryActionsRule: {
+      height: 1,
+      marginBottom: 18,
+      backgroundColor: palette.divider,
+    },
+    secondaryActionsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    secondaryButton: {
+      flex: 1,
+      minHeight: 66,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    secondaryButtonText: {
+      color: palette.text,
+      fontSize: 13.5,
+      fontWeight: '600',
+      fontFamily: designFonts.sans,
     },
     actionIcon: {
       width: 38,
@@ -751,6 +825,15 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) =>
     },
     actionEyebrow: {
       color: palette.accentText,
+      fontSize: 9.5,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      fontWeight: '700',
+      marginBottom: 4,
+      fontFamily: designFonts.mono,
+    },
+    privateActionEyebrow: {
+      color: palette.textFaint,
       fontSize: 9.5,
       letterSpacing: 1,
       textTransform: 'uppercase',

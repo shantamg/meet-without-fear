@@ -62,7 +62,7 @@ describe('InnerWorkHubScreen', () => {
 
     render(<InnerWorkHubScreen onStartNewSession={onStartNewSession} />);
 
-    fireEvent.press(screen.getByText('New Session'));
+    fireEvent.press(screen.getByLabelText('Start new Inner Thoughts session'));
 
     expect(onStartNewSession).toHaveBeenCalledTimes(1);
   });

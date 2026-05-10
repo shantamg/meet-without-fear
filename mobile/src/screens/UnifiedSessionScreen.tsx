@@ -11,7 +11,7 @@ import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppSt
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// useRouter removed - share navigation replaced by ActivityDrawer
+import { useRouter } from 'expo-router';
 import {
   Stage,
   MessageRole,
@@ -526,6 +526,7 @@ export function UnifiedSessionScreen({
   const { user, updateUser } = useAuth();
   const { mutate: updateMood } = useUpdateMood();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { showError } = useToast();
 
   // Real-time presence tracking
@@ -2613,9 +2614,60 @@ export function UnifiedSessionScreen({
     handleCloseRedesignedStage4,
   ]);
 
+  const sourceInnerThoughts = session?.sourceInnerThoughts ?? null;
+  const sourceInnerThoughtsCards = useMemo((): ChatCustomCardItem[] => {
+    if (!sourceInnerThoughts) return [];
+
+    const timestamp = timestampBeforeChatStart(displayMessages[0]?.timestamp || session?.createdAt);
+
+    return [{
+      type: 'custom-card',
+      id: `source-inner-thoughts-${sourceInnerThoughts.id}`,
+      timestamp,
+      animate: false,
+      render: () => (
+        <TouchableOpacity
+          style={styles.sourceInnerThoughtsCard}
+          onPress={() => router.push({
+            pathname: '/inner-work/self-reflection/[id]',
+            params: {
+              id: sourceInnerThoughts.id,
+              partnerSessionId: sessionId,
+              partnerName,
+            },
+          })}
+          accessibilityRole="button"
+          accessibilityLabel="Open source Inner Thoughts"
+        >
+          <Text style={styles.sourceInnerThoughtsIcon}>↙</Text>
+          <View style={styles.sourceInnerThoughtsTextWrap}>
+            <Text style={styles.sourceInnerThoughtsLabel} numberOfLines={1}>
+              From Inner Thoughts
+            </Text>
+            <Text style={styles.sourceInnerThoughtsTitle} numberOfLines={2}>
+              {sourceInnerThoughts.title || sourceInnerThoughts.theme || sourceInnerThoughts.summary || 'Private reflection'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      ),
+    }];
+  }, [
+    displayMessages,
+    partnerName,
+    router,
+    session?.createdAt,
+    sessionId,
+    sourceInnerThoughts,
+    styles.sourceInnerThoughtsCard,
+    styles.sourceInnerThoughtsIcon,
+    styles.sourceInnerThoughtsLabel,
+    styles.sourceInnerThoughtsTextWrap,
+    styles.sourceInnerThoughtsTitle,
+  ]);
+
   const chatCustomCards = useMemo(
-    () => [...inviteeOpeningCards, ...needsReviewCards, ...stage4RedesignCards],
-    [inviteeOpeningCards, needsReviewCards, stage4RedesignCards]
+    () => [...sourceInnerThoughtsCards, ...inviteeOpeningCards, ...needsReviewCards, ...stage4RedesignCards],
+    [sourceInnerThoughtsCards, inviteeOpeningCards, needsReviewCards, stage4RedesignCards]
   );
 
   // -------------------------------------------------------------------------
@@ -3970,6 +4022,41 @@ const useStyles = () => {
     },
     accentColor: {
       color: palette.accent,
+    },
+    sourceInnerThoughtsCard: {
+      alignSelf: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 9,
+      width: '86%',
+      maxWidth: 520,
+      marginVertical: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 8,
+    },
+    sourceInnerThoughtsIcon: {
+      fontSize: 15,
+      color: palette.accent,
+      fontWeight: '700',
+    },
+    sourceInnerThoughtsTextWrap: {
+      flex: 1,
+      minWidth: 0,
+    },
+    sourceInnerThoughtsLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: palette.accent,
+      textTransform: 'uppercase',
+    },
+    sourceInnerThoughtsTitle: {
+      marginTop: 1,
+      fontSize: 13,
+      color: palette.textMuted,
     },
 
     // Invitation Draft

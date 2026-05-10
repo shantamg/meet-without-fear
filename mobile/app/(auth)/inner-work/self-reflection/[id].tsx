@@ -50,6 +50,7 @@ export default function SelfReflectionChatScreen() {
   const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
   // Store suggested actions from session creation (e.g., "Start conversation with Jason")
   const [initialSuggestedActions, setInitialSuggestedActions] = useState<SuggestedAction[] | undefined>(undefined);
+  const [initialSuggestedActionMessageId, setInitialSuggestedActionMessageId] = useState<string | undefined>(undefined);
   // Track when the fade transition has completed (only for new sessions)
   const [transitionComplete, setTransitionComplete] = useState(!isNewSession || hasInitialMessage);
   const createSession = useCreateInnerThoughtsSession();
@@ -92,6 +93,7 @@ export default function SelfReflectionChatScreen() {
             // Capture suggested actions from the AI response (e.g., "Start conversation with Jason")
             if (result.suggestedActions && result.suggestedActions.length > 0) {
               setInitialSuggestedActions(result.suggestedActions);
+              setInitialSuggestedActionMessageId(result.initialMessage.id);
             }
 
             // Update state instead of router.replace() to avoid component remount
@@ -135,6 +137,7 @@ export default function SelfReflectionChatScreen() {
         isCreating={isCreating}
         initialMessage={initialMessage}
         initialSuggestedActions={initialSuggestedActions}
+        initialSuggestedActionMessageId={initialSuggestedActionMessageId}
         hideContentUntilReady={!isComingSoon && !transitionComplete}
         comingSoonMode={isComingSoon}
       />
