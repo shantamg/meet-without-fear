@@ -226,6 +226,28 @@ describe('Priority 4: Stage 2 (Empathy)', () => {
     expect(computeWaitingStatus(inputs)).toBeNull();
   });
 
+  it('returns partner-considering-perspective when my attempt is VALIDATED', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      partnerStage: Stage.PERSPECTIVE_STRETCH,
+      empathyStatus: { myAttemptStatus: 'VALIDATED' },
+      hasPartnerEmpathy: false,
+    });
+
+    expect(computeWaitingStatus(inputs)).toBe('partner-considering-perspective');
+  });
+
+  it('returns null when VALIDATED and partner has shared empathy', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      partnerStage: Stage.PERSPECTIVE_STRETCH,
+      empathyStatus: { myAttemptStatus: 'VALIDATED' },
+      hasPartnerEmpathy: true,
+    });
+
+    expect(computeWaitingStatus(inputs)).toBeNull();
+  });
+
   it('returns empathy-pending when user consented but partner has not shared', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
