@@ -67,6 +67,7 @@ export function encryptDataFields(
   }
   for (const field of config.jsonFields) {
     if (field in data && data[field] != null) {
+      if (!process.env.FIELD_ENCRYPTION_KEY) continue;
       const serialized = JSON.stringify(data[field]);
       data[field] = encrypt(serialized);
     }

@@ -234,12 +234,7 @@ describe('prisma-encryption-middleware', () => {
 
       encryptDataFields(data, config);
 
-      // Without a key, JSON.stringify → encrypt (passthrough) stores a string
-      // But since encrypt passes through, the JSON.stringify'd string is stored
-      // On read, if it's not encrypted format, it stays as-is
-      // This is fine because without a key, no encryption happens at all
-      expect(typeof data.globalFacts).toBe('string');
-      expect(JSON.parse(data.globalFacts as string)).toEqual(facts);
+      expect(data.globalFacts).toEqual(facts);
     });
   });
 
