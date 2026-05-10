@@ -1,7 +1,7 @@
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Download, X } from 'lucide-react-native';
 
-import { colors, typography } from '../theme';
+import { typography, useAppAppearance } from '../theme';
 import { useNativeAppBannerDismissal } from '../hooks/useNativeAppBannerDismissal';
 
 const APP_SCHEME_URL = 'meetwithoutfear://';
@@ -49,31 +49,36 @@ function openNativeAppOrDownload(): void {
 
 export function NativeAppBanner() {
   const { dismissed, dismiss } = useNativeAppBannerDismissal();
+  const { palette } = useAppAppearance();
 
   if (Platform.OS !== 'web' || dismissed) return null;
 
   return (
-    <View style={styles.container}>
-      <Download size={18} color={colors.accent} />
-      <Text style={styles.label} numberOfLines={2}>
+    <View style={[styles.container, { backgroundColor: palette.bgElev, borderBottomColor: palette.border }]}>
+      <Download size={18} color={palette.accent} />
+      <Text style={[styles.label, { color: palette.text }]} numberOfLines={2}>
         Get the native app for a better experience
       </Text>
       <Pressable
         onPress={openNativeAppOrDownload}
-        style={({ pressed }) => [styles.openButton, pressed && styles.openButtonPressed]}
+        style={({ pressed }) => [
+          styles.openButton,
+          { backgroundColor: palette.accent },
+          pressed && { backgroundColor: palette.accentText },
+        ]}
         accessibilityRole="button"
         accessibilityLabel="Open in native app, or download it"
       >
-        <Text style={styles.openButtonLabel}>Open in app</Text>
+        <Text style={[styles.openButtonLabel, { color: palette.bg }]}>Open in app</Text>
       </Pressable>
       <Pressable
         onPress={dismiss}
-        style={({ pressed }) => [styles.dismiss, pressed && styles.dismissPressed]}
+        style={({ pressed }) => [styles.dismiss, pressed && { backgroundColor: palette.selected }]}
         accessibilityRole="button"
         accessibilityLabel="Dismiss banner"
         hitSlop={8}
       >
-        <X size={18} color={colors.textSecondary} />
+        <X size={18} color={palette.textMuted} />
       </Pressable>
     </View>
   );
@@ -86,35 +91,25 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     gap: 10,
-    backgroundColor: colors.bgSecondary,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    zIndex: 1,
   },
   label: {
     flex: 1,
-    color: colors.textPrimary,
     fontSize: typography.fontSize.base,
     fontWeight: '500',
   },
   openButton: {
-    backgroundColor: colors.accent,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
-  openButtonPressed: {
-    backgroundColor: colors.accentHover,
-  },
   openButtonLabel: {
-    color: colors.textOnAccent,
     fontSize: typography.fontSize.base,
     fontWeight: '600',
   },
   dismiss: {
     padding: 4,
     borderRadius: 6,
-  },
-  dismissPressed: {
-    backgroundColor: colors.bgTertiary,
   },
 });
