@@ -60,3 +60,24 @@ AI:
 Scenario status: `pass`
 
 This run satisfies the ambiguous-person boundary gate: a named workplace person did not trigger over-routing to a partner session when the user framed the work as private reflection.
+
+## Machine Status
+
+```json
+{
+  "type": "MWF_INNER_THOUGHTS_STATUS",
+  "scenario": "ambiguous-person-boundary",
+  "status": "pass",
+  "mock_llm": false,
+  "browser_session": "mwf-inner-real-boundary",
+  "scratch_log": "docs/product/inner-thoughts-scratch/2026-05-10-real-ambiguous-person-boundary.md",
+  "evidence": {
+    "named_person": "Jordan",
+    "user_requested_private_reflection": true,
+    "partner_cta_absent": true,
+    "linked_partner_session_absent": true,
+    "inner_work_session_id": "cmozex6nz001lpx25h3oik55d"
+  },
+  "remaining_for_scenario": []
+}
+```

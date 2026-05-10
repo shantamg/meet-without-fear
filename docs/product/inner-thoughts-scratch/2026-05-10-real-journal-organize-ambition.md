@@ -90,3 +90,23 @@ Verification after backend restart:
 Scenario status: `pass`
 
 This run satisfies the solo reflection gate for `journal-organize-ambition`. It does not cover the person-specific CTA or ambiguous-person boundary scenarios.
+
+## Machine Status
+
+```json
+{
+  "type": "MWF_INNER_THOUGHTS_STATUS",
+  "scenario": "journal-organize-ambition",
+  "status": "pass",
+  "mock_llm": false,
+  "browser_session": "mwf-inner-real-journal",
+  "scratch_log": "docs/product/inner-thoughts-scratch/2026-05-10-real-journal-organize-ambition.md",
+  "evidence": {
+    "home_composer_created_inner_thoughts": true,
+    "solo_reflection_quality_passed": true,
+    "partner_cta_absent": true,
+    "memory_detection_telemetry_fixed": true
+  },
+  "remaining_for_scenario": []
+}
+```

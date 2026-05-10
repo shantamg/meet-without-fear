@@ -85,3 +85,27 @@ The first partner-session screen showed:
 Scenario status: `pass`
 
 The CTA did not appear merely because Maya was named. It appeared after the user explicitly identified a need to talk with Maya and wanted help clarifying what to say. The handoff preserved `partnerName`, generated context, linked the Inner Thoughts session to the partner session, and started the Stage 0 experience.
+
+## Machine Status
+
+```json
+{
+  "type": "MWF_INNER_THOUGHTS_STATUS",
+  "scenario": "person-to-partner-session",
+  "status": "pass",
+  "mock_llm": false,
+  "browser_session": "mwf-inner-real-maya",
+  "scratch_log": "docs/product/inner-thoughts-scratch/2026-05-10-real-person-to-partner-session.md",
+  "evidence": {
+    "cta_earned_after_named_relationship_processing": true,
+    "cta_text": "Start a session with Maya",
+    "new_session_url": "http://localhost:8082/session/new?partnerName=Maya&innerThoughtsId=cmozer39v000apx253x4y5efe",
+    "generated_context_visible": true,
+    "created_partner_session_id": "cmozeud490014px25t5xy0h50",
+    "linked_partner_session_id": "cmozeud490014px25t5xy0h50",
+    "linked_trigger": "suggestion_start",
+    "stage_0_opened": true
+  },
+  "remaining_for_scenario": []
+}
+```
