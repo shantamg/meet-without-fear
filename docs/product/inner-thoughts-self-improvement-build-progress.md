@@ -10,7 +10,7 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - [ ] Solo Inner Thoughts reflection is high quality for journaling, ambition, and idea organization.
 - [ ] Person-specific conversation earns a polished partner-session CTA.
 - [ ] Ambiguous person mentions do not over-route to partner sessions.
-- [ ] CTA opens the existing new-session flow with `partnerName` and `innerThoughtsId`.
+- [x] CTA opens the existing new-session flow with `partnerName` and `innerThoughtsId`.
 - [ ] Context generation runs through `POST /inner-thoughts/:id/generate-context`.
 - [ ] Partner session starts in Stage 0 with Inner Thoughts context available.
 - [x] Eval workspace exists under `eval/inner-thoughts/`.
@@ -28,6 +28,8 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `mobile/app/(auth)/(tabs)/__tests__/index.test.tsx`
 - `backend/src/services/stage-prompts.ts`
 - `backend/src/services/__tests__/stage-prompts.test.ts`
+- `backend/src/controllers/invitations.ts`
+- `backend/src/routes/__tests__/invitations.test.ts`
 - `docs/product/inner-thoughts-self-improvement-build-progress.md`
 
 ## Commands Run
@@ -41,6 +43,8 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - `npm --workspace mobile run check` (passed)
 - `npm --workspace backend test -- --runTestsByPath src/services/__tests__/stage-prompts.test.ts --runInBand` (passed: 105 tests)
 - `npm --workspace backend run check` initially failed in the fresh worktree because Prisma client generation was stale/missing; after `npm --workspace backend run prisma:generate`, rerun passed.
+- `npm --workspace backend test -- --runTestsByPath src/routes/__tests__/invitations.test.ts --runInBand` (passed: 14 tests)
+- `npm --workspace backend run check` (passed)
 
 ## Current Evidence
 
@@ -48,6 +52,7 @@ Worktree: `/private/tmp/mwf-inner-thoughts-self-improvement`
 - Product patch removes `comingSoon: '1'` from the home composer route and passes the typed message as `initialMessage`.
 - `mobile/app/(auth)/inner-work/self-reflection/[id].tsx` already creates a real session when `id === 'new'` and `comingSoon` is absent.
 - Prompt patch replaces over-eager partner-session CTA guidance with an earned, low-pressure, named-person rule and explicit ambiguous-person/workplace-boundary guardrails. This is prompt-contract progress only; live scenario evidence is still required before checking the CTA criteria complete.
+- Handoff patch preserves `innerThoughtsId` traceability even when the new-session flow returns an existing active session instead of creating a new one.
 
 ## Decisions
 

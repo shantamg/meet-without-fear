@@ -145,6 +145,50 @@ describe('Invitations API', () => {
         })
       );
     });
+
+    it('links origin Inner Thoughts session when continuing an existing active session', async () => {
+      const mockUser = { id: 'user-1', email: 'inviter@example.com', name: 'Inviter' };
+      const mockRelationship = { id: 'rel-1' };
+      const existingActiveSession = {
+        id: 'session-existing',
+        status: 'ACTIVE',
+        updatedAt: new Date('2026-05-10T12:00:00Z'),
+      };
+
+      (prisma.relationship.create as jest.Mock).mockResolvedValue(mockRelationship);
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(existingActiveSession);
+
+      const req = createMockRequest({
+        user: mockUser,
+        body: {
+          inviteName: 'Maya',
+          innerThoughtsId: 'inner-123',
+        },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await createSession(req as Request, res as Response);
+
+      expect(prisma.innerWorkSession.updateMany).toHaveBeenCalledWith({
+        where: { id: 'inner-123', userId: 'user-1' },
+        data: {
+          linkedPartnerSessionId: 'session-existing',
+          linkedTrigger: 'suggestion_start',
+        },
+      });
+      expect(statusMock).toHaveBeenCalledWith(200);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            existingActiveSession: expect.objectContaining({
+              id: 'session-existing',
+              status: 'ACTIVE',
+            }),
+          }),
+        })
+      );
+    });
   });
 
   describe('GET /invitations/:id (getInvitation)', () => {

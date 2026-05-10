@@ -45,6 +45,29 @@ const updateNicknameSchema = z.object({
   nickname: z.string().min(1).max(100).nullable(),
 });
 
+async function linkOriginInnerThoughts(
+  innerThoughtsId: string | undefined,
+  userId: string,
+  sessionId: string,
+): Promise<void> {
+  if (!innerThoughtsId) {
+    return;
+  }
+
+  try {
+    await prisma.innerWorkSession.updateMany({
+      where: { id: innerThoughtsId, userId },
+      data: {
+        linkedPartnerSessionId: sessionId,
+        linkedTrigger: 'suggestion_start',
+      },
+    });
+    logger.info(`[createSession] Linked session ${sessionId} to origin inner thoughts ${innerThoughtsId}`);
+  } catch (err) {
+    logger.warn(`[createSession] Failed to link inner thoughts session:`, err);
+  }
+}
+
 // ============================================================================
 // Controllers
 // ============================================================================
@@ -374,6 +397,8 @@ export async function createSession(req: Request, res: Response): Promise<void> 
     });
 
     if (existingActiveSession) {
+      await linkOriginInnerThoughts(innerThoughtsId, user.id, existingActiveSession.id);
+
       successResponse(res, {
         existingActiveSession: {
           id: existingActiveSession.id,
@@ -429,20 +454,7 @@ export async function createSession(req: Request, res: Response): Promise<void> 
     });
 
     // If originated from Inner Thoughts, link it back (non-critical, outside transaction)
-    if (innerThoughtsId) {
-      try {
-        await prisma.innerWorkSession.updateMany({
-          where: { id: innerThoughtsId, userId: user.id },
-          data: {
-            linkedPartnerSessionId: session.id,
-            linkedTrigger: 'suggestion_start',
-          },
-        });
-        logger.info(`[createSession] Linked session ${session.id} to origin inner thoughts ${innerThoughtsId}`);
-      } catch (err) {
-        logger.warn(`[createSession] Failed to link inner thoughts session:`, err);
-      }
-    }
+    await linkOriginInnerThoughts(innerThoughtsId, user.id, session.id);
 
     // Generate invitation URL (user shares via their own channels)
     const invitationUrl = createInvitationUrl(invitation.id);
