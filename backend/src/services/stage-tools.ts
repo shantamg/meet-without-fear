@@ -64,9 +64,6 @@ export const SESSION_STATE_TOOL_NAME = 'update_session_state';
  */
 export interface SessionStateToolInput {
   offerFeelHeardCheck?: boolean;
-  feelHeardConfirmed?: boolean;
-  feelHeardConfirmedAt?: string;
-  advancedToStage?: number;
   offerReadyToShare?: boolean;
   proposedEmpathyStatement?: string;
   proposedStrategies?: string[];
@@ -98,9 +95,6 @@ export function parseSessionStateToolInput(
       : false,
     offerReadyToShare: typeof input.offerReadyToShare === 'boolean'
       ? input.offerReadyToShare
-      : false,
-    feelHeardConfirmed: typeof input.feelHeardConfirmed === 'boolean'
-      ? input.feelHeardConfirmed
       : false,
     proposedEmpathyStatement: typeof input.proposedEmpathyStatement === 'string'
       ? input.proposedEmpathyStatement

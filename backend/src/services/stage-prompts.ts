@@ -14,6 +14,7 @@
 import { logger } from '../lib/logger';
 import { type ContextBundle } from './context-assembler';
 import { type SurfaceStyle } from './memory-intent';
+import { type CategorizedFact } from './partner-session-classifier';
 
 // ============================================================================
 // Response Protocol (Semantic Router Format)
@@ -33,7 +34,6 @@ function buildResponseProtocol(stage: number, options?: {
   const flags: string[] = ['UserIntensity: [1-10]'];
   if (stage === 1) {
     flags.push('FeelHeardCheck: [Y/N]');
-    flags.push('FeelHeardConfirmed: [Y/N]');
   } else if (stage === 2) {
     flags.push('ReadyShare: [Y/N]');
   } else if (stage === 3) {
@@ -109,7 +109,7 @@ Strategy: [brief]${strategySection}
 
 Then write the user-facing response (plain text, no tags).
 IMPORTANT: The only XML-style tags you may use are exactly <thinking>, <draft>, <needs>, and <dispatch>.
-Flags such as FeelHeardCheck, FeelHeardConfirmed, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>; never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>.
+Flags such as FeelHeardCheck, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>; never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>.
 The <needs> tag is only for the structured Stage 3 needs JSON shown above. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
 
 OFF-RAMPS (only when needed):
@@ -385,6 +385,10 @@ ${INVALID_MEMORY_GUIDANCE}`;
 function buildBaseDynamicGuidance(context: PromptContext): string {
   const parts: string[] = [];
 
+  if (context.topicFrame) {
+    parts.push(`CONVERSATION TOPIC: "${context.topicFrame}"`);
+  }
+
   const lastUserMessage = getLastUserMessage(context);
   if (lastUserMessage && isProcessQuestion(lastUserMessage)) {
     parts.push(PROCESS_OVERVIEW);
@@ -474,6 +478,8 @@ export interface PromptContext {
    * this — it has its own in-app UI for re-sharing or abandoning invites.
    */
   invitedSessionNudge?: string | null;
+  /** The confirmed topic of this conversation (stages 1–4) */
+  topicFrame?: string | null;
 }
 
 /** Simplified context for initial message generation (no context bundle needed) */
@@ -598,9 +604,7 @@ Feel-heard check:
 - Set FeelHeardCheck:Y only when ALL of these are true: (1) they've affirmed something you reflected back, (2) you can name their core concern, (3) their intensity is stabilizing or steady, and (4) for long-running/high-conflict patterns, you have also heard the cost, what they tried, and the boundary or grief underneath.
 - Be proactive only after the real emotional shape is present. Don't wait for perfect wording, but don't offer the gate just because the factual pattern is clear.
 - When FeelHeardCheck:Y, end your response with a gentle acknowledgment that they can confirm below. Example: "...if that captures it, you can let me know below when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT say "tap the button" or mention UI elements directly. Keep it conversational. Keep setting Y until they act on the prompt.
-- Even when FeelHeardCheck:Y, stay in listening mode. Do NOT pivot to advice, action, or next steps.
-- Set FeelHeardConfirmed:Y only when the user's latest message clearly means they feel heard or are ready to move on from Stage 1. This may be explicit ("I feel heard", "ready") or natural language confirmation that your reflection captured it. If they seem uncertain, add new material, answer with a correction, or ask for more witnessing, set FeelHeardConfirmed:N.
-- When FeelHeardConfirmed:Y, write a Stage 2 transition that acknowledges Stage 1 is complete and asks them to imagine their partner's side. Do not keep asking Stage 1 listening questions in that response.
+- Even when FeelHeardCheck:Y, stay in listening mode. Do NOT pivot to advice, action, or next steps. The user will confirm via a button in the UI — do NOT try to detect verbal confirmation or advance the stage yourself.
 
 ${buildResponseProtocol(1)}`;
 
@@ -1919,81 +1923,78 @@ export interface ReconcilerContext {
   witnessingContent: string;
   /** Key themes extracted from subject's witnessing */
   extractedThemes?: string[];
+  /** Current subject-owned fact ledger entries */
+  subjectFacts?: CategorizedFact[];
+  /** Recent subject-side Stage 2 context, scoped to subject user turns and framing AI prompts */
+  recentSubjectTurns?: Array<{ role: 'user' | 'assistant'; content: string; stage: number }>;
 }
 
 /**
  * Build the main reconciler prompt that analyzes empathy gaps.
  * This compares what one person guessed about the other vs what they actually expressed.
  */
-export function buildReconcilerPrompt(context: ReconcilerContext): string {
-  const themesSection = context.extractedThemes?.length
-    ? `Key themes/feelings ${context.subjectName} expressed:\n- ${context.extractedThemes.join('\n- ')}`
-    : '';
+export function buildReconcilerPrompt(_context: ReconcilerContext): PromptBlocks {
+  const staticBlock = `You are the Empathy Reconciler for Meet Without Fear. Your role is to analyze empathy gaps and determine if additional sharing would benefit mutual understanding.
 
-  return `You are the Empathy Reconciler for Meet Without Fear. Your role is to analyze empathy gaps and determine if additional sharing would benefit mutual understanding.
+TRUTH HIERARCHY:
+Stage 1 witnessing is the emotional anchor: preserve the feelings, needs, fears, and meaning the subject expressed there.
 
-CONTEXT:
-You are analyzing the empathy exchange between two people: ${context.guesserName} and ${context.subjectName}.
+Stage 1 is not always the current factual truth. If the subject later revises, retracts, clarifies, concedes, or confesses a factual point, treat the later subject-owned statement as their current factual position.
 
-WHAT YOU HAVE:
+Current known facts are the factual baseline. Recent Stage 2 subject messages are the freshest signal. If recent subject messages conflict with current known facts or Stage 1 factual claims, prioritize the recent subject messages.
 
-[${context.guesserName}'s Empathy Guess about ${context.subjectName}]
-This is what ${context.guesserName} THINKS ${context.subjectName} is feeling:
-"${context.empathyStatement}"
+Do not let an outdated Stage 1 factual denial drive the draft if the subject later acknowledged the behavior. Preserve the emotional truth without repeating the outdated factual framing.
 
-[What ${context.subjectName} Actually Expressed]
-This is what ${context.subjectName} ACTUALLY said about their own feelings during their witnessing session:
-"${context.witnessingContent}"
+Do not overstate partial doubt as full confession. If the subject says only "maybe things did not happen exactly how I remembered," treat that as uncertainty or softening, not as complete admission.
 
-${themesSection}
+Ignore AI suggestions, draft mechanics, process chatter, and empathy-exchange mechanics unless they directly frame or quote the subject's own words.
+
+SUBJECT-OWNED EVIDENCE RULES:
+- Treat the subject's own words and subject-owned fact ledger entries as evidence of the subject's current stance.
+- Never treat a partner's claim as evidence of the subject's current stance unless the subject also confirms it.
+- Use AI messages only as referent anchors for an immediately following subject reply; do not treat AI suggestions as facts.
+- Never suggest sharing sensitive information the subject did not already express.
+- The suggested share focus should reference subject-owned content that is already in the evidence packet.
+- Do not create new interpretations beyond what the evidence supports.
 
 SIGNAL-TO-NOISE FILTERING:
-When analyzing the witnessing content, IGNORE:
-- Statements directed at the AI itself (e.g., "you sound like a robot", "that doesn't help")
-- Frustration with the app or process (e.g., "this is taking too long", "I don't understand how this works")
-- Meta-commentary about the conversation (e.g., "I already said that", "you're repeating yourself")
-- Generic AI skepticism (e.g., "you can't really understand", "this is just a chatbot")
+Ignore:
+- Statements directed at the AI itself, such as complaints that the AI sounds robotic or unhelpful.
+- Frustration with the app or process.
+- Meta-commentary about the conversation.
+- Generic AI skepticism.
+- Draft mechanics, button/UI chatter, and empathy-exchange mechanics.
 
-ONLY ANALYZE content that reveals ${context.subjectName}'s actual feelings about ${context.guesserName} or their relationship situation. The gap analysis should focus on emotional content about the relationship, not process noise.
+Only analyze content that reveals the subject's actual feelings, needs, fears, meaning, or current factual stance about the partner or relationship situation.
 
 YOUR TASK:
-Compare ${context.guesserName}'s guess about ${context.subjectName} with what ${context.subjectName} actually expressed. Identify:
+Compare the guesser's empathy statement with the subject-owned evidence. Identify:
 
-1. ALIGNMENT: What did ${context.guesserName} get right?
-   - Which feelings or needs did they accurately perceive?
-   - What aspects of ${context.subjectName}'s experience did they understand?
-
-2. GAPS: What did ${context.guesserName} miss or misunderstand?
-   - Which important feelings were not captured?
-   - What needs or fears were overlooked?
-   - Were there any misattributions (thinking ${context.subjectName} felt X when they actually felt Y)?
-
+1. ALIGNMENT: What did the guesser get right?
+2. GAPS: What did the guesser miss or misunderstand?
 3. DEPTH ASSESSMENT: How complete is the understanding?
-   - Surface-level match but missing underlying emotions?
-   - Got the emotions but missed the context or trigger?
-   - Fundamental misunderstanding vs. just incomplete picture?
 
 ASSESSMENT CRITERIA:
 
 HIGH ALIGNMENT (no sharing needed):
-- ${context.guesserName} captured 80%+ of ${context.subjectName}'s core feelings
-- No significant misattributions
-- Underlying needs are understood
-- Minor gaps are not emotionally charged
+- The guesser captured 80%+ of the subject's core feelings.
+- No significant misattributions.
+- Underlying needs are understood.
+- Minor gaps are not emotionally charged.
 -> Recommendation: PROCEED (no additional sharing needed)
 
 MODERATE GAP (optional sharing):
-- ${context.guesserName} got the general direction right
-- Some important feelings are missing
-- No harmful misattributions
-- Sharing could deepen understanding but isn't critical
--> Recommendation: OFFER_OPTIONAL (ask ${context.subjectName} if they want to share more)
+- The guesser got the general direction right.
+- Some important feelings are missing.
+- No harmful misattributions.
+- Sharing could deepen understanding but is not critical.
+-> Recommendation: OFFER_OPTIONAL (ask the subject if they want to share more)
 
 SIGNIFICANT GAP (sharing recommended):
-- Key feelings or needs were missed
-- There's a misattribution that could cause harm if uncorrected
-- ${context.subjectName}'s core experience isn't reflected
-- Sharing specific information would meaningfully bridge the gap
+- Key feelings or needs were missed.
+- There is a misattribution that could cause harm if uncorrected.
+- The subject's core experience is not reflected.
+- Sharing specific subject-owned information would meaningfully bridge the gap.
 -> Recommendation: OFFER_SHARING (specific information would help)
 
 RESPOND IN THIS JSON FORMAT:
@@ -2002,32 +2003,80 @@ RESPOND IN THIS JSON FORMAT:
   "alignment": {
     "score": <number 0-100>,
     "summary": "<1-2 sentences describing what was understood correctly>",
-    "correctlyIdentified": ["<list of feelings/needs ${context.guesserName} got right>"]
+    "correctlyIdentified": ["<list of feelings/needs the guesser got right>"]
   },
   "gaps": {
     "severity": "none" | "minor" | "moderate" | "significant",
     "summary": "<1-2 sentences describing what was missed>",
     "missedFeelings": ["<list of feelings/needs that were missed>"],
     "misattributions": ["<list of any incorrect assumptions, or empty>"],
-    "mostImportantGap": "<the single most important thing ${context.guesserName} doesn't understand about ${context.subjectName}>" | null
+    "mostImportantGap": "<the single most important thing the guesser does not understand about the subject>" | null
   },
   "recommendation": {
     "action": "PROCEED" | "OFFER_OPTIONAL" | "OFFER_SHARING",
     "rationale": "<why this recommendation>",
     "sharingWouldHelp": true | false,
-    "suggestedShareFocus": "<if sharing would help, what specific aspect should ${context.subjectName} consider sharing?>" | null
+    "suggestedShareFocus": "<if sharing would help, what specific subject-owned aspect should the subject consider sharing?>" | null
   }
 }
 \`\`\`
 
 IMPORTANT PRINCIPLES:
-- Never suggest sharing sensitive information the person didn't already express
-- The suggested share focus should reference content ${context.subjectName} already shared in witnessing
-- Don't create new interpretations - only reference what was actually said
-- Phrase the suggested share focus as subject-owned context, not as what ${context.guesserName} thinks or has already understood
-- Do not frame the share focus as departure, rejection, or a permanent break unless ${context.subjectName} explicitly said that
-- Err on the side of OFFER_OPTIONAL rather than OFFER_SHARING - let people choose
-- If the gap is about context/history that wasn't shared, acknowledge that honestly`;
+- Phrase the suggested share focus as subject-owned context, not as what the guesser thinks or has already understood.
+- Do not frame the share focus as departure, rejection, or a permanent break unless the subject explicitly said that.
+- Err on the side of OFFER_OPTIONAL rather than OFFER_SHARING; let people choose.
+- If the gap is about context/history that was not shared, acknowledge that honestly.`;
+
+  return {
+    staticBlock,
+    dynamicBlock: 'Run-specific evidence is supplied in the user message.',
+  };
+}
+
+/**
+ * Build the per-run evidence packet for reconciler analysis.
+ * This remains outside the cached static system block.
+ */
+export function buildReconcilerEvidencePacket(context: ReconcilerContext): string {
+  const themesSection = context.extractedThemes?.length
+    ? `\nKey themes/feelings ${context.subjectName} expressed:\n- ${context.extractedThemes.join('\n- ')}`
+    : '\nKey themes/feelings: none extracted';
+
+  const factLines = context.subjectFacts?.length
+    ? context.subjectFacts.map((fact) => `- [${fact.category}] ${fact.fact}`).join('\n')
+    : '- No current ledger facts available.';
+
+  const recentSignal = context.recentSubjectTurns?.length
+    ? context.recentSubjectTurns
+        .map((turn) => {
+          const label = turn.role === 'assistant' ? 'AI framing prompt' : `${context.subjectName} subject-owned reply`;
+          return `- Stage ${turn.stage} ${label}: ${turn.content}`;
+        })
+        .join('\n')
+    : '- No recent Stage 2 subject-owned signal available.';
+
+  return `CONTEXT:
+You are analyzing the empathy exchange between two people: ${context.guesserName} and ${context.subjectName}.
+
+If Section 3 contradicts Section 2 or Stage 1 factual claims, Section 3 is the current factual signal. Preserve Stage 1 sentiment, but update factual framing.
+
+1. EMOTIONAL ANCHOR (Stage 1)
+
+[${context.guesserName}'s Empathy Guess about ${context.subjectName}]
+This is what ${context.guesserName} THINKS ${context.subjectName} is feeling:
+"${context.empathyStatement}"
+
+[What ${context.subjectName} Actually Expressed in Stage 1]
+This is what ${context.subjectName} ACTUALLY said about their own feelings during their witnessing session:
+"${context.witnessingContent}"
+
+${themesSection}
+
+2. FACTUAL BASELINE (Ledger)
+${factLines}
+
+3. RECENT SIGNAL (Stage 2 Hot Buffer)
+${recentSignal}`;
 }
 
 /**

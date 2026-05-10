@@ -251,6 +251,7 @@ export async function processSessionMessage(
     isInvitationPhase,
     isStageTransition,
     previousStage,
+    topicFrame: session.topicFrameConfirmedAt ? session.topicFrame : undefined,
   };
 
   if (isStageTransition) {

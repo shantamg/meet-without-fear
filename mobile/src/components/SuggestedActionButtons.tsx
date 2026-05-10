@@ -5,12 +5,12 @@
  * Users can tap to start a partner session, meditation, gratitude entry, etc.
  */
 
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { useMemo } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Users, Moon, Heart, Activity } from 'lucide-react-native';
 import { SuggestedAction, SuggestedActionType } from '@meet-without-fear/shared';
 
-import { createStyles } from '../theme/styled';
-import { colors } from '../theme';
+import { useAppAppearance } from '../theme';
 
 // ============================================================================
 // Types
@@ -33,13 +33,6 @@ const ACTION_ICONS: Record<SuggestedActionType, React.ElementType> = {
   check_need: Activity,
 };
 
-const ACTION_COLORS: Record<SuggestedActionType, string> = {
-  start_partner_session: colors.brandBlue,
-  start_meditation: colors.brandNavy,
-  add_gratitude: colors.success,
-  check_need: colors.brandOrange,
-};
-
 // ============================================================================
 // Component
 // ============================================================================
@@ -49,7 +42,15 @@ export function SuggestedActionButtons({
   onActionPress,
   onDismiss,
 }: SuggestedActionButtonsProps) {
-  const styles = useStyles();
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
+
+  const actionColors: Record<SuggestedActionType, string> = useMemo(() => ({
+    start_partner_session: palette.accent,
+    start_meditation: palette.info,
+    add_gratitude: palette.success,
+    check_need: palette.warning,
+  }), [palette]);
 
   if (actions.length === 0) {
     return null;
@@ -60,19 +61,20 @@ export function SuggestedActionButtons({
       <View style={styles.header}>
         <Text style={styles.headerText}>Suggested next steps</Text>
         {onDismiss && (
-          <TouchableOpacity onPress={onDismiss} style={styles.dismissButton}>
+          <TouchableOpacity
+            onPress={onDismiss}
+            style={styles.dismissButton}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss suggested next steps"
+          >
             <Text style={styles.dismissText}>Dismiss</Text>
           </TouchableOpacity>
         )}
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
+      <View style={styles.actionList}>
         {actions.map((action, index) => {
           const Icon = ACTION_ICONS[action.type] || Activity;
-          const iconColor = ACTION_COLORS[action.type] || colors.accent;
+          const iconColor = actionColors[action.type] || palette.accent;
 
           return (
             <TouchableOpacity
@@ -82,16 +84,16 @@ export function SuggestedActionButtons({
               accessibilityRole="button"
               accessibilityLabel={action.label}
             >
-              <View style={[styles.iconContainer, { backgroundColor: `${iconColor}20` }]}>
-                <Icon color={iconColor} size={20} />
+              <View style={styles.iconContainer}>
+                <Icon color={iconColor} size={18} />
               </View>
-              <Text style={styles.actionLabel} numberOfLines={2}>
+              <Text style={styles.actionLabel} numberOfLines={2} ellipsizeMode="tail">
                 {action.label}
               </Text>
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -100,60 +102,65 @@ export function SuggestedActionButtons({
 // Styles
 // ============================================================================
 
-const useStyles = () =>
-  createStyles((t) => ({
+type Palette = ReturnType<typeof useAppAppearance>['palette'];
+
+const makeStyles = (palette: Palette) =>
+  StyleSheet.create({
     container: {
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bg,
       borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-      paddingTop: t.spacing.sm,
-      paddingBottom: t.spacing.sm,
+      borderTopColor: palette.border,
+      paddingTop: 10,
+      paddingBottom: 10,
     },
     header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: t.spacing.lg,
-      marginBottom: t.spacing.sm,
+      paddingHorizontal: 16,
+      marginBottom: 8,
     },
     headerText: {
-      fontSize: t.typography.fontSize.sm,
-      color: t.colors.textMuted,
-      fontWeight: '500',
+      fontSize: 13,
+      color: palette.textMuted,
+      fontWeight: '600',
     },
     dismissButton: {
-      padding: t.spacing.xs,
+      paddingVertical: 4,
+      paddingHorizontal: 6,
     },
     dismissText: {
-      fontSize: t.typography.fontSize.sm,
-      color: t.colors.textMuted,
+      fontSize: 13,
+      color: palette.textMuted,
     },
-    scrollContent: {
-      paddingHorizontal: t.spacing.md,
-      gap: t.spacing.sm,
+    actionList: {
+      paddingHorizontal: 16,
+      gap: 8,
     },
     actionButton: {
-      backgroundColor: t.colors.bgTertiary,
-      borderRadius: 12,
-      padding: t.spacing.md,
-      minWidth: 140,
-      maxWidth: 180,
+      flexDirection: 'row',
       alignItems: 'center',
+      backgroundColor: palette.bgElev,
+      borderRadius: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
       borderWidth: 1,
-      borderColor: t.colors.border,
+      borderColor: palette.border,
+      gap: 10,
     },
     iconContainer: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 32,
+      height: 32,
+      borderRadius: 8,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: t.spacing.sm,
+      backgroundColor: palette.chipBg,
     },
     actionLabel: {
-      fontSize: t.typography.fontSize.sm,
-      color: t.colors.textPrimary,
-      textAlign: 'center',
-      fontWeight: '500',
+      flex: 1,
+      fontSize: 14,
+      lineHeight: 19,
+      color: palette.text,
+      fontWeight: '600',
     },
-  }));
+  });

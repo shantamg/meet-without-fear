@@ -33,19 +33,19 @@ describe('BreathingExercise', () => {
 
   it('shows ready state initially', () => {
     render(<BreathingExercise {...defaultProps} />);
-    expect(screen.getByText('Ready')).toBeTruthy();
-    expect(screen.getByText('Tap to begin')).toBeTruthy();
+    expect(screen.getByText('Take a deep breath in and out, then begin')).toBeTruthy();
+    expect(screen.getByTestId('ready-dot')).toBeTruthy();
   });
 
   it('shows start button in ready state', () => {
     render(<BreathingExercise {...defaultProps} />);
     expect(screen.getByTestId('start-button')).toBeTruthy();
+    expect(screen.getByText('Begin')).toBeTruthy();
   });
 
-  it('shows countdown timer placeholder initially', () => {
+  it('hides countdown timer initially', () => {
     render(<BreathingExercise {...defaultProps} />);
-    expect(screen.getByTestId('countdown-timer')).toBeTruthy();
-    expect(screen.getByText('--')).toBeTruthy();
+    expect(screen.queryByTestId('countdown-timer')).toBeNull();
   });
 
   it('shows skip button', () => {
@@ -61,11 +61,36 @@ describe('BreathingExercise', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('transitions to inhale phase when start is pressed', () => {
+  it('starts directly with inhale when start is pressed', () => {
     render(<BreathingExercise {...defaultProps} />);
     fireEvent.press(screen.getByTestId('start-button'));
-    expect(screen.getByText('Breathe In')).toBeTruthy();
+    expect(screen.getByText('Breathe')).toBeTruthy();
+    expect(screen.getByText('In through the nose')).toBeTruthy();
     expect(screen.getByText('Breathe in through your nose')).toBeTruthy();
+  });
+
+  it('transitions to hold phase after inhale', async () => {
+    render(<BreathingExercise {...defaultProps} phaseDuration={100} />);
+    fireEvent.press(screen.getByTestId('start-button'));
+    await act(async () => {
+      jest.advanceTimersByTime(100);
+    });
+    expect(screen.getByText('Hold')).toBeTruthy();
+    expect(screen.getByText('Hold your breath gently')).toBeTruthy();
+  });
+
+  it('shows out the mouth during exhale', async () => {
+    render(<BreathingExercise {...defaultProps} phaseDuration={100} />);
+    fireEvent.press(screen.getByTestId('start-button'));
+    await act(async () => {
+      jest.advanceTimersByTime(100);
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(100);
+    });
+    expect(screen.getByText('Breathe')).toBeTruthy();
+    expect(screen.getByText('Out the mouth')).toBeTruthy();
+    expect(screen.getByText('Exhale slowly through your mouth')).toBeTruthy();
   });
 
   it('shows back to chat button', () => {
@@ -97,7 +122,7 @@ describe('BreathingExercise', () => {
 
       // Wait for all phases to complete (inhale + hold + exhale = 300ms)
       await act(async () => {
-        jest.advanceTimersByTime(400);
+        jest.advanceTimersByTime(350);
       });
 
       await waitFor(
@@ -114,7 +139,7 @@ describe('BreathingExercise', () => {
       fireEvent.press(screen.getByTestId('start-button'));
 
       await act(async () => {
-        jest.advanceTimersByTime(400);
+        jest.advanceTimersByTime(350);
       });
 
       await waitFor(
@@ -137,7 +162,7 @@ describe('BreathingExercise', () => {
       fireEvent.press(screen.getByTestId('start-button'));
 
       await act(async () => {
-        jest.advanceTimersByTime(400);
+        jest.advanceTimersByTime(350);
       });
 
       await waitFor(

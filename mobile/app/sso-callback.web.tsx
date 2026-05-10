@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useClerk, useSignIn, useSignUp } from '@clerk/clerk-expo';
+import { useAuth as useClerkAuth, useClerk, useSignIn, useSignUp } from '@clerk/clerk-expo';
 
 import { colors } from '@/theme';
 
@@ -29,11 +29,41 @@ const CONTINUE_SIGN_UP_URL = 'https://accounts.meetwithoutfear.com/sign-up/conti
 
 export default function SsoCallbackScreen() {
   const clerk = useClerk();
+  const { isSignedIn } = useClerkAuth();
   const { signIn } = useSignIn();
   const { signUp } = useSignUp();
   const router = useRouter();
   const started = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingResult, setPendingResult] = useState<{
+    missing?: string;
+    status?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    router.replace('/');
+  }, [isSignedIn, router]);
+
+  useEffect(() => {
+    if (!pendingResult || isSignedIn || error) return;
+
+    const timer = setTimeout(() => {
+      if (isSignedIn) return;
+
+      if (pendingResult.missing) {
+        setError(
+          `Sign-up couldn't complete: missing ${pendingResult.missing}. If this doesn't finish on its own, check your Clerk dashboard's required fields.`,
+        );
+      } else if (pendingResult.status) {
+        setError(`Sign-in ended in status "${pendingResult.status}" without a session.`);
+      } else {
+        setError('Sign-in didn\'t complete. Please try again.');
+      }
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [error, isSignedIn, pendingResult]);
 
   useEffect(() => {
     if (!clerk || started.current) return;
@@ -70,20 +100,15 @@ export default function SsoCallbackScreen() {
           return;
         }
 
-        // No session and no navigation — surface whatever Clerk knows.
+        // Clerk's Expo web wrapper may update `isSignedIn` one render after
+        // handleRedirectCallback returns. Avoid flashing a false failure while
+        // that state settles; a separate effect surfaces real errors if no
+        // session appears shortly after the callback completes.
         const missing =
           signUp?.missingFields?.join(', ') ||
           signUp?.unverifiedFields?.join(', ');
-        const status = signUp?.status || signIn?.status;
-        if (missing) {
-          setError(
-            `Sign-up couldn't complete: missing ${missing}. If this doesn't finish on its own, check your Clerk dashboard's required fields.`,
-          );
-        } else if (status) {
-          setError(`Sign-in ended in status "${status}" without a session.`);
-        } else {
-          setError('Sign-in didn\'t complete. Please try again.');
-        }
+        const status = signUp?.status || signIn?.status || undefined;
+        setPendingResult({ missing, status });
       } catch (err) {
         console.error('[sso-callback] handleRedirectCallback failed:', err);
         const message =
