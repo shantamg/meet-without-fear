@@ -484,6 +484,7 @@ graph TD
    When `PromptContext.invitedSessionNudge` is set (non-null), its content is appended to the dynamic block as `OPERATIONAL NUDGE:`. This signals the AI to weave in an invite-expiry reminder. Only used for Slack-originated `INVITED` sessions approaching their 7-day TTL.
 
 5. **Dynamic Elements:**
+   - **Conversation topic** (`topicFrame`) — when the session has a confirmed topic (`topicFrameConfirmedAt` is set), the topic is injected at the top of the dynamic block as `CONVERSATION TOPIC: "{topicFrame}"`. This gives the AI awareness of the agreed-upon topic during stages 1–4.
    - **Stage turn count** (`stageTurnCount`) — counts only messages in the *current stage*, not the session total. This ensures stage-specific guards (e.g. `earlyStage3`, feel-heard timing) fire correctly regardless of how many turns occurred in prior stages.
    - Emotional intensity
    - Surfacing style

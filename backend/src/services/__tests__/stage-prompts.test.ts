@@ -1200,6 +1200,25 @@ describe('Stage Prompts Service', () => {
     });
   });
 
+  describe('topicFrame in dynamic guidance', () => {
+    it('includes topicFrame in dynamic block for stages 1–4 when provided', () => {
+      for (const stage of [1, 2, 3, 4]) {
+        const blocks = buildStagePrompt(stage, createContext({ topicFrame: 'Mealtime poking' }));
+        expect(blocks.dynamicBlock).toContain('CONVERSATION TOPIC: "Mealtime poking"');
+      }
+    });
+
+    it('omits topicFrame from dynamic block when null', () => {
+      const blocks = buildStagePrompt(1, createContext({ topicFrame: null }));
+      expect(blocks.dynamicBlock).not.toContain('CONVERSATION TOPIC');
+    });
+
+    it('omits topicFrame from dynamic block when undefined', () => {
+      const blocks = buildStagePrompt(1, createContext());
+      expect(blocks.dynamicBlock).not.toContain('CONVERSATION TOPIC');
+    });
+  });
+
   describe('buildStagePrompt — Stage 1 witness cadence', () => {
     it('keeps the first high-resistance final open-floor check separate from the felt-heard gate', () => {
       const blocks = buildStagePrompt(1, createContext({ turnCount: 5 }));
