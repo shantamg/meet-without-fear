@@ -863,9 +863,8 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('<thinking>');
       // The flag instruction is in format "FeelHeardCheck: [Y if ready..., N otherwise]"
       expect(prompt).toContain('FeelHeardCheck:');
-      expect(prompt).toContain('FeelHeardConfirmed:');
+      expect(prompt).not.toContain('FeelHeardConfirmed:');
       expect(prompt).toMatch(/FeelHeardCheck.*Y.*N/s);
-      expect(prompt).toMatch(/FeelHeardConfirmed.*Y.*N/s);
       expect(prompt).toContain('Do NOT invite more freeform chat unless the input remains visible');
     });
 
@@ -903,7 +902,7 @@ describe('Stage Prompts Service', () => {
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
       expect(prompt).toContain('The only XML-style tags you may use are exactly <thinking>, <draft>, <needs>, and <dispatch>.');
-      expect(prompt).toContain('Flags such as FeelHeardCheck, FeelHeardConfirmed, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>');
+      expect(prompt).toContain('Flags such as FeelHeardCheck, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>');
       expect(prompt).toContain('never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>');
       expect(prompt).toContain('The <needs> tag is only for the structured Stage 3 needs JSON shown above');
     });
