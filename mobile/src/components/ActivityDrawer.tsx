@@ -339,6 +339,7 @@ export function ActivityDrawer({
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const isDragging = useRef(false);
   const currentSnap = useRef<'3q' | 'full'>('3q');
+  const wasOpenedRef = useRef(visible);
 
   // Track the height above the FlatList (drag handle + header) so the
   // FlatList can be constrained to the visible area of the drawer.
@@ -398,14 +399,17 @@ export function ActivityDrawer({
     });
   }, [drawerTranslate, backdropOpacity, onClose]);
 
-  // Trigger open animation when visible changes.
-  // The else branch is unnecessary since the component returns null when !visible.
+  // Trigger open/close animation when visible changes.
   useEffect(() => {
     if (visible) {
+      wasOpenedRef.current = true;
       setIsMounted(true);
       openDrawer();
+    } else if (wasOpenedRef.current) {
+      wasOpenedRef.current = false;
+      closeDrawer();
     }
-  }, [visible, openDrawer]);
+  }, [visible, openDrawer, closeDrawer]);
 
   useEffect(() => {
     if (!visible || !focusMatch) {

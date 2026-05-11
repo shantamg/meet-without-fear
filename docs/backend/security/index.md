@@ -17,7 +17,7 @@ Current PostgreSQL RLS status and requirements for future enforcement. RLS is no
 API-level authorization and role-based access (user vs admin vs AI acting-on-behalf)
 
 ### Encryption
-Data encryption at rest and in transit (Render Postgres + TLS everywhere)
+Data encryption at rest and in transit (Render Postgres + TLS everywhere). Field-level AES-256-GCM encryption for sensitive PII fields (message content, conversation summaries, notable facts, etc.) via Prisma client extension — see `backend/src/lib/prisma-encryption-middleware.ts`.
 
 ### Audit Logging
 Consent decisions and retrieval attempts recorded for review
@@ -37,7 +37,7 @@ Consent decisions and retrieval attempts recorded for review
 - **Stage enforcement source of truth**: App-layer retrieval contracts + StageProgress gates.
 - **Consent scope**: All consent records are tied to a session + targetId + targetType; revocation must cascade to SharedVessel content (set `consentActive=false`) and mark dependent outputs stale.
 - **Admin access**: Only for global library curation; no access to user vessels. Admin queries must keep explicit user/session/relationship filters.
-- **Encryption**: TLS to Postgres, Render at-rest encryption, hash push tokens, and avoid storing secrets in user rows.
+- **Encryption**: TLS to Postgres, Render at-rest encryption, hash push tokens, and avoid storing secrets in user rows. Application-level field encryption (AES-256-GCM) auto-encrypts sensitive fields on write and auto-decrypts on read when `FIELD_ENCRYPTION_KEY` is set; gracefully degrades to plaintext passthrough when unset.
 - **Audit log**: Log every `/consent/decide`, `/consent/revoke`, and retrieval contract rejection.
 
 ---

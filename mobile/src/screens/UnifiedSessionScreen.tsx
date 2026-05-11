@@ -535,6 +535,8 @@ export function UnifiedSessionScreen({
   const {
     // Loading
     isLoading,
+    loadError,
+    refetchSession,
     accessDenied,
     isFetchingInitialMessage,
 
@@ -653,16 +655,17 @@ export function UnifiedSessionScreen({
     markSessionViewed,
 
   } = useUnifiedSession(sessionId);
+  const sessionQueriesEnabled = !accessDenied && !loadError;
 
   // Server-side pending actions for badge count (replaces client-side computation)
-  // Gate behind !accessDenied to prevent polling when session is deleted (#428)
-  const pendingActionsQuery = usePendingActions(sessionId, { enabled: !accessDenied });
+  // Gate behind a clean session load to prevent polling when session state fails (#428, #522)
+  const pendingActionsQuery = usePendingActions(sessionId, { enabled: sessionQueriesEnabled });
 
   // Sharing status for the header button. Keep these duplicate header queries
   // behind the same stage/access gates as useUnifiedSession so the badge does
   // not reintroduce the Stage 2 share-offer request storm this PR removes.
   const sharingStatus = useSharingStatus(sessionId, {
-    enabled: !accessDenied && currentStage >= Stage.PERSPECTIVE_STRETCH,
+    enabled: sessionQueriesEnabled && currentStage >= Stage.PERSPECTIVE_STRETCH,
     enableEmpathyStatus: currentStage >= Stage.PERSPECTIVE_STRETCH,
     enablePartnerEmpathy: currentStage >= Stage.PERSPECTIVE_STRETCH,
     enableShareOffer: currentStage === Stage.PERSPECTIVE_STRETCH,
@@ -759,10 +762,10 @@ export function UnifiedSessionScreen({
   });
 
   // Real-time presence and event tracking
-  // Disable when session is invalid to prevent Ably subscription cascading errors (#428)
+  // Disable when session is invalid or failed to load to prevent cascading errors (#428, #522)
   const { partnerOnline, connectionStatus, reconnect: _reconnectRealtime } = useRealtime({
     sessionId,
-    enabled: !accessDenied,
+    enabled: sessionQueriesEnabled,
     enablePresence: true,
     onSessionEvent: (event, data) => {
       console.log('[UnifiedSessionScreen] Received realtime event:', event);
@@ -1730,6 +1733,7 @@ export function UnifiedSessionScreen({
         status: empathyStatusData.myAttempt.status,
         content: empathyStatusData.myAttempt.content,
       } : undefined,
+      partnerEmpathyHeldStatus: empathyStatusData.partnerEmpathyHeldStatus,
       myValidation: sharingStatus.myValidation,
       partnerValidated: sharingStatus.partnerValidated,
       messageCountSinceSharedContext: empathyStatusData.messageCountSinceSharedContext,
@@ -3266,6 +3270,30 @@ export function UnifiedSessionScreen({
   }
 
   // -------------------------------------------------------------------------
+  // Load Error — network/server failure (retries exhausted)
+  // The foreground recovery effect (AppState listener) will auto-retry when
+  // the app returns from background, so the user can also just reopen.
+  // -------------------------------------------------------------------------
+  if (loadError) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.loadingText}>Couldn't load session</Text>
+        <Text style={[styles.loadingText, { fontSize: 14, marginTop: 4, opacity: 0.7 }]}>
+          Check your connection and try again.
+        </Text>
+        <TouchableOpacity onPress={() => refetchSession()} style={{ marginTop: 20 }}>
+          <Text style={[styles.loadingText, { textDecorationLine: 'underline' }]}>Retry</Text>
+        </TouchableOpacity>
+        {onNavigateBack && (
+          <TouchableOpacity onPress={onNavigateBack} style={{ marginTop: 12 }}>
+            <Text style={[styles.loadingText, { textDecorationLine: 'underline' }]}>Go back</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
+  // -------------------------------------------------------------------------
   // Access Denied — user is not a member of this session's relationship
   // -------------------------------------------------------------------------
   if (accessDenied) {
@@ -4417,9 +4445,9 @@ const useStyles = () => {
       paddingHorizontal: t.spacing.lg,
       paddingTop: t.spacing.sm,
       paddingBottom: t.spacing.md,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderTopWidth: 1,
-      borderTopColor: t.colors.border,
+      borderTopColor: palette.border,
     },
     strategyPreviewBelowInputContainer: {
       paddingHorizontal: t.spacing.lg,
@@ -4483,10 +4511,10 @@ const useStyles = () => {
       marginHorizontal: 16,
       marginVertical: 8,
       padding: 16,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: t.colors.border,
+      borderColor: palette.border,
     },
     needsSummaryCardCompact: {
       marginHorizontal: 0,
@@ -4503,18 +4531,18 @@ const useStyles = () => {
     needsSummaryEyebrow: {
       fontSize: 11,
       fontWeight: '700',
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       letterSpacing: 0,
     },
     needsSummaryStatus: {
       fontSize: 12,
       fontWeight: '600',
-      color: t.colors.brandBlue,
+      color: palette.accent,
     },
     needsSummaryTitle: {
       fontSize: 17,
       fontWeight: '700',
-      color: t.colors.textPrimary,
+      color: palette.text,
       marginBottom: 12,
     },
     needsSummaryCompactBody: {
@@ -4545,30 +4573,30 @@ const useStyles = () => {
       paddingVertical: 8,
       paddingHorizontal: 10,
       borderRadius: 8,
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bg,
     },
     needsSummaryCategory: {
       fontSize: 11,
       fontWeight: '700',
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       marginBottom: 3,
       letterSpacing: 0,
     },
     needsSummaryText: {
       fontSize: 14,
       lineHeight: 19,
-      color: t.colors.textPrimary,
+      color: palette.text,
     },
     needsSummaryMore: {
       fontSize: 13,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       marginTop: 2,
     },
     needsSummaryAction: {
       marginTop: 14,
       fontSize: 14,
       fontWeight: '700',
-      color: t.colors.brandBlue,
+      color: palette.accent,
     },
     needsSummaryActionCompact: {
       paddingVertical: 8,

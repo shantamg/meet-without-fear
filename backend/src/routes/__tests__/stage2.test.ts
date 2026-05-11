@@ -541,6 +541,38 @@ describe('Stage 2 API', () => {
       );
     });
 
+    it('does not validate partner empathy before it is revealed', async () => {
+      const req = mockRequest({
+        body: { validated: true },
+      });
+      const res = mockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        stage: 2,
+        status: 'IN_PROGRESS',
+      });
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
+        id: 'attempt-1',
+        sourceUserId: 'partner-1',
+        status: 'AWAITING_SHARING',
+      });
+
+      await validateEmpathy(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: 'VALIDATION_ERROR',
+            message: 'Partner empathy is not ready for validation yet',
+          }),
+        })
+      );
+      expect(prisma.empathyValidation.upsert).not.toHaveBeenCalled();
+    });
+
     it('requires feedback when empathy is not validated', async () => {
       const req = mockRequest({
         body: { validated: false, feedback: '   ' },

@@ -133,6 +133,7 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
   container: {
     ...appWidthStyle,
     flex: 1,
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,

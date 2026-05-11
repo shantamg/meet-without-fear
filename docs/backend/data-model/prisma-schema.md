@@ -3,7 +3,7 @@ title: Prisma Schema
 sidebar_position: 1
 description: Core Vessel Architecture tables plus pointers to the rest of the Prisma schema (Inner Work, reconciler, memory, needs/people, telemetry).
 slug: /backend/data-model/prisma-schema
-updated: "2026-05-10"
+updated: "2026-05-11"
 ---
 # Prisma Schema
 
@@ -1027,7 +1027,7 @@ const similarMoments = await prisma.$queryRaw`
 These subsystems share the same database but aren't documented in full here. Consult `backend/prisma/schema.prisma` for field-level detail.
 
 ### Inner Work (solo reflection + practices)
-- `InnerWorkSession` / `InnerWorkMessage` — solo reflection sessions that can be linked to a partner session via `linkedPartnerSessionId`.
+- `InnerWorkSession` / `InnerWorkMessage` — solo reflection sessions that can be linked to a partner session via `linkedPartnerSessionId`. Branch-point metadata added in the partner-branch flow: `linkedAtMessageId` (which Inner Thoughts message triggered the link), `linkedAtStage` (partner session stage at link time), and `contextSummarySnapshot` (point-in-time context snapshot passed when the new partner session was started).
 - `SessionTakeaway` + `TakeawayLink` — distilled takeaways that can be attached to partner sessions.
 - `GratitudeEntry` — gratitude practice logs.
 - `MeditationSession`, `MeditationStats`, `MeditationFavorite`, `SavedMeditation` — meditation tracking + generated scripts.

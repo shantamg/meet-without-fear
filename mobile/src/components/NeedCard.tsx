@@ -6,7 +6,7 @@
  */
 
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
-import { colors } from '@/theme';
+import { useAppAppearance } from '@/theme';
 
 // ============================================================================
 // Types
@@ -34,6 +34,9 @@ export function NeedCard({
   style,
   testID,
 }: NeedCardProps) {
+  const { palette } = useAppAppearance();
+  const styles = makeStyles(palette);
+
   const cardContent = (
     <>
       <Text style={styles.category}>
@@ -67,12 +70,12 @@ export function NeedCard({
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
+const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   card: {
-    backgroundColor: 'rgba(147, 197, 253, 0.15)',
+    backgroundColor: palette.infoSoft,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(147, 197, 253, 0.3)',
+    borderColor: palette.info,
     padding: 16,
     marginBottom: 12,
     marginHorizontal: 16,
@@ -81,12 +84,12 @@ const styles = StyleSheet.create({
   category: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: palette.textMuted,
     marginBottom: 4,
   },
   description: {
     fontSize: 16,
-    color: colors.textPrimary,
+    color: palette.text,
     lineHeight: 22,
   },
 });

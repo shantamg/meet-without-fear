@@ -103,8 +103,12 @@ export function NeedsDrawer({
   const drawerTranslate = useRef(new Animated.Value(drawerHostHeight)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const isDragging = useRef(false);
+  const isClosing = useRef(false);
   const currentSnap = useRef<'3q' | 'full'>('3q');
+  const wasOpened = useRef(visible);
+  const [isMounted, setIsMounted] = useState(visible);
   const [contentHeight, setContentHeight] = useState(drawerHostHeight - position3Q);
+  const [backdropTouchableHeight, setBackdropTouchableHeight] = useState(position3Q);
 
   const handleHostLayout = useCallback((event: LayoutChangeEvent) => {
     const measuredHeight = event.nativeEvent.layout.height;
@@ -120,6 +124,7 @@ export function NeedsDrawer({
   // -------------------------------------------------------------------------
   const snapTo = useCallback(
     (position: number, backdrop: number) => {
+      setBackdropTouchableHeight(position);
       setContentHeight(drawerHostHeightRef.current - position);
       Animated.parallel([
         Animated.spring(drawerTranslate, {
@@ -139,11 +144,16 @@ export function NeedsDrawer({
   );
 
   const openDrawer = useCallback(() => {
+    isClosing.current = false;
     currentSnap.current = '3q';
+    drawerTranslate.setValue(drawerHostHeightRef.current);
+    backdropOpacity.setValue(0);
     snapTo(position3QRef.current, 0.4);
-  }, [snapTo]);
+  }, [backdropOpacity, drawerTranslate, snapTo]);
 
   const closeDrawer = useCallback(() => {
+    if (isClosing.current) return;
+    isClosing.current = true;
     Animated.parallel([
       Animated.timing(drawerTranslate, {
         toValue: drawerHostHeightRef.current,
@@ -157,15 +167,22 @@ export function NeedsDrawer({
       }),
     ]).start(() => {
       currentSnap.current = '3q';
+      wasOpened.current = false;
+      isClosing.current = false;
+      setIsMounted(false);
       onClose();
     });
   }, [drawerTranslate, backdropOpacity, onClose]);
 
   useEffect(() => {
     if (visible) {
+      wasOpened.current = true;
+      setIsMounted(true);
       openDrawer();
+    } else if (wasOpened.current) {
+      closeDrawer();
     }
-  }, [visible, openDrawer]);
+  }, [visible, openDrawer, closeDrawer]);
 
   useEffect(() => {
     if (!visible) {
@@ -174,9 +191,8 @@ export function NeedsDrawer({
     }
 
     const position = currentSnap.current === 'full' ? positionFullRef.current : position3Q;
-    drawerTranslate.setValue(position);
-    setContentHeight(drawerHostHeight - position);
-  }, [visible, drawerHostHeight, position3Q, drawerTranslate]);
+    snapTo(position, currentSnap.current === 'full' ? 0.6 : 0.4);
+  }, [visible, drawerHostHeight, position3Q, drawerTranslate, snapTo]);
 
   // -------------------------------------------------------------------------
   // Android back button
@@ -383,7 +399,7 @@ export function NeedsDrawer({
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
-  if (!visible) return null;
+  if (!isMounted) return null;
 
   const headerText = mode === 'needs' ? 'Your Needs' : 'Needs Side by Side';
 
@@ -396,12 +412,13 @@ export function NeedsDrawer({
     >
       {/* Backdrop */}
       <Pressable
-        style={styles.backdropPressable}
+        style={[styles.backdropPressable, { height: backdropTouchableHeight }]}
         onPress={() => {
           if (!isDragging.current) closeDrawer();
         }}
         accessibilityRole="button"
         accessibilityLabel={`Close ${headerText}`}
+        testID={`${testID}-backdrop`}
       >
         <Animated.View
           style={[styles.backdrop, { opacity: backdropOpacity }]}
@@ -437,6 +454,9 @@ export function NeedsDrawer({
             {headerText}
           </Text>
 
+          {mode === 'needs' && renderNeedsButtons()}
+          {mode === 'reveal' && renderRevealButtons()}
+
           {/* Scrollable content */}
           <ScrollView
             style={styles.scrollView}
@@ -446,10 +466,6 @@ export function NeedsDrawer({
             {mode === 'needs' && renderNeedsMode()}
             {mode === 'reveal' && renderRevealMode()}
           </ScrollView>
-
-          {/* Fixed footer buttons */}
-          {mode === 'needs' && renderNeedsButtons()}
-          {mode === 'reveal' && renderRevealButtons()}
         </View>
       </Animated.View>
     </View>
@@ -462,7 +478,11 @@ export function NeedsDrawer({
 
 const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   backdropPressable: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 0,
   },
   backdrop: {
     flex: 1,
@@ -472,6 +492,7 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     position: 'absolute',
     left: 0,
     right: 0,
+    zIndex: 1,
     backgroundColor: palette.bgPane,
     borderWidth: 1,
     borderColor: palette.border,
@@ -530,10 +551,12 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     marginHorizontal: 16,
   },
 
-  // Fixed button area at bottom of drawer
+  // Action area
   fixedButtonArea: {
     borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderTopColor: palette.border,
+    borderBottomColor: palette.border,
     backgroundColor: palette.bgPane,
     paddingHorizontal: 16,
     paddingTop: 12,

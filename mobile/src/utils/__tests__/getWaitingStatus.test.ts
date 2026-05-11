@@ -295,6 +295,35 @@ describe('Priority 4: Stage 2 (Empathy)', () => {
 
     expect(computeWaitingStatus(inputs)).toBe('partner-validating-empathy');
   });
+
+  it('returns partner-revising-empathy after I send feedback on partner empathy', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      partnerStage: Stage.PERSPECTIVE_STRETCH,
+      hasPartnerEmpathy: false,
+      empathyStatus: {
+        myAttemptStatus: 'REVEALED',
+        partnerAttemptStatus: 'REFINING',
+      },
+      myValidation: { validated: false },
+    });
+
+    expect(computeWaitingStatus(inputs)).toBe('partner-revising-empathy');
+  });
+
+  it('returns partner-revising-empathy from explicit awaitingRevision cache state', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      partnerStage: Stage.PERSPECTIVE_STRETCH,
+      hasPartnerEmpathy: false,
+      empathyStatus: {
+        myAttemptStatus: 'REVEALED',
+      },
+      myValidation: { validated: false, awaitingRevision: true },
+    });
+
+    expect(computeWaitingStatus(inputs)).toBe('partner-revising-empathy');
+  });
 });
 
 // ============================================================================

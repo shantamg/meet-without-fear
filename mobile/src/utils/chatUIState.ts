@@ -599,13 +599,12 @@ function computeShouldHideInput(
   // This prevents the flash of input on initial load before data arrives.
   // Exception: if there's a share suggestion, user CAN chat to respond.
   const currentStage = inputs.myStage ?? Stage.ONBOARDING;
+  // In Stage 3, only hide input for needs-reveal-validation (which has an
+  // above-input panel).  needs-review and needs-share render a compact card
+  // *below* the input — users keep chatting while reviewing/sharing needs.
   if (
     currentStage === Stage.NEED_MAPPING &&
-    (
-      aboveInputPanel === 'needs-review' ||
-      aboveInputPanel === 'needs-share' ||
-      aboveInputPanel === 'needs-reveal-validation'
-    )
+    aboveInputPanel === 'needs-reveal-validation'
   ) {
     return true;
   }

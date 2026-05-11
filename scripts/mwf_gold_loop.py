@@ -558,16 +558,13 @@ def parse_key_values(text: str) -> dict[str, str]:
     return values
 
 
-def create_gold_session(character: str, api_url: str, app_url: str) -> dict[str, str]:
-    scenarios_by_character = {
-        "adam": ("Adam", "Eve"),
-        "eve": ("Eve", "Adam"),
-        "james": ("James", "Catherine"),
-        "catherine": ("Catherine", "James"),
-    }
-    assigned_name, partner_name = scenarios_by_character.get(character.lower(), (None, None))
-    if not assigned_name or not partner_name:
-        raise GoldLoopError(f"Unknown character {character!r}; expected Adam, Eve, James, or Catherine")
+def create_gold_session(scenario: str, character: str, api_url: str, app_url: str) -> dict[str, str]:
+    participants = SCENARIOS[scenario]
+    assigned_name = character_from_name(character, participants)
+    if not assigned_name:
+        expected = ", ".join(participants)
+        raise GoldLoopError(f"Unknown character {character!r} for scenario {scenario!r}; expected {expected}")
+    partner_name = next(participant for participant in participants if participant != assigned_name)
 
     stamp = datetime.now().strftime("%Y%m%d%H%M%S")
     assigned_email = f"gold-loop-{assigned_name.lower()}-{stamp}@e2e.test"
@@ -938,6 +935,8 @@ Continue as {actor.character} until one of these happens:
 
 If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present for {actor.character}, either click it or give a clear in-character typed confirmation such as "I feel heard" / "Ready" when that is realistic. Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate.
 
+If a visible Stage 0 compact/getting-started screen is present for {actor.character}, including copy like "Ready to begin?" with a "Ready" CTA, click it and continue. The header may show the partner's name because the session is "with {partner.character}"; do not treat that alone as evidence that you are operating the partner side.
+
 If Stage {stop_after_stage} shows a visible share suggestion, context-share decision, validation card, proposal inventory, rank/select/submit controls, draft review, or text input for {actor.character}, treat it as legitimate in-stage work. Respond to that action before reporting "stage_limit_reached". In Stage 4, do not report "stage_limit_reached" merely after adding ideas; use it only after this assigned side has submitted selections or the stage is visibly closed for this side. If the visible next action belongs to {partner.character}, use "needs_partner" with "blocked_on": "{partner.side}".
 
 In Stage 4, do not keep adding ideas indefinitely just because the chat input remains visible. Once {actor.character} has contributed one or two concrete proposals or individual commitments and has made visible willingness selections for the current proposal inventory, stop and report `needs_partner` if closure buttons are still disabled because {partner.character}'s private selections, proposals, review, or closure are pending.
@@ -978,6 +977,7 @@ Stop after Stage {stop_after_stage}.
 
 Inspect the current in-app browser state, continue if {actor.character} has a legitimate action, and stop when blocked on {partner.character}, Stage {stop_after_stage} is reached, completed, or bug-blocked.
 If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present for {actor.character}, either click it or give a clear in-character typed confirmation such as "I feel heard" / "Ready" when that is realistic. Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate.
+If a visible Stage 0 compact/getting-started screen is present for {actor.character}, including copy like "Ready to begin?" with a "Ready" CTA, click it and continue. The header may show the partner's name because the session is "with {partner.character}"; do not treat that alone as evidence that you are operating the partner side.
 If Stage {stop_after_stage} shows a visible share suggestion, context-share decision, validation card, proposal inventory, rank/select/submit controls, draft review, or text input for {actor.character}, handle that in-stage action before reporting "stage_limit_reached". In Stage 4, do not report "stage_limit_reached" merely after adding ideas; use it only after this assigned side has submitted selections or the stage is visibly closed for this side. If the visible next action belongs to {partner.character}, use "needs_partner" with "blocked_on": "{partner.side}".
 In Stage 4, do not keep adding ideas indefinitely just because the chat input remains visible. Once {actor.character} has contributed one or two concrete proposals or individual commitments and has made visible willingness selections for the current proposal inventory, stop and report `needs_partner` if closure buttons are still disabled because {partner.character}'s private selections, proposals, review, or closure are pending.
 For Stage 4 specifically, "stage_limit_reached" must have `"blocked_on": null`. If {actor.character} is waiting for {partner.character} to submit proposals, selections, review, or closure, report `"state": "needs_partner"` instead.
@@ -1264,16 +1264,29 @@ def actor_satisfies_stop_boundary(actor: Actor, stop_after_stage: int) -> bool:
         stage = int(status.stage)
     except (TypeError, ValueError):
         return False
-    return status.state == "needs_partner" and stage >= stop_after_stage and not status.blocked_on
+    if status.state != "needs_partner" or stage < stop_after_stage:
+        return False
+    # For Stage 0-2 regression gates, a partner-wait at the requested stage is
+    # a valid stop boundary: the product may still be doing privacy review or
+    # partner reveal work, but the assigned actor has reached the requested
+    # stage cap. Stage 4 remains stricter because proposal/selection closure has
+    # side-specific work that must not be cut short while blocked_on is set.
+    return not status.blocked_on or stop_after_stage < 4
 
 
-def actor_has_unanswered_blocker(actors: dict[str, Actor], target_side: str) -> bool:
+def actor_has_unanswered_blocker(actors: dict[str, Actor], target_side: str, stop_after_stage: int = 0) -> bool:
     target = actors[target_side]
     for actor in actors.values():
         status = actor.status
         if not status or not status.blocked_on:
             continue
         if str(status.blocked_on).lower() == target_side and actor.turns > target.turns:
+            if (
+                stop_after_stage < 4
+                and actor_satisfies_stop_boundary(actor, stop_after_stage)
+                and actor_satisfies_stop_boundary(target, stop_after_stage)
+            ):
+                continue
             return True
     return False
 
@@ -1282,7 +1295,8 @@ def choose_next_actor(actors: dict[str, Actor], last_side: str | None = None, st
     if any(actor.status and actor.status.state in FAILED_ACTOR_STATES for actor in actors.values()):
         return None
     if all(
-        actor_satisfies_stop_boundary(actor, stop_after_stage) and not actor_has_unanswered_blocker(actors, side)
+        actor_satisfies_stop_boundary(actor, stop_after_stage)
+        and not actor_has_unanswered_blocker(actors, side, stop_after_stage)
         for side, actor in actors.items()
     ):
         return None
@@ -1292,7 +1306,7 @@ def choose_next_actor(actors: dict[str, Actor], last_side: str | None = None, st
             return actor
 
     for side, actor in actors.items():
-        if actor_has_unanswered_blocker(actors, side):
+        if actor_has_unanswered_blocker(actors, side, stop_after_stage):
             return actor
 
     if last_side and actors[last_side].status:
@@ -1301,7 +1315,7 @@ def choose_next_actor(actors: dict[str, Actor], last_side: str | None = None, st
             blocked_on = str(blocked_on).lower()
             if blocked_on in actors:
                 target = actors[blocked_on]
-                if not actor_satisfies_stop_boundary(target, stop_after_stage) or actor_has_unanswered_blocker(actors, blocked_on):
+                if not actor_satisfies_stop_boundary(target, stop_after_stage) or actor_has_unanswered_blocker(actors, blocked_on, stop_after_stage):
                     return target
 
     for actor in actors.values():
@@ -3354,7 +3368,7 @@ def run_iteration(
         session = seeded_session_from_target_stage(args.scenario, args.seed_target_stage, args.api_url, args.app_url)
         start_info = {"mode": "target_stage", "target_stage": args.seed_target_stage, "session_id": session["SESSION_ID"]}
     else:
-        session = create_gold_session(start_character, args.api_url, args.app_url)
+        session = create_gold_session(args.scenario, start_character, args.api_url, args.app_url)
 
     session_id = session["SESSION_ID"]
     actors = {

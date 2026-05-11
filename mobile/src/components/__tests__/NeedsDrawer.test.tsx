@@ -72,7 +72,7 @@ describe('NeedsDrawer', () => {
     const onValidateNeeds = jest.fn();
     const onNeedsNotValidYet = jest.fn();
 
-    render(
+    const { unmount } = render(
       <NeedsDrawer
         visible
         onClose={jest.fn()}
@@ -87,6 +87,19 @@ describe('NeedsDrawer', () => {
     fireEvent.press(screen.getByTestId('needs-drawer-validate-needs'));
     expect(onValidateNeeds).toHaveBeenCalledTimes(1);
 
+    unmount();
+
+    render(
+      <NeedsDrawer
+        visible
+        onClose={jest.fn()}
+        mode="reveal"
+        needs={needs}
+        partnerNeeds={partnerNeeds}
+        onValidateNeeds={onValidateNeeds}
+        onNeedsNotValidYet={onNeedsNotValidYet}
+      />
+    );
     fireEvent.press(screen.getByTestId('needs-drawer-not-valid-yet'));
     expect(onNeedsNotValidYet).toHaveBeenCalledTimes(1);
   });
@@ -120,5 +133,55 @@ describe('NeedsDrawer', () => {
 
     expect(StyleSheet.flatten(screen.getByTestId('needs-drawer-sheet').props.style).height).toBe(620);
     expect(StyleSheet.flatten(screen.getByTestId('needs-drawer-content').props.style).height).toBe(465);
+  });
+
+  it('limits backdrop presses to the area above the visible sheet', () => {
+    render(
+      <NeedsDrawer
+        visible
+        onClose={jest.fn()}
+        mode="needs"
+        needs={needs}
+      />
+    );
+
+    fireEvent(screen.getByTestId('needs-drawer'), 'layout', {
+      nativeEvent: { layout: { height: 620 } },
+    });
+
+    const backdropStyle = StyleSheet.flatten(screen.getByTestId('needs-drawer-backdrop').props.style);
+    expect(backdropStyle.top).toBe(0);
+    expect(backdropStyle.bottom).toBeUndefined();
+    expect(backdropStyle.height).toBe(155);
+  });
+
+  it('keeps the sheet layered above the backdrop', () => {
+    render(
+      <NeedsDrawer
+        visible
+        onClose={jest.fn()}
+        mode="needs"
+        needs={needs}
+      />
+    );
+
+    const sheetStyle = StyleSheet.flatten(screen.getByTestId('needs-drawer-sheet').props.style);
+    expect(sheetStyle.zIndex).toBeGreaterThan(0);
+  });
+
+  it('closes when the user presses the backdrop', () => {
+    const onClose = jest.fn();
+
+    render(
+      <NeedsDrawer
+        visible
+        onClose={onClose}
+        mode="needs"
+        needs={needs}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('needs-drawer-backdrop'));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
