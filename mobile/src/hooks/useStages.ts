@@ -1181,6 +1181,8 @@ export function useValidateEmpathy(
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+      queryClient.refetchQueries({ queryKey: messageKeys.list(sessionId) });
       // When both users validated, the server triggers stage transition async.
       // Delayed refetch ensures we pick up the new stage after the transition commits.
       if (data.canAdvance && data.partnerValidated) {

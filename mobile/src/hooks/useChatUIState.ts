@@ -282,6 +282,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,
     hasEmpathyContent: hasLiveProposedEmpathyStatement || !!empathyDraftData?.draft?.content,
+    hasLiveProposedEmpathyStatement,
     empathyAlreadyConsented: empathyDraftData?.alreadyConsented ?? false,
     hasSharedEmpathyLocal,
     isRefiningEmpathy: empathyStatusData?.hasNewSharedContext ?? false,

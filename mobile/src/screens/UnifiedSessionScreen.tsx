@@ -1570,6 +1570,13 @@ export function UnifiedSessionScreen({
   const isEmpathyValidated =
     isLocalEmpathyValidationActive && localEmpathyValidationAction?.action === 'accepted';
   const isEmpathyShared = completedActions.has('shared-empathy');
+  const effectiveMyValidation = isEmpathyValidated
+    ? {
+        ...sharingStatus.myValidation,
+        validated: true,
+        awaitingRevision: false,
+      }
+    : sharingStatus.myValidation;
 
   useEffect(() => {
     if (showFeedbackCoachChat && !feedbackCoachInitializedRef.current) {
@@ -1735,7 +1742,7 @@ export function UnifiedSessionScreen({
         content: empathyStatusData.myAttempt.content,
       } : undefined,
       partnerEmpathyHeldStatus: empathyStatusData.partnerEmpathyHeldStatus,
-      myValidation: sharingStatus.myValidation,
+      myValidation: effectiveMyValidation,
       partnerValidated: sharingStatus.partnerValidated,
       messageCountSinceSharedContext: empathyStatusData.messageCountSinceSharedContext,
     } : undefined,

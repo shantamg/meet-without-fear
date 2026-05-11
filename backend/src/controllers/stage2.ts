@@ -1233,17 +1233,46 @@ export async function validateEmpathy(
       })
       : null;
 
+    const partnerHasValidatedMyAttempt = partnerValidation?.validated === true;
+    if (validated && !partnerHasValidatedMyAttempt) {
+      const waitMessage =
+        "You confirmed this feels right. We'll hold here while your partner reviews what you shared. Once they respond, we'll move you into the next step.";
+
+      const existingWaitMessage = await prisma.message.findFirst({
+        where: {
+          sessionId,
+          forUserId: user.id,
+          role: MessageRole.AI,
+          content: waitMessage,
+        },
+      });
+
+      if (!existingWaitMessage) {
+        await prisma.message.create({
+          data: {
+            sessionId,
+            senderId: null,
+            forUserId: user.id,
+            role: MessageRole.AI,
+            content: waitMessage,
+            stage: 2,
+            timestamp: now,
+          },
+        });
+      }
+    }
+
     successResponse(res, {
       validated,
       validatedAt: now.toISOString(),
       feedbackShared: validationRecord.feedbackShared,
       awaitingRevision: validated === false,
       canAdvance: validated,
-      partnerValidated: partnerValidation ? partnerValidation.validated : false,
+      partnerValidated: partnerHasValidatedMyAttempt,
     });
 
     // Check if both have validated (Accurate/Partial) and trigger transition
-    if (validated && partnerValidation?.validated) {
+    if (validated && partnerHasValidatedMyAttempt) {
       triggerStage3Transition(sessionId, user.id, partnerId).catch(err =>
         logger.error('[validateEmpathy] Failed to trigger stage 3 transition:', err)
       );

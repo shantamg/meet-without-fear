@@ -394,6 +394,24 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(true);
   });
 
+  it('shows a waiting banner and hides input after I validate partner empathy but partner has not validated mine', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      hasPartnerEmpathy: true,
+      myValidation: { validated: true },
+      partnerValidated: false,
+      empathyStatus: { myAttemptStatus: 'REVEALED' },
+      empathyDraft: { alreadyConsented: true },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.waitingStatus).toBe('partner-validating-empathy');
+    expect(result.aboveInputPanel).toBe('waiting-banner');
+    expect(result.shouldHideInput).toBe(true);
+  });
+
   it('shows a waiting banner and hides input after sending empathy revision feedback', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
@@ -721,7 +739,7 @@ describe('Empathy Panel Visibility', () => {
     expect(result.aboveInputPanel).not.toBe('empathy-statement');
   });
 
-  it('does not show in refining mode before user reflects, even when new AI content is reviewable', () => {
+  it('does not show in refining mode before user reflects when only prior draft content is reviewable', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -735,6 +753,23 @@ describe('Empathy Panel Visibility', () => {
     const result = computeChatUIState(inputs);
     expect(result.panels.showEmpathyPanel).toBe(false);
     expect(result.aboveInputPanel).not.toBe('empathy-statement');
+  });
+
+  it('shows in refining mode once the AI has produced a revised draft', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      isRefiningEmpathy: true,
+      messageCountSinceSharedContext: 0,
+      hasEmpathyContent: true,
+      hasLiveProposedEmpathyStatement: true,
+      empathyStatus: { hasNewSharedContext: true },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showEmpathyPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('empathy-statement');
   });
 
   it('does not show in refining mode before user sends another message when no content is reviewable', () => {
