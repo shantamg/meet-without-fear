@@ -281,10 +281,21 @@ export function ChatInterface({
   // This eliminates the need for a separate waitingForAIResponse boolean state
   const isWaitingForAI = useMemo(() => {
     if (messages.length === 0) return false;
-    // Messages are sorted oldest-to-newest in the array (but displayed inverted)
-    // So the last element in the array is the newest message
-    const lastMessage = messages[messages.length - 1];
-    return lastMessage?.role === MessageRole.USER;
+    // Find the newest message by timestamp among chat-flow roles (USER/AI).
+    // Synthetic messages (EMPATHY_STATEMENT, SHARED_CONTEXT, etc.) may be
+    // appended at the end of the array but have older timestamps — using
+    // array position would incorrectly suppress the typing indicator.
+    let newest: ChatMessage | null = null;
+    let newestTime = 0;
+    for (const m of messages) {
+      if (m.role !== MessageRole.USER && m.role !== MessageRole.AI) continue;
+      const t = new Date(m.timestamp).getTime();
+      if (t >= newestTime) {
+        newestTime = t;
+        newest = m;
+      }
+    }
+    return newest?.role === MessageRole.USER;
   }, [messages]);
 
   // Combined loading state: explicit isLoading OR derived from last message
