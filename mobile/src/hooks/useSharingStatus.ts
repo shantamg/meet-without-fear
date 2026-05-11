@@ -57,6 +57,7 @@ export interface SharingStatusData {
   /** My validation status of partner's attempt */
   myValidation: {
     validated: boolean;
+    awaitingRevision: boolean;
     validatedAt: string | null;
   };
   /** Shared context from subject (if I'm the guesser) */
@@ -246,6 +247,7 @@ export function useSharingStatus(
     partnerValidated: empathyStatus?.myAttempt?.status === 'VALIDATED',
     myValidation: {
       validated: partnerEmpathyData?.validated ?? false,
+      awaitingRevision: partnerEmpathyData?.awaitingRevision ?? false,
       validatedAt: partnerEmpathyData?.validatedAt ?? null,
     },
     sharedContext: empathyStatus?.sharedContext ?? null,

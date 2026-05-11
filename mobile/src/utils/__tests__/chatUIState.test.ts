@@ -394,6 +394,25 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(true);
   });
 
+  it('shows a waiting banner and hides input after sending empathy revision feedback', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      hasPartnerEmpathy: false,
+      myValidation: { validated: false, awaitingRevision: true },
+      empathyStatus: {
+        myAttemptStatus: 'REVEALED',
+      },
+      empathyDraft: { alreadyConsented: true },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.waitingStatus).toBe('partner-revising-empathy');
+    expect(result.aboveInputPanel).toBe('waiting-banner');
+    expect(result.shouldHideInput).toBe(true);
+  });
+
   it('hides input while waiting for partner to share Stage 3 needs', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,

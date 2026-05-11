@@ -1733,6 +1733,7 @@ export function UnifiedSessionScreen({
         status: empathyStatusData.myAttempt.status,
         content: empathyStatusData.myAttempt.content,
       } : undefined,
+      partnerEmpathyHeldStatus: empathyStatusData.partnerEmpathyHeldStatus,
       myValidation: sharingStatus.myValidation,
       partnerValidated: sharingStatus.partnerValidated,
       messageCountSinceSharedContext: empathyStatusData.messageCountSinceSharedContext,

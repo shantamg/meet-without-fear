@@ -53,13 +53,13 @@ function getStatusText(status?: string): string {
     case 'sending':
       return 'Sending...';
     case 'pending':
-      return 'On its way';
+      return 'Submitted for review';
     case 'delivered':
       return 'Delivered';
     case 'seen':
       return 'Seen';
     case 'superseded':
-      return 'Updated version sent';
+      return 'Updated version below';
     default:
       return '';
   }

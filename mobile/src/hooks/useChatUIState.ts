@@ -86,7 +86,8 @@ export interface UseChatUIStateProps {
     hasNewSharedContext?: boolean;
     hasUnviewedSharedContext?: boolean;
     myAttempt?: { status?: string; content?: string };
-    myValidation?: { validated?: boolean };
+    partnerEmpathyHeldStatus?: string | null;
+    myValidation?: { validated?: boolean; awaitingRevision?: boolean };
     partnerValidated?: boolean;
     messageCountSinceSharedContext?: number;
   } | undefined;
@@ -239,6 +240,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
       awaitingSharing: empathyStatusData.awaitingSharing,
       hasNewSharedContext: empathyStatusData.hasNewSharedContext,
       myAttemptStatus: empathyStatusData.myAttempt?.status,
+      partnerAttemptStatus: empathyStatusData.partnerEmpathyHeldStatus ?? undefined,
     } : undefined,
     myValidation: empathyStatusData?.myValidation,
     partnerValidated: empathyStatusData?.partnerValidated,

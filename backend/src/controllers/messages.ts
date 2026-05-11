@@ -14,7 +14,7 @@ import { prisma } from '../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
 import { getSonnetResponse, getSonnetStreamingResponse, BrainActivityCallType, isMockLLMEnabled } from '../lib/bedrock';
 import { brainService } from '../services/brain-service';
-import { buildInitialMessagePrompt, buildStagePrompt, buildStagePromptString, type PromptContext } from '../services/stage-prompts';
+import { buildInitialMessagePrompt, buildStagePrompt, buildStagePromptString } from '../services/stage-prompts';
 import { parseMicroTagResponse } from '../utils/micro-tag-parser';
 import { type SessionStateToolInput } from '../services/stage-tools';
 import {
@@ -148,7 +148,7 @@ function buildStage2TransitionFallback(
     ? `${partnerName || 'Your partner'} will be doing this same thing for you on their side.`
     : `${partnerName || 'Your partner'} is doing this same thing for you on their side.`;
 
-  return `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partner} might be experiencing, even though you might still be upset with them. I know that's a strange ask. This is not about excusing, agreeing, or deciding what happens next. It's a protected attempt to see whether you can name something real about ${partner}'s inner experience while keeping your own truth intact. You don't have to get it right — it's a guess, not a test. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partner} in all of this?`;
+  return `That gives us enough to move to the next step.\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part may feel unusual: try to imagine what ${partner} might be experiencing, even if you are still upset with them. This is not about excusing, agreeing, softening your boundary, or deciding what happens next. It is a guess about how this may be landing for ${partner}, while keeping your own truth intact. ${mutualPhrase}\n\nWhat do you think might be going on for ${partner} in all of this?`;
 }
 
 function scrubStage2RepairFraming(content: string): string {
@@ -527,107 +527,9 @@ export async function confirmFeelHeard(
           partnerName = myMember?.nickname || invitation?.name || undefined;
         }
 
-        // Fetch Stage 1 conversation history for context
-        const conversationHistory = await prisma.message.findMany({
-          where: {
-            sessionId,
-            stage: 1,
-            OR: [
-              // Messages user sent without a specific recipient
-              { senderId: user.id, forUserId: null },
-              // Messages specifically for this user
-              { forUserId: user.id },
-            ],
-          },
-          orderBy: { timestamp: 'asc' },
-          take: 15, // Get recent context
-          select: {
-            role: true,
-            content: true,
-            timestamp: true,
-          },
-        });
-
-        // Build Stage 2 transition prompt using the standard prompt pipeline
-        const userName = user.name || 'The user';
-        const promptContext: PromptContext = {
-          userName,
-          partnerName,
-          partnerStatus,
-          turnCount: 1,
-          emotionalIntensity: 5,
-          topicFrame: session.topicFrame || undefined,
-          contextBundle: {
-            conversationContext: {
-              recentTurns: conversationHistory.map((m) => ({
-                role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
-                content: m.content,
-                timestamp: m.timestamp.toISOString(),
-              })),
-              turnCount: conversationHistory.filter((m) => m.role === 'USER').length,
-              sessionDurationMinutes: 0,
-            },
-            emotionalThread: {
-              initialIntensity: null,
-              currentIntensity: null,
-              trend: 'unknown',
-              notableShifts: [],
-            },
-            stageContext: {
-              stage: 2,
-              gatesSatisfied: {},
-            },
-            userName,
-            partnerName,
-            intent: {
-              intent: 'stage_enforcement',
-              depth: 'minimal',
-              reason: 'Stage 1→2 transition',
-              threshold: 0.60,
-              maxCrossSession: 0,
-              allowCrossSession: false,
-              surfaceStyle: 'silent',
-            },
-            assembledAt: new Date().toISOString(),
-          },
-        };
-
-        const transitionPrompt = buildStagePrompt(2, promptContext, {
-          isStageTransition: true,
-          previousStage: 1,
-        });
-
-        // Pass conversation history as proper messages
-        const messages = conversationHistory.map((m) => ({
-          role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
-          content: m.content,
-        }));
-
-        // Bedrock requires conversations to start with a user message
-        // Add a brief user message if history is empty or starts with assistant
-        if (messages.length === 0 || messages[0].role !== 'user') {
-          messages.unshift({ role: 'user', content: 'I feel heard now.' });
-        }
-
-        const aiResponse = await getSonnetResponse({
-          systemPrompt: transitionPrompt,
-          messages,
-          maxTokens: 512,
-          sessionId,
-          turnId,
-          operation: 'stage1-transition',
-          callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
-        });
-
-        let transitionContent: string;
-        if (aiResponse) {
-          // Parse the semantic tag response (micro-tag format)
-          const parsed = parseMicroTagResponse(aiResponse);
-          transitionContent = cleanVisibleAIText(parsed.response) || buildStage2TransitionFallback(partnerName, partnerStatus);
-        } else {
-          transitionContent = buildStage2TransitionFallback(partnerName, partnerStatus);
-        }
-        transitionContent = scrubStage2RepairFraming(transitionContent);
+        const transitionContent = scrubStage2RepairFraming(
+          buildStage2TransitionFallback(partnerName, partnerStatus)
+        );
 
         // Save the transition message to the database as Stage 2
         // This is the first message in the perspective-taking phase

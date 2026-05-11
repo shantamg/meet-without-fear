@@ -11,6 +11,57 @@ describe('Stage 2 user-facing copy', () => {
     expect(source.toLowerCase()).not.toContain('internal reconciler');
   });
 
+  it('uses deterministic privacy-review copy for empathy resubmission acknowledgments', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'stage2.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain('separate privacy-protected review to check whether your updated perspective is ready to share');
+    expect(source).not.toContain('Priya');
+    expect(source).not.toContain('honors');
+    expect(source).not.toContain('honour');
+  });
+
+  it('does not promise partner empathy validation before reveal is ready', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'stage2.ts'),
+      'utf8'
+    );
+    const messagesSource = fs.readFileSync(
+      path.join(__dirname, '..', 'messages.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain('Both empathy statements are now submitted');
+    expect(source).toContain('privacy-protected review is ready');
+    expect(source).toContain('Your empathy attempt has been submitted');
+    expect(source).not.toContain("they'll read");
+    expect(source).not.toContain('mark whether it feels accurate');
+    expect(source).not.toContain('Now you can read');
+    expect(source).not.toContain('real courage');
+    expect(source).not.toContain('Thank you for taking that step');
+    expect(messagesSource).not.toContain('What you just did really mattered');
+    expect(messagesSource).not.toContain('real honesty');
+    expect(messagesSource).not.toContain('protected attempt');
+  });
+
+  it('does not route optional share suggestions ahead of empathy reveal', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'stage2.ts'),
+      'utf8'
+    );
+    const reconcilerStateSource = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'services', 'reconciler', 'state.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain('const hasSignificantGapsA = false');
+    expect(source).toContain('const hasSignificantGapsB = false');
+    expect(source).not.toContain("recommendation.action === 'OFFER_OPTIONAL' &&");
+    expect(reconcilerStateSource).toContain('const shouldOfferSharing = false');
+  });
+
   it('does not frame Stage 2 empathy as repair or working things out', () => {
     const files = [
       path.join(__dirname, '..', 'stage2.ts'),

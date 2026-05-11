@@ -36,6 +36,20 @@ class GoldLoopActorHandoffTest(unittest.TestCase):
 
         self.assertFalse(actor_satisfies_stop_boundary(actor, 4))
 
+    def test_stage2_partner_wait_satisfies_stop_boundary(self) -> None:
+        actor = self.actor(
+            "eve",
+            ActorStatus(
+                side="eve",
+                session_id="session-1",
+                stage=2,
+                state="needs_partner",
+                blocked_on="adam",
+            ),
+        )
+
+        self.assertTrue(actor_satisfies_stop_boundary(actor, 2))
+
     def test_stage_limit_with_blocked_on_is_not_terminal(self) -> None:
         actor = self.actor(
             "eve",
@@ -95,6 +109,38 @@ class GoldLoopActorHandoffTest(unittest.TestCase):
         )
 
         self.assertIs(next_actor, catherine)
+
+    def test_stage2_mutual_partner_wait_stops_loop(self) -> None:
+        adam = self.actor(
+            "adam",
+            ActorStatus(
+                side="adam",
+                session_id="session-1",
+                stage=2,
+                state="needs_partner",
+                blocked_on="eve",
+            ),
+        )
+        adam.turns = 3
+        eve = self.actor(
+            "eve",
+            ActorStatus(
+                side="eve",
+                session_id="session-1",
+                stage=2,
+                state="needs_partner",
+                blocked_on="adam",
+            ),
+        )
+        eve.turns = 2
+
+        next_actor = choose_next_actor(
+            {"adam": adam, "eve": eve},
+            last_side="adam",
+            stop_after_stage=2,
+        )
+
+        self.assertIsNone(next_actor)
 
     def test_later_partner_block_can_reopen_actor_that_reached_stage_limit(self) -> None:
         adam = self.actor(

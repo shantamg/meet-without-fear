@@ -98,6 +98,18 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     bannerSubtext: "Once they respond, you'll both be ready for the next step.",
   },
 
+  // Stage 2: User sent feedback and partner needs to revise their empathy attempt.
+  'partner-revising-empathy': {
+    showBanner: true,
+    hideInput: true,
+    showInnerThoughts: true,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: true,
+    bannerText: (p) => `${p} is revising their understanding.`,
+    bannerSubtext: "You'll be able to review the updated version when it's ready.",
+  },
+
   // Stage 2: System review is running; block input until the next action is known.
   'reconciler-analyzing': {
     showBanner: true,
