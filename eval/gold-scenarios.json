@@ -61,37 +61,6 @@
       "live_enabled": true,
       "participants": ["James", "Catherine"],
       "reference_transcript": "docs/product/source-material/golden-transcripts/james-catherine.md"
-    },
-    {
-      "gold_profile": "eval/gold-profiles/darryl-shantam.json",
-      "gate": {
-        "mode": "fresh_gold_loop",
-        "max_iterations": 1,
-        "stop_after_stage": 2,
-        "target_score": 4.0
-      },
-      "gates": [
-        {
-          "id": "bounded-stage-2",
-          "mode": "fresh_gold_loop",
-          "required_for_clean_pass": true,
-          "max_iterations": 1,
-          "stop_after_stage": 2,
-          "target_score": 4.0
-        },
-        {
-          "id": "stage-3-needs-readiness",
-          "mode": "fresh_gold_loop",
-          "required_for_clean_pass": false,
-          "max_iterations": 1,
-          "stop_after_stage": 3,
-          "target_score": 4.0
-        }
-      ],
-      "id": "darryl-shantam",
-      "live_enabled": true,
-      "participants": ["Darryl", "Shantam"],
-      "reference_transcript": "docs/product/source-material/golden-transcripts/darryl-shantam.md"
     }
   ]
 }

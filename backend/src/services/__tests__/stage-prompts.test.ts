@@ -114,14 +114,6 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Test User');
     });
 
-    it('asks all stages to proofread visible response text', () => {
-      const context = createContext();
-      const prompt = fullPrompt(buildStagePrompt(1, context));
-
-      expect(prompt).toContain('proofread contractions, spaces, and quotation marks');
-      expect(prompt).toContain('stray unmatched quotes');
-    });
-
     it('returns Stage 2 prompt for stage 2', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(2, context));
@@ -421,56 +413,6 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('vague phrases like "conflict"');
       expect(prompt).toContain('<draft>\ntopic text\n</draft>');
     });
-
-    it('stage 0 preserves child and bathroom specificity for property-boundary topics', () => {
-      const context = createContext({
-        userName: 'Darryl',
-        partnerName: 'Shantam',
-        contextBundle: {
-          ...mockContextBundle,
-          conversationContext: {
-            ...mockContextBundle.conversationContext,
-            recentTurns: [
-              {
-                role: 'user',
-                content: 'There is human waste in my yard and I think it is connected to his child having bathroom issues. I want it stopped.',
-              },
-            ] as any,
-          },
-        },
-      });
-      const options: BuildStagePromptOptions = { isInvitationPhase: true };
-      const prompt = fullPrompt(buildStagePrompt(0, context, options));
-
-      expect(prompt).toContain('child/bathroom-boundary detail');
-      expect(prompt).toContain('Topic specificity signal');
-      expect(prompt).toContain('Do not reduce it to only "human waste in the yard."');
-    });
-
-    it('stage 0 drafts once the user names a concrete issue and desired boundary', () => {
-      const context = createContext({
-        userName: 'Darryl',
-        partnerName: 'Shantam',
-        contextBundle: {
-          ...mockContextBundle,
-          conversationContext: {
-            ...mockContextBundle.conversationContext,
-            recentTurns: [
-              {
-                role: 'user',
-                content: 'There is human waste showing up in my yard. I think it is connected to Shantam and I want it stopped.',
-              },
-            ] as any,
-          },
-        },
-      });
-      const options: BuildStagePromptOptions = { isInvitationPhase: true };
-      const prompt = fullPrompt(buildStagePrompt(0, context, options));
-
-      expect(prompt).toContain('If the user has already named the concrete issue and what they want addressed, draft immediately');
-      expect(prompt).toContain('Topic sufficiency signal');
-      expect(prompt).toContain('do not ask for frequency, proof, timeline, motive, or extra details');
-    });
   });
 
   describe('Stage Transition Prompts', () => {
@@ -533,12 +475,8 @@ describe('Stage Prompts Service', () => {
       };
       const prompt = fullPrompt(buildStagePrompt(2, context, options));
 
-      expect(prompt).toContain('not about excusing, agreeing, softening boundaries, promising repair, or deciding what happens next');
+      expect(prompt).toContain('not about excusing, agreeing, or deciding what happens next');
       expect(prompt).toContain('without selling repair or agreement');
-      expect(prompt).toContain('do not praise them with "brave", "courage", "real honesty", "took real effort"');
-      expect(prompt).toContain('what you just did really mattered');
-      expect(prompt).toContain('Do not start with "Thank you for..."');
-      expect(prompt).toContain('Avoid clinical phrases like "protected attempt"');
       expect(prompt).not.toContain('research');
       expect(prompt).not.toContain('working things out');
     });
@@ -704,238 +642,10 @@ describe('Stage Prompts Service', () => {
       const prompt = fullPrompt(buildStagePrompt(2, context));
 
       expect(prompt).toContain('Stage 2 is not a speed run to a draft');
-      expect(prompt).toContain('usually needs at least 4 substantive Stage 2 turns');
+      expect(prompt).toContain('at least 4 substantive Stage 2 turns');
       expect(prompt).toContain('unfairness, anger, fear, resentment');
       expect(prompt).toContain('Does that feel like your real attempt');
-      expect(prompt).toContain('ReadyShare guard: EARLY');
-    });
-
-    it('Stage 1 prompt validates disputed concrete concerns without settling responsibility', () => {
-      const prompt = fullPrompt(buildStagePrompt(1, createContext({ turnCount: 5 })));
-
-      expect(prompt).toContain('DISPUTED FACTS AND RESPONSIBILITY');
-      expect(prompt).toContain('validate the user\'s experience without settling facts you do not know');
-      expect(prompt).toContain('responsibility, intent, or motive is not proven');
-      expect(prompt).toContain('Do not turn a vague, confused, or defensive response into a settled motive');
-      expect(prompt).toContain('investigate, stop the behavior, protect the boundary');
-    });
-
-    it('Stage 1 prompt does not adopt high-conflict blame frames as fact', () => {
-      const prompt = fullPrompt(buildStagePrompt(1, createContext({ turnCount: 6 })));
-
-      expect(prompt).toContain('CONTESTED CAUSAL STORIES');
-      expect(prompt).toContain('Do not adopt that causal story as product truth');
-      expect(prompt).toContain('Validate the felt bind without agreeing to the blame frame');
-      expect(prompt).toContain('Avoid reflections that sound like verdicts');
-      expect(prompt).toContain('one person feeling criticized does not make yelling safe');
-      expect(prompt).toContain('one person naming volatility does not prove the other person never contributed');
-    });
-
-    it('Stage 2 prompt adapts after repeated low-knowledge or process-frustration answers', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({ turnCount: 4 })));
-
-      expect(prompt).toContain('not knowing private inner states is valid information');
-      expect(prompt).toContain('If they say "I don\'t know" again');
-      expect(prompt).toContain('pivot to observable impact, uncertainty, and a bounded sentence scaffold');
-      expect(prompt).toContain('Do not ask a third rephrased inner-state question');
-    });
-
-    it('Stage 2 prompt allows early readiness for bounded observational empathy', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({ turnCount: 4 })));
-
-      expect(prompt).toContain('bounded low-knowledge empathy attempt');
-      expect(prompt).toContain('more inference would be irresponsible guessing');
-      expect(prompt).toContain('Concrete-conflict sufficiency');
-      expect(prompt).toContain('two layers do not always require shame, pride, reputation');
-      expect(prompt).toContain('you may adapt and draft instead of repeating the same inner-state prompt');
-    });
-
-    it('Stage 2 prompt keeps concrete boundary empathy from becoming premature repair', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({ turnCount: 6 })));
-
-      expect(prompt).toContain('CONCRETE BOUNDARY CONFLICTS');
-      expect(prompt).toContain('UNDERSTANDING ONLY, NOT AGREEMENT');
-      expect(prompt).toContain('empathy does not have to become repair language');
-      expect(prompt).toContain('Do not steer the user toward "what does Partner need from you"');
-      expect(prompt).toContain('Do not ask what Partner "needs from you"');
-      expect(prompt).toContain('Those belong in later needs/strategy stages');
-      expect(prompt).toContain('Do not draft softening phrases like "can we investigate this as a team"');
-      expect(prompt).toContain('Understanding how something lands is not an apology');
-      expect(prompt).toContain('Consent to understand is not reassurance, agreement, apology, or a promise to repair');
-      expect(prompt).toContain('Avoid "as a team", "work together", "I will do those things"');
-      expect(prompt).toContain('do not convert a tentative hypothesis into settled motive');
-      expect(prompt).toContain('Avoid adding "you do not want to believe it"');
-    });
-
-    it('Stage 2 prompt slows down relational identity conflicts before drafting', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({ turnCount: 6 })));
-
-      expect(prompt).toContain('RELATIONAL / IDENTITY CONFLICTS');
-      expect(prompt).toContain('do not use the concrete-boundary fast path');
-      expect(prompt).toContain('mirror that burden before bridging');
-      expect(prompt).toContain('Do not ask "if you had to guess" as the first move after resistance');
-      expect(prompt).toContain('Before a draft, get at least one turn about what feels unfair or costly about empathizing');
-      expect(prompt).toContain('Do not draft from a single quick recognition');
-    });
-
-    it('Stage 2 prompt slows down safety volatility conflicts before drafting', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({ turnCount: 6 })));
-
-      expect(prompt).toContain('SAFETY / VOLATILITY / DIAGNOSIS CONFLICTS');
-      expect(prompt).toContain('Do not draft after a single acknowledgment');
-      expect(prompt).toContain('That is only the doorway');
-      expect(prompt).toContain('vigilance plus loneliness');
-      expect(prompt).toContain('Do not let "I am not a monster" become the final empathy');
-      expect(prompt).toContain('ask one more mechanism-to-inside question before drafting');
-    });
-
-    it('Stage 2 prompt keeps safety drafts inside-frame rather than diagnostic', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({ turnCount: 6 })));
-
-      expect(prompt).toContain('must help Partner feel understood from inside their own frame');
-      expect(prompt).toContain('Avoid clinical/impact-heavy conclusions');
-      expect(prompt).toContain('you collapse or attack');
-      expect(prompt).toContain('foreground what Partner might feel');
-      expect(prompt).toContain('If a draft would make Partner feel only accused or pathologized');
-      expect(prompt).toContain('do not make the share read like a clinical assessment');
-      expect(prompt).toContain('Convert it into inside-frame empathy');
-      expect(prompt).toContain('you may feel erased');
-      expect(prompt).toContain('the story you need about yourself');
-      expect(prompt).toContain('you are brittle');
-      expect(prompt).toContain('Prefer their inside-frame fear');
-    });
-
-    it('Stage 2 prompt reduces generic process praise for boundary conflicts', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({ turnCount: 6 })));
-
-      expect(prompt).toContain('PROCESS PRAISE');
-      expect(prompt).toContain('Avoid generic praise such as "brave", "courage", "protected attempt"');
-      expect(prompt).toContain('Prefer "That gives us enough to draft"');
-    });
-
-    it('Stage 2 dynamic prompt forces readiness after a bounded non-conceding attempt', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({
-        turnCount: 4,
-        contextBundle: {
-          ...mockContextBundle,
-          conversationContext: {
-            ...mockContextBundle.conversationContext,
-            recentTurns: [
-              {
-                role: 'user',
-                content: 'Probably protecting the idea that his kid is not doing it. I get that. It still has to stop.',
-              },
-            ] as any,
-          },
-        },
-      })));
-
-      expect(prompt).toContain('ReadyShare signal');
-      expect(prompt).toContain('Set ReadyShare:Y and draft from their words now');
-      expect(prompt).toContain('Do not ask another feeling/need/layer question');
-      expect(prompt).toContain('omit unchosen shame/bad-parent wording');
-    });
-
-    it('Stage 2 dynamic readiness catches low-knowledge careless plus boundary wording', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({
-        turnCount: 4,
-        contextBundle: {
-          ...mockContextBundle,
-          conversationContext: {
-            ...mockContextBundle.conversationContext,
-            recentTurns: [
-              {
-                role: 'user',
-                content: 'Maybe he does not want to look careless. Or maybe he really does not know. I cannot tell. I can keep it factual, but I am not going to soften the main point.',
-              },
-            ] as any,
-          },
-        },
-      })));
-
-      expect(prompt).toContain('ReadyShare signal');
-      expect(prompt).toContain('Do not ask another feeling/need/layer question');
-    });
-
-    it('Stage 2 dynamic readiness catches concrete sanitation responsibility without action commitments', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({
-        turnCount: 3,
-        contextBundle: {
-          ...mockContextBundle,
-          conversationContext: {
-            ...mockContextBundle.conversationContext,
-            recentTurns: [
-              {
-                role: 'user',
-                content: 'If there really is waste there, I can see why he would be angry and disgusted. I still do not know that my kid caused it, but I can see that he wants the boundary treated as real.',
-              },
-            ] as any,
-          },
-        },
-      })));
-
-      expect(prompt).toContain('ReadyShare signal');
-      expect(prompt).toContain('Set ReadyShare:Y and draft from their words now');
-      expect(prompt).toContain('Do not ask another feeling/need/layer question');
-      expect(prompt).toContain('Do not ask what Partner "needs from you"');
-      expect(prompt).toContain('Those belong in later needs/strategy stages');
-    });
-
-    it('Stage 2 dynamic prompt holds relational resistance before bridging again', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({
-        turnCount: 4,
-        contextBundle: {
-          ...mockContextBundle,
-          conversationContext: {
-            ...mockContextBundle.conversationContext,
-            recentTurns: [
-              {
-                role: 'user',
-                content: 'My first answer is that he is comfortable and does not want anything to disturb that. His fear gets protected, and my wanting a bigger life becomes the threat.',
-              },
-            ] as any,
-          },
-        },
-      })));
-
-      expect(prompt).toContain('Relational resistance signal');
-      expect(prompt).toContain('keep ReadyShare:N');
-      expect(prompt).toContain('Mirror what feels unfair, costly, or exhausting');
-      expect(prompt).toContain('do not draft until the user has both named the burden of empathizing');
-    });
-
-    it('Stage 2 dynamic prompt holds high-conflict volatility before drafting', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({
-        turnCount: 5,
-        contextBundle: {
-          ...mockContextBundle,
-          conversationContext: {
-            ...mockContextBundle.conversationContext,
-            recentTurns: [
-              {
-                role: 'user',
-                content: 'Probably tense all the time, like she is waiting for the next thing to happen. I still think we both contribute, but I get that not knowing what I will say when I am angry would wear on a person.',
-              },
-            ] as any,
-          },
-        },
-      })));
-
-      expect(prompt).toContain('High-conflict volatility signal');
-      expect(prompt).toContain('keep ReadyShare:N');
-      expect(prompt).toContain('Do not draft from one narrow acknowledgment');
-      expect(prompt).toContain('vigilance, loneliness, loss of trust, self-doubt');
-    });
-
-    it('Stage 2 draft guidance keeps concrete low-knowledge empathy plain', () => {
-      const prompt = fullPrompt(buildStagePrompt(2, createContext({ turnCount: 6 })));
-
-      expect(prompt).toContain('For concrete low-knowledge conflicts, keep the draft bounded and plain');
-      expect(prompt).toContain('Do not add polished therapeutic layers');
-      expect(prompt).toContain('can we investigate this as a team');
-      expect(prompt).toContain('unless Test User explicitly said them or they came from consented partner context');
-      expect(prompt).toContain('prefer "this may feel accusatory"');
-      expect(prompt).toContain('over shame labels such as "bad parent"');
+      expect(prompt).toContain('ReadyShare guard: TOO EARLY');
     });
 
     it('Stage 2 prompt prevents empathy drafts from adding unearned reassurance', () => {
@@ -958,7 +668,7 @@ describe('Stage Prompts Service', () => {
       const prompt = fullPrompt(buildStagePrompt(2, context));
 
       expect(prompt).toContain('REFINEMENT MODE');
-      expect(prompt).not.toContain('ReadyShare guard: EARLY');
+      expect(prompt).not.toContain('ReadyShare guard: TOO EARLY');
     });
   });
 

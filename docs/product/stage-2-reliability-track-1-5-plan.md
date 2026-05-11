@@ -1,11 +1,9 @@
 # Stage 2 Reliability Track 1.5 Plan
 
-Status: proposed follow-up after PR #548
+Status: proposed follow-up after Stage 2 gold-loop reliability findings
 Date: 2026-05-11
 
 ## Purpose
-
-PR #548 improved Stage 0-2 gold alignment and merged the Darryl/Shantam gold scenario, prompt guidance, deterministic Stage 2 copy, waiting-state UI fixes, and gold-loop harness updates.
 
 Before the larger context architecture upgrade, do a small reliability PR that removes product-state noise from Stage 2 gold loops:
 
@@ -177,11 +175,11 @@ MOCK_LLM=false python3 scripts/mwf_gold_loop.py run \
   --no-improve-on-final-fail
 ```
 
-If the changes touch shared Stage 2 paths broadly, also run:
+If the changes touch shared Stage 2 paths broadly, also run Adam/Eve:
 
 ```bash
 MOCK_LLM=false python3 scripts/mwf_gold_loop.py run \
-  --scenario darryl-shantam \
+  --scenario adam-eve \
   --stop-after-stage 2 \
   --target-score 4.0 \
   --max-iterations 1 \

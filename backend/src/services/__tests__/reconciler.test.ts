@@ -1574,22 +1574,39 @@ describe('Reconciler Service', () => {
       expect(result.empathyStatus).toBe('READY');
     });
 
-    it('marks READY before first reveal when gaps are detected', async () => {
+    it('sets AWAITING_SHARING and generates share offer when gaps detected', async () => {
       const { getSonnetResponse } = require('../../lib/bedrock');
 
-      (getSonnetResponse as jest.Mock).mockResolvedValue(
-        JSON.stringify({
-          alignment: { score: 50, summary: 'Significant gaps', correctlyIdentified: [] },
-          gaps: { severity: 'significant', summary: 'Major gaps', missedFeelings: ['fear', 'loneliness'], misattributions: [], mostImportantGap: 'Deep fear' },
-          recommendation: { action: 'OFFER_SHARING', rationale: 'Must share', sharingWouldHelp: true, suggestedShareFocus: 'Their deep fear' },
-        })
-      );
+      // First call: reconciler analysis (gaps detected)
+      // Second call: share suggestion generation
+      let callIndex = 0;
+      (getSonnetResponse as jest.Mock).mockImplementation(() => {
+        callIndex++;
+        if (callIndex === 1) {
+          return Promise.resolve(
+            JSON.stringify({
+              alignment: { score: 50, summary: 'Significant gaps', correctlyIdentified: [] },
+              gaps: { severity: 'significant', summary: 'Major gaps', missedFeelings: ['fear', 'loneliness'], misattributions: [], mostImportantGap: 'Deep fear' },
+              recommendation: { action: 'OFFER_SHARING', rationale: 'Must share', sharingWouldHelp: true, suggestedShareFocus: 'Their deep fear' },
+            })
+          );
+        }
+        // Share suggestion generation
+        return Promise.resolve(
+          JSON.stringify({
+            suggestedContent: 'I feel scared that we are drifting apart.',
+            reason: 'Addresses the core fear.',
+          })
+        );
+      });
 
       // No existing shared context
       (prisma.message.findFirst as jest.Mock).mockResolvedValue(null);
 
-      // The empathyAttempt.findFirst is called for getEmpathyData and then for
-      // markEmpathyReady transition validation.
+      // The empathyAttempt.findFirst is called multiple times:
+      // 1. getEmpathyData (for the guesser's empathy statement) — needs content
+      // 2. For AWAITING_SHARING transition validation — needs status ANALYZING
+      //    (because analyzeEmpathyGap runs first, implicitly the status should be ANALYZING)
       (prisma.empathyAttempt.findFirst as jest.Mock)
         .mockResolvedValueOnce({
           id: 'attempt-1',
@@ -1603,23 +1620,21 @@ describe('Reconciler Service', () => {
           id: 'attempt-1',
           sessionId,
           sourceUserId: guesserId,
-          status: EmpathyStatus.HELD,
+          status: EmpathyStatus.ANALYZING,
         });
 
+      // Mock reconciler result creation — need it for generateShareSuggestion
       (prisma.reconcilerResult.create as jest.Mock).mockResolvedValue({ id: 'result-1' });
+      // After creation, the findFirst for share suggestion lookup should return it
       (prisma.reconcilerResult.findFirst as jest.Mock)
         .mockResolvedValueOnce(null) // First call: no existing result (triggers analysis)
-        .mockResolvedValue({ id: 'result-1' });
+        .mockResolvedValue({ id: 'result-1' }); // Subsequent calls: return the created result
 
       const result = await runReconcilerForDirection(sessionId, guesserId, subjectId);
 
-      expect(result.empathyStatus).toBe('READY');
-      expect(result.shareOffer).toBeNull();
-      expect(prisma.empathyAttempt.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ status: 'READY' }),
-        })
-      );
+      expect(result.empathyStatus).toBe('AWAITING_SHARING');
+      expect(result.shareOffer).not.toBeNull();
+      expect(result.shareOffer?.suggestedContent).toBeTruthy();
     });
 
     it('throws when guesser has not submitted empathy statement', async () => {

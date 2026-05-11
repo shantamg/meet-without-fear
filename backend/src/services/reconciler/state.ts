@@ -243,22 +243,24 @@ export async function runReconcilerForDirection(
     witnessingContent,
   });
 
-  // Determine outcome based on gaps.
-  // Initial Stage 2 should reveal each submitted empathy attempt for partner
-  // review before inserting extra shared context. The analysis result is still
-  // stored for audit/future flows, but it should not block the first reveal.
+  // Determine outcome based on gaps
+  // OFFER_SHARING: Significant gaps - strongly recommend sharing
+  // OFFER_OPTIONAL: Moderate gaps - optionally offer sharing (only if suggestedShareFocus exists)
+  // PROCEED: No/minor gaps - proceed without sharing
   const action = result.recommendation.action;
   const hasSuggestedFocus = !!result.recommendation.suggestedShareFocus;
 
-  const shouldOfferSharing = false;
+  // Treat OFFER_OPTIONAL with null suggestedShareFocus as PROCEED (US-8)
+  const shouldOfferSharing =
+    action === 'OFFER_SHARING' ||
+    (action === 'OFFER_OPTIONAL' && hasSuggestedFocus);
 
   logger.info('Reconciler outcome', { severity: result.gaps.severity, action, hasSuggestedFocus, shouldOfferSharing });
 
   if (!shouldOfferSharing) {
-    // No sharing needed before first reveal - mark READY so both submitted
-    // empathy attempts can enter the normal partner-review path.
+    // No sharing needed - mark as READY (will reveal when both directions are ready)
     logger.info('No sharing needed, marking READY', { action, hasSuggestedFocus, guesserId: guesserInfo.id, subjectId: subjectInfo.id });
-    await markEmpathyReady(sessionId, guesserId, subjectInfo.name, action !== 'PROCEED');
+    await markEmpathyReady(sessionId, guesserId, subjectInfo.name);
 
     return {
       result,
