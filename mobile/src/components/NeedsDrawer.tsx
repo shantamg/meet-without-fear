@@ -191,10 +191,8 @@ export function NeedsDrawer({
     }
 
     const position = currentSnap.current === 'full' ? positionFullRef.current : position3Q;
-    setBackdropTouchableHeight(position);
-    drawerTranslate.setValue(position);
-    setContentHeight(drawerHostHeight - position);
-  }, [visible, drawerHostHeight, position3Q, drawerTranslate]);
+    snapTo(position, currentSnap.current === 'full' ? 0.6 : 0.4);
+  }, [visible, drawerHostHeight, position3Q, drawerTranslate, snapTo]);
 
   // -------------------------------------------------------------------------
   // Android back button
