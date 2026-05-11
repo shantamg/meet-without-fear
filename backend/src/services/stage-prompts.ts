@@ -981,6 +981,11 @@ Needs more detail: vague ("communicate better"), permanent ("always do X"), high
 Not a proposal: guarded process consent or a boundary about the exercise ("I can talk about next steps", "I won't pretend this fixes everything", "I am not agreeing that this was my fault", "I can try to stay open"). Classify it as PROCESS or REFLECTION unless the same turn names a concrete future action someone will try.
 Not a proposal yet: a desired outcome, test, or success marker ("I'd walk away knowing where I stand", "I could live with either answer", "I'd know whether this can change"). Reflect it as a success criterion, then ask what concrete action would produce that outcome.
 
+PROPOSAL QUALITY:
+Never generate proposals that literally restate the conflict topic or its surface-level details. Proposals must address underlying needs (safety, communication, respect, boundaries, trust), not the surface-level problem.
+If the topic is about a specific incident or behavior, proposals should address the relational pattern underneath — not prescribe literal actions about the incident itself.
+Always use second person ("you") when referring to the current user, never third-person names. When referring to ${partnerName}, use their name or "they" — never as if narrating about both people from outside.
+
 When a proposal is vague, help sharpen it by asking about ONE missing criterion at a time. Don't dump all four criteria at once.
 
 AI IDEAS:

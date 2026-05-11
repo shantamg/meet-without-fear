@@ -369,6 +369,40 @@ describe('stage4-capture.service', () => {
     );
   });
 
+  it('rejects structured proposals that restate the topic frame', async () => {
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'ok sure',
+        topicFrame: "Shantam's son defecates on Darryl's lawn",
+        structuredProposals: [
+          {
+            action: 'ADD',
+            classification: 'PROPOSAL',
+            description: "When his son does defecate on Darryl's lawn, Shantam cleans it up immediately",
+            kind: Stage4ProposalKind.INDIVIDUAL_COMMITMENT,
+            ownerUserId: userId,
+            needsAddressed: [],
+          },
+        ],
+      })
+    );
+
+    expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    expect(result.appliedOperationCount).toBe(0);
+  });
+
+  it('allows proposals that do not restate the topic frame', async () => {
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: 'I can send a Sunday planning text each week for a month.',
+        topicFrame: "Shantam's son defecates on Darryl's lawn",
+      })
+    );
+
+    expect(prisma.strategyProposal.create).toHaveBeenCalled();
+    expect(result.appliedOperationCount).toBe(1);
+  });
+
   it('does not treat complete-enough-to-start language as a closure signal', async () => {
     const result = await captureStage4Turn(captureInput({
       userMessage: 'That feels complete enough to start. I am nervous, but this list feels small enough that I could actually try it.',
