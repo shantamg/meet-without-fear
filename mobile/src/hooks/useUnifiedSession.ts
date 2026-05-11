@@ -1031,13 +1031,17 @@ export function useUnifiedSession(
       {
         onError: (error) => {
           console.error('[handleResubmitEmpathy] Mutation onError callback', error);
+          const message = error instanceof ApiClientError
+            ? error.message
+            : 'Failed to resubmit. Please try again.';
+          showError('Resubmission failed', message);
         },
         onSuccess: (data) => {
           console.log('[handleResubmitEmpathy] Mutation onSuccess callback', data);
         },
       }
     );
-  }, [sessionId, resubmitEmpathy]);
+  }, [sessionId, resubmitEmpathy, showError]);
 
   const handleValidatePartnerEmpathy = useCallback(
     (validated: boolean, feedback?: string) => {

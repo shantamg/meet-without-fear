@@ -2027,6 +2027,18 @@ export async function resubmitEmpathy(
       return;
     }
 
+    // Block identical resubmission — user must actually revise the content
+    const normalize = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (normalize(content) === normalize(attempt.content)) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Your empathy statement hasn\'t changed. Please revise it based on the feedback you received before resubmitting.',
+        400
+      );
+      return;
+    }
+
     const previousRevision = attempt.revisionCount;
 
     // Update the attempt with new content and set status to ANALYZING
