@@ -361,7 +361,7 @@ export async function respondToShareOfferHandler(
     });
 
     // Notify partner if content was shared
-    if (result.status === 'shared') {
+    if (result.status === 'shared' && result.guesserUpdated) {
       // Get partner ID
       const members = await prisma.relationshipMember.findMany({
         where: {
