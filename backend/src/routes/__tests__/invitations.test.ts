@@ -148,7 +148,7 @@ describe('Invitations API', () => {
   });
 
   describe('GET /invitations/:id (getInvitation)', () => {
-    it('returns invitation details', async () => {
+    it('returns invitation details without topicFrame', async () => {
       const mockInvitation = {
         id: 'inv-123',
         invitedBy: { id: 'user-1', name: 'Inviter' },
@@ -175,12 +175,17 @@ describe('Invitations API', () => {
           data: expect.objectContaining({
             invitation: expect.objectContaining({
               id: 'inv-123',
-              invitedBy: expect.objectContaining({ name: 'Inviter' }),
+              invitedBy: { name: 'Inviter' },
               status: 'PENDING',
+              session: { id: 'session-1', status: 'INVITED' },
             }),
           }),
         })
       );
+
+      // Verify topicFrame is NOT exposed in the public response
+      const responseData = jsonMock.mock.calls[0][0].data.invitation;
+      expect(responseData.session).not.toHaveProperty('topicFrame');
     });
 
     it('returns 404 for non-existent invitation', async () => {
