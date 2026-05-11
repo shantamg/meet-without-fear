@@ -88,6 +88,7 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
 
   // Stage 2: Empathy
   hasEmpathyContent: boolean; // liveProposedEmpathyStatement || empathyDraftData?.draft?.content
+  hasLiveProposedEmpathyStatement: boolean;
   empathyAlreadyConsented: boolean;
   hasSharedEmpathyLocal: boolean; // Local latch to prevent flash
 
@@ -282,9 +283,13 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
   const currentStage = myStage ?? Stage.ONBOARDING;
 
   // When the partner has just shared context, the next user action should be
-  // reflection in chat. Do not offer review/resubmit until they have taken
-  // that first turn, even if an old attempt or draft is already reviewable.
-  if (isRefiningEmpathy && inputs.messageCountSinceSharedContext === 0) {
+  // reflection in chat. Do not offer review/resubmit until either they have
+  // taken that first turn or the AI has produced a fresh revised draft.
+  if (
+    isRefiningEmpathy &&
+    inputs.messageCountSinceSharedContext === 0 &&
+    !inputs.hasLiveProposedEmpathyStatement
+  ) {
     return false;
   }
 
@@ -780,6 +785,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     feelHeardConfirmedAt: undefined,
     isConfirmingFeelHeard: false,
     hasEmpathyContent: false,
+    hasLiveProposedEmpathyStatement: false,
     empathyAlreadyConsented: false,
     hasSharedEmpathyLocal: false,
     isRefiningEmpathy: false,
