@@ -517,4 +517,30 @@ describe('TypingIndicator', () => {
 
     expect(screen.getByTestId('typing-indicator')).toBeTruthy();
   });
+
+  it('shows typing indicator when newest chat-flow message is USER even if a synthetic message is appended after', () => {
+    const baseTime = new Date('2026-05-11T00:00:00.000Z').getTime();
+    const userMsg = createMockMessage({
+      id: 'user-1',
+      role: MessageRole.USER,
+      content: 'Help me',
+      timestamp: new Date(baseTime).toISOString(),         // newer
+    });
+    const syntheticMsg = createMockMessage({
+      id: 'synthetic-1',
+      role: MessageRole.EMPATHY_STATEMENT,
+      content: 'Empathy statement content',
+      timestamp: new Date(baseTime - 5000).toISOString(), // older, but last in array
+    });
+
+    render(
+      <ChatInterface
+        messages={[userMsg, syntheticMsg]}
+        onSendMessage={jest.fn()}
+        isLoading={false}
+      />
+    );
+
+    expect(screen.getByTestId('typing-indicator')).toBeTruthy();
+  });
 });
