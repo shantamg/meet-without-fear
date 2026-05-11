@@ -483,6 +483,11 @@ describe('Stage 2 API', () => {
         feedbackShared: false,
       });
       (prisma.empathyValidation.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.message.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.message.create as jest.Mock).mockResolvedValue({
+        id: 'wait-message-1',
+        timestamp: new Date(),
+      });
       (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
         gatesSatisfied: { empathyValidated: true },
       });
@@ -505,6 +510,18 @@ describe('Stage 2 API', () => {
 
       expect(prisma.empathyValidation.upsert).toHaveBeenCalled();
       expect(prisma.stageProgress.update).toHaveBeenCalled();
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            sessionId: 'session-123',
+            senderId: null,
+            forUserId: 'user-1',
+            role: 'AI',
+            content: expect.stringContaining('You confirmed this feels right'),
+            stage: 2,
+          }),
+        })
+      );
       expect(notifyPartner).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
