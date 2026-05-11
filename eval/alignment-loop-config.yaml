@@ -156,18 +156,6 @@
     {
       "id": "james-catherine-stage-3-validation-692",
       "threshold": 4.0
-    },
-    {
-      "id": "darryl-shantam-stage-2-low-knowledge-pivot",
-      "threshold": 4.0
-    },
-    {
-      "id": "darryl-shantam-stage-3-concrete-need-capture",
-      "threshold": 4.0
-    },
-    {
-      "id": "darryl-shantam-stage-3-offer-sharing-content",
-      "threshold": 4.0
     }
   ],
   "schedule": {
