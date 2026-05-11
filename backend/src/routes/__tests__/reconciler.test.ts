@@ -626,6 +626,87 @@ describe('Reconciler API', () => {
         })
       );
     });
+
+    it('accepts late share offer after guesser empathy is already validated without changing terminal status', async () => {
+      const req = mockRequest({
+        user: { id: 'partner-1', name: 'Bob' },
+        body: { action: 'accept' },
+      });
+      const res = mockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.reconcilerShareOffer.findFirst as jest.Mock).mockResolvedValue(mockShareOffer());
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
+        id: 'attempt-1',
+        status: 'VALIDATED',
+      });
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({ stage: 2 });
+      (prisma.message.count as jest.Mock).mockResolvedValue(0);
+      (prisma.message.create as jest.Mock).mockResolvedValue({
+        id: 'msg-1',
+        stage: 2,
+        timestamp: new Date(),
+      });
+      (prisma.relationshipMember.findMany as jest.Mock).mockResolvedValue([
+        { userId: 'user-1' },
+        { userId: 'partner-1' },
+      ]);
+
+      await respondToShareOfferHandler(req, res);
+
+      expect(prisma.reconcilerShareOffer.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'ACCEPTED',
+            deliveryStatus: 'DELIVERED',
+          }),
+        })
+      );
+      expect(prisma.empathyAttempt.updateMany).not.toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            status: 'shared',
+            guesserUpdated: true,
+          }),
+        })
+      );
+    });
+
+    it('returns idempotent success for repeated accept after share offer was already accepted', async () => {
+      const req = mockRequest({
+        user: { id: 'partner-1', name: 'Bob' },
+        body: { action: 'accept' },
+      });
+      const res = mockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.reconcilerShareOffer.findFirst as jest.Mock)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockShareOffer({
+          status: 'ACCEPTED',
+          sharedContent: 'Already shared context.',
+        }));
+
+      await respondToShareOfferHandler(req, res);
+
+      expect(prisma.reconcilerShareOffer.updateMany).not.toHaveBeenCalled();
+      expect(prisma.message.create).not.toHaveBeenCalled();
+      expect(notifyPartner).not.toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            status: 'shared',
+            sharedContent: 'Already shared context.',
+            guesserUpdated: false,
+          }),
+        })
+      );
+    });
   });
 
   describe('POST /sessions/:id/reconciler/share-offer/skip (skipShareOfferHandler)', () => {
