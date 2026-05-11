@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { NeedCard } from '../NeedCard';
 
 describe('NeedCard', () => {
@@ -29,5 +30,12 @@ describe('NeedCard', () => {
     render(<NeedCard need={defaultNeed} testID="need-card" />);
     const card = screen.getByTestId('need-card');
     expect(card).toBeTruthy();
+  });
+
+  it('uses the current appearance palette for readable text', () => {
+    render(<NeedCard need={defaultNeed} testID="need-card" />);
+
+    expect(StyleSheet.flatten(screen.getByText('Security').props.style).color).toBe('#6c6961');
+    expect(StyleSheet.flatten(screen.getByText('A need for safety and stability').props.style).color).toBe('#1a1815');
   });
 });
