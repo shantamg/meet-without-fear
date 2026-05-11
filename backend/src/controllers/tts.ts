@@ -3,6 +3,26 @@ import { logger } from '../lib/logger';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
+const TTS_MAX_RETRIES = 2;
+const TTS_BASE_DELAY_MS = 500;
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+
+async function callOpenAITTS(
+  params: { model: string; input: string; voice: string; speed: number },
+): Promise<globalThis.Response> {
+  return fetch('https://api.openai.com/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      ...params,
+      response_format: 'opus',
+    }),
+  });
+}
+
 export const streamTTS = async (req: Request, res: Response): Promise<void | Response> => {
   try {
     if (!OPENAI_API_KEY) {
@@ -31,25 +51,47 @@ export const streamTTS = async (req: Request, res: Response): Promise<void | Res
       modelId = 'tts-1';
     }
 
-    const response = await fetch('https://api.openai.com/v1/audio/speech', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: modelId,
-        input: text,
-        voice: voiceId,
-        speed: speechSpeed,
-        response_format: 'opus', // Use opus for lower latency
-      }),
-    });
+    const ttsParams = { model: modelId, input: text, voice: voiceId, speed: speechSpeed };
+    const logContext = { model: modelId, voice: voiceId, textLength: text.length };
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error('[TTS] OpenAI API error:', response.status, errorText);
-      return res.status(response.status).json({ error: `OpenAI API error: ${errorText}` });
+    let response: globalThis.Response | undefined;
+    let lastStatus = 0;
+    let lastErrorText = '';
+
+    for (let attempt = 0; attempt <= TTS_MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        const delay = TTS_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        logger.warn('[TTS] Retrying OpenAI API call', { attempt, delay, lastStatus, ...logContext });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+
+      response = await callOpenAITTS(ttsParams);
+
+      if (response.ok) break;
+
+      lastStatus = response.status;
+      lastErrorText = await response.text();
+
+      if (!RETRYABLE_STATUS_CODES.has(response.status)) {
+        // Non-retryable error — log and return immediately
+        logger.error('[TTS] OpenAI API error (non-retryable)', {
+          status: response.status,
+          errorBody: lastErrorText,
+          ...logContext,
+        });
+        return res.status(response.status).json({ error: `OpenAI API error: ${lastErrorText}` });
+      }
+    }
+
+    if (!response || !response.ok) {
+      // All retries exhausted
+      logger.error('[TTS] OpenAI API error after retries exhausted', {
+        status: lastStatus,
+        errorBody: lastErrorText,
+        retries: TTS_MAX_RETRIES,
+        ...logContext,
+      });
+      return res.status(lastStatus || 500).json({ error: `OpenAI API error: ${lastErrorText}` });
     }
 
     // Stream the audio back to the client
@@ -66,7 +108,10 @@ export const streamTTS = async (req: Request, res: Response): Promise<void | Res
     }
 
   } catch (error) {
-    logger.error('[TTS] Error streaming audio:', error);
+    logger.error('[TTS] Error streaming audio', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     if (!res.headersSent) {
       res.status(500).json({ error: 'Internal server error processing TTS' });
     }
