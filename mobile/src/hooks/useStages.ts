@@ -99,6 +99,49 @@ type ProgressCacheWithGates = GetProgressResponse & {
   };
 };
 
+function patchStage3Gates(
+  queryClient: ReturnType<typeof useQueryClient>,
+  sessionId: string,
+  gates: Record<string, unknown>,
+) {
+  const mergeProgress = <T extends { myProgress?: { gatesSatisfied?: unknown; gates?: unknown } }>(
+    old: T | undefined,
+  ): T | undefined => {
+    if (!old?.myProgress) return old;
+    const existingGates =
+      (old.myProgress.gatesSatisfied as Record<string, unknown> | null | undefined) ??
+      (old.myProgress.gates as Record<string, unknown> | null | undefined) ??
+      {};
+
+    return {
+      ...old,
+      myProgress: {
+        ...old.myProgress,
+        gatesSatisfied: {
+          ...existingGates,
+          ...gates,
+        },
+      },
+    };
+  };
+
+  queryClient.setQueryData<ProgressCacheWithGates>(
+    stageKeys.progress(sessionId),
+    mergeProgress,
+  );
+
+  queryClient.setQueryData<SessionStateResponse>(
+    sessionKeys.state(sessionId),
+    (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        progress: mergeProgress(old.progress) ?? old.progress,
+      };
+    },
+  );
+}
+
 // ============================================================================
 // Progress Hook
 // ============================================================================
@@ -1470,6 +1513,10 @@ export function useConfirmNeeds(
       });
     },
     onSuccess: (_, { sessionId }) => {
+      patchStage3Gates(queryClient, sessionId, {
+        needsConfirmed: true,
+        needsConfirmedAt: new Date().toISOString(),
+      });
       queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
@@ -1530,7 +1577,11 @@ export function useConsentShareNeeds(
         needIds,
       });
     },
-    onSuccess: (_, { sessionId }) => {
+    onSuccess: (data, { sessionId }) => {
+      patchStage3Gates(queryClient, sessionId, {
+        needsShared: true,
+        sharedAt: data.sharedAt,
+      });
       queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });

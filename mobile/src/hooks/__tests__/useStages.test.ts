@@ -41,6 +41,7 @@ import {
   useResolveSession,
   stageKeys,
 } from '../useStages';
+import { sessionKeys } from '../queryKeys';
 import {
   Stage,
   StageStatus,
@@ -87,15 +88,18 @@ jest.mock('../useAuth', () => ({
 const mockGet = api.get as jest.MockedFunction<typeof api.get>;
 const mockPost = api.post as jest.MockedFunction<typeof api.post>;
 
-// Create a wrapper with QueryClient
-function createWrapper(): React.FC<{ children: React.ReactNode }> {
-  const queryClient = new QueryClient({
+function createTestQueryClient(): QueryClient {
+  return new QueryClient({
     defaultOptions: {
       queries: {
         retry: false,
       },
     },
   });
+}
+
+// Create a wrapper with QueryClient
+function createWrapper(queryClient = createTestQueryClient()): React.FC<{ children: React.ReactNode }> {
   return ({ children }) =>
     React.createElement(QueryClientProvider, { client: queryClient }, children);
 }
@@ -627,6 +631,68 @@ describe('useStages', () => {
           adjustments: undefined,
         });
       });
+
+      it('immediately marks needs confirmed in progress and session state caches', async () => {
+        mockPost.mockResolvedValueOnce({
+          confirmed: true,
+          confirmedAt: '2024-01-01T00:00:00.000Z',
+          partnerConfirmed: false,
+          canAdvance: false,
+        });
+
+        const queryClient = createTestQueryClient();
+        queryClient.setQueryData(stageKeys.progress(sessionId), {
+          sessionId,
+          myProgress: {
+            stage: Stage.NEED_MAPPING,
+            status: StageStatus.IN_PROGRESS,
+            startedAt: '2024-01-01T00:00:00.000Z',
+            completedAt: null,
+            gatesSatisfied: {},
+          },
+          partnerProgress: {
+            stage: Stage.NEED_MAPPING,
+            status: StageStatus.IN_PROGRESS,
+          },
+          canAdvance: false,
+        });
+        queryClient.setQueryData(sessionKeys.state(sessionId), {
+          progress: {
+            sessionId,
+            myProgress: {
+              stage: Stage.NEED_MAPPING,
+              status: StageStatus.IN_PROGRESS,
+              startedAt: '2024-01-01T00:00:00.000Z',
+              completedAt: null,
+              gatesSatisfied: {},
+            },
+            partnerProgress: {
+              stage: Stage.NEED_MAPPING,
+              status: StageStatus.IN_PROGRESS,
+            },
+            canAdvance: false,
+            milestones: { feelHeardConfirmedAt: null },
+          },
+        });
+
+        const { result } = renderHook(() => useConfirmNeeds(), {
+          wrapper: createWrapper(queryClient),
+        });
+
+        await act(async () => {
+          await result.current.mutateAsync({
+            sessionId,
+            needIds: ['need-1', 'need-2'],
+          });
+        });
+
+        expect(
+          queryClient.getQueryData<any>(stageKeys.progress(sessionId))?.myProgress.gatesSatisfied.needsConfirmed
+        ).toBe(true);
+        expect(
+          queryClient.getQueryData<any>(sessionKeys.state(sessionId))?.progress.myProgress.gatesSatisfied.needsConfirmed
+        ).toBe(true);
+      });
     });
 
     describe('useAddNeed hook', () => {
@@ -667,8 +733,10 @@ describe('useStages', () => {
     describe('useConsentShareNeeds hook', () => {
       it('consents to reveal confirmed needs to the partner', async () => {
         mockPost.mockResolvedValueOnce({
-          consent: true,
-          sharedNeedIds: ['need-1', 'need-2'],
+          consented: true,
+          sharedAt: '2024-01-01T00:00:00.000Z',
+          waitingForPartner: true,
+          needsRevealReady: false,
         });
 
         const { result } = renderHook(() => useConsentShareNeeds(), {
@@ -685,6 +753,68 @@ describe('useStages', () => {
         expect(mockPost).toHaveBeenCalledWith(`/sessions/${sessionId}/needs/consent`, {
           needIds: ['need-1', 'need-2'],
         });
+      });
+
+      it('immediately marks needs shared in progress and session state caches', async () => {
+        mockPost.mockResolvedValueOnce({
+          consented: true,
+          sharedAt: '2024-01-01T00:00:00.000Z',
+          waitingForPartner: false,
+          needsRevealReady: true,
+        });
+
+        const queryClient = createTestQueryClient();
+        queryClient.setQueryData(stageKeys.progress(sessionId), {
+          sessionId,
+          myProgress: {
+            stage: Stage.NEED_MAPPING,
+            status: StageStatus.GATE_PENDING,
+            startedAt: '2024-01-01T00:00:00.000Z',
+            completedAt: null,
+            gatesSatisfied: { needsConfirmed: true },
+          },
+          partnerProgress: {
+            stage: Stage.NEED_MAPPING,
+            status: StageStatus.GATE_PENDING,
+          },
+          canAdvance: false,
+        });
+        queryClient.setQueryData(sessionKeys.state(sessionId), {
+          progress: {
+            sessionId,
+            myProgress: {
+              stage: Stage.NEED_MAPPING,
+              status: StageStatus.GATE_PENDING,
+              startedAt: '2024-01-01T00:00:00.000Z',
+              completedAt: null,
+              gatesSatisfied: { needsConfirmed: true },
+            },
+            partnerProgress: {
+              stage: Stage.NEED_MAPPING,
+              status: StageStatus.GATE_PENDING,
+            },
+            canAdvance: false,
+            milestones: { feelHeardConfirmedAt: null },
+          },
+        });
+
+        const { result } = renderHook(() => useConsentShareNeeds(), {
+          wrapper: createWrapper(queryClient),
+        });
+
+        await act(async () => {
+          await result.current.mutateAsync({
+            sessionId,
+            needIds: ['need-1', 'need-2'],
+          });
+        });
+
+        expect(
+          queryClient.getQueryData<any>(stageKeys.progress(sessionId))?.myProgress.gatesSatisfied.needsShared
+        ).toBe(true);
+        expect(
+          queryClient.getQueryData<any>(sessionKeys.state(sessionId))?.progress.myProgress.gatesSatisfied.needsShared
+        ).toBe(true);
       });
     });
 
