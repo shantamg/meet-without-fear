@@ -556,6 +556,7 @@ export async function confirmFeelHeard(
           partnerStatus,
           turnCount: 1,
           emotionalIntensity: 5,
+          topicFrame: session.topicFrame || undefined,
           contextBundle: {
             conversationContext: {
               recentTurns: conversationHistory.map((m) => ({
@@ -1619,6 +1620,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       empathyDraft: empathyDraftContent || undefined,
       isRefiningEmpathy: isRefiningEmpathy || undefined,
       stage4InventoryContext,
+      topicFrame: session.topicFrame || undefined,
     }, { isInvitationPhase });
 
     // Prompt already includes semantic tag format instructions via buildResponseProtocol()
