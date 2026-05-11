@@ -458,6 +458,38 @@ export function useStreamingMessage(
     [queryClient]
   );
 
+  const recoverTimedOutStream = useCallback(
+    (sessionId: string, stage?: Stage) => {
+      if (pendingUpdateRef.current) {
+        clearTimeout(pendingUpdateRef.current);
+        pendingUpdateRef.current = null;
+      }
+
+      // The backend may have persisted the message even if the client-side SSE
+      // connection stopped producing events. Pull server truth instead of
+      // forcing the user to manually reload the chat.
+      reconcilePersistedMessages(sessionId);
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      queryClient.invalidateQueries({ queryKey: timelineKeys.infinite(sessionId) });
+      if (stage === Stage.PERSPECTIVE_STRETCH) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+      }
+      if (stage === Stage.NEED_MAPPING) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
+
+      accumulatedTextRef.current = '';
+      aiMessageIdRef.current = '';
+      optimisticUserIdRef.current = '';
+      activeUserMessageIdRef.current = '';
+      realUserIdRef.current = '';
+      setStatus('idle');
+    },
+    [queryClient, reconcilePersistedMessages]
+  );
+
   /**
    * Handle metadata from the AI response
    */
@@ -613,13 +645,12 @@ export function useStreamingMessage(
           // Only trigger if EventSource is still active (connection still open)
           // The timer is cleared on complete/error, so reaching here means we're stuck
           if (eventSourceRef.current) {
-            console.warn('[useStreamingMessage] 15s timeout - closing stuck connection');
+            console.warn('[useStreamingMessage] 15s timeout - recovering persisted messages');
             // Close the stuck connection
             eventSourceRef.current.close();
             eventSourceRef.current = null;
-            cleanupFailedStream(sessionId, currentStage);
-            // Transition to idle so typing indicator disappears
-            setStatus('idle');
+            fallbackTimerRef.current = null;
+            recoverTimedOutStream(sessionId, currentStage);
           }
         }, FALLBACK_TIMEOUT);
 
@@ -918,7 +949,7 @@ export function useStreamingMessage(
         onError?.(error as Error);
       }
     },
-    [addMessageToCache, updateMessageInCache, cleanupFailedStream, handleMetadata, invalidateAfterSuccessfulStream, reconcilePersistedMessages, queryClient, onComplete, onError]
+    [addMessageToCache, updateMessageInCache, cleanupFailedStream, handleMetadata, invalidateAfterSuccessfulStream, reconcilePersistedMessages, recoverTimedOutStream, queryClient, onComplete, onError]
   );
 
   /**
