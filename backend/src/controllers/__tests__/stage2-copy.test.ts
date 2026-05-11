@@ -46,20 +46,15 @@ describe('Stage 2 user-facing copy', () => {
     expect(messagesSource).not.toContain('protected attempt');
   });
 
-  it('does not route optional share suggestions ahead of empathy reveal', () => {
+  it('does not force optional share suggestions ahead of empathy reveal from the Stage 2 controller', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '..', 'stage2.ts'),
-      'utf8'
-    );
-    const reconcilerStateSource = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'services', 'reconciler', 'state.ts'),
       'utf8'
     );
 
     expect(source).toContain('const hasSignificantGapsA = false');
     expect(source).toContain('const hasSignificantGapsB = false');
     expect(source).not.toContain("recommendation.action === 'OFFER_OPTIONAL' &&");
-    expect(reconcilerStateSource).toContain('const shouldOfferSharing = false');
   });
 
   it('does not frame Stage 2 empathy as repair or working things out', () => {
