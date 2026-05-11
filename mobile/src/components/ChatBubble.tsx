@@ -189,15 +189,15 @@ export function ChatBubble({
       case 'sending':
         return 'Sending...';
       case 'pending':
-        return 'Pending review (not delivered yet)';
+        return 'Submitted for review';
       case 'delivered':
         return 'Delivered';
       case 'seen':
         return '✓ Seen';
       case 'superseded':
-        return 'Not Delivered (Updated Below)';
+        return 'Updated version below';
       default:
-        return 'Pending review (not delivered yet)';
+        return 'Submitted for review';
     }
   };
 

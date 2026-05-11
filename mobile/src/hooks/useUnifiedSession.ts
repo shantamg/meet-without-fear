@@ -556,7 +556,9 @@ export function useUnifiedSession(
   const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
   const gateOffered = !!gates?.feelHeardCheckOffered;
   const gateConfirmed = !!gates?.feelHeardConfirmed;
+  const isWitnessStage = myProgress?.stage === Stage.WITNESS;
   const showFeelHeardConfirmation = (
+    isWitnessStage &&
     (gateOffered || streamTriggeredFeelHeard) &&
     !gateConfirmed &&
     !hasDismissedFeelHeard &&

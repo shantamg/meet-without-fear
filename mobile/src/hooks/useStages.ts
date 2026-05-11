@@ -1121,7 +1121,10 @@ export function useValidateEmpathy(
       ValidateEmpathyResponse,
       ApiClientError,
       ValidateEmpathyRequest,
-      { previousPartnerEmpathy: GetPartnerEmpathyResponse | undefined }
+      {
+        previousPartnerEmpathy: GetPartnerEmpathyResponse | undefined;
+        previousEmpathyStatus: EmpathyExchangeStatusResponse | undefined;
+      }
     >,
     'mutationFn'
   >
@@ -1142,6 +1145,9 @@ export function useValidateEmpathy(
       const previousPartnerEmpathy = queryClient.getQueryData<GetPartnerEmpathyResponse>(
         stageKeys.partnerEmpathy(sessionId)
       );
+      const previousEmpathyStatus = queryClient.getQueryData<EmpathyExchangeStatusResponse>(
+        stageKeys.empathyStatus(sessionId)
+      );
 
       // Write optimistic result: set validated and validatedAt immediately
       queryClient.setQueryData<GetPartnerEmpathyResponse>(
@@ -1154,7 +1160,19 @@ export function useValidateEmpathy(
         } : old
       );
 
-      return { previousPartnerEmpathy };
+      if (!validated) {
+        queryClient.setQueryData<EmpathyExchangeStatusResponse>(
+          stageKeys.empathyStatus(sessionId),
+          (old) => old ? {
+            ...old,
+            partnerAttempt: null,
+            partnerHasSubmittedEmpathy: true,
+            partnerEmpathyHeldStatus: 'REFINING',
+          } : old
+        );
+      }
+
+      return { previousPartnerEmpathy, previousEmpathyStatus };
     },
     onSuccess: (data, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
@@ -1178,6 +1196,12 @@ export function useValidateEmpathy(
         queryClient.setQueryData(
           stageKeys.partnerEmpathy(sessionId),
           context.previousPartnerEmpathy
+        );
+      }
+      if (context?.previousEmpathyStatus) {
+        queryClient.setQueryData(
+          stageKeys.empathyStatus(sessionId),
+          context.previousEmpathyStatus
         );
       }
     },

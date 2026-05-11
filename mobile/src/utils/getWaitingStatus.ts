@@ -22,6 +22,7 @@ export type WaitingStatusState =
   | 'empathy-pending' // Stage 2: Waiting for partner to share empathy
   | 'partner-considering-perspective' // Stage 2: Partner felt heard, now building empathy for you (good alignment)
   | 'partner-validating-empathy' // Stage 2: User validated partner empathy, waiting for partner to validate theirs
+  | 'partner-revising-empathy' // Stage 2: User sent validation feedback, waiting for partner to revise
   | 'needs-pending' // Stage 3: Waiting for partner to confirm needs
   | 'needs-waiting-for-partner' // Stage 3: User shared needs, waiting for partner to share
   | 'needs-validation-pending' // Stage 3: Waiting for partner to confirm needs validation
@@ -62,9 +63,11 @@ export interface WaitingStatusInputs {
     hasNewSharedContext?: boolean;
     myAttemptStatus?: string; // 'REVEALED', 'NEEDS_WORK', etc.
     myAttemptRevisionCount?: number; // Number of times empathy was revised
+    partnerAttemptStatus?: string; // Partner's held status, even when not revealable
   } | undefined;
   myValidation?: {
     validated?: boolean;
+    awaitingRevision?: boolean;
   } | undefined;
   partnerValidated?: boolean;
 
@@ -209,6 +212,18 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
   // This happens when reconciler found gaps and is waiting for subject response
   if (empathyStatus?.awaitingSharing && !empathyStatus?.hasNewSharedContext) {
     return 'awaiting-subject-decision';
+  }
+
+  // User already sent feedback that the partner's empathy attempt needs work.
+  // The reviewed attempt is now held as REFINING, so the next useful action
+  // belongs to the partner rather than the freeform chat input.
+  if (
+    myStage === Stage.PERSPECTIVE_STRETCH &&
+    (inputs.myValidation?.awaitingRevision === true ||
+      empathyStatus?.partnerAttemptStatus === 'REFINING') &&
+    inputs.myValidation?.validated === false
+  ) {
+    return 'partner-revising-empathy';
   }
 
   // Good alignment: User's empathy is READY (or REVEALED), partner is working on their empathy for us.

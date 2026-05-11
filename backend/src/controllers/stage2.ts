@@ -119,10 +119,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
 
     // Update empathy attempt for User A (A's guess about B)
     if (result.aUnderstandingB && shouldUpdateA) {
-      const hasSignificantGapsA =
-        result.aUnderstandingB.gaps.severity === 'significant' ||
-        result.aUnderstandingB.recommendation.action === 'OFFER_SHARING' ||
-        (result.aUnderstandingB.recommendation.action === 'OFFER_OPTIONAL' && !!result.aUnderstandingB.recommendation.suggestedShareFocus);
+      const hasSignificantGapsA = false;
 
       // Check if B has already shared context with A to prevent infinite loop
       // When A has gaps guessing B, B (subject) should share with A (guesser)
@@ -180,10 +177,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
 
     // Update empathy attempt for User B (B's guess about A)
     if (result.bUnderstandingA && shouldUpdateB) {
-      const hasSignificantGapsB =
-        result.bUnderstandingA.gaps.severity === 'significant' ||
-        result.bUnderstandingA.recommendation.action === 'OFFER_SHARING' ||
-        (result.bUnderstandingA.recommendation.action === 'OFFER_OPTIONAL' && !!result.bUnderstandingA.recommendation.suggestedShareFocus);
+      const hasSignificantGapsB = false;
 
       // Check if A has already shared context with B to prevent infinite loop
       // When B has gaps guessing A, A (subject) should share with B (guesser)
@@ -802,74 +796,10 @@ export async function consentToShare(
     } | null = null;
 
     try {
-      const userName = user.firstName || user.name || 'The user';
-      const partner = partnerName || 'their partner';
-
       const bothShared = !!partnerAttempt;
-
-      // Build a transition prompt for empathy sharing acknowledgment
-      const transitionPrompt = bothShared
-        ? `You are Meet Without Fear, a Process Guardian. ${userName} has just shared their empathy statement with ${partner}. ${partner} has also shared their empathy statement.
-
-Generate a brief, warm message (2-3 sentences) for ${userName} that:
-1. Acknowledges the courage it took to share their attempt
-2. Notes that both empathy statements are now shared
-3. Clearly explains the next step: they'll read ${partner}'s empathy statement and mark whether it feels accurate (validation). If it feels inaccurate, they can give brief feedback; if accurate, the process can continue to the next private step.
-
-Keep it natural and conversational. Don't be overly effusive.
-
-Respond in JSON format:
-\`\`\`json
-{
-  "response": "Your message"
-}
-\`\`\``
-        : `You are Meet Without Fear, a Process Guardian. ${userName} has just shared their empathy statement with ${partner}, expressing their attempt to imagine what ${partner} might be experiencing.
-
-Generate a brief, warm acknowledgment message (2-3 sentences) for ${userName} that:
-1. Acknowledges the courage it took to try to see things from ${partner}'s perspective
-2. Validates the importance of this step in creating clearer understanding without deciding what happens next
-3. Gently prepares them for what comes next: now ${partner} will work on imagining what ${userName} might be feeling (not responding to what was shared, but creating their own empathy attempt)
-4. Suggest they can use Inner Thoughts to continue processing privately while they wait - a space for personal reflection that's connected to this conversation
-
-Keep it natural and conversational. Don't be overly effusive. Make it clear that both partners share empathy attempts before the process continues; do not imply repair, agreement, or a shared decision.
-
-Respond in JSON format:
-\`\`\`json
-{
-  "response": "Your acknowledgment message"
-}
-\`\`\``;
-
-      const aiResponse = await getSonnetResponse({
-        systemPrompt: transitionPrompt,
-        messages: [{ role: 'user', content: 'Generate the acknowledgment message.' }],
-        maxTokens: 512,
-        sessionId,
-        turnId,  // Use same turnId for all operations in this request
-        operation: 'stage2-transition',
-        callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
-      });
-
-      let transitionContent: string;
-      if (aiResponse) {
-        try {
-          const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
-          transitionContent = typeof parsed.response === 'string'
-            ? cleanVisibleAIText(parsed.response)
-            : bothShared
-              ? `Thank you for sharing your attempt. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
-              : `You've done something difficult — thank you for staying with it. You've completed your part for now. We'll notify you when ${partnerName || 'your partner'} has completed their side. Then you'll each see the other's attempt to understand.`;
-        } catch {
-          transitionContent = bothShared
-            ? `Thank you for sharing your attempt. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
-            : `You've done something difficult — thank you for staying with it. You've completed your part for now. We'll notify you when ${partnerName || 'your partner'} has completed their side. Then you'll each see the other's attempt to understand.`;
-        }
-      } else {
-        transitionContent = bothShared
-          ? `Thank you for sharing your attempt. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
-          : `You've done something difficult — thank you for staying with it. You've completed your part for now. We'll notify you when ${partnerName || 'your partner'} has completed their side. Then you'll each see the other's attempt to understand.`;
-      }
+      let transitionContent = bothShared
+        ? `Your empathy attempt has been submitted. Both empathy statements are now submitted. We'll show the next review or waiting step once the privacy-protected review is ready.`
+        : `Your empathy attempt has been submitted. ${partnerName || 'Your partner'} will do the same perspective-taking step on their side. While you wait, you can use Inner Thoughts if you want a private place to process what came up.`;
 
       transitionContent = cleanVisibleAIText(transitionContent)
         .replace(new RegExp(['once you both feel', 'move forward together'].join('[^.]*'), 'gi'),
@@ -1160,6 +1090,16 @@ export async function validateEmpathy(
 
     if (!partnerAttempt) {
       errorResponse(res, 'NOT_FOUND', 'Partner empathy attempt not found', 404);
+      return;
+    }
+
+    if (partnerAttempt.status !== 'REVEALED' && partnerAttempt.status !== 'VALIDATED') {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Partner empathy is not ready for validation yet',
+        409
+      );
       return;
     }
 
@@ -2117,7 +2057,7 @@ export async function resubmitEmpathy(
       );
     }
 
-    // Generate AI acknowledgment message for the revision
+    // Generate acknowledgment message for the revision.
     let transitionMessage: {
       id: string;
       content: string;
@@ -2126,49 +2066,7 @@ export async function resubmitEmpathy(
     } | null = null;
 
     try {
-      const userName = user.firstName || user.name || 'The user';
-
-      const transitionPrompt = `You are Meet Without Fear, a Process Guardian. ${userName} has just revised their empathy statement based on new context they received about their partner's experience.
-
-Generate a brief, warm acknowledgment message (2-3 sentences) for ${userName} that:
-1. Acknowledges the effort to refine their understanding
-2. Notes that a separate privacy-protected review will check whether their updated statement is ready to share
-3. Encourages them that this iterative process helps build deeper understanding
-
-Use human process language. Do not mention internal systems or implementation details.
-
-Keep it natural and conversational. Don't be overly effusive.
-
-Respond in JSON format:
-\`\`\`json
-{
-  "response": "Your acknowledgment message"
-}
-\`\`\``;
-
-      const aiResponse = await getSonnetResponse({
-        systemPrompt: transitionPrompt,
-        messages: [{ role: 'user', content: 'Generate the acknowledgment message for the revised empathy statement.' }],
-        maxTokens: 256,
-        sessionId,
-        turnId,
-        operation: 'stage2-revision-acknowledgment',
-        callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
-      });
-
-      let transitionContent: string;
-      if (aiResponse) {
-        try {
-          const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
-          transitionContent = typeof parsed.response === 'string'
-            ? cleanVisibleAIText(parsed.response)
-            : `You're showing real understanding here. We'll send this through a separate privacy-protected review to check whether your updated perspective is ready to share.`;
-        } catch {
-          transitionContent = `You're showing real understanding here. We'll send this through a separate privacy-protected review to check whether your updated perspective is ready to share.`;
-        }
-      } else {
-        transitionContent = `You're showing real understanding here. We'll send this through a separate privacy-protected review to check whether your updated perspective is ready to share.`;
-      }
+      const transitionContent = `You're showing real understanding here. We'll send this through a separate privacy-protected review to check whether your updated perspective is ready to share.`;
 
       // Save the transition message to the database
       const aiMessage = await prisma.message.create({
