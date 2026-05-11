@@ -110,6 +110,7 @@ import {
   trackShareDraftSent,
 } from '../services/analytics';
 import { shouldShowSessionEntryMoodCheck } from '../utils/sessionEntryMoodCheck';
+import { hasNewerDistinctEmpathyStatement, isSameEmpathyAttemptMessage } from '../utils/empathyMessageMatching';
 
 // ============================================================================
 // Types
@@ -2078,10 +2079,7 @@ export function UnifiedSessionScreen({
 
     if (myAttempt?.content && myAttempt.sharedAt) {
       const hasMyAttemptMessage = baseMessages.some(
-        (message) =>
-          message.role === MessageRole.EMPATHY_STATEMENT &&
-          message.senderId === user?.id &&
-          message.timestamp === myAttempt.sharedAt,
+        (message) => isSameEmpathyAttemptMessage(message, user?.id, myAttempt),
       );
 
       if (!hasMyAttemptMessage) {
@@ -2103,9 +2101,10 @@ export function UnifiedSessionScreen({
       const partnerTimestamp = partnerAttempt.revealedAt || partnerAttempt.sharedAt;
       const hasPartnerAttemptMessage = baseMessages.some(
         (message) =>
-          message.role === MessageRole.EMPATHY_STATEMENT &&
-          message.senderId === partnerAttempt.sourceUserId &&
-          message.timestamp === partnerTimestamp,
+          isSameEmpathyAttemptMessage(message, partnerAttempt.sourceUserId, {
+            content: partnerAttempt.content,
+            sharedAt: partnerTimestamp,
+          }),
       );
 
       if (!hasPartnerAttemptMessage) {
@@ -2193,7 +2192,8 @@ export function UnifiedSessionScreen({
         if (
           message.senderId === user?.id &&
           myEmpathyStatements.length > 1 &&
-          message.id !== latestEmpathyId
+          message.id !== latestEmpathyId &&
+          hasNewerDistinctEmpathyStatement(message, myEmpathyStatements)
         ) {
           return {
             ...message,
