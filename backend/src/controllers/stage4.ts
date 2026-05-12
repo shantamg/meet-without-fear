@@ -228,6 +228,32 @@ async function markStage4SelectionSubmitted(
   });
 }
 
+async function clearStage4SelectionSubmitted(
+  sessionId: string,
+  userId: string,
+  existingGates: Prisma.JsonValue | null | undefined
+): Promise<void> {
+  const next = {
+    ...((existingGates as Record<string, unknown> | null) || {}),
+  };
+  delete next.selectionSubmitted;
+  delete next.selectionSubmittedAt;
+
+  await prisma.stageProgress.update({
+    where: {
+      sessionId_userId_stage: { sessionId, userId, stage: 4 },
+    },
+    data: { gatesSatisfied: next as Prisma.InputJsonValue },
+  });
+}
+
+function hasSubmittedSelectionGate(
+  existingGates: Prisma.JsonValue | null | undefined
+): boolean {
+  const gates = existingGates as Record<string, unknown> | null | undefined;
+  return Boolean(gates && gates.selectionSubmitted === true);
+}
+
 function userIsSessionMember(session: Stage4MutableSession, userId: string): boolean {
   return session.relationship.members.some((member) => member.userId === userId);
 }
@@ -469,28 +495,160 @@ async function submitStage4SelectionsInternal(
     )
   );
 
-  await markStage4SelectionSubmitted(sessionId, userId, mutable.progress?.gatesSatisfied);
-
-  const partnerId = await getPartnerUserId(sessionId, userId);
-  const partnerSubmitted = partnerId
-    ? (await prisma.stage4ProposalSelection.count({ where: { sessionId, userId: partnerId } })) > 0
-    : false;
-
-  if (partnerId) {
-    await notifyPartner(sessionId, partnerId, 'session.strategies_updated', {
-      stage: 4,
-      submittedBy: userId,
-      change: 'stage4_selection_submitted',
-    });
+  // Per-tap selections are kept private until the user explicitly shares.
+  // If the user has already shared, persist the change but clear the gate so
+  // the partner doesn't see partially-revised stances mid-stream.
+  if (hasSubmittedSelectionGate(mutable.progress?.gatesSatisfied)) {
+    await clearStage4SelectionSubmitted(sessionId, userId, mutable.progress?.gatesSatisfied);
+    const partnerId = await getPartnerUserId(sessionId, userId);
+    if (partnerId) {
+      await notifyPartner(sessionId, partnerId, 'session.strategies_updated', {
+        stage: 4,
+        submittedBy: userId,
+        change: 'stage4_selection_revised',
+      });
+    }
   }
 
   const state = await buildStage4State(sessionId, userId);
+  const partnerId = await getPartnerUserId(sessionId, userId);
+  const partnerSubmitted = state.partnerSelectionStatus === 'SUBMITTED';
+
   successResponse(res, {
-    submitted: true,
+    submitted: state.mySelectionStatus === 'SUBMITTED',
     submittedAt: submittedAt.toISOString(),
     partnerSubmitted,
     state,
   });
+  void partnerId;
+}
+
+/**
+ * Mark the current user's Stage 4 selections as shared with their partner.
+ * Requires a selection on every active proposal.
+ * POST /sessions/:id/stage4/share-selections
+ */
+export async function shareStage4Selections(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const mutable = await getMutableStage4Session(sessionId, user.id);
+    if (!mutable) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (mutable.session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+    if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+
+    // Stances are required only on shared proposals — individual commitments
+    // are one-sided so a stance from the non-owner isn't expected.
+    const [activeSharedProposals, mySelections] = await Promise.all([
+      prisma.strategyProposal.findMany({
+        where: {
+          sessionId,
+          status: Stage4ProposalStatus.ACTIVE,
+          kind: Stage4ProposalKind.SHARED_PROPOSAL,
+        },
+        select: { id: true },
+      }),
+      prisma.stage4ProposalSelection.findMany({
+        where: { sessionId, userId: user.id },
+        select: { proposalId: true },
+      }),
+    ]);
+
+    if (activeSharedProposals.length === 0) {
+      errorResponse(res, 'VALIDATION_ERROR', 'No shared proposals to share stances on yet', 400);
+      return;
+    }
+
+    const selectedIds = new Set(mySelections.map((s) => s.proposalId));
+    const missing = activeSharedProposals.filter((p) => !selectedIds.has(p.id));
+    if (missing.length > 0) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Take a stance on every shared proposal before sharing',
+        400
+      );
+      return;
+    }
+
+    await markStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied);
+
+    const partnerId = await getPartnerUserId(sessionId, user.id);
+    if (partnerId) {
+      await notifyPartner(sessionId, partnerId, 'session.strategies_updated', {
+        stage: 4,
+        submittedBy: user.id,
+        change: 'stage4_selection_submitted',
+      });
+    }
+
+    const state = await buildStage4State(sessionId, user.id);
+    successResponse(res, { state });
+  } catch (error) {
+    logger.error('[shareStage4Selections] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to share Stage 4 selections', 500);
+  }
+}
+
+/**
+ * Withdraw the current user's shared Stage 4 selections so they can revise.
+ * Partner immediately stops seeing them as shared.
+ * POST /sessions/:id/stage4/unshare-selections
+ */
+export async function unshareStage4Selections(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const mutable = await getMutableStage4Session(sessionId, user.id);
+    if (!mutable) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (mutable.session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+    if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+
+    await clearStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied);
+
+    const partnerId = await getPartnerUserId(sessionId, user.id);
+    if (partnerId) {
+      await notifyPartner(sessionId, partnerId, 'session.strategies_updated', {
+        stage: 4,
+        submittedBy: user.id,
+        change: 'stage4_selection_revised',
+      });
+    }
+
+    const state = await buildStage4State(sessionId, user.id);
+    successResponse(res, { state });
+  } catch (error) {
+    logger.error('[unshareStage4Selections] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to revise Stage 4 selections', 500);
+  }
 }
 
 /**

@@ -24,6 +24,8 @@ interface WaitingBannerProps {
   animationValue?: Animated.Value;
   /** Callback when user taps the breathing exercise link */
   onExercisePress?: () => void;
+  /** Optional action button (e.g. "Review"). Label comes from the status config; host wires the handler. */
+  onActionPress?: () => void;
   /** Test ID for testing */
   testID?: string;
 }
@@ -37,6 +39,7 @@ export function WaitingBanner({
   partnerName,
   animationValue,
   onExercisePress,
+  onActionPress,
   testID = 'waiting-banner',
 }: WaitingBannerProps) {
   const styles = useStyles();
@@ -95,6 +98,19 @@ export function WaitingBanner({
           <Text style={styles.subtext} testID={`${testID}-subtext`}>
             {config.bannerSubtext}
           </Text>
+        )}
+
+        {/* Inline action button (e.g. Review). Driven by config.actionLabel. */}
+        {config.actionLabel && onActionPress && (
+          <Pressable
+            onPress={onActionPress}
+            style={styles.actionButton}
+            testID={`${testID}-action`}
+            accessibilityRole="button"
+            accessibilityLabel={config.actionLabel}
+          >
+            <Text style={styles.actionButtonText}>{config.actionLabel}</Text>
+          </Pressable>
         )}
 
         {/* Breathing exercise link */}
@@ -165,6 +181,21 @@ const useStyles = () =>
       fontSize: t.typography.fontSize.sm,
       color: palette.accent,
       textDecorationLine: 'underline',
+      fontFamily: designFonts.sans,
+    },
+    actionButton: {
+      marginTop: t.spacing.sm,
+      minHeight: 44,
+      paddingHorizontal: t.spacing.lg,
+      borderRadius: 12,
+      backgroundColor: palette.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    actionButtonText: {
+      fontSize: t.typography.fontSize.md,
+      color: palette.bg,
+      fontWeight: '700',
       fontFamily: designFonts.sans,
     },
   }));

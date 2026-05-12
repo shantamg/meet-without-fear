@@ -324,6 +324,7 @@ export interface GetStage4StateResponse {
   coverageAudit: Stage4CoverageAuditDTO;
   mySelections: Stage4SelectionDTO[];
   partnerSelections: Stage4SelectionDTO[];
+  mySelectionStatus: 'NOT_STARTED' | 'SUBMITTED';
   partnerSelectionStatus: 'NOT_STARTED' | 'SUBMITTED';
   outcome: Stage4OutcomeDTO | null;
   tendingPreview: TendingPreviewDTO | null;

@@ -28,6 +28,7 @@ export type WaitingStatusState =
   | 'needs-validation-pending' // Stage 3: Waiting for partner to confirm needs validation
   | 'partner-validating-needs' // Stage 3: User validated revealed needs, waiting for partner
   | 'ranking-pending' // Stage 4: Waiting for partner to submit ranking
+  | 'stage4-selections-pending' // Stage 4 (redesigned): User shared willingness stances, waiting for partner
   | 'strategy-readiness-pending' // Stage 4: User is ready to rank, waiting for partner readiness
   | 'partner-signed' // Partner has signed compact (transient)
   | 'partner-completed-witness' // Partner completed witness stage (transient)
@@ -115,6 +116,13 @@ export interface WaitingStatusInputs {
     agreedByMe: boolean;
     agreedByPartner: boolean;
   }>;
+
+  // Stage 4 (redesigned): per-proposal willingness share status
+  stage4Selections?: {
+    mySelectionSubmitted: boolean;
+    partnerSelectionSubmitted: boolean;
+    hasOutcome: boolean;
+  };
   sessionStatus?: string; // SessionStatus enum value
 }
 
@@ -326,6 +334,17 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
 
   if (strategyPhase === StrategyPhase.REVEALING && overlappingStrategies.count === 0) {
     return 'ranking-pending';
+  }
+
+  // Stage 4 redesign: I shared my willingness stances, partner hasn't yet.
+  if (
+    myStage === Stage.STRATEGIC_REPAIR &&
+    inputs.stage4Selections &&
+    inputs.stage4Selections.mySelectionSubmitted &&
+    !inputs.stage4Selections.partnerSelectionSubmitted &&
+    !inputs.stage4Selections.hasOutcome
+  ) {
+    return 'stage4-selections-pending';
   }
 
   // --- Priority 7: Stage 4 (Agreement Confirmation) ---
