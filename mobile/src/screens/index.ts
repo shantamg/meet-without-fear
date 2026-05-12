@@ -5,7 +5,6 @@
  */
 
 export { NeedMappingScreen } from './NeedMappingScreen';
-export { StrategicRepairScreen } from './StrategicRepairScreen';
 export { PersonDetailScreen } from './PersonDetailScreen';
 
 // Inner Work screens
