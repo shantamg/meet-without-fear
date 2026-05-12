@@ -237,6 +237,24 @@ describe('AI Orchestrator', () => {
       expect(result.offerFeelHeardCheck).toBe(true);
     });
 
+    it('suppresses early Stage 1 feel-heard checks even when the model requests one', async () => {
+      mockGetModelCompletion.mockResolvedValue(MICRO_TAG_RESPONSE_FEEL_HEARD);
+
+      const result = await orchestrateResponse(buildContext({ stage: 1, turnCount: 4 }));
+
+      expect(result.usedMock).toBe(false);
+      expect(result.offerFeelHeardCheck).toBe(false);
+    });
+
+    it('does not apply the Stage 1 feel-heard turn guard to other stages', async () => {
+      mockGetModelCompletion.mockResolvedValue(MICRO_TAG_RESPONSE_READY_SHARE);
+
+      const result = await orchestrateResponse(buildContext({ stage: 2, turnCount: 4 }));
+
+      expect(result.usedMock).toBe(false);
+      expect(result.offerReadyToShare).toBe(true);
+    });
+
     it('parses ReadyShare flag from thinking block (stage 2)', async () => {
       mockGetModelCompletion.mockResolvedValue(MICRO_TAG_RESPONSE_READY_SHARE);
 

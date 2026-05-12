@@ -170,6 +170,284 @@ describe('Context Assembler', () => {
       });
     });
 
+    describe('Topic Frame Formatting', () => {
+      it('includes confirmed topic frame as orientation context', () => {
+        const bundle = createMinimalBundle({
+          topicFrame: {
+            text: 'Trust around late-night texting',
+            confirmedAt: '2026-05-12T00:00:00.000Z',
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        expect(formatted).toContain('--- Conversation topic ---');
+        expect(formatted).toContain('Confirmed topic: "Trust around late-night texting"');
+        expect(formatted).toContain('Use this as orientation only');
+        expect(formatted).toContain('Stage gates still come from StageProgress');
+      });
+
+      it('omits topic frame when not present', () => {
+        const formatted = formatContextForPrompt(createMinimalBundle());
+
+        expect(formatted).not.toContain('--- Conversation topic ---');
+        expect(formatted).not.toContain('Confirmed topic:');
+      });
+    });
+
+    describe('Consented Share State Formatting', () => {
+      it('includes typed consent and share lifecycle as orientation context', () => {
+        const bundle = createMinimalBundle({
+          consentedShareState: {
+            items: [
+              {
+                kind: 'empathy_attempt',
+                direction: 'user_to_partner',
+                lifecycleStatus: 'VALIDATED',
+                content: 'I think you felt shut out when I made the decision alone.',
+                sharedAt: '2026-05-12T00:00:00.000Z',
+                revealedAt: '2026-05-12T00:05:00.000Z',
+                validatedAt: '2026-05-12T00:10:00.000Z',
+              },
+              {
+                kind: 'additional_context',
+                direction: 'partner_to_user',
+                lifecycleStatus: 'ACCEPTED/DELIVERED',
+                content: 'I needed to know my effort still mattered.',
+                sharedAt: '2026-05-12T00:02:00.000Z',
+                deliveredAt: '2026-05-12T00:03:00.000Z',
+              },
+            ],
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        expect(formatted).toContain('--- Consented partner/share state ---');
+        expect(formatted).toContain('Use this only for orientation');
+        expect(formatted).toContain('Stage gates still come from StageProgress');
+        expect(formatted).toContain('empathy/share/validation lifecycle state');
+        expect(formatted).toContain('- You shared empathy attempt (VALIDATED; shared 2026-05-12T00:00:00.000Z; revealed 2026-05-12T00:05:00.000Z; validated 2026-05-12T00:10:00.000Z): I think you felt shut out when I made the decision alone.');
+        expect(formatted).toContain('- Partner shared additional context (ACCEPTED/DELIVERED; shared 2026-05-12T00:02:00.000Z; delivered 2026-05-12T00:03:00.000Z): I needed to know my effort still mattered.');
+      });
+
+      it('omits consented share state when no items are present', () => {
+        const bundle = createMinimalBundle({
+          consentedShareState: {
+            items: [],
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        expect(formatted).not.toContain('--- Consented partner/share state ---');
+      });
+
+      it('does not render partner content when lifecycle says it is not visible to this user', () => {
+        const bundle = createMinimalBundle({
+          consentedShareState: {
+            items: [
+              {
+                kind: 'empathy_attempt',
+                direction: 'partner_to_user',
+                lifecycleStatus: 'READY',
+                sharedAt: '2026-05-12T00:00:00.000Z',
+              },
+            ],
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        expect(formatted).toContain('- Partner shared empathy attempt (READY; shared 2026-05-12T00:00:00.000Z) (content not yet visible to this user)');
+      });
+
+      it('truncates long share-state content to keep prompt size bounded', () => {
+        const longContent = 'b'.repeat(500);
+        const bundle = createMinimalBundle({
+          consentedShareState: {
+            items: [
+              {
+                kind: 'additional_context',
+                direction: 'user_to_partner',
+                lifecycleStatus: 'ACCEPTED/SEEN',
+                content: longContent,
+              },
+            ],
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        expect(formatted).toContain(`${'b'.repeat(359)}…`);
+        expect(formatted).not.toContain(longContent);
+      });
+    });
+
+    describe('Prior Stage Summaries Formatting', () => {
+      it('includes prior-stage summaries as continuity context', () => {
+        const bundle = createMinimalBundle({
+          stageContext: {
+            stage: 2,
+            gatesSatisfied: {},
+          },
+          priorStageSummaries: {
+            stages: [
+              {
+                stage: 1,
+                lifecycleStatus: 'COMPLETED',
+                completedAt: '2026-05-12T00:10:00.000Z',
+                userTurnCount: 2,
+                assistantTurnCount: 2,
+                highlights: [
+                  {
+                    role: 'user',
+                    content: 'I felt like every practical objection meant she was already halfway gone.',
+                    stage: 1,
+                    timestamp: '2026-05-12T00:01:00.000Z',
+                  },
+                  {
+                    role: 'assistant',
+                    content: 'The fear is not just about the trip, it is about losing the marriage.',
+                    stage: 1,
+                    timestamp: '2026-05-12T00:02:00.000Z',
+                  },
+                ],
+              },
+            ],
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        expect(formatted).toContain('--- Prior stage summaries (current user lane only) ---');
+        expect(formatted).toContain('Use this only for continuity');
+        expect(formatted).toContain('Stage gates still come from StageProgress');
+        expect(formatted).toContain('Stage 1 (COMPLETED; completed 2026-05-12T00:10:00.000Z): 2 user turn(s), 2 AI turn(s).');
+        expect(formatted).toContain('- User: I felt like every practical objection meant she was already halfway gone.');
+        expect(formatted).toContain('- AI: The fear is not just about the trip, it is about losing the marriage.');
+      });
+
+      it('omits prior-stage summaries when no stages are present', () => {
+        const bundle = createMinimalBundle({
+          priorStageSummaries: {
+            stages: [],
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        expect(formatted).not.toContain('--- Prior stage summaries');
+      });
+
+      it('truncates long prior-stage highlights to keep prompt size bounded', () => {
+        const longContent = 'c'.repeat(500);
+        const bundle = createMinimalBundle({
+          priorStageSummaries: {
+            stages: [
+              {
+                stage: 0,
+                lifecycleStatus: 'COMPLETED',
+                userTurnCount: 1,
+                assistantTurnCount: 0,
+                highlights: [
+                  {
+                    role: 'user',
+                    content: longContent,
+                    stage: 0,
+                    timestamp: '2026-05-12T00:00:00.000Z',
+                  },
+                ],
+              },
+            ],
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        expect(formatted).toContain(`${'c'.repeat(239)}…`);
+        expect(formatted).not.toContain(longContent);
+      });
+    });
+
+    describe('Current Stage History Formatting', () => {
+      it('includes full current-user stage history as continuity context', () => {
+        const bundle = createMinimalBundle({
+          stageContext: {
+            stage: 2,
+            gatesSatisfied: {},
+          },
+          currentStageHistory: {
+            stage: 2,
+            messages: [
+              {
+                role: 'user',
+                content: 'I think Eve feels boxed in by the safe life I built.',
+                stage: 2,
+                timestamp: '2026-05-12T00:00:00.000Z',
+              },
+              {
+                role: 'assistant',
+                content: 'That sounds like a real attempt to imagine her side.',
+                stage: 2,
+                timestamp: '2026-05-12T00:01:00.000Z',
+              },
+              {
+                role: 'empathy_statement',
+                content: 'I think you might feel like stability became a cage.',
+                stage: 2,
+                timestamp: '2026-05-12T00:02:00.000Z',
+              },
+            ],
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        expect(formatted).toContain('--- Current Stage 2 history (current user lane only) ---');
+        expect(formatted).toContain('Use this only for continuity');
+        expect(formatted).toContain('Stage gates still come from StageProgress');
+        expect(formatted).toContain('- User: I think Eve feels boxed in by the safe life I built.');
+        expect(formatted).toContain('- AI: That sounds like a real attempt to imagine her side.');
+        expect(formatted).toContain('- Empathy statement: I think you might feel like stability became a cage.');
+      });
+
+      it('omits current stage history when no messages are present', () => {
+        const bundle = createMinimalBundle({
+          currentStageHistory: {
+            stage: 2,
+            messages: [],
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        expect(formatted).not.toContain('Current Stage 2 history');
+      });
+
+      it('truncates long stage-history entries to keep prompt size bounded', () => {
+        const longContent = 'a'.repeat(500);
+        const bundle = createMinimalBundle({
+          currentStageHistory: {
+            stage: 1,
+            messages: [
+              {
+                role: 'user',
+                content: longContent,
+                stage: 1,
+                timestamp: '2026-05-12T00:00:00.000Z',
+              },
+            ],
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        expect(formatted).toContain(`${'a'.repeat(359)}…`);
+        expect(formatted).not.toContain(longContent);
+      });
+    });
+
     describe('Session Isolation', () => {
       it('does not include global facts when undefined (session isolation)', () => {
         // Per session isolation spec: globalFacts should be undefined until consent UI is built

@@ -11,6 +11,9 @@ export interface ContextFormattingOptions {
  * in one logical place per direction of control.
  */
 const LONG_IDLE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+const STAGE_HISTORY_CONTENT_LIMIT = 360;
+const SHARE_STATE_CONTENT_LIMIT = 360;
+const PRIOR_STAGE_CONTENT_LIMIT = 240;
 
 /** Humanize an idle duration for inclusion in the prompt. */
 function formatIdleDuration(ms: number): string {
@@ -218,6 +221,36 @@ export function formatContextForPrompt(
     parts.push(...factLines);
   }
 
+  if (bundle.topicFrame?.text) {
+    parts.push('--- Conversation topic ---');
+    parts.push(`Confirmed topic: "${bundle.topicFrame.text}"`);
+    parts.push('Use this as orientation only. Stage gates still come from StageProgress and explicit product lifecycle state.');
+  }
+
+  if (bundle.priorStageSummaries?.stages.length) {
+    parts.push('--- Prior stage summaries (current user lane only) ---');
+    parts.push('Use this only for continuity. Stage gates still come from StageProgress and explicit product lifecycle state.');
+    for (const summary of bundle.priorStageSummaries.stages) {
+      parts.push(renderPriorStageSummary(summary));
+    }
+  }
+
+  if (bundle.consentedShareState?.items.length) {
+    parts.push('--- Consented partner/share state ---');
+    parts.push('Use this only for orientation. Stage gates still come from StageProgress and empathy/share/validation lifecycle state.');
+    for (const item of bundle.consentedShareState.items) {
+      parts.push(renderConsentedShareStateItem(item));
+    }
+  }
+
+  if (bundle.currentStageHistory?.messages.length) {
+    parts.push(`--- Current Stage ${bundle.currentStageHistory.stage} history (current user lane only) ---`);
+    parts.push('Use this only for continuity. Stage gates still come from StageProgress and explicit product lifecycle state.');
+    for (const message of bundle.currentStageHistory.messages) {
+      parts.push(`- ${renderStageHistoryRole(message.role)}: ${truncateStageHistoryContent(message.content)}`);
+    }
+  }
+
   if (bundle.innerThoughtsContext?.relevantReflections?.length) {
     parts.push('--- Private reflections (gentle reference) ---');
     for (const reflection of bundle.innerThoughtsContext.relevantReflections.slice(0, 2)) {
@@ -236,4 +269,69 @@ export function formatContextForPrompt(
   }
 
   return parts.filter((part) => part.trim().length > 0).join('\n');
+}
+
+function renderStageHistoryRole(role: NonNullable<ContextBundle['currentStageHistory']>['messages'][number]['role']): string {
+  switch (role) {
+    case 'user':
+      return 'User';
+    case 'assistant':
+      return 'AI';
+    case 'empathy_statement':
+      return 'Empathy statement';
+    case 'shared_context':
+      return 'Shared context';
+    default:
+      return 'System';
+  }
+}
+
+function truncateStageHistoryContent(content: string): string {
+  const compact = content.replace(/\s+/g, ' ').trim();
+  if (compact.length <= STAGE_HISTORY_CONTENT_LIMIT) return compact;
+  return `${compact.slice(0, STAGE_HISTORY_CONTENT_LIMIT - 1)}…`;
+}
+
+function renderPriorStageSummary(
+  summary: NonNullable<ContextBundle['priorStageSummaries']>['stages'][number]
+): string {
+  const status = summary.lifecycleStatus ? ` (${summary.lifecycleStatus}${summary.completedAt ? `; completed ${summary.completedAt}` : ''})` : '';
+  const lines = [
+    `Stage ${summary.stage}${status}: ${summary.userTurnCount} user turn(s), ${summary.assistantTurnCount} AI turn(s).`,
+  ];
+
+  for (const highlight of summary.highlights) {
+    lines.push(`  - ${renderStageHistoryRole(highlight.role)}: ${truncatePriorStageContent(highlight.content)}`);
+  }
+
+  return lines.join('\n');
+}
+
+function truncatePriorStageContent(content: string): string {
+  const compact = content.replace(/\s+/g, ' ').trim();
+  if (compact.length <= PRIOR_STAGE_CONTENT_LIMIT) return compact;
+  return `${compact.slice(0, PRIOR_STAGE_CONTENT_LIMIT - 1)}…`;
+}
+
+function renderConsentedShareStateItem(
+  item: NonNullable<ContextBundle['consentedShareState']>['items'][number]
+): string {
+  const direction = item.direction === 'user_to_partner' ? 'You shared' : 'Partner shared';
+  const kind = item.kind === 'empathy_attempt' ? 'empathy attempt' : 'additional context';
+  const timestamps = [
+    item.sharedAt ? `shared ${item.sharedAt}` : null,
+    item.deliveredAt ? `delivered ${item.deliveredAt}` : null,
+    item.revealedAt ? `revealed ${item.revealedAt}` : null,
+    item.validatedAt ? `validated ${item.validatedAt}` : null,
+  ].filter(Boolean);
+  const lifecycle = [item.lifecycleStatus, ...timestamps].join('; ');
+  const content = item.content ? `: ${truncateShareStateContent(item.content)}` : ' (content not yet visible to this user)';
+
+  return `- ${direction} ${kind} (${lifecycle})${content}`;
+}
+
+function truncateShareStateContent(content: string): string {
+  const compact = content.replace(/\s+/g, ' ').trim();
+  if (compact.length <= SHARE_STATE_CONTENT_LIMIT) return compact;
+  return `${compact.slice(0, SHARE_STATE_CONTENT_LIMIT - 1)}…`;
 }

@@ -223,6 +223,32 @@ describe('Above Input Panel Priority', () => {
     expect(result.shouldHideInput).toBe(false);
   });
 
+  it('prioritizes empathy revision review over optional share suggestion while refining', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      hasShareSuggestion: true,
+      shareOffer: { hasSuggestion: true },
+      hasRespondedToShareOfferLocal: false,
+      empathyAlreadyConsented: true,
+      empathyDraft: { alreadyConsented: true },
+      isRefiningEmpathy: true,
+      messageCountSinceSharedContext: 1,
+      hasEmpathyContent: true,
+      hasLiveProposedEmpathyStatement: true,
+      empathyStatus: {
+        hasNewSharedContext: true,
+        myAttemptStatus: 'REFINING',
+      },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showShareSuggestionPanel).toBe(false);
+    expect(result.panels.showEmpathyPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('empathy-statement');
+  });
+
   it('does not show share-suggestion panel after Stage 2', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,

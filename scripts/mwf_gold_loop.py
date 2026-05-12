@@ -346,6 +346,29 @@ def run_command(
             handle.close()
 
 
+def load_dotenv_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            values[key] = value
+    return values
+
+
+def backend_command_env() -> dict[str, str]:
+    env = dict(os.environ)
+    for key, value in load_dotenv_file(REPO_ROOT / "backend/.env").items():
+        env.setdefault(key, value)
+    return env
+
+
 def start_background_command(
     name: str,
     cmd: list[str],
@@ -933,11 +956,15 @@ Continue as {actor.character} until one of these happens:
 - the run is completed,
 - a product/state/browser bug blocks progress.
 
-If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present for {actor.character}, either click it or give a clear in-character typed confirmation such as "I feel heard" / "Ready" when that is realistic. Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate.
+If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present for {actor.character}, click the CTA. Do not type a chat message to satisfy a product gate. Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate.
 
 If a visible Stage 0 compact/getting-started screen is present for {actor.character}, including copy like "Ready to begin?" with a "Ready" CTA, click it and continue. The header may show the partner's name because the session is "with {partner.character}"; do not treat that alone as evidence that you are operating the partner side.
 
 If Stage {stop_after_stage} shows a visible share suggestion, context-share decision, validation card, proposal inventory, rank/select/submit controls, draft review, or text input for {actor.character}, treat it as legitimate in-stage work. Respond to that action before reporting "stage_limit_reached". In Stage 4, do not report "stage_limit_reached" merely after adding ideas; use it only after this assigned side has submitted selections or the stage is visibly closed for this side. If the visible next action belongs to {partner.character}, use "needs_partner" with "blocked_on": "{partner.side}".
+
+For Stage 2 specifically, a post-empathy prompt like "Share this with {partner.character}? Review", "Review what you'll share", "Share this version", or "Does this still feel true?" is a required context-share/review action for {actor.character}. Open the review, share/decline/refine in character, and only then report waiting or stage-limit status. Do not stop merely because an empathy attempt was submitted if a share/context review prompt remains visible.
+
+Exchange-history surfaces are diagnostic only. Do not open them to satisfy Stage 2. If exchange history is already open and it blocks controls, dismiss it or reload the page before deciding whether a real stage action remains.
 
 In Stage 4, do not keep adding ideas indefinitely just because the chat input remains visible. Once {actor.character} has contributed one or two concrete proposals or individual commitments and has made visible willingness selections for the current proposal inventory, stop and report `needs_partner` if closure buttons are still disabled because {partner.character}'s private selections, proposals, review, or closure are pending.
 
@@ -976,9 +1003,11 @@ Partner side: {partner.character}
 Stop after Stage {stop_after_stage}.
 
 Inspect the current in-app browser state, continue if {actor.character} has a legitimate action, and stop when blocked on {partner.character}, Stage {stop_after_stage} is reached, completed, or bug-blocked.
-If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present for {actor.character}, either click it or give a clear in-character typed confirmation such as "I feel heard" / "Ready" when that is realistic. Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate.
+If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present for {actor.character}, click the CTA. Do not type a chat message to satisfy a product gate. Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate.
 If a visible Stage 0 compact/getting-started screen is present for {actor.character}, including copy like "Ready to begin?" with a "Ready" CTA, click it and continue. The header may show the partner's name because the session is "with {partner.character}"; do not treat that alone as evidence that you are operating the partner side.
 If Stage {stop_after_stage} shows a visible share suggestion, context-share decision, validation card, proposal inventory, rank/select/submit controls, draft review, or text input for {actor.character}, handle that in-stage action before reporting "stage_limit_reached". In Stage 4, do not report "stage_limit_reached" merely after adding ideas; use it only after this assigned side has submitted selections or the stage is visibly closed for this side. If the visible next action belongs to {partner.character}, use "needs_partner" with "blocked_on": "{partner.side}".
+For Stage 2 specifically, a post-empathy prompt like "Share this with {partner.character}? Review", "Review what you'll share", "Share this version", or "Does this still feel true?" is a required context-share/review action for {actor.character}. Open the review, share/decline/refine in character, and only then report waiting or stage-limit status. Do not stop merely because an empathy attempt was submitted if a share/context review prompt remains visible.
+Exchange-history surfaces are diagnostic only. Do not open them to satisfy Stage 2. If exchange history is already open and it blocks controls, dismiss it or reload the page before deciding whether a real stage action remains.
 In Stage 4, do not keep adding ideas indefinitely just because the chat input remains visible. Once {actor.character} has contributed one or two concrete proposals or individual commitments and has made visible willingness selections for the current proposal inventory, stop and report `needs_partner` if closure buttons are still disabled because {partner.character}'s private selections, proposals, review, or closure are pending.
 For Stage 4 specifically, "stage_limit_reached" must have `"blocked_on": null`. If {actor.character} is waiting for {partner.character} to submit proposals, selections, review, or closure, report `"state": "needs_partner"` instead.
 Keep browser observations compact. Prefer `agent-browser ... snapshot -i` over full snapshots, and do not paste long prior transcript history into the final answer.
@@ -1266,12 +1295,11 @@ def actor_satisfies_stop_boundary(actor: Actor, stop_after_stage: int) -> bool:
         return False
     if status.state != "needs_partner" or stage < stop_after_stage:
         return False
-    # For Stage 0-2 regression gates, a partner-wait at the requested stage is
-    # a valid stop boundary: the product may still be doing privacy review or
-    # partner reveal work, but the assigned actor has reached the requested
-    # stage cap. Stage 4 remains stricter because proposal/selection closure has
-    # side-specific work that must not be cut short while blocked_on is set.
-    return not status.blocked_on or stop_after_stage < 4
+    # Stage 2 includes draft/share/reveal/validation work that can reopen the
+    # partner after both sides have entered the stage. A blocked partner wait is
+    # only a stop boundary for the early Stage 0/1 gates; later stages must
+    # clear the blocker before scoring.
+    return not status.blocked_on or stop_after_stage < 2
 
 
 def actor_has_unanswered_blocker(actors: dict[str, Actor], target_side: str, stop_after_stage: int = 0) -> bool:
@@ -1280,7 +1308,8 @@ def actor_has_unanswered_blocker(actors: dict[str, Actor], target_side: str, sto
         status = actor.status
         if not status or not status.blocked_on:
             continue
-        if str(status.blocked_on).lower() == target_side and actor.turns > target.turns:
+        target_has_had_chance = actor.turns >= target.turns if stop_after_stage == 2 else actor.turns > target.turns
+        if str(status.blocked_on).lower() == target_side and target_has_had_chance:
             if (
                 stop_after_stage < 4
                 and actor_satisfies_stop_boundary(actor, stop_after_stage)
@@ -1473,7 +1502,12 @@ def write_mock_transcripts(run_dir: Path, scenario: str, max_stage: int) -> list
 def extract_transcripts(session_id: str, run_dir: Path, scenario: str, max_stage: int) -> list[str]:
     output_dir = REPO_ROOT / "backend/scripts/transcripts"
     before = set(output_dir.glob(f"*{session_id[:8]}*.md")) if output_dir.exists() else set()
-    result = run_command(["npx", "tsx", "scripts/extract-session-transcripts.ts", session_id], cwd=REPO_ROOT / "backend", timeout=120)
+    result = run_command(
+        ["npx", "tsx", "scripts/extract-session-transcripts.ts", session_id],
+        cwd=REPO_ROOT / "backend",
+        timeout=120,
+        env=backend_command_env(),
+    )
     if result.returncode != 0:
         (run_dir / "transcript-extract-error.txt").write_text(result.stderr + "\n" + result.stdout, encoding="utf-8")
         return []
@@ -1488,6 +1522,92 @@ def extract_transcripts(session_id: str, run_dir: Path, scenario: str, max_stage
         copied.append(str(dest))
     stable = write_stage_transcript_artifacts((Path(path) for path in copied), target, scenario, max_stage)
     return stable or copied
+
+
+def capture_db_stage_state(session_id: str, run_dir: Path) -> dict[str, Any]:
+    script = r'''
+import "dotenv/config";
+import { PrismaClient } from "@prisma/client";
+
+(async () => {
+  const prisma = new PrismaClient();
+  const sessionId = process.argv[1];
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    include: {
+      relationship: { include: { members: { include: { user: true } } } },
+      stageProgress: { orderBy: [{ userId: "asc" }, { stage: "asc" }] },
+      messages: {
+        orderBy: { timestamp: "asc" },
+        select: { id: true, role: true, senderId: true, forUserId: true, stage: true, content: true, timestamp: true },
+      },
+      empathyAttempts: { include: { validations: true }, orderBy: [{ sourceUserId: "asc" }, { sharedAt: "asc" }] },
+    },
+  });
+  if (!session) {
+    console.log(JSON.stringify({ error: "session_not_found", sessionId }));
+    return;
+  }
+  const users = session.relationship.members.map((member) => member.user);
+  const userName = (id) => users.find((user) => user.id === id)?.name || id || null;
+  console.log(JSON.stringify({
+    session: { id: session.id, status: session.status },
+    users: users.map((user) => ({ id: user.id, name: user.name, email: user.email })),
+    stageProgress: session.stageProgress.map((row) => ({
+      userId: row.userId,
+      user: userName(row.userId),
+      stage: row.stage,
+      status: row.status,
+      completedAt: row.completedAt,
+      gates: row.gatesSatisfied,
+    })),
+    empathyAttempts: session.empathyAttempts.map((attempt) => ({
+      id: attempt.id,
+      sourceUserId: attempt.sourceUserId,
+      sourceUser: userName(attempt.sourceUserId),
+      status: attempt.status,
+      sharedAt: attempt.sharedAt,
+      revealedAt: attempt.revealedAt,
+      validations: attempt.validations.map((validation) => ({
+        userId: validation.userId,
+        user: userName(validation.userId),
+        validated: validation.validated,
+        validatedAt: validation.validatedAt,
+      })),
+    })),
+    messageStages: session.messages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      stage: message.stage,
+      senderId: message.senderId,
+      sender: userName(message.senderId),
+      forUserId: message.forUserId,
+      forUser: userName(message.forUserId),
+      contentPrefix: String(message.content || "").slice(0, 180),
+    })),
+  }));
+  await prisma.$disconnect();
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+'''
+    result = run_command(
+        ["npx", "tsx", "-e", script, session_id],
+        cwd=REPO_ROOT / "backend",
+        timeout=120,
+        env=backend_command_env(),
+    )
+    if result.returncode != 0:
+        (run_dir / "db-stage-state-error.txt").write_text(result.stderr + "\n" + result.stdout, encoding="utf-8")
+        return {"status": "error", "error": result.stderr.strip() or result.stdout.strip()}
+    try:
+        state = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        (run_dir / "db-stage-state-error.txt").write_text(result.stdout, encoding="utf-8")
+        return {"status": "error", "error": "invalid_json", "raw": result.stdout}
+    (run_dir / "db-stage-state.json").write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return state
 
 
 CONTROL_TAG_RE = re.compile(
@@ -1758,6 +1878,85 @@ def check_stage_limit_reached(run_data: dict[str, Any], scenario: str, max_stage
         owner="eval_harness",
         dimension="actor_orchestration",
         details="Every scenario side must reach the requested stage limit, a completed state, or a no-action partner wait at the requested stop stage.",
+        evidence=evidence,
+    )
+
+
+def check_db_stage_state_matches_stop_gate(run_data: dict[str, Any], scenario: str, max_stage: int) -> dict[str, Any]:
+    evidence: list[str] = []
+    state = run_data.get("db_stage_state")
+    if not isinstance(state, dict) or state.get("status") == "error":
+        error = state.get("error") if isinstance(state, dict) else "missing db_stage_state"
+        evidence.append(f"db stage state unavailable: {error}")
+        return invariant_result(
+            "db_stage_state_matches_stop_gate",
+            False,
+            owner="eval_harness",
+            dimension="actor_orchestration",
+            details="Gold-loop gate evaluation must inspect DB StageProgress, Message.stage, and empathy lifecycle state instead of trusting actor transcript/status text alone.",
+            evidence=evidence,
+        )
+
+    users = {str(user.get("name", "")).lower(): str(user.get("id", "")) for user in state.get("users", []) if isinstance(user, dict)}
+    progress = state.get("stageProgress") if isinstance(state.get("stageProgress"), list) else []
+    messages = state.get("messageStages") if isinstance(state.get("messageStages"), list) else []
+    empathy_attempts = state.get("empathyAttempts") if isinstance(state.get("empathyAttempts"), list) else []
+    sides = scenario_sides(scenario)
+    side_ids = {side: users.get(side) for side in sides}
+    start = run_data.get("start") if isinstance(run_data.get("start"), dict) else {}
+    prior_stages = range(0, max_stage)
+    if str(start.get("mode") or "") == "target_stage":
+        prior_stages = range(0, 0)
+    for side, user_id in side_ids.items():
+        if not user_id:
+            evidence.append(f"{side}: missing DB user")
+            continue
+        for stage in prior_stages:
+            row = next((item for item in progress if item.get("userId") == user_id and item.get("stage") == stage), None)
+            if not row:
+                evidence.append(f"{side}: missing StageProgress stage {stage}")
+            elif row.get("status") != "COMPLETED":
+                evidence.append(f"{side}: StageProgress stage {stage} is {row.get('status')!r}, expected COMPLETED")
+        row = next((item for item in progress if item.get("userId") == user_id and item.get("stage") == max_stage), None)
+        if not row:
+            evidence.append(f"{side}: missing StageProgress stop stage {max_stage}")
+            continue
+        status = row.get("status")
+        gates = row.get("gates") if isinstance(row.get("gates"), dict) else {}
+        if max_stage == 1:
+            if status != "COMPLETED" or gates.get("feelHeardConfirmed") is not True:
+                evidence.append(f"{side}: Stage 1 DB gate incomplete: status={status!r} gates={gates!r}")
+        elif max_stage == 2:
+            attempts = [attempt for attempt in empathy_attempts if attempt.get("sourceUserId") == user_id]
+            if not attempts:
+                evidence.append(f"{side}: missing EmpathyAttempt for Stage 2")
+            else:
+                attempt = attempts[-1]
+                if attempt.get("status") not in {"READY", "REVEALED", "VALIDATED"}:
+                    evidence.append(f"{side}: EmpathyAttempt status {attempt.get('status')!r} is not a completed stop-gate state")
+            if status == "COMPLETED":
+                if gates.get("empathyValidated") is not True:
+                    evidence.append(f"{side}: Stage 2 marked COMPLETED without empathyValidated gate")
+            elif status != "GATE_PENDING":
+                evidence.append(f"{side}: Stage 2 DB status {status!r} is not GATE_PENDING or COMPLETED at stop gate")
+        elif status not in {"GATE_PENDING", "COMPLETED"}:
+            evidence.append(f"{side}: Stage {max_stage} DB status {status!r} is not GATE_PENDING or COMPLETED")
+
+    user_message_stages = [
+        int(message.get("stage"))
+        for message in messages
+        if message.get("role") in {"USER", "AI", "EMPATHY_STATEMENT", "SHARED_CONTEXT", "VALIDATION_FEEDBACK"}
+        and isinstance(message.get("stage"), int)
+    ]
+    if user_message_stages and max(user_message_stages) < max_stage:
+        evidence.append(f"highest Message.stage is {max(user_message_stages)}, below stop_after_stage {max_stage}")
+
+    return invariant_result(
+        "db_stage_state_matches_stop_gate",
+        not evidence,
+        owner="eval_harness",
+        dimension="actor_orchestration",
+        details="Gold-loop gate evaluation must inspect DB StageProgress, Message.stage, and empathy lifecycle state instead of trusting actor transcript/status text alone.",
         evidence=evidence,
     )
 
@@ -2069,6 +2268,7 @@ def run_invariant_checks(run_dir: Path, run_data: dict[str, Any], scenario: str,
     checks.append(check_no_internal_reconciler_analysis(transcripts))
     checks.append(check_partner_private_leakage(transcripts))
     checks.append(check_stage_limit_reached(run_data, scenario, max_stage))
+    checks.append(check_db_stage_state_matches_stop_gate(run_data, scenario, max_stage))
     checks.append(check_actor_operated_correct_side(run_data, scenario))
     checks.append(check_session_started_with_profile_initiator(run_data, scenario))
     checks.append(check_felt_heard_gate_after_witnessing(transcripts))
@@ -3449,6 +3649,8 @@ def run_iteration(
         run_data["transcripts"] = write_mock_transcripts(run_dir, args.scenario, args.stop_after_stage)
     else:
         run_data["transcripts"] = extract_transcripts(session_id, run_dir, args.scenario, args.stop_after_stage)
+    if not args.mock_actor:
+        run_data["db_stage_state"] = capture_db_stage_state(session_id, run_dir)
     write_run_json(run_dir, run_data)
 
     run_data["invariants"] = run_invariant_checks(run_dir, run_data, args.scenario, args.stop_after_stage)

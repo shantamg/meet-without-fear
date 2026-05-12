@@ -285,7 +285,9 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasLiveProposedEmpathyStatement,
     empathyAlreadyConsented: empathyDraftData?.alreadyConsented ?? false,
     hasSharedEmpathyLocal,
-    isRefiningEmpathy: empathyStatusData?.hasNewSharedContext ?? false,
+    isRefiningEmpathy:
+      empathyStatusData?.hasNewSharedContext === true ||
+      empathyStatusData?.myAttempt?.status === 'REFINING',
     messageCountSinceSharedContext: empathyStatusData?.messageCountSinceSharedContext ?? 0,
     myAttemptContent: !!empathyStatusData?.myAttempt?.content,
     hasShareSuggestion: shareOfferData?.hasSuggestion ?? false,

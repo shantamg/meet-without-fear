@@ -1522,7 +1522,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       empathyDraft: empathyDraftContent || undefined,
       isRefiningEmpathy: isRefiningEmpathy || undefined,
       stage4InventoryContext,
-      topicFrame: session.topicFrame || undefined,
+      topicFrame: session.topicFrameConfirmedAt ? session.topicFrame : undefined,
     }, { isInvitationPhase });
 
     // Prompt already includes semantic tag format instructions via buildResponseProtocol()

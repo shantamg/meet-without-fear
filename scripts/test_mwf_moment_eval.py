@@ -145,7 +145,7 @@ class TestYamlParsing(unittest.TestCase):
                 self.assertIsInstance(entry.get("target_behaviors"), list)
                 self.assertIsInstance(entry.get("required_invariants"), list)
 
-    def test_gold_loop_actor_prompt_allows_realistic_typed_feel_heard_confirmation(self) -> None:
+    def test_gold_loop_actor_prompt_requires_clicking_feel_heard_cta(self) -> None:
         actor = gold_loop.Actor("Eve", "http://localhost:8082/session/test?e2e-user-id=eve")
         partner = gold_loop.Actor("Adam", "http://localhost:8082/session/test?e2e-user-id=adam")
 
@@ -161,8 +161,8 @@ class TestYamlParsing(unittest.TestCase):
 
         for text in (prompt, resume_prompt):
             self.assertIn('If a visible Stage 1 "I feel heard" / feel-heard confirmation CTA is present', text)
-            self.assertIn("either click it or give a clear in-character typed confirmation", text)
-            self.assertIn('"I feel heard" / "Ready"', text)
+            self.assertIn("click the CTA", text)
+            self.assertIn("Do not type a chat message to satisfy a product gate", text)
             self.assertIn("Do not report Stage 2 progress unless the UI actually moves past the Stage 1 gate", text)
 
     def test_gold_loop_uses_profile_initiator_separate_from_registry_order(self) -> None:
