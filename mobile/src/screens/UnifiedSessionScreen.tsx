@@ -7,7 +7,7 @@
  */
 
 import { ReactNode, useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState, Keyboard, Platform, Share, LayoutChangeEvent } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, ScrollView, AppState, Keyboard, Platform, Share, LayoutChangeEvent } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,11 +15,9 @@ import { useRouter } from 'expo-router';
 import {
   Stage,
   MessageRole,
-  StrategyPhase,
   SessionStatus,
   MemorySuggestion,
   ConfirmAgreementResponse,
-  MAX_AGREEMENTS,
   EmpathyStatus,
   Stage4ClosureKind,
   Stage4ClosureReason,
@@ -39,9 +37,7 @@ import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
 import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
 import { ShareTopicPanel } from '../components/ShareTopicPanel';
 // NeedsSection removed - needs review/reveal now lives inside NeedsDrawer
-import { StrategyPool } from '../components/StrategyPool';
-import { StrategyRanking } from '../components/StrategyRanking';
-import { OverlapReveal } from '../components/OverlapReveal';
+// StrategyPool/StrategyRanking/OverlapReveal removed - replaced by Stage4RedesignPanel
 import { WaitingRoom } from '../components/WaitingRoom';
 import { AgreementCard } from '../components/AgreementCard';
 import { SessionCompletionScreen } from '../components/SessionCompletionScreen';
@@ -594,7 +590,6 @@ export function UnifiedSessionScreen({
     strategyData,
     strategyPhase,
     strategies,
-    revealData,
     overlappingStrategies,
     agreements,
     isGenerating,
@@ -1376,6 +1371,7 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   const [showNeedsDrawer, setShowNeedsDrawer] = useState(false);
   const [needsDrawerMode, setNeedsDrawerMode] = useState<NeedsDrawerMode>('needs');
+  const [showStage4Drawer, setShowStage4Drawer] = useState(false);
   const myNeedsSharedForComparison =
     (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true;
   const { data: needsComparisonData } = useNeedsComparison(
@@ -2321,90 +2317,8 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // Render Inline Card
   // -------------------------------------------------------------------------
-  const renderStrategyPreviewCard = useCallback((
-    card: InlineChatCard,
-    placement: 'inline' | 'bottom' = 'inline',
-  ) => {
-    const stratCount = card.props.strategyCount as number;
-    if (stratCount === 0) return null;
-
-    const canMarkReadyToRank = card.props.canMarkReadyToRank === true;
-    const canRank = card.props.canRank === true;
-    const showPoolActions = stratCount > 0 && canRank;
-    const canReviewIdeas = stratCount > 0;
-    const countLabel = canRank
-      ? `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} ready to review`
-      : `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} saved from your side`;
-
-    if (placement === 'bottom') {
-      return (
-        <View style={styles.strategyPreviewCompactCard} key={card.id} testID="strategy-preview-bottom-card">
-          <TouchableOpacity
-            style={styles.strategyPreviewCompactBody}
-            onPress={() => {
-              if (canReviewIdeas) {
-                openOverlay('strategy-pool');
-              }
-            }}
-            activeOpacity={canReviewIdeas ? 0.8 : 1}
-            disabled={!canReviewIdeas}
-          >
-            <View style={styles.strategyPreviewCompactText}>
-              <Text style={styles.needsSummaryCompactTitle}>Ideas So Far</Text>
-              <Text style={styles.needsSummaryCount}>{countLabel}</Text>
-            </View>
-            {canReviewIdeas && (
-              <Text style={styles.needsSummaryActionCompact}>Review</Text>
-            )}
-          </TouchableOpacity>
-          {showPoolActions && (
-            <View style={styles.strategyPreviewCompactActions}>
-              <TouchableOpacity
-                style={styles.strategyPreviewCompactPrimary}
-                onPress={() => openOverlay('strategy-ranking')}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.strategyPreviewCompactPrimaryText}>Ready to Rank</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.inlineCard} key={card.id}>
-        <Text style={styles.cardTitle}>Ideas So Far</Text>
-        <Text style={styles.cardSubtitle}>{countLabel}</Text>
-        <View style={styles.strategyPreviewButtons}>
-          {showPoolActions && (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => openOverlay('strategy-pool')}
-            >
-              <Text style={styles.secondaryButtonText}>View All</Text>
-            </TouchableOpacity>
-          )}
-          {canMarkReadyToRank && (
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => openOverlay('strategy-pool')}
-            >
-              <Text style={styles.primaryButtonText}>Review Ideas</Text>
-            </TouchableOpacity>
-          )}
-          {showPoolActions && (
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => openOverlay('strategy-ranking')}
-            >
-              <Text style={styles.primaryButtonText}>Ready to Rank</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    );
-  }, [handleMarkReadyToRank, openOverlay, styles]);
+  // Legacy renderStrategyPreviewCard removed - Stage4RedesignPanel is the
+  // canonical Stage 4 surface and renders its own inline cards.
 
   const renderInlineCard = useCallback(
     (card: InlineChatCard) => {
@@ -2427,27 +2341,9 @@ export function UnifiedSessionScreen({
         // These are now shown in the NeedsDrawer bottom sheet, opened via
         // the above-input buttons (needs-review, needs-reveal-validation).
 
-        case 'strategy-pool-preview': {
-          return renderStrategyPreviewCard(card);
-        }
-
-        case 'overlap-preview':
-          return (
-            <View style={styles.inlineCard} key={card.id}>
-              <Text style={styles.cardTitle}>Possible Shared Step</Text>
-              <Text style={styles.overlapDescription}>
-                {(card.props.topOverlap as { description: string })?.description}
-              </Text>
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={() => openOverlay('overlap-reveal')}
-              >
-                <Text style={styles.primaryButtonText}>
-                  See All {card.props.overlappingCount as number} Matches
-                </Text>
-              </TouchableOpacity>
-            </View>
-          );
+        // 'strategy-pool-preview' and 'overlap-preview' cases removed -
+        // those entry points opened the legacy StrategyPool/OverlapReveal
+        // overlays. Stage4RedesignPanel renders its own coverage/overlap UI.
 
         case 'agreement-preview': {
           const totalAgreements = card.props.totalAgreements as number;
@@ -2526,13 +2422,7 @@ export function UnifiedSessionScreen({
       sendMessage,
       onStageComplete,
       onNavigateBack,
-      renderStrategyPreviewCard,
     ]
-  );
-
-  const strategyPreviewCard = useMemo(
-    () => inlineCards.find((card) => card.type === 'strategy-pool-preview'),
-    [inlineCards]
   );
 
   const transcriptInlineCards = useMemo(
@@ -2688,40 +2578,8 @@ export function UnifiedSessionScreen({
     }];
   }, [currentStage, needsData?.synthesizedAt, needs, myProgress?.gatesSatisfied, allNeedsConfirmed, aboveInputPanel]);
 
-  const stage4RedesignCards = useMemo((): ChatCustomCardItem[] => {
-    if (!hasRedesignedStage4 || !stage4State) return [];
-
-    const latestTimestamp = displayMessages[0]?.timestamp;
-    const timestamp = latestTimestamp
-      ? new Date(new Date(latestTimestamp).getTime() + 1).toISOString()
-      : session?.createdAt || new Date(0).toISOString();
-
-    return [{
-      type: 'custom-card',
-      id: `stage4-redesign-${stage4State.phase}`,
-      timestamp,
-      render: () => (
-        <Stage4RedesignPanel
-          state={stage4State}
-          partnerName={partnerName}
-          isSelecting={submitStage4Selection.isPending}
-          isClosing={closeStage4.isPending}
-          onSelectProposal={handleStage4Selection}
-          onCloseStage4={handleCloseRedesignedStage4}
-        />
-      ),
-    }];
-  }, [
-    hasRedesignedStage4,
-    stage4State,
-    displayMessages,
-    session?.createdAt,
-    partnerName,
-    submitStage4Selection.isPending,
-    closeStage4.isPending,
-    handleStage4Selection,
-    handleCloseRedesignedStage4,
-  ]);
+  // Stage4RedesignPanel is now mounted inside a slide-up Modal (Stage 4 drawer)
+  // rather than as an inline chat card. The CTA above the chat input opens it.
 
   const sourceInnerThoughts = session?.sourceInnerThoughts ?? null;
   const sourceInnerThoughtsCards = useMemo((): ChatCustomCardItem[] => {
@@ -2775,8 +2633,8 @@ export function UnifiedSessionScreen({
   ]);
 
   const chatCustomCards = useMemo(
-    () => [...sourceInnerThoughtsCards, ...inviteeOpeningCards, ...needsReviewCards, ...stage4RedesignCards],
-    [sourceInnerThoughtsCards, inviteeOpeningCards, needsReviewCards, stage4RedesignCards]
+    () => [...sourceInnerThoughtsCards, ...inviteeOpeningCards, ...needsReviewCards],
+    [sourceInnerThoughtsCards, inviteeOpeningCards, needsReviewCards]
   );
 
   // -------------------------------------------------------------------------
@@ -2859,66 +2717,8 @@ export function UnifiedSessionScreen({
           />
         );
 
-      case 'strategy-pool':
-        if (strategies.length === 0) return null;
-        return (
-          <View style={styles.overlayContainer}>
-            <StrategyPool
-              strategies={strategies.map((s) => ({
-                id: s.id,
-                description: s.description,
-                duration: s.duration || undefined,
-              }))}
-              onRequestMore={handleRequestMoreStrategies}
-              onReady={() => {
-                handleMarkReadyToRank();
-                closeOverlay();
-              }}
-              readyLabel={strategyData?.canRank === true ? 'These look good - rank my choices' : 'Done adding ideas'}
-              onClose={closeOverlay}
-              isGenerating={isGenerating}
-            />
-          </View>
-        );
-
-      case 'strategy-ranking':
-        if (strategyData?.canRank !== true) return null;
-        return (
-          <View style={styles.overlayContainer}>
-            <StrategyRanking
-              strategies={strategies.map((s) => ({
-                id: s.id,
-                description: s.description,
-                duration: s.duration || undefined,
-              }))}
-              onSubmit={(rankedIds) => {
-                handleSubmitRankings(rankedIds);
-                closeOverlay();
-              }}
-            />
-          </View>
-        );
-
-      case 'overlap-reveal':
-        return (
-          <View style={styles.overlayContainer}>
-            <OverlapReveal
-              overlapping={overlappingStrategies.map((s) => ({
-                id: s.id,
-                description: s.description,
-                duration: s.duration || undefined,
-              }))}
-              uniqueToMe={[]}
-              uniqueToPartner={[]}
-              onCreateAgreement={handleCreateAgreementFromOverlap}
-              disableCreate={agreements.length >= MAX_AGREEMENTS}
-              existingAgreementStrategyIds={agreements.map((a) => a.strategyId).filter((id): id is string => typeof id === 'string')}
-            />
-            <TouchableOpacity style={styles.closeOverlay} onPress={closeOverlay}>
-              <Text style={styles.closeOverlayText}>Continue</Text>
-            </TouchableOpacity>
-          </View>
-        );
+      // 'strategy-pool', 'strategy-ranking', 'overlap-reveal' overlays removed
+      // (Stage4RedesignPanel is the canonical Stage 4 surface now).
 
       case 'agreement-confirmation': {
         const unconfirmedAgreements = agreements.filter(a => !a.agreedByMe);
@@ -2931,7 +2731,7 @@ export function UnifiedSessionScreen({
           if (!allConfirmedByPartner) {
             // Show brief waiting message then auto-close
             return (
-              <View style={styles.overlayContainer}>
+              <View style={[styles.overlayContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
                 <Text style={styles.waitingMessageText}>
                   {"You've confirmed your part. The agreement is now waiting for " +
                    (partnerName || 'your partner') +
@@ -2946,7 +2746,7 @@ export function UnifiedSessionScreen({
         if (!currentAgreement) return null;
 
         return (
-          <View style={styles.overlayContainer}>
+          <View style={[styles.overlayContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
             {agreements.length > 1 && (
               <Text style={styles.agreementCounter}>
                 {confirmedCount + 1} of {agreements.length}
@@ -3151,10 +2951,35 @@ export function UnifiedSessionScreen({
         );
 
       default:
+        // Fallback: when no other panel is queued and we're in the redesigned
+        // Stage 4, surface the proposal-review entry point above the input so
+        // the user always has a way to open the Stage 4 drawer.
+        if (hasRedesignedStage4 && stage4State) {
+          const proposalCount =
+            stage4State.inventory.sharedProposals.length +
+            stage4State.inventory.individualCommitments.length;
+          if (proposalCount === 0) return undefined;
+          return (
+            <GuidedActionPanel
+              tone="review"
+              eyebrow="What comes next"
+              title={proposalCount === 1 ? '1 proposal on the table' : `${proposalCount} proposals on the table`}
+              subtitle="Review the inventory and mark which proposals you're willing to try."
+              primaryAction={{
+                label: 'Review',
+                onPress: () => setShowStage4Drawer(true),
+                testID: 'stage4-review-button',
+              }}
+              testID="stage4-review-panel"
+            />
+          );
+        }
         return undefined;
     }
   }, [
     aboveInputPanel,
+    hasRedesignedStage4,
+    stage4State,
     sessionId,
     invitation?.isInviter,
     isInviter,
@@ -3244,14 +3069,6 @@ export function UnifiedSessionScreen({
       );
     }
 
-    if (strategyPreviewCard) {
-      return (
-        <View style={styles.strategyPreviewBelowInputContainer}>
-          {renderStrategyPreviewCard(strategyPreviewCard, 'bottom')}
-        </View>
-      );
-    }
-
     return undefined;
   }, [
     aboveInputPanel,
@@ -3260,8 +3077,6 @@ export function UnifiedSessionScreen({
     needs,
     myProgress?.gatesSatisfied,
     allNeedsConfirmed,
-    strategyPreviewCard,
-    renderStrategyPreviewCard,
   ]);
 
   // -------------------------------------------------------------------------
@@ -3502,91 +3317,9 @@ export function UnifiedSessionScreen({
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Strategy Ranking Phase - Full Screen Overlay
-  // -------------------------------------------------------------------------
-  if (
-    currentStage === Stage.STRATEGIC_REPAIR &&
-    !hasRedesignedStage4 &&
-    strategyPhase === StrategyPhase.RANKING &&
-    strategyData?.canRank === true
-  ) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <SessionChatHeader
-          partnerName={partnerName}
-          partnerOnline={partnerOnline}
-          connectionStatus={connectionStatus}
-          briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-          onBackPress={onNavigateBack}
-          onPress={() => setShowPartnerInfo(true)}
-          stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
-          testID="session-chat-header"
-        />
-        {partnerInfoDrawer}
-        <StrategyRanking
-          strategies={strategies.map((s) => ({
-            id: s.id,
-            description: s.description,
-            duration: s.duration || undefined,
-          }))}
-          onSubmit={handleSubmitRankings}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Strategy Revealing Phase - Full Screen Overlay
-  // -------------------------------------------------------------------------
-  if (
-    currentStage === Stage.STRATEGIC_REPAIR &&
-    !hasRedesignedStage4 &&
-    strategyPhase === StrategyPhase.REVEALING
-  ) {
-    const waitingForRankingReveal = !revealData ||
-      (revealData as { waitingForPartner?: boolean; overlap?: unknown[] | null }).waitingForPartner === true ||
-      (revealData as { overlap?: unknown[] | null }).overlap === null;
-
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <SessionChatHeader
-          partnerName={partnerName}
-          partnerOnline={partnerOnline}
-          connectionStatus={connectionStatus}
-          briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-          onBackPress={onNavigateBack}
-          onPress={() => setShowPartnerInfo(true)}
-          stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
-          testID="session-chat-header"
-        />
-        {partnerInfoDrawer}
-        {waitingForRankingReveal ? (
-          <WaitingRoom
-            message="Waiting for your partner to submit their ranking"
-            partnerName={partnerName || undefined}
-          />
-        ) : overlappingStrategies.length > 0 ? (
-          <OverlapReveal
-            overlapping={overlappingStrategies.map((s) => ({
-              id: s.id,
-              description: s.description,
-              duration: s.duration || undefined,
-            }))}
-            uniqueToMe={[]}
-            uniqueToPartner={[]}
-            onCreateAgreement={handleCreateAgreementFromOverlap}
-            existingAgreementStrategyIds={agreements.map((a) => a.strategyId).filter((id): id is string => typeof id === 'string')}
-          />
-        ) : (
-          <WaitingRoom
-            message="Your rankings didn't overlap. Return to chat to discuss next steps."
-            partnerName={partnerName || undefined}
-          />
-        )}
-      </SafeAreaView>
-    );
-  }
+  // Legacy "Strategy Ranking Phase" and "Strategy Revealing Phase" full-screen
+  // overlays removed. Stage4RedesignPanel is the canonical Stage 4 surface and
+  // is rendered above when hasRedesignedStage4 is true.
 
   // -------------------------------------------------------------------------
   // Main Chat Interface
@@ -3694,9 +3427,13 @@ export function UnifiedSessionScreen({
               ? compactEmptyStateElement
               : undefined
           }
-          renderAboveInput={aboveInputPanel ? renderAboveInput : undefined}
+          renderAboveInput={
+            aboveInputPanel || (hasRedesignedStage4 && !!stage4State)
+              ? renderAboveInput
+              : undefined
+          }
           renderBelowInput={
-            aboveInputPanel === 'needs-review' || aboveInputPanel === 'needs-share' || strategyPreviewCard
+            aboveInputPanel === 'needs-review' || aboveInputPanel === 'needs-share'
               ? renderBelowInput
               : undefined
           }
@@ -3962,6 +3699,44 @@ export function UnifiedSessionScreen({
         partnerName={partnerName}
         testID="needs-drawer"
       />
+
+      {/* Stage 4 redesign drawer — bottom-sheet wrapper around Stage4RedesignPanel. */}
+      <Modal
+        visible={showStage4Drawer && hasRedesignedStage4 && !!stage4State}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowStage4Drawer(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: styles.container.backgroundColor }} edges={['top', 'bottom']}>
+          <View style={styles.stage4DrawerHeader}>
+            <Text style={styles.stage4DrawerTitle}>What comes next</Text>
+            <TouchableOpacity
+              style={styles.stage4DrawerCloseButton}
+              onPress={() => setShowStage4Drawer(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Close Stage 4 review"
+              testID="stage4-drawer-close"
+            >
+              <Text style={styles.stage4DrawerCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={styles.stage4DrawerScroll}>
+            {stage4State && (
+              <Stage4RedesignPanel
+                state={stage4State}
+                partnerName={partnerName}
+                isSelecting={submitStage4Selection.isPending}
+                isClosing={closeStage4.isPending}
+                onSelectProposal={handleStage4Selection}
+                onCloseStage4={(kind, reason) => {
+                  handleCloseRedesignedStage4(kind, reason);
+                  setShowStage4Drawer(false);
+                }}
+              />
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
       {/* Invitation Ready Modal — replaces the inline 'invitation' panel.
           Opens automatically when the topic is confirmed and the user has not
@@ -4837,7 +4612,42 @@ const useStyles = () => {
       right: 0,
       bottom: 0,
       backgroundColor: palette.bg,
+      // Stretch child to full width (not 'center' — that collapses it to intrinsic width).
+      alignItems: 'stretch',
+      // Sit above sibling chrome like ChatInterface's bottom EmotionSlider, which is
+      // a normal-flow sibling and would otherwise bleed through on iOS at higher elevations.
+      zIndex: 100,
+      elevation: 100,
+    },
+    stage4DrawerHeader: {
+      flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: palette.border,
+    },
+    stage4DrawerTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: palette.text,
+    },
+    stage4DrawerCloseButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: palette.bgPane,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stage4DrawerCloseText: {
+      color: palette.textMuted,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    stage4DrawerScroll: {
+      paddingVertical: 8,
     },
     closeOverlay: {
       position: 'absolute',

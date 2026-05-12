@@ -2,7 +2,7 @@
  * SessionCompletionScreen Component
  *
  * Shown as a full-screen early-return overlay when session.status === RESOLVED.
- * Follows the same pattern as SessionEntryMoodCheck and StrategyRanking overlays.
+ * Follows the same pattern as SessionEntryMoodCheck.
  *
  * Design philosophy: "warm gravity" — acknowledge the work, center the agreement,
  * don't celebrate or inflate. The screen should feel like the last page of a chapter.

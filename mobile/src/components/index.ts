@@ -59,10 +59,6 @@ export { NeedCard } from './NeedCard';
 export { NeedsSection } from './NeedsSection';
 
 // Stage 4 components - Strategic Repair
-export { StrategyCard } from './StrategyCard';
-export { StrategyPool } from './StrategyPool';
-export { StrategyRanking } from './StrategyRanking';
-export { OverlapReveal } from './OverlapReveal';
 export { AgreementCard } from './AgreementCard';
 export { Stage4RedesignPanel } from './Stage4RedesignPanel';
 export { TendingPanel } from './TendingPanel';
