@@ -587,12 +587,7 @@ export function UnifiedSessionScreen({
     needsRevealValidationItems,
     needsRevealValidationData,
     needsRevealValidatedByBoth,
-    strategyData,
-    strategyPhase,
-    strategies,
-    overlappingStrategies,
     agreements,
-    isGenerating,
     isSavingEmpathyDraft,
     isSharingEmpathy,
     isResubmittingEmpathy,
@@ -630,11 +625,7 @@ export function UnifiedSessionScreen({
     handleConsentToShareNeeds,
     handleValidateNeedsReveal,
     handleNeedsNotValidYet,
-    handleRequestMoreStrategies,
-    handleMarkReadyToRank,
-    handleSubmitRankings,
     handleConfirmAgreement,
-    handleCreateAgreementFromOverlap,
     handleResolveSession,
     handleRespondToShareOffer,
 
@@ -1765,16 +1756,12 @@ export function UnifiedSessionScreen({
     needsRevealValidatedByMe: (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsValidated === true,
     needsRevealValidatedByBoth: needsRevealValidatedByBoth,
     hasValidatedNeedsRevealLocal: completedActions.has('validated-needs'),
-    strategyPhase,
-    strategyReadiness: {
-      myReadyToRank: strategyData?.myReadyToRank === true ||
-        (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.readyToRank === true,
-      partnerReadyToRank: strategyData?.partnerReadyToRank === true ||
-        ((partnerProgress as { gatesSatisfied?: Record<string, unknown> } | undefined)?.gatesSatisfied)?.readyToRank === true,
-      canMarkReadyToRank: strategyData?.canMarkReadyToRank === true,
-      canRank: strategyData?.canRank === true,
-    },
-    overlappingStrategiesCount: overlappingStrategies?.length ?? 0,
+    // Legacy Stage 4 inputs: the strategy-pool-preview / overlap-preview cards
+    // are no longer emitted in renderInlineCard, but the hook still types them
+    // as required. Pass benign defaults until the hook's prop shape is cleaned
+    // up to drop them.
+    strategyPhase: 'COLLECTING',
+    overlappingStrategiesCount: 0,
     agreements: agreements?.map(a => ({
       agreedByMe: a.agreedByMe,
       agreedByPartner: a.agreedByPartner,
@@ -2417,7 +2404,6 @@ export function UnifiedSessionScreen({
       handleValidatePartnerEmpathy,
       handleConfirmAllNeeds,
       handleConsentToShareNeeds,
-      handleMarkReadyToRank,
       handleRespondToShareOffer,
       sendMessage,
       onStageComplete,
@@ -2425,10 +2411,9 @@ export function UnifiedSessionScreen({
     ]
   );
 
-  const transcriptInlineCards = useMemo(
-    () => inlineCards.filter((card) => card.type !== 'strategy-pool-preview'),
-    [inlineCards]
-  );
+  // 'strategy-pool-preview' is no longer emitted by useChatUIState now that the
+  // legacy StrategyPool path is gone. Pass inlineCards through directly.
+  const transcriptInlineCards = inlineCards;
 
   // -------------------------------------------------------------------------
   // Invitation URL for sharing (must be before early returns)
@@ -2789,19 +2774,12 @@ export function UnifiedSessionScreen({
   }, [
     activeOverlay,
     barometerValue,
-    strategies,
-    overlappingStrategies,
     agreements,
     sessionId,
-    isGenerating,
     styles,
     partnerName,
     handleBarometerChange,
-    handleRequestMoreStrategies,
-    handleMarkReadyToRank,
-    handleSubmitRankings,
     handleConfirmAgreement,
-    handleCreateAgreementFromOverlap,
     handleResolveSession,
     handleSignCompact,
     closeOverlay,
