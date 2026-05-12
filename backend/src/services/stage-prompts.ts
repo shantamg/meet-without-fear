@@ -1825,13 +1825,18 @@ The acknowledgment should feel like a natural transition, not a restart. Look at
  * Returns PromptBlocks with static (cacheable) and dynamic (per-turn) content.
  */
 export function buildStagePrompt(stage: number, context: PromptContext, options?: BuildStagePromptOptions): PromptBlocks {
+  const promptContext =
+    context.topicFrame === undefined && context.contextBundle.topicFrame?.text
+      ? { ...context, topicFrame: context.contextBundle.topicFrame.text }
+      : context;
+
   // Build post-share section if user just shared context with partner
-  const postShareSection = buildPostShareContextSection(context);
+  const postShareSection = buildPostShareContextSection(promptContext);
 
   // Stage transition: prepend a short injection to the dynamic block
   // (instead of replacing the entire prompt, which would lose modes/rules/readiness signals)
   const transitionInjection = options?.isStageTransition
-    ? buildTransitionInjection(stage, options.previousStage, context)
+    ? buildTransitionInjection(stage, options.previousStage, promptContext)
     : '';
 
   // Helper to combine dynamic parts with transition injection and post-share context
@@ -1846,8 +1851,8 @@ export function buildStagePrompt(stage: number, context: PromptContext, options?
     // Invited-session nudge — operational hint surfaced when an INVITED
     // Slack session is nearing its TTL. Goes at the END of the dynamic
     // block so it reads as a recent operational signal, not as framing.
-    if (context.invitedSessionNudge) {
-      dynamicBlock = `${dynamicBlock}\n\nOPERATIONAL NUDGE:\n${context.invitedSessionNudge}`;
+    if (promptContext.invitedSessionNudge) {
+      dynamicBlock = `${dynamicBlock}\n\nOPERATIONAL NUDGE:\n${promptContext.invitedSessionNudge}`;
     }
     // Append Slack formatting rules to the static block when the response will
     // render in a Slack DM. Keeping this in the static block preserves prompt
@@ -1861,35 +1866,35 @@ export function buildStagePrompt(stage: number, context: PromptContext, options?
 
   // Special case: Stage 0 invitation phase (before partner joins)
   if (stage === 0 && options?.isInvitationPhase) {
-    return finalize(buildInvitationPrompt(context));
+    return finalize(buildInvitationPrompt(promptContext));
   }
 
   // Special case: Onboarding mode (compact not yet signed)
   if (stage === 0 && options?.isOnboarding) {
-    return finalize(buildOnboardingPrompt(context));
+    return finalize(buildOnboardingPrompt(promptContext));
   }
 
   let blocks: PromptBlocks;
   switch (stage) {
     case 0:
     case 1:
-      blocks = buildStage1Prompt(context);
+      blocks = buildStage1Prompt(promptContext);
       break;
     case 2:
-      blocks = buildStage2Prompt(context);
+      blocks = buildStage2Prompt(promptContext);
       break;
     case 3:
-      blocks = buildStage3Prompt(context);
+      blocks = buildStage3Prompt(promptContext);
       break;
     case 4:
-      blocks = buildStage4Prompt(context);
+      blocks = buildStage4Prompt(promptContext);
       break;
     case 21: // Stage 2B: Informed Empathy
-      blocks = buildStage2BPrompt(context);
+      blocks = buildStage2BPrompt(promptContext);
       break;
     default:
       logger.warn(`[Stage Prompts] Unknown stage ${stage}, using Stage 1 prompt`);
-      blocks = buildStage1Prompt(context);
+      blocks = buildStage1Prompt(promptContext);
       break;
   }
 

@@ -346,6 +346,7 @@ function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
     sessionStatus,
     empathyAlreadyConsented,
     empathyDraft,
+    isRefiningEmpathy,
   } = inputs;
 
   if (sessionStatus === SessionStatus.RESOLVED) return false;
@@ -361,6 +362,12 @@ function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
   // their own empathy attempt. Hold it until their own Stage 2 share is done
   // so the suggestion does not interrupt perspective-taking.
   const ownEmpathySubmitted = empathyAlreadyConsented || empathyDraft?.alreadyConsented === true;
+
+  // Optional context sharing must not block the required Stage 2 refinement
+  // review/resubmit path after the partner shares new context.
+  if (isRefiningEmpathy) {
+    return false;
+  }
 
   return hasShareSuggestion && ownEmpathySubmitted && !hasRespondedToShareOfferLocal;
 }

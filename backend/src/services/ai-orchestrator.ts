@@ -132,6 +132,8 @@ export interface OrchestratorResult {
 // User Preferences
 // ============================================================================
 
+const MIN_STAGE1_TURNS_BEFORE_FEEL_HEARD_CHECK = 5;
+
 /**
  * Get user's memory preferences from database.
  * Returns defaults if not set.
@@ -655,6 +657,9 @@ export async function orchestrateResponse(
       response = parsed.response;
       offerFeelHeardCheck = parsed.offerFeelHeardCheck;
       offerReadyToShare = parsed.offerReadyToShare;
+      if (context.stage === 1 && context.turnCount < MIN_STAGE1_TURNS_BEFORE_FEEL_HEARD_CHECK) {
+        offerFeelHeardCheck = false;
+      }
 
       // Draft is used for empathy (Stage 2) or topic frame (Stage 0).
       if (context.stage === 2) {
