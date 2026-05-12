@@ -3,7 +3,7 @@ title: "Stage 2 API: Perspective Stretch"
 sidebar_position: 7
 description: Endpoints for building and exchanging empathy attempts.
 slug: /backend/api/stage-2
-updated: 2026-05-11
+updated: 2026-05-12
 status: living
 ---
 # Stage 2 API: Perspective Stretch
@@ -253,7 +253,11 @@ interface ValidateEmpathyResponse {
 }
 ```
 
+**Precondition**: Returns `409 VALIDATION_ERROR` if the partner's empathy attempt is not in `REVEALED` or `VALIDATED` status. Clients should confirm `empathy/status` before calling this endpoint.
+
 Validation: feedback max 1000 chars; one validation per recipient per attempt (idempotent overwrite allowed).
+
+**Side effect (validated=true, partner pending)**: When `validated: true` but the partner has not yet validated the caller's attempt, the API inserts a single AI chat message for the caller: *"You confirmed this feels right. We'll hold here while your partner reviews what you shared. Once they respond, we'll move you into the next step."* The message is deduplicated — only created if it does not already exist.
 
 For the "Not quite" path, mobile first collects rough notes with the `What feels off?`
 step, then the Feedback Coach refines those notes into a final message. The final send
