@@ -327,6 +327,61 @@ Respond with ONLY the message text, no additional formatting.`;
 }
 
 // ============================================================================
+// Helper: Generate Validation-Feedback Reflection
+// ============================================================================
+
+/**
+ * Generate a reflection AI message for the guesser after they receive validation feedback.
+ * Placed before the VALIDATION_FEEDBACK card to frame the situation and invite reflection.
+ *
+ * Falls back to hardcoded message on AI failure.
+ */
+export async function generateValidationFeedbackReflection(
+  sessionId: string,
+  guesserName: string,
+  subjectName: string,
+): Promise<string> {
+  const fallback = `${subjectName} shared some thoughts about what didn't feel fully captured in your empathy attempt. Take a moment to read their feedback — it can help you understand their experience more deeply before you revise.`;
+
+  try {
+    const turnId = `${sessionId}-val-feedback-reflection-${Date.now()}`;
+    const prompt = `${guesserName}'s partner ${subjectName} just provided feedback on ${guesserName}'s empathy attempt, indicating that it didn't fully capture their experience. The feedback will appear directly below your message in a labeled card.
+
+Generate a short message (1-3 sentences) that frames the situation for ${guesserName}. Explain that ${subjectName} has shared thoughts about what didn't feel fully captured, and invite ${guesserName} to read the feedback and reflect on it before revising their understanding.
+
+Tone: warm, encouraging, non-judgmental. This is a normal part of the process — getting feedback is how understanding deepens.
+Do NOT paraphrase or reveal the feedback content. Do NOT use the word "reconciler".
+
+Respond with ONLY the message text, no additional formatting.`;
+
+    const response = await getSonnetResponse({
+      systemPrompt: prompt,
+      messages: [{ role: 'user', content: 'Generate the validation feedback reflection message.' }],
+      maxTokens: 256,
+      sessionId,
+      turnId,
+      operation: 'reconciler-validation-feedback-reflection',
+    });
+
+    if (!response) {
+      logger.warn('generateValidationFeedbackReflection: Sonnet returned null, using fallback');
+      return fallback;
+    }
+
+    const trimmed = response.trim();
+    if (trimmed.length > 0) {
+      logger.debug('Generated validation feedback reflection message', { sessionId });
+      return trimmed;
+    }
+
+    return fallback;
+  } catch (error) {
+    logger.error('generateValidationFeedbackReflection failed', { error: (error as Error).message });
+    return fallback;
+  }
+}
+
+// ============================================================================
 // Share Suggestion Generation
 // ============================================================================
 

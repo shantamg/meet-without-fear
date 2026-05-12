@@ -49,6 +49,7 @@ export {
   generatePostShareContinuation,
   getFallbackContinuation,
   generateContextReceivedReflection,
+  generateValidationFeedbackReflection,
 } from './sharing';
 
 // State
