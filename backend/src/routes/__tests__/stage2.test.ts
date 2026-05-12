@@ -648,6 +648,11 @@ describe('Stage 2 API', () => {
         timestamp: new Date(),
       });
       (prisma.empathyValidation.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.user.findUnique as jest.Mock).mockImplementation(({ where }: any) => {
+        if (where.id === 'user-1') return Promise.resolve({ firstName: null, name: 'Validator' });
+        if (where.id === 'partner-1') return Promise.resolve({ firstName: null, name: 'Guesser' });
+        return Promise.resolve(null);
+      });
 
       await validateEmpathy(req, res);
 
@@ -674,6 +679,19 @@ describe('Stage 2 API', () => {
           }),
         })
       );
+      // AI framing message created before the feedback card
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            sessionId: 'session-123',
+            senderId: null,
+            forUserId: 'partner-1',
+            role: 'AI',
+            stage: 2,
+          }),
+        })
+      );
+      // VALIDATION_FEEDBACK card created with +100ms offset
       expect(prisma.message.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -686,6 +704,7 @@ describe('Stage 2 API', () => {
           }),
         })
       );
+      expect(prisma.message.create).toHaveBeenCalledTimes(2);
       expect(notifyPartner).toHaveBeenCalledWith(
         'session-123',
         'partner-1',
