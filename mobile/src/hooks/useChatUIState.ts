@@ -133,6 +133,13 @@ export interface UseChatUIStateProps {
     agreedByMe: boolean;
     agreedByPartner: boolean;
   }>;
+
+  // Stage 4 (redesigned): per-proposal willingness share status
+  stage4Selections?: {
+    mySelectionSubmitted: boolean;
+    partnerSelectionSubmitted: boolean;
+    hasOutcome: boolean;
+  };
 }
 
 /**
@@ -224,6 +231,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     strategyReadiness,
     overlappingStrategiesCount,
     agreements,
+    stage4Selections,
   } = props;
 
   // Track previous waiting status for transition detection
@@ -261,6 +269,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     strategyReadiness,
     overlappingStrategies: { count: overlappingStrategiesCount },
     agreements,
+    stage4Selections,
 
     // ChatUIStateInputs
     sessionStatus,
@@ -330,6 +339,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     strategyReadiness,
     overlappingStrategiesCount,
     agreements,
+    stage4Selections,
     sessionStatus,
     isInviter,
     isLoading,

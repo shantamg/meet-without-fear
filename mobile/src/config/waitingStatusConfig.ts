@@ -31,6 +31,8 @@ export interface WaitingStatusConfig {
   bannerSubtext?: string;
   /** Whether to show "Keep Chatting" action button */
   showKeepChattingAction: boolean;
+  /** Optional inline action button label (e.g. "Review"). The handler is wired by the host screen. */
+  actionLabel?: string;
 }
 
 // ============================================================================
@@ -240,6 +242,18 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     showSpinner: false,
     showKeepChattingAction: false,
     bannerText: (p) => `${p} is reviewing the needs you both shared.`,
+  },
+
+  // Stage 4 (redesigned): I shared my willingness stances; partner hasn't yet.
+  'stage4-selections-pending': {
+    showBanner: true,
+    hideInput: true,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: false,
+    actionLabel: 'Review',
+    bannerText: (p) => `Hidden until ${p} shares too — then you'll both see at once.`,
   },
 
   // Stage 4: Waiting for partner to submit strategy rankings

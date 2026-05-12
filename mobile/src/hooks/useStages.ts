@@ -50,6 +50,7 @@ import {
   RevealOverlapResponse,
   MarkReadyResponse,
   GetStage4StateResponse,
+  Stage4SelectionDecision,
   SubmitStage4SelectionRequest,
   SubmitStage4SelectionsRequest,
   SubmitStage4SelectionsResponse,
@@ -2031,18 +2032,49 @@ export function useSubmitStage4ProposalSelection(
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useMutation<
+    SubmitStage4SelectionsResponse,
+    ApiClientError,
+    { sessionId: string; proposalId: string } & SubmitStage4SelectionRequest,
+    { previous: GetStage4StateResponse | undefined }
+  >({
+    ...options,
     mutationFn: async ({ sessionId, proposalId, ...request }) => {
       return post<SubmitStage4SelectionsResponse, SubmitStage4SelectionRequest>(
         `/sessions/${sessionId}/stage4/proposals/${proposalId}/selection`,
         request
       );
     },
+    onMutate: async ({ sessionId, proposalId, decision }) => {
+      const key = stageKeys.stage4(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<GetStage4StateResponse>(key);
+      if (previous) {
+        const patchProposal = <T extends { id: string; myDecision?: Stage4SelectionDecision }>(p: T): T =>
+          p.id === proposalId ? { ...p, myDecision: decision } : p;
+        queryClient.setQueryData<GetStage4StateResponse>(key, {
+          ...previous,
+          // Changing a stance after sharing pulls the share back so the
+          // partner never sees a stale value. Match the backend behavior.
+          mySelectionStatus: 'NOT_STARTED',
+          inventory: {
+            ...previous.inventory,
+            sharedProposals: previous.inventory.sharedProposals.map(patchProposal),
+            individualCommitments: previous.inventory.individualCommitments.map(patchProposal),
+          },
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(stageKeys.stage4(sessionId), context.previous);
+      }
+    },
     onSuccess: (data, { sessionId }) => {
       queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
       refreshStage4Caches(queryClient, sessionId);
     },
-    ...options,
   });
 }
 
@@ -2073,6 +2105,87 @@ export function useSubmitStage4Selections(
       refreshStage4Caches(queryClient, sessionId);
     },
     ...options,
+  });
+}
+
+/**
+ * Share the current user's Stage 4 selections with their partner.
+ * Requires every active proposal to have a stance.
+ */
+export function useShareStage4Selections() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { state: GetStage4StateResponse },
+    ApiClientError,
+    { sessionId: string },
+    { previous: GetStage4StateResponse | undefined }
+  >({
+    mutationFn: async ({ sessionId }) =>
+      post<{ state: GetStage4StateResponse }, Record<string, never>>(
+        `/sessions/${sessionId}/stage4/share-selections`,
+        {} as Record<string, never>
+      ),
+    onMutate: async ({ sessionId }) => {
+      const key = stageKeys.stage4(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<GetStage4StateResponse>(key);
+      if (previous) {
+        queryClient.setQueryData<GetStage4StateResponse>(key, {
+          ...previous,
+          mySelectionStatus: 'SUBMITTED',
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(stageKeys.stage4(sessionId), context.previous);
+      }
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      refreshStage4Caches(queryClient, sessionId);
+    },
+  });
+}
+
+/**
+ * Withdraw the current user's shared Stage 4 selections so they can revise.
+ */
+export function useUnshareStage4Selections() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { state: GetStage4StateResponse },
+    ApiClientError,
+    { sessionId: string },
+    { previous: GetStage4StateResponse | undefined }
+  >({
+    mutationFn: async ({ sessionId }) =>
+      post<{ state: GetStage4StateResponse }, Record<string, never>>(
+        `/sessions/${sessionId}/stage4/unshare-selections`,
+        {} as Record<string, never>
+      ),
+    onMutate: async ({ sessionId }) => {
+      const key = stageKeys.stage4(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<GetStage4StateResponse>(key);
+      if (previous) {
+        queryClient.setQueryData<GetStage4StateResponse>(key, {
+          ...previous,
+          mySelectionStatus: 'NOT_STARTED',
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(stageKeys.stage4(sessionId), context.previous);
+      }
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      refreshStage4Caches(queryClient, sessionId);
+    },
   });
 }
 

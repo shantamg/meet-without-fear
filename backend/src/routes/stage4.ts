@@ -19,6 +19,8 @@ import {
   getStage4State,
   submitStage4ProposalSelection,
   submitStage4Selections,
+  shareStage4Selections,
+  unshareStage4Selections,
   closeStage4,
   proposeStrategy,
   submitRanking,
@@ -54,6 +56,22 @@ router.post(
   requireAuth,
   requireSessionAccess,
   asyncHandler(submitStage4Selections)
+);
+
+// Share current user's Stage 4 selections with their partner
+router.post(
+  '/sessions/:id/stage4/share-selections',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(shareStage4Selections)
+);
+
+// Withdraw current user's shared Stage 4 selections so they can revise
+router.post(
+  '/sessions/:id/stage4/unshare-selections',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(unshareStage4Selections)
 );
 
 // Close redesigned Stage 4 from willingness selections

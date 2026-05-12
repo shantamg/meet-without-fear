@@ -138,6 +138,8 @@ export {
   useStage4State,
   useSubmitStage4ProposalSelection,
   useSubmitStage4Selections,
+  useShareStage4Selections,
+  useUnshareStage4Selections,
   useCloseStage4,
   useTendingEntries,
   useSubmitTendingResponse,

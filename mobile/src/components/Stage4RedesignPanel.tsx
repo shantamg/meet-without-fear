@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Check, Clock, MinusCircle, Send, XCircle } from 'lucide-react-native';
+import { MinusCircle, Send, RotateCcw, Share2, XCircle } from 'lucide-react-native';
 import {
   GetStage4StateResponse,
   ProposalCardDTO,
@@ -18,7 +18,24 @@ interface Stage4RedesignPanelProps {
   partnerName?: string | null;
   isSelecting?: boolean;
   isClosing?: boolean;
+  isSharing?: boolean;
+  isRevising?: boolean;
+  /** Hide the inline footer — caller renders <Stage4RedesignFooter /> separately (e.g. sticky to the drawer). */
+  hideFooter?: boolean;
   onSelectProposal: (proposalId: string, decision: Stage4SelectionDecision) => void;
+  onShareSelections?: () => void;
+  onReviseSelections?: () => void;
+  onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason) => void;
+}
+
+interface Stage4RedesignFooterProps {
+  state: GetStage4StateResponse;
+  partnerName?: string | null;
+  isClosing?: boolean;
+  isSharing?: boolean;
+  isRevising?: boolean;
+  onShareSelections?: () => void;
+  onReviseSelections?: () => void;
   onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason) => void;
 }
 
@@ -33,27 +50,6 @@ const coverageLabels: Record<Stage4CoverageStatus, string> = {
   PARTIAL: 'Partly covered',
   OPEN: 'Open',
 };
-
-function phaseLabel(phase: Stage4Phase): string {
-  switch (phase) {
-    case Stage4Phase.INVENTORY_BUILDING:
-      return 'Building proposals';
-    case Stage4Phase.COVERAGE_REVIEW:
-      return 'Checking coverage';
-    case Stage4Phase.SELECTION:
-      return 'Choosing willingness';
-    case Stage4Phase.OUTCOME_REVIEW:
-      return 'Reviewing outcome';
-    case Stage4Phase.CLOSING:
-      return 'Closing';
-    case Stage4Phase.CLOSED_SHARED_AGREEMENT:
-      return 'Shared agreement';
-    case Stage4Phase.CLOSED_NO_SHARED_AGREEMENT:
-      return 'No shared agreement';
-    default:
-      return 'Stage 4';
-  }
-}
 
 function outcomeReasonLabel(reason: Stage4ClosureReason): string {
   switch (reason) {
@@ -76,24 +72,13 @@ function proposalKindLabel(kind: Stage4ProposalKind): string {
     : 'Shared proposal';
 }
 
-function DecisionBadge({
-  label,
-  decision,
-}: {
-  label: string;
-  decision?: Stage4SelectionDecision;
-}) {
-  const { palette } = useAppAppearance();
-  const styles = useMemo(() => makeStyles(palette), [palette]);
-
-  return (
-    <View style={styles.decisionBadge}>
-      <Text style={styles.decisionLabel}>{label}</Text>
-      <Text style={styles.decisionValue}>
-        {decision ? decisionLabels[decision] : 'Private'}
-      </Text>
-    </View>
-  );
+function partnerStateLabel(
+  partnerName: string | null,
+  decision?: Stage4SelectionDecision,
+): string {
+  const who = partnerName || 'They';
+  if (!decision) return `${who} hasn't shared their stance yet`;
+  return `${who}: ${decisionLabels[decision].toLowerCase()}`;
 }
 
 function ProposalCard({
@@ -104,16 +89,25 @@ function ProposalCard({
   onSelectProposal,
 }: {
   proposal: ProposalCardDTO;
-  partnerName?: string | null;
+  partnerName: string;
   isSelecting?: boolean;
   readOnly?: boolean;
   onSelectProposal: (proposalId: string, decision: Stage4SelectionDecision) => void;
 }) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => makeStyles(palette), [palette]);
-  const needsText = proposal.needsAddressed
-    .map((need) => `${need.label} (${coverageLabels[need.coverage]})`)
-    .join(', ');
+
+  const metaLines: string[] = [];
+  if (proposal.needsAddressed.length > 0) {
+    metaLines.push(
+      'Addresses: ' +
+        proposal.needsAddressed
+          .map((n) => `${n.label} (${coverageLabels[n.coverage].toLowerCase()})`)
+          .join(', '),
+    );
+  }
+  if (proposal.duration) metaLines.push(`Timing: ${proposal.duration}`);
+  if (proposal.measureOfSuccess) metaLines.push(`Success: ${proposal.measureOfSuccess}`);
 
   return (
     <View style={styles.proposalCard}>
@@ -124,25 +118,15 @@ function ProposalCard({
         )}
       </View>
       <Text style={styles.proposalDescription}>{proposal.description}</Text>
-      {needsText.length > 0 && (
-        <Text style={styles.proposalMeta}>Needs: {needsText}</Text>
-      )}
-      {proposal.duration && (
-        <Text style={styles.proposalMeta}>Timing: {proposal.duration}</Text>
-      )}
-      {proposal.measureOfSuccess && (
-        <Text style={styles.proposalMeta}>Success: {proposal.measureOfSuccess}</Text>
-      )}
 
-      <View style={styles.decisionRow}>
-        <DecisionBadge label="You" decision={proposal.myDecision} />
-        <DecisionBadge
-          label={partnerName || 'Partner'}
-          decision={proposal.partnerDecisionVisible}
-        />
-      </View>
+      {metaLines.map((line) => (
+        <Text key={line} style={styles.proposalMeta}>
+          {line}
+        </Text>
+      ))}
 
-      <View style={styles.selectionButtons}>
+      <Text style={styles.stanceLabel}>Your stance</Text>
+      <View style={styles.segmentedControl}>
         {[
           Stage4SelectionDecision.WILLING,
           Stage4SelectionDecision.NEEDS_DISCUSSION,
@@ -153,20 +137,33 @@ function ProposalCard({
           return (
             <TouchableOpacity
               key={decision}
-              style={[styles.selectionButton, selected && styles.selectionButtonSelected]}
+              style={[
+                styles.segment,
+                selected && styles.segmentSelected,
+                disabled && !selected && styles.segmentDisabled,
+              ]}
               onPress={() => onSelectProposal(proposal.id, decision)}
               disabled={disabled}
               accessibilityRole="button"
               accessibilityLabel={`${decisionLabels[decision]} for proposal`}
               accessibilityState={{ selected, disabled }}
             >
-              <Text style={[styles.selectionButtonText, selected && styles.selectionButtonTextSelected]}>
+              <Text
+                style={[
+                  styles.segmentText,
+                  selected && styles.segmentTextSelected,
+                ]}
+              >
                 {decisionLabels[decision]}
               </Text>
             </TouchableOpacity>
           );
         })}
       </View>
+
+      <Text style={styles.partnerState}>
+        {partnerStateLabel(partnerName, proposal.partnerDecisionVisible)}
+      </Text>
     </View>
   );
 }
@@ -193,10 +190,172 @@ function NeedRows({
           <View style={[styles.needDot, styles[`${tone}Dot`]]} />
           <View style={styles.needTextWrap}>
             <Text style={styles.needLabel}>{row.label}</Text>
-            {row.note && <Text style={styles.needNote}>{row.note}</Text>}
           </View>
         </View>
       ))}
+    </View>
+  );
+}
+
+export function Stage4RedesignFooter({
+  state,
+  partnerName,
+  isClosing = false,
+  isSharing = false,
+  isRevising = false,
+  onShareSelections,
+  onReviseSelections,
+  onCloseStage4,
+}: Stage4RedesignFooterProps) {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
+  const allProposals = [
+    ...state.inventory.sharedProposals,
+    ...state.inventory.individualCommitments,
+  ];
+  const mutualShared = state.inventory.sharedProposals.filter(
+    (proposal) =>
+      proposal.myDecision === Stage4SelectionDecision.WILLING &&
+      proposal.partnerDecisionVisible === Stage4SelectionDecision.WILLING,
+  );
+  const canCloseShared =
+    mutualShared.length > 0 && state.partnerSelectionStatus === 'SUBMITTED';
+  const canCloseNoShared =
+    (state.phase === Stage4Phase.OUTCOME_REVIEW ||
+      state.phase === Stage4Phase.SELECTION ||
+      state.phase === Stage4Phase.COVERAGE_REVIEW) &&
+    state.partnerSelectionStatus === 'SUBMITTED';
+  const showNoSharedClose =
+    state.phase === Stage4Phase.OUTCOME_REVIEW ||
+    state.phase === Stage4Phase.SELECTION ||
+    state.phase === Stage4Phase.COVERAGE_REVIEW;
+  const noSharedCloseDisabled = !canCloseNoShared || isClosing;
+  const mySelectionSubmitted = state.mySelectionStatus === 'SUBMITTED';
+  const partnerReady = state.partnerSelectionStatus === 'SUBMITTED';
+  const allMyDecisionsMade =
+    state.inventory.sharedProposals.length > 0 &&
+    state.inventory.sharedProposals.every((p) => Boolean(p.myDecision));
+  const who = partnerName || 'They';
+
+  if (state.outcome) return null;
+
+  if (allProposals.length === 0) {
+    return (
+      <View style={styles.footerContainer}>
+        <View style={styles.statusBlock}>
+          <Text style={styles.statusText}>
+            Proposals will appear here as your conversation develops them.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!mySelectionSubmitted) {
+    const canShare = allMyDecisionsMade && !isSharing;
+    return (
+      <View style={styles.footerContainer}>
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.primaryButton, !canShare && styles.primaryButtonDisabled]}
+            onPress={() => {
+              if (canShare && onShareSelections) onShareSelections();
+            }}
+            disabled={!canShare}
+            accessibilityRole="button"
+            accessibilityLabel="Share my stances"
+            accessibilityState={{ disabled: !canShare }}
+            testID="stage4-share-selections"
+          >
+            <Share2 color={canShare ? palette.bg : palette.textFaint} size={17} />
+            <Text style={[styles.primaryButtonText, !canShare && styles.disabledButtonText]}>
+              {isSharing ? 'Sharing…' : `Share my stances with ${who}`}
+            </Text>
+          </TouchableOpacity>
+          {!allMyDecisionsMade && (
+            <Text style={styles.actionHint}>
+              Take a stance on every proposal first.
+            </Text>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  if (!partnerReady) {
+    return (
+      <View style={styles.footerContainer}>
+        <View style={styles.actions}>
+          {onReviseSelections && (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                if (!isRevising) onReviseSelections();
+              }}
+              disabled={isRevising}
+              accessibilityRole="button"
+              accessibilityLabel="Revise my stances"
+              testID="stage4-revise-selections"
+            >
+              <RotateCcw color={palette.text} size={17} />
+              <Text style={styles.secondaryButtonText}>
+                {isRevising ? 'Pulling back…' : 'Pull my stances back to revise'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          <Text style={styles.actionHint}>
+            Hidden until {who} shares too — then you'll both see at once.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.footerContainer}>
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={[styles.primaryButton, !canCloseShared && styles.primaryButtonDisabled]}
+          onPress={() =>
+            onCloseStage4(
+              Stage4ClosureKind.SHARED_AGREEMENT,
+              Stage4ClosureReason.MUTUAL_SELECTION,
+            )
+          }
+          disabled={!canCloseShared || isClosing}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canCloseShared || isClosing }}
+        >
+          <Send color={canCloseShared ? palette.bg : palette.textFaint} size={17} />
+          <Text style={[styles.primaryButtonText, !canCloseShared && styles.disabledButtonText]}>
+            Close with shared agreement
+          </Text>
+        </TouchableOpacity>
+        {showNoSharedClose && (
+          <TouchableOpacity
+            style={[styles.secondaryButton, noSharedCloseDisabled && styles.secondaryButtonDisabled]}
+            onPress={() =>
+              onCloseStage4(
+                Stage4ClosureKind.NO_SHARED_AGREEMENT,
+                Stage4ClosureReason.NO_OVERLAP,
+              )
+            }
+            disabled={noSharedCloseDisabled}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: noSharedCloseDisabled }}
+          >
+            <MinusCircle color={canCloseNoShared ? palette.text : palette.textFaint} size={17} />
+            <Text style={[styles.secondaryButtonText, noSharedCloseDisabled && styles.disabledButtonText]}>
+              Close without a shared agreement
+            </Text>
+          </TouchableOpacity>
+        )}
+        {!canCloseShared && (
+          <Text style={styles.actionHint}>
+            A shared agreement is available once you and {who} both say &ldquo;willing&rdquo; to the same proposal.
+          </Text>
+        )}
+      </View>
     </View>
   );
 }
@@ -206,11 +365,17 @@ export function Stage4RedesignPanel({
   partnerName,
   isSelecting = false,
   isClosing = false,
+  isSharing = false,
+  isRevising = false,
+  hideFooter = false,
   onSelectProposal,
+  onShareSelections,
+  onReviseSelections,
   onCloseStage4,
 }: Stage4RedesignPanelProps) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => makeStyles(palette), [palette]);
+  const partnerLabel = partnerName || 'Partner';
   const allProposals = [
     ...state.inventory.sharedProposals,
     ...state.inventory.individualCommitments,
@@ -233,22 +398,25 @@ export function Stage4RedesignPanel({
     state.phase === Stage4Phase.SELECTION ||
     state.phase === Stage4Phase.COVERAGE_REVIEW;
   const noSharedCloseDisabled = !canCloseNoShared || isClosing;
+  const mySelectionSubmitted = state.mySelectionStatus === 'SUBMITTED';
+  // Stances stay editable after sharing — changing one auto-unshares on the
+  // backend, so the partner never sees a stale stance. Only a finalized
+  // outcome locks them.
   const proposalSelectionsReadOnly = Boolean(state.outcome);
+
+  const coverageHasRows =
+    state.coverageAudit.covered.length > 0 ||
+    state.coverageAudit.partial.length > 0 ||
+    state.coverageAudit.open.length > 0;
 
   return (
     <View style={styles.container} testID="stage4-redesign-panel">
-      <View style={styles.card}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>What comes next</Text>
-          <Text style={styles.phasePill}>{phaseLabel(state.phase)}</Text>
-        </View>
-        <Text style={styles.subtitle}>
-          Proposals are receipts from the conversation. Keep talking to add, revise, remove, or clarify them.
-        </Text>
-      </View>
+      <Text style={styles.intro}>
+        Proposals are receipts from your conversation. Keep talking to add, revise, or remove them.
+      </Text>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Proposal inventory</Text>
+        <Text style={styles.sectionTitle}>Proposals</Text>
         {allProposals.length === 0 ? (
           <Text style={styles.emptyText}>No proposals captured yet.</Text>
         ) : (
@@ -256,53 +424,28 @@ export function Stage4RedesignPanel({
             <ProposalCard
               key={proposal.id}
               proposal={proposal}
-              partnerName={partnerName}
+              partnerName={partnerLabel}
               isSelecting={isSelecting}
               readOnly={proposalSelectionsReadOnly}
               onSelectProposal={onSelectProposal}
             />
           ))
         )}
-        {state.inventory.unaddressedNeeds.length > 0 && (
-          <View style={styles.unaddressedBox}>
-            <Text style={styles.unaddressedTitle}>Still open</Text>
-            {state.inventory.unaddressedNeeds.map((need, index) => (
-              <Text key={need.id || `${need.label}-${index}`} style={styles.unaddressedNeed}>
-                {need.label}
-              </Text>
-            ))}
-          </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>How your needs are addressed</Text>
+        {coverageHasRows ? (
+          <>
+            <NeedRows title="Covered" rows={state.coverageAudit.covered} tone="covered" />
+            <NeedRows title="Partly addressed" rows={state.coverageAudit.partial} tone="partial" />
+            <NeedRows title="Not yet addressed" rows={state.coverageAudit.open} tone="open" />
+          </>
+        ) : (
+          <Text style={styles.emptyText}>
+            This will appear once your needs are mapped.
+          </Text>
         )}
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Needs coverage</Text>
-        <NeedRows title="Covered" rows={state.coverageAudit.covered} tone="covered" />
-        <NeedRows title="Partly covered" rows={state.coverageAudit.partial} tone="partial" />
-        <NeedRows title="Open" rows={state.coverageAudit.open} tone="open" />
-        {state.coverageAudit.covered.length === 0 &&
-          state.coverageAudit.partial.length === 0 &&
-          state.coverageAudit.open.length === 0 && (
-            <Text style={styles.emptyText}>Coverage will appear once Stage 3 needs are available.</Text>
-          )}
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Selection receipt</Text>
-        <View style={styles.receiptRow}>
-          <Check color={palette.success} size={18} />
-          <Text style={styles.receiptText}>
-            Your choices are saved proposal by proposal.
-          </Text>
-        </View>
-        <View style={styles.receiptRow}>
-          <Clock color={palette.textMuted} size={18} />
-          <Text style={styles.receiptText}>
-            {state.partnerSelectionStatus === 'SUBMITTED'
-              ? `${partnerName || 'Partner'} has submitted. Shared choices can now be reviewed.`
-              : `${partnerName || 'Partner'} choices stay private until they submit.`}
-          </Text>
-        </View>
       </View>
 
       {state.outcome && (
@@ -327,55 +470,138 @@ export function Stage4RedesignPanel({
         </View>
       )}
 
-      {!state.outcome && (
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.closeButton, !canCloseShared && styles.disabledButton]}
-            onPress={() =>
-              onCloseStage4(
-                Stage4ClosureKind.SHARED_AGREEMENT,
-                Stage4ClosureReason.MUTUAL_SELECTION
-              )
-            }
-            disabled={!canCloseShared || isClosing}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !canCloseShared || isClosing }}
-          >
-            <Send color={canCloseShared ? TEXT_ON_ACCENT : palette.textFaint} size={17} />
-            <Text style={[styles.closeButtonText, !canCloseShared && styles.disabledButtonText]}>
-              Close with shared agreement
-            </Text>
-          </TouchableOpacity>
+      {!hideFooter && !state.outcome && (() => {
+        const partnerReady = state.partnerSelectionStatus === 'SUBMITTED';
+        // Only shared proposals require a stance — individual commitments are
+        // one-sided so the partner doesn't have to take a position on them.
+        const allMyDecisionsMade =
+          state.inventory.sharedProposals.length > 0 &&
+          state.inventory.sharedProposals.every((p) => Boolean(p.myDecision));
+        const who = partnerName || 'They';
 
-          {showNoSharedClose && (
+        // (a) No proposals yet.
+        if (allProposals.length === 0) {
+          return (
+            <View style={styles.statusBlock}>
+              <Text style={styles.statusText}>
+                Proposals will appear here as your conversation develops them.
+              </Text>
+            </View>
+          );
+        }
+
+        // (b) I haven't shared yet → show Share CTA (disabled until every
+        // proposal has a stance) and an inline hint about what's missing.
+        if (!mySelectionSubmitted) {
+          const canShare = allMyDecisionsMade && !isSharing;
+          return (
+            <View style={styles.actions}>
+              <TouchableOpacity
+                style={[styles.primaryButton, !canShare && styles.primaryButtonDisabled]}
+                onPress={() => {
+                  if (canShare && onShareSelections) onShareSelections();
+                }}
+                disabled={!canShare}
+                accessibilityRole="button"
+                accessibilityLabel="Share my stances"
+                accessibilityState={{ disabled: !canShare }}
+                testID="stage4-share-selections"
+              >
+                <Share2 color={canShare ? palette.bg : palette.textFaint} size={17} />
+                <Text style={[styles.primaryButtonText, !canShare && styles.disabledButtonText]}>
+                  {isSharing ? 'Sharing…' : `Share my stances with ${who}`}
+                </Text>
+              </TouchableOpacity>
+              {!allMyDecisionsMade && (
+                <Text style={styles.actionHint}>
+                  Take a stance on every proposal first.
+                </Text>
+              )}
+            </View>
+          );
+        }
+
+        // (c) I've shared but partner hasn't → waiting state + Revise.
+        if (!partnerReady) {
+          return (
+            <View style={styles.actions}>
+              {onReviseSelections && (
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => {
+                    if (!isRevising) onReviseSelections();
+                  }}
+                  disabled={isRevising}
+                  accessibilityRole="button"
+                  accessibilityLabel="Revise my stances"
+                  testID="stage4-revise-selections"
+                >
+                  <RotateCcw color={palette.text} size={17} />
+                  <Text style={styles.secondaryButtonText}>
+                    {isRevising ? 'Taking back…' : "I'm not ready yet"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <View style={styles.statusBlock}>
+                <Text style={styles.statusText}>
+                  Hidden until {who} shares too — then you'll both see at once.
+                </Text>
+              </View>
+            </View>
+          );
+        }
+
+        // (d) Both shared → close buttons.
+        return (
+          <View style={styles.actions}>
             <TouchableOpacity
-              style={[styles.secondaryCloseButton, noSharedCloseDisabled && styles.disabledSecondaryButton]}
+              style={[styles.primaryButton, !canCloseShared && styles.primaryButtonDisabled]}
               onPress={() =>
                 onCloseStage4(
-                  Stage4ClosureKind.NO_SHARED_AGREEMENT,
-                  Stage4ClosureReason.NO_OVERLAP
+                  Stage4ClosureKind.SHARED_AGREEMENT,
+                  Stage4ClosureReason.MUTUAL_SELECTION
                 )
               }
-              disabled={noSharedCloseDisabled}
+              disabled={!canCloseShared || isClosing}
               accessibilityRole="button"
-              accessibilityState={{ disabled: noSharedCloseDisabled }}
+              accessibilityState={{ disabled: !canCloseShared || isClosing }}
             >
-              <MinusCircle color={canCloseNoShared ? palette.text : palette.textFaint} size={17} />
-              <Text style={[
-                styles.secondaryCloseButtonText,
-                noSharedCloseDisabled && styles.disabledButtonText,
-              ]}>
-                Close with no shared agreement
+              <Send color={canCloseShared ? palette.bg : palette.textFaint} size={17} />
+              <Text style={[styles.primaryButtonText, !canCloseShared && styles.disabledButtonText]}>
+                Close with shared agreement
               </Text>
             </TouchableOpacity>
-          )}
-          {showNoSharedClose && state.partnerSelectionStatus !== 'SUBMITTED' && (
-            <Text style={styles.actionHint}>
-              Available once both partners have made selections.
-            </Text>
-          )}
-        </View>
-      )}
+
+            {showNoSharedClose && (
+              <TouchableOpacity
+                style={[styles.secondaryButton, noSharedCloseDisabled && styles.secondaryButtonDisabled]}
+                onPress={() =>
+                  onCloseStage4(
+                    Stage4ClosureKind.NO_SHARED_AGREEMENT,
+                    Stage4ClosureReason.NO_OVERLAP
+                  )
+                }
+                disabled={noSharedCloseDisabled}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: noSharedCloseDisabled }}
+              >
+                <MinusCircle color={canCloseNoShared ? palette.text : palette.textFaint} size={17} />
+                <Text style={[
+                  styles.secondaryButtonText,
+                  noSharedCloseDisabled && styles.disabledButtonText,
+                ]}>
+                  Close without a shared agreement
+                </Text>
+              </TouchableOpacity>
+            )}
+            {!canCloseShared && (
+              <Text style={styles.actionHint}>
+                A shared agreement is available once you and {who} both say &ldquo;willing&rdquo; to the same proposal.
+              </Text>
+            )}
+          </View>
+        );
+      })()}
 
       {state.phase === Stage4Phase.CLOSED_NO_SHARED_AGREEMENT && (
         <View style={styles.closedNote}>
@@ -391,54 +617,31 @@ export function Stage4RedesignPanel({
 
 type Palette = ReturnType<typeof useAppAppearance>['palette'];
 
-const TEXT_ON_ACCENT = '#0d0f12';
-const TEXT_ON_DANGER = '#ffffff';
-
 const makeStyles = (palette: Palette) => StyleSheet.create({
   container: {
-    padding: 16,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+    gap: 16,
   },
-  card: {
-    backgroundColor: palette.bgElev,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: palette.border,
-    padding: 14,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  title: {
-    flex: 1,
-    color: palette.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  phasePill: {
-    color: TEXT_ON_ACCENT,
-    backgroundColor: palette.accent,
-    borderRadius: 999,
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  subtitle: {
+  intro: {
     color: palette.textMuted,
     fontSize: 14,
     lineHeight: 20,
-    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  card: {
+    backgroundColor: palette.bgElev,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: 14,
   },
   sectionTitle: {
     color: palette.text,
     fontSize: 16,
     fontWeight: '700',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   emptyText: {
     color: palette.textMuted,
@@ -447,9 +650,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   },
   proposalCard: {
     backgroundColor: palette.bgPane,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: palette.border,
+    borderRadius: 10,
     padding: 12,
     marginBottom: 10,
   },
@@ -463,6 +664,8 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     color: palette.accentText,
     fontSize: 12,
     fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   ownerLabel: {
     color: palette.textMuted,
@@ -480,92 +683,71 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     lineHeight: 18,
     marginTop: 6,
   },
-  decisionRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 10,
-  },
-  decisionBadge: {
-    flex: 1,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: palette.border,
-    padding: 8,
-  },
-  decisionLabel: {
+  stanceLabel: {
     color: palette.textMuted,
-    fontSize: 11,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 14,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  segmentedControl: {
+    flexDirection: 'row',
+    backgroundColor: palette.bgElev,
+    borderRadius: 10,
+    padding: 3,
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  segmentSelected: {
+    backgroundColor: palette.accent,
+  },
+  segmentDisabled: {
+    opacity: 0.5,
+  },
+  segmentText: {
+    color: palette.text,
+    fontSize: 13,
     fontWeight: '600',
   },
-  decisionValue: {
-    color: palette.text,
-    fontSize: 13,
+  segmentTextSelected: {
+    color: palette.bg,
     fontWeight: '700',
-    marginTop: 2,
   },
-  selectionButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-  },
-  selectionButton: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: palette.border,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  selectionButtonSelected: {
-    backgroundColor: palette.success,
-    borderColor: palette.success,
-  },
-  selectionButtonText: {
-    color: palette.text,
+  partnerState: {
+    color: palette.textMuted,
     fontSize: 12,
-    fontWeight: '700',
-  },
-  selectionButtonTextSelected: {
-    color: TEXT_ON_DANGER,
-  },
-  unaddressedBox: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: palette.warning,
-    padding: 10,
-    marginTop: 2,
-  },
-  unaddressedTitle: {
-    color: palette.warning,
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  unaddressedNeed: {
-    color: palette.text,
-    fontSize: 13,
-    lineHeight: 18,
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   coverageGroup: {
-    marginBottom: 10,
+    marginBottom: 12,
   },
   coverageTitle: {
     color: palette.textMuted,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   needRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 7,
+    gap: 10,
+    marginBottom: 8,
   },
   needDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    marginTop: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 6,
   },
   coveredDot: {
     backgroundColor: palette.success,
@@ -583,24 +765,6 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     color: palette.text,
     fontSize: 14,
     lineHeight: 19,
-  },
-  needNote: {
-    color: palette.textMuted,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  receiptRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 8,
-  },
-  receiptText: {
-    flex: 1,
-    color: palette.text,
-    fontSize: 14,
-    lineHeight: 20,
   },
   outcomeReason: {
     color: palette.accentText,
@@ -630,49 +794,67 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     lineHeight: 18,
     marginTop: 10,
   },
-  actions: {
-    gap: 8,
+  footerContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+    backgroundColor: palette.bgPane,
   },
-  closeButton: {
-    minHeight: 44,
-    borderRadius: 8,
+  actions: {
+    gap: 10,
+  },
+  statusBlock: {
+    backgroundColor: palette.bgElev,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: 14,
+  },
+  statusText: {
+    color: palette.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: 12,
     backgroundColor: palette.accent,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
   },
-  closeButtonText: {
-    color: TEXT_ON_ACCENT,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  disabledButton: {
+  primaryButtonDisabled: {
     backgroundColor: palette.chipBg,
   },
-  disabledButtonText: {
-    color: palette.textFaint,
+  primaryButtonText: {
+    color: palette.bg,
+    fontSize: 15,
+    fontWeight: '700',
   },
-  secondaryCloseButton: {
-    minHeight: 44,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: palette.border,
+  secondaryButton: {
+    minHeight: 48,
+    borderRadius: 12,
+    backgroundColor: palette.bgElev,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
   },
-  disabledSecondaryButton: {
-    borderColor: palette.border,
-    backgroundColor: palette.chipBg,
+  secondaryButtonDisabled: {
+    opacity: 0.6,
   },
-  secondaryCloseButtonText: {
+  secondaryButtonText: {
     color: palette.text,
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  disabledButtonText: {
+    color: palette.textFaint,
   },
   actionHint: {
     color: palette.textMuted,
@@ -684,7 +866,7 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: palette.warning,
     padding: 12,

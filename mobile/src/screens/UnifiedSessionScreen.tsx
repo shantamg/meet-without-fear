@@ -41,7 +41,7 @@ import { ShareTopicPanel } from '../components/ShareTopicPanel';
 import { WaitingRoom } from '../components/WaitingRoom';
 import { AgreementCard } from '../components/AgreementCard';
 import { SessionCompletionScreen } from '../components/SessionCompletionScreen';
-import { Stage4RedesignPanel } from '../components/Stage4RedesignPanel';
+import { Stage4RedesignPanel, Stage4RedesignFooter } from '../components/Stage4RedesignPanel';
 import { TendingPanel } from '../components/TendingPanel';
 // CuriosityCompactOverlay removed - now using inline approach
 import { CompactChatItem } from '../components/CompactChatItem';
@@ -72,6 +72,8 @@ import { useSharingStatus } from '../hooks/useSharingStatus';
 import { usePendingActions } from '../hooks/usePendingActions';
 import {
   useCloseStage4,
+  useShareStage4Selections,
+  useUnshareStage4Selections,
   useCreateTendingReentry,
   useNeedsComparison,
   useStage4State,
@@ -525,7 +527,7 @@ export function UnifiedSessionScreen({
   const { mutate: updateMood } = useUpdateMood();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const { showError } = useToast();
+  const { showError, showWarning } = useToast();
 
   // Real-time presence tracking
 
@@ -1100,6 +1102,15 @@ export function UnifiedSessionScreen({
       if (eventName === 'session.strategies_updated') {
         console.log('[UnifiedSessionScreen] Strategies updated');
         refreshStage4RealtimeState();
+
+        // Partner pulled their stances back to revise → surface it so the
+        // partner doesn't wonder why their view "lost" data.
+        if ((data as { change?: string }).change === 'stage4_selection_revised') {
+          showWarning(
+            `${partnerName || 'Your other'} pulled their stances back`,
+            'You\'ll see them again when they re-share.',
+          );
+        }
       }
 
       if (eventName === 'partner.ranking_submitted') {
@@ -1444,6 +1455,8 @@ export function UnifiedSessionScreen({
       showError('Could not save that Stage 4 choice. Please try again.');
     },
   });
+  const shareStage4Selections = useShareStage4Selections();
+  const unshareStage4Selections = useUnshareStage4Selections();
   const closeStage4 = useCloseStage4({
     onSuccess: (response) => {
       if (response.outcome.kind === Stage4ClosureKind.SHARED_AGREEMENT) {
@@ -1479,6 +1492,27 @@ export function UnifiedSessionScreen({
     },
     [sessionId, submitStage4Selection]
   );
+  const handleShareStage4Selections = useCallback(() => {
+    shareStage4Selections.mutate(
+      { sessionId },
+      {
+        onError: (err) => {
+          const detail = err?.message || 'Please try again.';
+          showError('Could not share your stances', detail);
+        },
+      }
+    );
+  }, [shareStage4Selections, sessionId, showError]);
+  const handleReviseStage4Selections = useCallback(() => {
+    unshareStage4Selections.mutate(
+      { sessionId },
+      {
+        onError: () => {
+          showError('Could not unshare your stances. Please try again.');
+        },
+      }
+    );
+  }, [unshareStage4Selections, sessionId, showError]);
   const handleCloseRedesignedStage4 = useCallback(
     (kind: Stage4ClosureKind, reason: Stage4ClosureReason) => {
       closeStage4.mutate({
@@ -1766,6 +1800,13 @@ export function UnifiedSessionScreen({
       agreedByMe: a.agreedByMe,
       agreedByPartner: a.agreedByPartner,
     })),
+    stage4Selections: stage4State
+      ? {
+          mySelectionSubmitted: stage4State.mySelectionStatus === 'SUBMITTED',
+          partnerSelectionSubmitted: stage4State.partnerSelectionStatus === 'SUBMITTED',
+          hasOutcome: !!stage4State.outcome,
+        }
+      : undefined,
   });
 
   // -------------------------------------------------------------------------
@@ -2924,6 +2965,11 @@ export function UnifiedSessionScreen({
             partnerName={partnerName || 'your partner'}
             animationValue={waitingBannerAnim}
             onExercisePress={() => openOverlay('support-options')}
+            onActionPress={
+              waitingStatus === 'stage4-selections-pending'
+                ? () => setShowStage4Drawer(true)
+                : undefined
+            }
             testID="waiting-banner"
           />
         );
@@ -2933,18 +2979,60 @@ export function UnifiedSessionScreen({
         // Stage 4, surface the proposal-review entry point above the input so
         // the user always has a way to open the Stage 4 drawer.
         if (hasRedesignedStage4 && stage4State) {
-          const proposalCount =
-            stage4State.inventory.sharedProposals.length +
-            stage4State.inventory.individualCommitments.length;
+          const allProposals = [
+            ...stage4State.inventory.sharedProposals,
+            ...stage4State.inventory.individualCommitments,
+          ];
+          const proposalCount = allProposals.length;
           if (proposalCount === 0) return undefined;
+
+          const who = partnerName || 'them';
+          const mineSubmitted = stage4State.mySelectionStatus === 'SUBMITTED';
+          const partnerSubmitted = stage4State.partnerSelectionStatus === 'SUBMITTED';
+          const allStanced = allProposals.every((p) => Boolean(p.myDecision));
+          const hasMutualWilling = stage4State.inventory.sharedProposals.some(
+            (p) =>
+              p.myDecision === Stage4SelectionDecision.WILLING &&
+              p.partnerDecisionVisible === Stage4SelectionDecision.WILLING,
+          );
+
+          let title: string;
+          let subtitle: string;
+          let label: string;
+          if (stage4State.outcome) {
+            // Outcome already exists; chat surface doesn't need a CTA here.
+            return undefined;
+          } else if (!mineSubmitted && !allStanced) {
+            title =
+              proposalCount === 1 ? '1 proposal on the table' : `${proposalCount} proposals on the table`;
+            subtitle = 'Take a stance on each one when you’re ready.';
+            label = 'Review';
+          } else if (!mineSubmitted && allStanced) {
+            title = 'Ready to share your stances';
+            subtitle = `Open this to share them with ${who}.`;
+            label = 'Review & share';
+          } else if (mineSubmitted && !partnerSubmitted) {
+            title = `Waiting for ${who}`;
+            subtitle = `You'll know as soon as ${who} shares.`;
+            label = 'Review';
+          } else if (mineSubmitted && partnerSubmitted && hasMutualWilling) {
+            title = `You and ${who} agree on at least one proposal`;
+            subtitle = 'Open this to close with a shared agreement.';
+            label = 'Review & close';
+          } else {
+            title = `${who} has shared too`;
+            subtitle = 'No mutual “willing” yet — open this to see your options.';
+            label = 'Review';
+          }
+
           return (
             <GuidedActionPanel
               tone="review"
               eyebrow="What comes next"
-              title={proposalCount === 1 ? '1 proposal on the table' : `${proposalCount} proposals on the table`}
-              subtitle="Review the inventory and mark which proposals you're willing to try."
+              title={title}
+              subtitle={subtitle}
               primaryAction={{
-                label: 'Review',
+                label,
                 onPress: () => setShowStage4Drawer(true),
                 testID: 'stage4-review-button',
               }}
@@ -3180,7 +3268,11 @@ export function UnifiedSessionScreen({
               partnerName={partnerName}
               isSelecting={submitStage4Selection.isPending}
               isClosing={closeStage4.isPending}
+              isSharing={shareStage4Selections.isPending}
+              isRevising={unshareStage4Selections.isPending}
               onSelectProposal={handleStage4Selection}
+              onShareSelections={handleShareStage4Selections}
+              onReviseSelections={handleReviseStage4Selections}
               onCloseStage4={handleCloseRedesignedStage4}
             />
             {tendingPanel}
@@ -3361,7 +3453,10 @@ export function UnifiedSessionScreen({
           }
           // isInputDisabled prevents sending while API call is in progress
           isInputDisabled={isSending}
-          showEmotionSlider={!isInOnboardingUnsigned}
+          showEmotionSlider={
+            !isInOnboardingUnsigned &&
+            waitingStatus !== 'stage4-selections-pending'
+          }
           partnerName={partnerName}
           emotionValue={barometerValue}
           onEmotionChange={handleBarometerChange}
@@ -3685,18 +3780,12 @@ export function UnifiedSessionScreen({
         presentationStyle="pageSheet"
         onRequestClose={() => setShowStage4Drawer(false)}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: styles.container.backgroundColor }} edges={['top', 'bottom']}>
+        <SafeAreaView style={styles.stage4DrawerSafeArea} edges={['top', 'bottom']}>
+          <View style={styles.stage4DrawerDragHandleArea}>
+            <View style={styles.stage4DrawerDragHandle} />
+          </View>
           <View style={styles.stage4DrawerHeader}>
             <Text style={styles.stage4DrawerTitle}>What comes next</Text>
-            <TouchableOpacity
-              style={styles.stage4DrawerCloseButton}
-              onPress={() => setShowStage4Drawer(false)}
-              accessibilityRole="button"
-              accessibilityLabel="Close Stage 4 review"
-              testID="stage4-drawer-close"
-            >
-              <Text style={styles.stage4DrawerCloseText}>✕</Text>
-            </TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={styles.stage4DrawerScroll}>
             {stage4State && (
@@ -3705,7 +3794,12 @@ export function UnifiedSessionScreen({
                 partnerName={partnerName}
                 isSelecting={submitStage4Selection.isPending}
                 isClosing={closeStage4.isPending}
+                isSharing={shareStage4Selections.isPending}
+                isRevising={unshareStage4Selections.isPending}
+                hideFooter
                 onSelectProposal={handleStage4Selection}
+                onShareSelections={handleShareStage4Selections}
+                onReviseSelections={handleReviseStage4Selections}
                 onCloseStage4={(kind, reason) => {
                   handleCloseRedesignedStage4(kind, reason);
                   setShowStage4Drawer(false);
@@ -3713,6 +3807,21 @@ export function UnifiedSessionScreen({
               />
             )}
           </ScrollView>
+          {stage4State && (
+            <Stage4RedesignFooter
+              state={stage4State}
+              partnerName={partnerName}
+              isClosing={closeStage4.isPending}
+              isSharing={shareStage4Selections.isPending}
+              isRevising={unshareStage4Selections.isPending}
+              onShareSelections={handleShareStage4Selections}
+              onReviseSelections={handleReviseStage4Selections}
+              onCloseStage4={(kind, reason) => {
+                handleCloseRedesignedStage4(kind, reason);
+                setShowStage4Drawer(false);
+              }}
+            />
+          )}
         </SafeAreaView>
       </Modal>
 
@@ -4597,17 +4706,30 @@ const useStyles = () => {
       zIndex: 100,
       elevation: 100,
     },
+    stage4DrawerSafeArea: {
+      flex: 1,
+      backgroundColor: palette.bgPane,
+    },
+    stage4DrawerDragHandleArea: {
+      paddingTop: 12,
+      paddingBottom: 8,
+      alignItems: 'center',
+    },
+    stage4DrawerDragHandle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: palette.borderStrong,
+    },
     stage4DrawerHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: palette.border,
+      paddingBottom: 8,
     },
     stage4DrawerTitle: {
-      fontSize: 20,
+      fontSize: 18,
       fontWeight: '700',
       color: palette.text,
     },
@@ -4615,7 +4737,7 @@ const useStyles = () => {
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: palette.bgPane,
+      backgroundColor: palette.bgElev,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -4625,7 +4747,7 @@ const useStyles = () => {
       fontWeight: '600',
     },
     stage4DrawerScroll: {
-      paddingVertical: 8,
+      paddingBottom: 8,
     },
     closeOverlay: {
       position: 'absolute',

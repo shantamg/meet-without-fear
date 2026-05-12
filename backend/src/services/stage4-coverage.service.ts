@@ -174,7 +174,7 @@ function classifyCoverage(
     return {
       status: 'OPEN',
       proposalIds: [],
-      note: 'Still open for Stage 4 discussion.',
+      note: 'Not yet addressed by a proposal.',
     };
   }
 

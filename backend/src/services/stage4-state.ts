@@ -219,24 +219,6 @@ function buildProposalCard(
   };
 }
 
-function requiresSharedSelection(proposal: Stage4ProposalRow): boolean {
-  return proposal.kind === Stage4ProposalKind.SHARED_PROPOSAL && proposal.status === Stage4ProposalStatus.ACTIVE;
-}
-
-function hasSelectionForEveryActiveSharedProposal(
-  userId: string | null,
-  proposals: Stage4ProposalRow[],
-  selections: Stage4SelectionRow[]
-): boolean {
-  if (!userId) return false;
-
-  const sharedProposalIds = proposals.filter(requiresSharedSelection).map((proposal) => proposal.id);
-  if (sharedProposalIds.length === 0) return false;
-
-  return sharedProposalIds.every((proposalId) =>
-    selections.some((selection) => selection.proposalId === proposalId && selection.userId === userId)
-  );
-}
 
 function hasSubmittedSelectionGate(progressRows: Stage4ProgressRow[], userId: string | null): boolean {
   if (!userId) return false;
@@ -407,16 +389,11 @@ export async function getStage4State(
   const mySelections = selections.filter((selection) => selection.userId === userId);
   const partnerSelections = selections.filter((selection) => selection.userId === partnerUserId);
   const activeProposals = proposals.filter((proposal) => proposal.status === Stage4ProposalStatus.ACTIVE);
-  const myActiveSharedSelectionComplete = hasSelectionForEveryActiveSharedProposal(userId, activeProposals, selections);
-  const partnerActiveSharedSelectionComplete = hasSelectionForEveryActiveSharedProposal(
-    partnerUserId,
-    activeProposals,
-    selections
-  );
-  const mySelectionSubmitted =
-    hasSubmittedSelectionGate(progressRows ?? [], userId) || myActiveSharedSelectionComplete;
-  const partnerSelectionSubmitted =
-    hasSubmittedSelectionGate(progressRows ?? [], partnerUserId) || partnerActiveSharedSelectionComplete;
+  // "Submitted" must be an explicit act now (POST /stage4/share-selections),
+  // not an implicit consequence of having decided on every proposal. Otherwise
+  // partners would see each others' stances mid-deliberation.
+  const mySelectionSubmitted = hasSubmittedSelectionGate(progressRows ?? [], userId);
+  const partnerSelectionSubmitted = hasSubmittedSelectionGate(progressRows ?? [], partnerUserId);
   const revealPartnerSelections = mySelectionSubmitted && partnerSelectionSubmitted;
   const proposalCards = activeProposals.map((proposal) =>
     buildProposalCard(proposal, userId, partnerUserId, selections, coverageRows, revealPartnerSelections)
@@ -469,6 +446,7 @@ export async function getStage4State(
           updatedAt: selection.updatedAt.toISOString(),
         }))
       : [],
+    mySelectionStatus: mySelectionSubmitted ? 'SUBMITTED' : 'NOT_STARTED',
     partnerSelectionStatus: partnerSelectionSubmitted ? 'SUBMITTED' : 'NOT_STARTED',
     outcome: closure
       ? {

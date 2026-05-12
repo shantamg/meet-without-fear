@@ -292,6 +292,9 @@ describe('Stage 4 API', () => {
           updatedAt: new Date('2026-05-06T10:02:00.000Z'),
         },
       ]);
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: mockPartnerId, stage: 4, gatesSatisfied: { selectionSubmitted: true } },
+      ]);
       (prisma.stage4NeedCoverage.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.stage4Closure.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.agreement.findMany as jest.Mock).mockResolvedValue([]);
@@ -460,6 +463,10 @@ describe('Stage 4 API', () => {
           updatedAt: new Date('2026-05-06T10:03:00.000Z'),
         },
       ]);
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: mockUser.id, stage: 4, gatesSatisfied: { selectionSubmitted: true } },
+        { userId: mockPartnerId, stage: 4, gatesSatisfied: { selectionSubmitted: true } },
+      ]);
       (prisma.stage4NeedCoverage.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.stage4Closure.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.agreement.findMany as jest.Mock).mockResolvedValue([]);
@@ -550,6 +557,9 @@ describe('Stage 4 API', () => {
           selectedAt: new Date('2026-05-06T10:04:00.000Z'),
           updatedAt: new Date('2026-05-06T10:04:00.000Z'),
         },
+      ]);
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: mockPartnerId, stage: 4, gatesSatisfied: { selectionSubmitted: true } },
       ]);
       (prisma.stage4NeedCoverage.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.stage4Closure.findUnique as jest.Mock).mockResolvedValue(null);
@@ -895,30 +905,20 @@ describe('Stage 4 API', () => {
           }),
         })
       );
-      expect(prisma.stageProgress.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: {
-            gatesSatisfied: expect.objectContaining({
-              selectionSubmitted: true,
-            }),
-          },
-        })
-      );
-      expect(notifyPartner).toHaveBeenCalledWith(
-        mockSessionId,
-        mockPartnerId,
-        'session.strategies_updated',
-        expect.objectContaining({ change: 'stage4_selection_submitted' })
-      );
+      // Per-tap should NOT flip the selectionSubmitted gate — that's now an
+      // explicit "share" action.
+      expect(prisma.stageProgress.update).not.toHaveBeenCalled();
+      expect(notifyPartner).not.toHaveBeenCalled();
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(jsonMock).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
           data: expect.objectContaining({
-            submitted: true,
+            submitted: false,
             partnerSubmitted: false,
             state: expect.objectContaining({
               phase: Stage4Phase.SELECTION,
+              mySelectionStatus: 'NOT_STARTED',
               partnerSelectionStatus: 'NOT_STARTED',
             }),
           }),
