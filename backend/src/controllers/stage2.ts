@@ -37,6 +37,7 @@ import {
   hasContextAlreadyBeenShared,
   markResultHandledAlreadyShared,
   incrementAttempts,
+  generateValidationFeedbackReflection,
 } from '../services/reconciler';
 import { isSessionCreator } from '../utils/session';
 import { publishSessionEvent } from '../services/realtime';
@@ -1156,6 +1157,46 @@ export async function validateEmpathy(
         },
       });
 
+      // Get names for AI framing message
+      const [validatorUser, guesserUser] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: user.id },
+          select: { firstName: true, name: true },
+        }),
+        prisma.user.findUnique({
+          where: { id: partnerId },
+          select: { firstName: true, name: true },
+        }),
+      ]);
+      const validatorName = validatorUser?.firstName || validatorUser?.name || 'your partner';
+      const guesserName = guesserUser?.firstName || guesserUser?.name || 'User';
+
+      // Generate AI framing message before showing feedback card
+      const framingMessage = await generateValidationFeedbackReflection(
+        sessionId,
+        guesserName,
+        validatorName,
+      );
+
+      // Create messages with guaranteed ordering (100ms apart)
+      const baseTime = now.getTime();
+      const framingTimestamp = new Date(baseTime);
+      const feedbackTimestamp = new Date(baseTime + 100);
+
+      // AI framing message — introduces the feedback to the guesser
+      await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: null,
+          forUserId: partnerId,
+          role: MessageRole.AI,
+          content: framingMessage,
+          stage: 2,
+          timestamp: framingTimestamp,
+        },
+      });
+
+      // VALIDATION_FEEDBACK card — the actual feedback content
       await prisma.message.create({
         data: {
           sessionId,
@@ -1164,7 +1205,7 @@ export async function validateEmpathy(
           role: MessageRole.VALIDATION_FEEDBACK,
           content: trimmedFeedback,
           stage: 2,
-          timestamp: now,
+          timestamp: feedbackTimestamp,
         },
       });
     }
