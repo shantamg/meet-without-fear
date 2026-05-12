@@ -276,7 +276,8 @@ sequenceDiagram
         UI->>API: POST /empathy/validation-feedback/refine<br/>(optional iterations)
         UI->>API: POST /empathy/validate<br/>{ validated: false, feedback }
         API->>API: Status -> REFINING
-        API->>API: Create targeted chat message<br/>role VALIDATION_FEEDBACK
+        API->>API: Create AI framing message (role AI, forUserId=guesser)
+        API->>API: Create feedback card (role VALIDATION_FEEDBACK, +100ms offset)
         API->>Guesser: empathy.status_updated<br/>with validationFeedback
     end
 ```
