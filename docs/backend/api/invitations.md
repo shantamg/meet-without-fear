@@ -28,7 +28,6 @@ GET /api/v1/invitations/:id
 interface InvitationDTO {
   id: string;
   invitedBy: {
-    id: string;
     name: string | null;
   };
   name: string | null;
@@ -38,7 +37,6 @@ interface InvitationDTO {
   session: {
     id: string;
     status: string;
-    topicFrame: string | null;  // AI-confirmed Stage 0 topic anchor shown before accept
   };
 }
 ```
@@ -52,7 +50,6 @@ interface InvitationDTO {
     "invitation": {
       "id": "inv_def456",
       "invitedBy": {
-        "id": "user_123",
         "name": "Jordan"
       },
       "name": "Alex",
@@ -61,19 +58,23 @@ interface InvitationDTO {
       "expiresAt": "2024-01-22T10:30:00Z",
       "session": {
         "id": "sess_abc123",
-        "status": "INVITED",
-        "topicFrame": "Tuesday pickup disagreement"
+        "status": "INVITED"
       }
     }
   }
 }
 ```
 
+### Rate Limit
+
+Rate limited to 10 requests per minute per IP. Returns `RATE_LIMITED` on breach.
+
 ### Errors
 
 | Code | When |
 |------|------|
 | `NOT_FOUND` | Invitation doesn't exist |
+| `RATE_LIMITED` | More than 10 requests per minute from the same IP |
 
 > Expired invitations return a successful 200 response with `status: 'EXPIRED'` rather than an error code — clients should branch on `data.status`.
 
