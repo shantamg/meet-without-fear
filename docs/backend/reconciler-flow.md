@@ -3,7 +3,7 @@ title: "Stage 2: Perspective Stretch - Empathy Exchange Flow"
 sidebar_position: 6
 description: This document describes the empathy exchange flow in Stage 2, including the reconciler system that analyzes empathy accuracy and manages the sharing of addit...
 created: 2026-03-11
-updated: 2026-05-10
+updated: 2026-05-12
 status: living
 ---
 # Stage 2: Perspective Stretch - Empathy Exchange Flow
@@ -342,6 +342,12 @@ stateDiagram-v2
     EmpathyPending --> PartnerSharedEmpathy: Partner shares
     PartnerSharedEmpathy --> Active: Show validation UI
 
+    Active --> PartnerValidatingEmpathy: User validated, awaiting partner validation
+    PartnerValidatingEmpathy --> Active: Partner validates
+
+    Active --> PartnerRevisingEmpathy: User sent feedback, partner revising
+    PartnerRevisingEmpathy --> Active: Partner resubmits
+
     state Active {
         [*] --> Chatting
         Chatting --> ViewingEmpathy: Tap "View your empathy attempt"
@@ -359,6 +365,8 @@ stateDiagram-v2
 | `witness-pending` | Yes | Yes | Yes |
 | `empathy-pending` | Yes | Yes | Yes |
 | `partner-considering-perspective` | Yes | Yes | Yes |
+| `partner-validating-empathy` | Yes | Yes | Yes |
+| `partner-revising-empathy` | Yes | Yes | Yes |
 | `reconciler-analyzing` | Yes | Yes (with spinner) | Yes | <!-- Note: This UI state exists but the ANALYZING empathy status is never set by current code -->
 | `awaiting-context-share` | No | Yes | No |
 | `refining-empathy` | No | No | No |
@@ -553,6 +561,7 @@ If user accepts/declines before the GET endpoint marks offer as `OFFERED`:
 - `respondToShareSuggestion` accepts both `PENDING` and `OFFERED` status, and supports three actions: `accept`, `decline`, and `refine` (re-runs suggestion generation with `refinedContent` feedback from the user)
 - After the circuit-breaker trips, the Guesser's alignment message uses neutral waiting language ("You've shared your perspective… [Partner] is also reflecting on your perspective — once they're done, you'll both see what each other shared") instead of the normal "quite accurate" feedback, to avoid overclaiming accuracy when refinement was exhausted or context was already shared
 - Marks as `OFFERED` before processing for proper audit trail
+- **Idempotent retries**: If a duplicate request arrives after the offer is already `ACCEPTED` or `DECLINED`, the handler returns the prior outcome with `guesserUpdated: false` so the partner is not double-notified. Callers should check `guesserUpdated` before dispatching partner notifications.
 
 ## Debugging Tips
 
