@@ -78,6 +78,7 @@ import {
   useDeclineStage4Need,
   useUndeclineStage4Need,
   useCreateTendingReentry,
+  useSetTendingEntryShare,
   useNeedsComparison,
   useStage4State,
   useSubmitStage4ProposalSelection,
@@ -1488,6 +1489,11 @@ export function UnifiedSessionScreen({
   const submitTendingResponse = useSubmitTendingResponse({
     onError: () => {
       showError('Could not save that Tending review. Please try again.');
+    },
+  });
+  const setTendingEntryShare = useSetTendingEntryShare({
+    onError: () => {
+      showError('Could not update sharing on that Tending entry. Please try again.');
     },
   });
   const handleStage4Selection = useCallback(
@@ -3380,6 +3386,12 @@ export function UnifiedSessionScreen({
       isSubmittingResponse={submitTendingResponse.isPending}
       onCreateReentry={handleCreateTendingReentry}
       onSubmitResponse={handleSubmitTendingResponse}
+      currentUserId={user?.id}
+      isUpdatingShare={setTendingEntryShare.isPending}
+      onToggleShare={(entryId, optedInShared) => {
+        if (!sessionId) return;
+        setTendingEntryShare.mutate({ sessionId, entryId, optedInShared });
+      }}
     />
   ) : null;
 

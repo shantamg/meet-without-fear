@@ -2382,6 +2382,44 @@ export function useSubmitTendingResponse(
 }
 
 /**
+ * Toggle an INDIVIDUAL Tending entry's opt-in share with the partner.
+ */
+export function useSetTendingEntryShare(
+  options?: Omit<
+    UseMutationOptions<
+      SubmitTendingResponseResponse,
+      ApiClientError,
+      { sessionId: string; entryId: string; optedInShared: boolean }
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ sessionId, entryId, optedInShared }) => {
+      const suffix = optedInShared ? 'share' : 'unshare';
+      return post<SubmitTendingResponseResponse, Record<string, never>>(
+        `/sessions/${sessionId}/tending/${entryId}/${suffix}`,
+        {}
+      );
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData<GetTendingEntriesResponse>(
+        stageKeys.tending(sessionId),
+        (old) => {
+          const existing = old?.entries ?? [];
+          const next = existing.map((entry) =>
+            entry.id === data.entry.id ? data.entry : entry
+          );
+          return { entries: next };
+        }
+      );
+    },
+    ...options,
+  });
+}
+
+/**
  * Start a passive Tending re-entry from a resolved session.
  */
 export function useCreateTendingReentry(

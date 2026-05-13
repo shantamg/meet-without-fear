@@ -442,6 +442,8 @@ model IdentifiedNeed {
   // Link to shared version if consented
   consentedContent ConsentedContent?
 
+  proposalLinks StrategyProposalNeed[]
+
   @@index([vesselId])
 }
 
@@ -949,6 +951,7 @@ model StrategyProposal {
   agreements Agreement[]
   selections Stage4ProposalSelection[]
   revisions  Stage4ProposalRevision[]
+  needLinks  StrategyProposalNeed[]
 
   @@index([sessionId])
   @@index([sessionId, status])
@@ -992,6 +995,7 @@ enum Stage4ClosureReason {
 
 enum TendingEntryType {
   SCHEDULED_SHARED_AGREEMENT_CHECKIN
+  SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN
   USER_INITIATED_REENTRY
 }
 
@@ -1002,6 +1006,23 @@ enum TendingEntryStatus {
   COMPLETED
   EXPIRED
   CANCELLED
+}
+
+enum TendingEntryScope {
+  SHARED
+  INDIVIDUAL
+}
+
+model StrategyProposalNeed {
+  proposalId String
+  needId     String
+  createdAt  DateTime @default(now())
+
+  proposal StrategyProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  need     IdentifiedNeed   @relation(fields: [needId], references: [id], onDelete: Cascade)
+
+  @@id([proposalId, needId])
+  @@index([needId])
 }
 
 model Stage4ProposalSelection {
@@ -1123,25 +1144,29 @@ model Stage4SubChatMessage {
 }
 
 model TendingEntry {
-  id           String             @id @default(cuid())
-  session      Session            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId    String
-  agreement    Agreement?         @relation(fields: [agreementId], references: [id], onDelete: Cascade)
-  agreementId  String?
-  type         TendingEntryType
-  status       TendingEntryStatus @default(SCHEDULED)
-  scheduledFor DateTime?
-  openedAt     DateTime?
-  completedAt  DateTime?
-  summary      String?            @db.Text
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id             String             @id @default(cuid())
+  session        Session            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId      String
+  agreement      Agreement?         @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  agreementId    String?
+  type           TendingEntryType
+  scope          TendingEntryScope  @default(SHARED)
+  ownerUserId    String?
+  optedInShared  Boolean            @default(false)
+  status         TendingEntryStatus @default(SCHEDULED)
+  scheduledFor   DateTime?
+  openedAt       DateTime?
+  completedAt    DateTime?
+  summary        String?            @db.Text
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
   responses TendingResponse[]
 
   @@index([sessionId, status])
   @@index([agreementId])
   @@index([scheduledFor])
+  @@index([sessionId, scope, ownerUserId])
 }
 
 model TendingResponse {

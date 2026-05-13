@@ -15,6 +15,7 @@ import {
   Stage4SelectionDecision,
   Stage4SubChatAnchor,
   Stage4SubChatStatus,
+  TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
 } from '../enums';
@@ -280,6 +281,9 @@ export interface TendingEntryDTO {
   sessionId: string;
   agreementId: string | null;
   type: TendingEntryType;
+  scope: TendingEntryScope;
+  ownerUserId: string | null;
+  optedInShared: boolean;
   status: TendingEntryStatus;
   scheduledFor: string | null;
   openedAt: string | null;

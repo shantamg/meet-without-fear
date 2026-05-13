@@ -3,6 +3,8 @@ import { requireAuth, requireSessionAccess } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errors';
 import {
   getTendingEntries,
+  postTendingEntryShare,
+  postTendingEntryUnshare,
   postTendingReentry,
   postTendingResponse,
 } from '../controllers/tending';
@@ -28,6 +30,20 @@ router.post(
   requireAuth,
   requireSessionAccess,
   asyncHandler(postTendingResponse)
+);
+
+router.post(
+  '/sessions/:id/tending/:entryId/share',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(postTendingEntryShare)
+);
+
+router.post(
+  '/sessions/:id/tending/:entryId/unshare',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(postTendingEntryUnshare)
 );
 
 export default router;

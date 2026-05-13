@@ -5,7 +5,9 @@ import { successResponse, errorResponse } from '../utils/response';
 import {
   createPassiveReentry,
   listTendingEntries,
+  setIndividualEntryShare,
   submitTendingResponse,
+  TendingForbiddenError,
   TendingInvalidStateError,
   TendingNotFoundError,
 } from '../services/tending.service';
@@ -72,6 +74,46 @@ export async function postTendingResponse(req: Request, res: Response): Promise<
     logger.error('[postTendingResponse] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to submit Tending response', 500);
   }
+}
+
+async function handleShareToggle(req: Request, res: Response, optedInShared: boolean): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const entry = await setIndividualEntryShare({
+      entryId: req.params.entryId,
+      userId: user.id,
+      optedInShared,
+    });
+    successResponse(res, { entry });
+  } catch (error) {
+    if (error instanceof TendingNotFoundError) {
+      errorResponse(res, 'NOT_FOUND', 'Tending entry not found', 404);
+      return;
+    }
+    if (error instanceof TendingForbiddenError) {
+      errorResponse(res, 'FORBIDDEN', 'Only the owner can change sharing on this entry', 403);
+      return;
+    }
+    if (error instanceof TendingInvalidStateError) {
+      errorResponse(res, 'VALIDATION_ERROR', error.message, 400);
+      return;
+    }
+    logger.error('[handleShareToggle] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to update Tending entry sharing', 500);
+  }
+}
+
+export async function postTendingEntryShare(req: Request, res: Response): Promise<void> {
+  await handleShareToggle(req, res, true);
+}
+
+export async function postTendingEntryUnshare(req: Request, res: Response): Promise<void> {
+  await handleShareToggle(req, res, false);
 }
 
 export async function postTendingReentry(req: Request, res: Response): Promise<void> {
