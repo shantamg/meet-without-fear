@@ -671,19 +671,13 @@ export async function shareStage4Selections(req: Request, res: Response): Promis
     // for the first time AND the partner hasn't shared yet, append a single
     // templated AI message to their chat so the moment doesn't go silent.
     try {
-      const partnerHasShared = partnerId
-        ? Boolean(
-            await prisma.stageProgress.findFirst({
-              where: {
-                sessionId,
-                userId: partnerId,
-                stage: 4,
-                gatesSatisfied: { path: ['selectionSubmitted'], equals: true },
-              },
-              select: { id: true },
-            })
-          )
-        : false;
+      const partnerProgress = partnerId
+        ? await prisma.stageProgress.findFirst({
+            where: { sessionId, userId: partnerId, stage: 4 },
+            select: { gatesSatisfied: true },
+          })
+        : null;
+      const partnerHasShared = hasSubmittedSelectionGate(partnerProgress?.gatesSatisfied);
       if (!partnerHasShared) {
         const sessionWithMembers = await prisma.session.findUnique({
           where: { id: sessionId },

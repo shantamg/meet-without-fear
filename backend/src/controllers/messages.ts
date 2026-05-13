@@ -128,7 +128,7 @@ async function getStage4OpenNeedsForPrompt(
     const [coverageRows, willingSelections, declinations] = await Promise.all([
       prisma.stage4NeedCoverage.findMany({
         where: { sessionId, coverageStatus: { in: ['OPEN', 'PARTIAL'] } },
-        select: { id: true, needId: true, coveringProposalIds: true },
+        select: { id: true, needId: true, needLabel: true, coveringProposalIds: true },
       }),
       prisma.stage4ProposalSelection.findMany({
         where: { sessionId, userId, decision: 'WILLING' },
@@ -150,15 +150,19 @@ async function getStage4OpenNeedsForPrompt(
     });
     if (candidateRows.length === 0) return null;
     const needIds = candidateRows.map((r) => r.needId).filter((n): n is string => Boolean(n));
-    if (needIds.length === 0) return null;
-    const needs = await prisma.identifiedNeed.findMany({
-      where: { id: { in: needIds }, vessel: { userId } },
-      select: { id: true, need: true },
-    });
+    const needs = needIds.length > 0
+      ? await prisma.identifiedNeed.findMany({
+          where: { id: { in: needIds }, vessel: { userId } },
+          select: { id: true, need: true },
+        })
+      : [];
     const byId = new Map(needs.map((n) => [n.id, n.need] as const));
     const labels: Array<{ needLabel: string }> = [];
     for (const row of candidateRows) {
-      const label = row.needId ? byId.get(row.needId) : undefined;
+      // Prefer the user's exact phrasing from IdentifiedNeed; fall back to the
+      // coverage row's needLabel so coverage rows without an IdentifiedNeed
+      // link (or whose link belongs to the partner's vessel) still surface.
+      const label = (row.needId && byId.get(row.needId)) || row.needLabel;
       if (label) labels.push({ needLabel: label });
     }
     return labels.length > 0 ? labels : null;
