@@ -167,14 +167,14 @@ export async function resolveStage4SubChat(
           stage: 4,
           submittedBy: user.id,
           change: 'stage4_subchat_resolved',
-        } as any);
+        });
         const partnerId = await getPartnerUserId(sessionId, user.id);
         if (partnerId) {
           await notifyPartner(sessionId, partnerId, 'session.strategies_updated', {
             stage: 4,
             submittedBy: user.id,
             change: 'stage4_subchat_resolved',
-          } as any);
+          });
         }
       } catch (e) {
         logger.warn('[resolveStage4SubChat] realtime emit failed', e);

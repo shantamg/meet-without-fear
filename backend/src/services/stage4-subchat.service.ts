@@ -13,12 +13,18 @@
  * Phase 6 tunes them to match the gold rubric.
  */
 
-import { Prisma } from '@prisma/client';
+import {
+  MessageRole as PrismaMessageRole,
+  Prisma,
+  Stage4ProposalKind as PrismaStage4ProposalKind,
+  Stage4ProposalStatus as PrismaStage4ProposalStatus,
+  Stage4SubChatAnchor as PrismaStage4SubChatAnchor,
+  Stage4SubChatStatus as PrismaStage4SubChatStatus,
+  StrategySource as PrismaStrategySource,
+} from '@prisma/client';
 import {
   MessageRole as SharedMessageRole,
   Stage4ProposalDraft,
-  Stage4ProposalKind,
-  Stage4ProposalStatus,
   Stage4SubChatAnchor,
   Stage4SubChatDTO,
   Stage4SubChatMessageDTO,
@@ -108,9 +114,9 @@ export async function openOrGetActiveSubChat(
     where: {
       sessionId,
       userId,
-      anchorKind: anchorKind as any,
+      anchorKind: anchorKind as unknown as PrismaStage4SubChatAnchor,
       anchorId,
-      status: 'ACTIVE' as any,
+      status: PrismaStage4SubChatStatus.ACTIVE,
     },
     include: {
       messages: { orderBy: { createdAt: 'asc' } },
@@ -125,9 +131,9 @@ export async function openOrGetActiveSubChat(
     data: {
       sessionId,
       userId,
-      anchorKind: anchorKind as any,
+      anchorKind: anchorKind as unknown as PrismaStage4SubChatAnchor,
       anchorId,
-      status: 'ACTIVE' as any,
+      status: PrismaStage4SubChatStatus.ACTIVE,
     },
     include: { messages: true },
   });
@@ -230,7 +236,7 @@ export async function buildSystemPrompt(
       select: { role: true, content: true },
     }),
     prisma.strategyProposal.findMany({
-      where: { sessionId, status: 'ACTIVE' as any },
+      where: { sessionId, status: PrismaStage4ProposalStatus.ACTIVE },
       select: {
         id: true,
         description: true,
@@ -294,14 +300,14 @@ export async function appendUserMessageAndRespond(
   if (subChat.userId !== input.userId) {
     throw new SubChatForbiddenError();
   }
-  if (subChat.status !== ('ACTIVE' as any)) {
+  if (subChat.status !== PrismaStage4SubChatStatus.ACTIVE) {
     throw new SubChatResolvedError();
   }
 
   await prisma.stage4SubChatMessage.create({
     data: {
       subChatId: subChat.id,
-      role: 'USER' as any,
+      role: PrismaMessageRole.USER,
       content: input.content,
     },
   });
@@ -320,7 +326,7 @@ export async function appendUserMessageAndRespond(
 
   const llmMessages = [
     ...subChat.messages.map((m) => ({
-      role: (m.role === ('AI' as any) ? 'assistant' : 'user') as 'user' | 'assistant',
+      role: (m.role === PrismaMessageRole.AI ? 'assistant' : 'user') as 'user' | 'assistant',
       content: m.content,
     })),
     { role: 'user' as const, content: input.content },
@@ -345,7 +351,7 @@ export async function appendUserMessageAndRespond(
   await prisma.stage4SubChatMessage.create({
     data: {
       subChatId: subChat.id,
-      role: 'AI' as any,
+      role: PrismaMessageRole.AI,
       content: aiText && aiText.trim().length ? aiText : fallback,
     },
   });
@@ -380,7 +386,7 @@ export async function resolveSubChat(
   });
   if (!subChat) throw new SubChatNotFoundError();
   if (subChat.userId !== input.userId) throw new SubChatForbiddenError();
-  if (subChat.status !== ('ACTIVE' as any)) {
+  if (subChat.status !== PrismaStage4SubChatStatus.ACTIVE) {
     // Idempotent: already resolved — return current state.
     const current = await getSubChatById(subChat.id);
     if (!current) throw new SubChatNotFoundError();
@@ -412,9 +418,9 @@ export async function resolveSubChat(
           needsAddressed,
           duration: draft.duration ?? null,
           measureOfSuccess: draft.measureOfSuccess ?? null,
-          kind: Stage4ProposalKind.SHARED_PROPOSAL as any,
-          status: Stage4ProposalStatus.ACTIVE as any,
-          source: 'AI_SUGGESTED' as any,
+          kind: PrismaStage4ProposalKind.SHARED_PROPOSAL,
+          status: PrismaStage4ProposalStatus.ACTIVE,
+          source: PrismaStrategySource.AI_SUGGESTED,
         },
       });
       createdIds.push(created.id);
@@ -453,7 +459,7 @@ export async function resolveSubChat(
     await tx.stage4SubChat.update({
       where: { id: subChat.id },
       data: {
-        status: 'RESOLVED' as any,
+        status: PrismaStage4SubChatStatus.RESOLVED,
         resolvedAt: new Date(),
       },
     });
