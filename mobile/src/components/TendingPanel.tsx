@@ -9,7 +9,9 @@ import {
   TendingEntryStatus,
   TendingEntryType,
 } from '@meet-without-fear/shared';
-import { colors } from '@/theme';
+import { useAppAppearance } from '@/theme';
+
+type Palette = ReturnType<typeof useAppAppearance>['palette'];
 
 type TendingStatusChoice = 'WORKED' | 'PARTLY' | 'DID_NOT_WORK' | 'DID_NOT_TRY' | 'OTHER';
 type TendingContinueChoice = 'CONTINUE' | 'ADJUST' | 'CLOSE' | 'NEW_PROCESS' | 'OTHER_TRACK';
@@ -116,6 +118,8 @@ export function TendingPanel({
   onSubmitResponse,
   onToggleShare,
 }: TendingPanelProps) {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => createStyles(palette), [palette]);
   const [intent, setIntent] = useState('');
   const [reflection, setReflection] = useState('');
   const [statusChoice, setStatusChoice] = useState<TendingStatusChoice>('PARTLY');
@@ -164,7 +168,7 @@ export function TendingPanel({
       <View style={styles.card}>
         <View style={styles.titleRow}>
           <View style={styles.titleIcon}>
-            <RotateCcw color={colors.accent} size={18} />
+            <RotateCcw color={palette.accent} size={18} />
           </View>
           <View style={styles.titleCopy}>
             <Text style={styles.title}>The Tending</Text>
@@ -220,7 +224,7 @@ export function TendingPanel({
                   </TouchableOpacity>
                 )}
             </View>
-            {selectedEntry.myResponse && <CheckCircle2 color={colors.success} size={20} />}
+            {selectedEntry.myResponse && <CheckCircle2 color={palette.success} size={20} />}
           </View>
 
           {selectedAgreement && (
@@ -286,7 +290,7 @@ export function TendingPanel({
                 value={reflection}
                 onChangeText={setReflection}
                 placeholder="Add a short reflection"
-                placeholderTextColor={colors.textMuted}
+                placeholderTextColor={palette.textFaint}
                 multiline
                 style={styles.textInput}
                 accessibilityLabel="Tending reflection"
@@ -326,7 +330,7 @@ export function TendingPanel({
               {passiveEntries.length > 0 ? ` · ${passiveEntries.length} re-entry ${passiveEntries.length === 1 ? 'thread' : 'threads'}` : ''}
             </Text>
           </View>
-          <CalendarClock color={colors.textSecondary} size={20} />
+          <CalendarClock color={palette.textMuted} size={20} />
         </View>
 
         {outcome?.individualCommitments.length ? (
@@ -355,7 +359,7 @@ export function TendingPanel({
           value={intent}
           onChangeText={setIntent}
           placeholder="What do you want to revisit?"
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={palette.textFaint}
           multiline
           style={styles.textInput}
           accessibilityLabel="Passive re-entry intent"
@@ -377,204 +381,205 @@ export function TendingPanel({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    gap: 12,
-  },
-  card: {
-    backgroundColor: colors.bgSecondary,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'flex-start',
-  },
-  titleIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.bgTertiary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  titleCopy: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
-  entryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 4,
-  },
-  entryMeta: {
-    fontSize: 12,
-    color: colors.textMuted,
-    lineHeight: 17,
-  },
-  contextBox: {
-    backgroundColor: colors.bgPrimary,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  contextLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    marginBottom: 6,
-  },
-  contextText: {
-    fontSize: 14,
-    color: colors.textPrimary,
-    lineHeight: 20,
-    marginBottom: 4,
-  },
-  contextMeta: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 18,
-    marginTop: 4,
-  },
-  responseArea: {
-    gap: 10,
-  },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textSecondary,
-  },
-  choiceWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  choiceButton: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    backgroundColor: colors.bgPrimary,
-  },
-  choiceButtonSelected: {
-    borderColor: colors.accent,
-    backgroundColor: colors.bgTertiary,
-  },
-  choiceText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  choiceTextSelected: {
-    color: colors.accent,
-  },
-  textInput: {
-    minHeight: 78,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bgPrimary,
-    color: colors.textPrimary,
-    padding: 12,
-    fontSize: 14,
-    textAlignVertical: 'top',
-  },
-  primaryButton: {
-    borderRadius: 8,
-    backgroundColor: colors.accent,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: colors.textOnAccent,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  secondaryButtonText: {
-    color: colors.accent,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  mutedText: {
-    fontSize: 13,
-    color: colors.textMuted,
-    lineHeight: 18,
-  },
-  scopeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  scopeChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    backgroundColor: colors.bgTertiary,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  scopeChipIndividual: {
-    backgroundColor: colors.bgPrimary,
-    borderColor: colors.accent,
-  },
-  scopeChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-  },
-  shareToggle: {
-    alignSelf: 'flex-start',
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    backgroundColor: colors.bgPrimary,
-  },
-  shareToggleText: {
-    color: colors.accent,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-});
+const createStyles = (palette: Palette) =>
+  StyleSheet.create({
+    container: {
+      gap: 12,
+    },
+    card: {
+      backgroundColor: palette.bgElev,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: palette.border,
+      padding: 16,
+    },
+    titleRow: {
+      flexDirection: 'row',
+      gap: 12,
+      alignItems: 'flex-start',
+    },
+    titleIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: palette.bgPane,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    titleCopy: {
+      flex: 1,
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: palette.text,
+      marginBottom: 4,
+    },
+    subtitle: {
+      fontSize: 14,
+      color: palette.textMuted,
+      lineHeight: 20,
+    },
+    entryHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: 12,
+      alignItems: 'flex-start',
+      marginBottom: 12,
+    },
+    sectionTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: palette.text,
+      marginBottom: 4,
+    },
+    entryMeta: {
+      fontSize: 12,
+      color: palette.textFaint,
+      lineHeight: 17,
+    },
+    contextBox: {
+      backgroundColor: palette.bg,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    contextLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: palette.textFaint,
+      textTransform: 'uppercase',
+      marginBottom: 6,
+    },
+    contextText: {
+      fontSize: 14,
+      color: palette.text,
+      lineHeight: 20,
+      marginBottom: 4,
+    },
+    contextMeta: {
+      fontSize: 13,
+      color: palette.textMuted,
+      lineHeight: 18,
+      marginTop: 4,
+    },
+    responseArea: {
+      gap: 10,
+    },
+    fieldLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: palette.textMuted,
+    },
+    choiceWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    choiceButton: {
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: palette.border,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      backgroundColor: palette.bg,
+    },
+    choiceButtonSelected: {
+      borderColor: palette.accent,
+      backgroundColor: palette.bgPane,
+    },
+    choiceText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: palette.textMuted,
+    },
+    choiceTextSelected: {
+      color: palette.accent,
+    },
+    textInput: {
+      minHeight: 78,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.bg,
+      color: palette.text,
+      padding: 12,
+      fontSize: 14,
+      textAlignVertical: 'top',
+    },
+    primaryButton: {
+      borderRadius: 8,
+      backgroundColor: palette.accent,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    primaryButtonText: {
+      color: palette.textOnAccent,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    secondaryButton: {
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: palette.accent,
+      paddingVertical: 12,
+      alignItems: 'center',
+      marginTop: 4,
+    },
+    secondaryButtonText: {
+      color: palette.accent,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    disabledButton: {
+      opacity: 0.6,
+    },
+    mutedText: {
+      fontSize: 13,
+      color: palette.textFaint,
+      lineHeight: 18,
+    },
+    scopeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 4,
+    },
+    scopeChip: {
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 10,
+      backgroundColor: palette.bgPane,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    scopeChipIndividual: {
+      backgroundColor: palette.bg,
+      borderColor: palette.accent,
+    },
+    scopeChipText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: palette.textMuted,
+      textTransform: 'uppercase',
+    },
+    shareToggle: {
+      alignSelf: 'flex-start',
+      marginTop: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: palette.accent,
+      backgroundColor: palette.bg,
+    },
+    shareToggleText: {
+      color: palette.accent,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+  });
 
 export default TendingPanel;
