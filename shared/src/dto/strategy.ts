@@ -319,6 +319,47 @@ export interface SubmitTendingResponseResponse {
   entry: TendingEntryDTO;
 }
 
+// Stage 4 Phase 5: the five forward paths surfaced at a Tending check-in.
+export enum ContinueChoice {
+  ANOTHER_ROUND = 'ANOTHER_ROUND',
+  EXTEND = 'EXTEND',
+  NEW_PROCESS = 'NEW_PROCESS',
+  PARTIAL_CLOSURE = 'PARTIAL_CLOSURE',
+  FULL_CLOSURE = 'FULL_CLOSURE',
+}
+
+export enum PartialClosureResolution {
+  RESOLVED = 'RESOLVED',
+  CONTINUING = 'CONTINUING',
+}
+
+export interface TendingCheckinOrientationReflection {
+  reflection: string;
+  perEntryNotes?: Record<string, string>;
+}
+
+export interface TendingCheckinWhatComesNext {
+  continueChoice: ContinueChoice;
+  partialClosure?: Record<string, PartialClosureResolution>;
+}
+
+export interface TendingCheckinOrientations {
+  whatWorked: TendingCheckinOrientationReflection;
+  whereMoreSupport: TendingCheckinOrientationReflection;
+  whatComesNext: TendingCheckinWhatComesNext;
+}
+
+export interface SubmitTendingCheckinRequest {
+  orientations: TendingCheckinOrientations;
+}
+
+export interface SubmitTendingCheckinResponse {
+  entries: TendingEntryDTO[];
+  newSessionId?: string;
+  continueChoice: ContinueChoice;
+  nextScheduledFor?: string | null;
+}
+
 export interface CreateTendingReentryRequest {
   intent?: string;
 }

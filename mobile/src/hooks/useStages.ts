@@ -59,6 +59,8 @@ import {
   GetTendingEntriesResponse,
   SubmitTendingResponseRequest,
   SubmitTendingResponseResponse,
+  SubmitTendingCheckinRequest,
+  SubmitTendingCheckinResponse,
   CreateTendingReentryRequest,
   CreateTendingReentryResponse,
   AgreementDTO,
@@ -2374,6 +2376,36 @@ export function useSubmitTendingResponse(
           return { entries: [data.entry, ...withoutUpdated] };
         }
       );
+      queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
+      queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Stage 4 Phase 5 — submit the three-orientation Tending check-in covering all
+ * open entries on a session.
+ */
+export function useSubmitTendingCheckin(
+  options?: Omit<
+    UseMutationOptions<
+      SubmitTendingCheckinResponse,
+      ApiClientError,
+      { sessionId: string } & SubmitTendingCheckinRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ sessionId, ...request }) => {
+      return post<SubmitTendingCheckinResponse, SubmitTendingCheckinRequest>(
+        `/sessions/${sessionId}/tending/checkin`,
+        request
+      );
+    },
+    onSuccess: (_data, { sessionId }) => {
       queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
       queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
     },

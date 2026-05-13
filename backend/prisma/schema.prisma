@@ -156,9 +156,15 @@ model Session {
   // Linked Inner Thoughts sessions for private reflection during partner session
   linkedInnerThoughts InnerWorkSession[] @relation("LinkedInnerThoughts")
 
+  // Stage 4 Phase 5: Tending check-in NEW_PROCESS path links forward to a fresh session
+  previousSession   Session?  @relation("SessionLineage", fields: [previousSessionId], references: [id], onDelete: SetNull)
+  previousSessionId String?
+  nextSessions      Session[] @relation("SessionLineage")
+
   @@index([relationshipId])
   @@index([status])
   @@index([type])
+  @@index([previousSessionId])
 }
 
 enum SessionType {
@@ -1161,7 +1167,8 @@ model TendingEntry {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  responses TendingResponse[]
+  responses        TendingResponse[]
+  partialClosures  TendingResponsePartialClosure[]
 
   @@index([sessionId, status])
   @@index([agreementId])
@@ -1177,10 +1184,44 @@ model TendingResponse {
   userId         String
   status         String
   reflection     String?      @db.Text
-  continueChoice String?
+  continueChoice ContinueChoice?
   submittedAt    DateTime     @default(now())
 
+  // Stage 4 Phase 5: when continueChoice = PARTIAL_CLOSURE, per-entry resolutions
+  // are recorded against the originating response (one row per TendingEntry resolved).
+  partialClosures TendingResponsePartialClosure[]
+
   @@unique([tendingEntryId, userId])
+}
+
+// Stage 4 Phase 5: ContinueChoice — five forward paths at the end of a Tending check-in.
+enum ContinueChoice {
+  ANOTHER_ROUND     // Reset Stage 4 to inventory building; new experiments
+  EXTEND            // Keep current entries open with a new scheduledFor
+  NEW_PROCESS       // Create a fresh Session linked via previousSessionId; both users start at Stage 0
+  PARTIAL_CLOSURE   // Close some entries, continue others (per-TendingEntry granularity)
+  FULL_CLOSURE      // Mark all entries COMPLETED and move session to terminal state
+}
+
+enum PartialClosureResolution {
+  RESOLVED
+  CONTINUING
+}
+
+// Stage 4 Phase 5: Per-TendingEntry resolution recorded when a user picks PARTIAL_CLOSURE.
+// Scope decision: targets TendingEntry (not Agreement) so individual commitments can be
+// partially closed alongside shared agreements. See PR description for rationale.
+model TendingResponsePartialClosure {
+  id                String                    @id @default(cuid())
+  tendingResponse   TendingResponse           @relation(fields: [tendingResponseId], references: [id], onDelete: Cascade)
+  tendingResponseId String
+  tendingEntry      TendingEntry              @relation(fields: [tendingEntryId], references: [id], onDelete: Cascade)
+  tendingEntryId    String
+  resolution        PartialClosureResolution
+  createdAt         DateTime                  @default(now())
+
+  @@unique([tendingResponseId, tendingEntryId])
+  @@index([tendingEntryId])
 }
 
 model StrategyRanking {

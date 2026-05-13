@@ -1,5 +1,8 @@
 import { Prisma } from '@prisma/client';
 import {
+  ContinueChoice,
+  PartialClosureResolution,
+  TendingCheckinOrientations,
   TendingEntryDTO,
   TendingEntryScope,
   TendingEntryStatus,
@@ -40,7 +43,7 @@ type TendingEntryWithResponses = {
     userId: string;
     status: string;
     reflection: string | null;
-    continueChoice: string | null;
+    continueChoice: ContinueChoice | null;
     submittedAt: Date;
   }>;
 };
@@ -280,7 +283,7 @@ export async function submitTendingResponse(args: {
   userId: string;
   status: string;
   reflection?: string;
-  continueChoice?: string;
+  continueChoice?: ContinueChoice;
 }): Promise<TendingEntryDTO> {
   const entry = await getEntryForUser(args.entryId, args.userId);
   if (entry.scope === TendingEntryScope.INDIVIDUAL && entry.ownerUserId !== args.userId) {
@@ -429,6 +432,257 @@ export async function publishPartnerInvolvingReentryChoice(args: {
     tendingEntryId: args.tendingEntryId,
     createdBy: args.userId,
   }, args.userId);
+}
+
+/**
+ * Stage 4 Phase 5 — submit the structured three-orientation check-in covering all
+ * currently-open Tending entries on a session in one shot. Returns the affected entries
+ * and metadata about the chosen forward path.
+ *
+ * Scope decision (documented in PR): partial-closure resolutions target TendingEntry
+ * rather than Agreement so individual commitments can be partially closed too.
+ */
+const DEFAULT_EXTENSION_DAYS = 28;
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date.getTime());
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+export type SubmitTendingCheckinResult = {
+  entries: TendingEntryDTO[];
+  newSessionId?: string;
+  continueChoice: ContinueChoice;
+  nextScheduledFor?: Date | null;
+};
+
+export async function submitTendingCheckin(args: {
+  sessionId: string;
+  userId: string;
+  orientations: TendingCheckinOrientations;
+  now?: Date;
+}): Promise<SubmitTendingCheckinResult> {
+  const now = args.now ?? new Date();
+  const session = await assertSessionMember(args.sessionId, args.userId);
+
+  const openEntries = (await prisma.tendingEntry.findMany({
+    where: {
+      sessionId: args.sessionId,
+      status: { in: [TendingEntryStatus.OPEN, TendingEntryStatus.PARTIAL] },
+      OR: [
+        { scope: TendingEntryScope.SHARED },
+        { scope: TendingEntryScope.INDIVIDUAL, ownerUserId: args.userId },
+      ],
+    },
+    include: { responses: true },
+  })) as TendingEntryWithResponses[];
+
+  if (openEntries.length === 0) {
+    throw new TendingInvalidStateError('No open Tending entries to check in on');
+  }
+
+  const choice = args.orientations.whatComesNext.continueChoice;
+  const reflection = [
+    args.orientations.whatWorked.reflection
+      ? `What worked: ${args.orientations.whatWorked.reflection}`
+      : null,
+    args.orientations.whereMoreSupport.reflection
+      ? `Where more support: ${args.orientations.whereMoreSupport.reflection}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  let nextScheduledFor: Date | null = null;
+  let newSessionId: string | undefined;
+
+  await prisma.$transaction(async (tx) => {
+    // 1) Persist a TendingResponse for each open entry that the user can respond to.
+    const responseIds: Record<string, string> = {};
+    for (const entry of openEntries) {
+      if (entry.scope === TendingEntryScope.INDIVIDUAL && entry.ownerUserId !== args.userId) {
+        continue;
+      }
+      const upserted = await tx.tendingResponse.upsert({
+        where: {
+          tendingEntryId_userId: {
+            tendingEntryId: entry.id,
+            userId: args.userId,
+          },
+        },
+        create: {
+          tendingEntryId: entry.id,
+          userId: args.userId,
+          status: 'CHECKIN',
+          reflection: reflection || null,
+          continueChoice: choice,
+          submittedAt: now,
+        },
+        update: {
+          status: 'CHECKIN',
+          reflection: reflection || null,
+          continueChoice: choice,
+          submittedAt: now,
+        },
+      });
+      responseIds[entry.id] = upserted.id;
+    }
+
+    // 2) Apply path-specific state transitions.
+    switch (choice) {
+      case ContinueChoice.ANOTHER_ROUND: {
+        // Reset Stage 4 to inventory building: clear closure, selections, gates.
+        // Preserve agreements as historical context.
+        await tx.stage4Closure.deleteMany({ where: { sessionId: args.sessionId } });
+        await tx.stage4ProposalSelection.deleteMany({ where: { sessionId: args.sessionId } });
+        await tx.stage4NeedCoverage.deleteMany({ where: { sessionId: args.sessionId } });
+        await tx.stage4NeedDeclination.deleteMany({ where: { sessionId: args.sessionId } });
+        // Clear selectionSubmitted gates on every member's stage-4 progress.
+        const progress = await tx.stageProgress.findMany({
+          where: { sessionId: args.sessionId, stage: 4 },
+        });
+        for (const row of progress) {
+          const gates = (row.gatesSatisfied as Record<string, unknown> | null) ?? {};
+          delete gates.selectionSubmitted;
+          await tx.stageProgress.update({
+            where: { id: row.id },
+            data: { gatesSatisfied: gates as Prisma.InputJsonValue },
+          });
+        }
+        // Close out current Tending entries so a fresh inventory cycle can run.
+        for (const entry of openEntries) {
+          await tx.tendingEntry.update({
+            where: { id: entry.id },
+            data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
+          });
+        }
+        await tx.session.update({
+          where: { id: args.sessionId },
+          data: { status: 'ACTIVE' },
+        });
+        break;
+      }
+      case ContinueChoice.EXTEND: {
+        nextScheduledFor = addDays(now, DEFAULT_EXTENSION_DAYS);
+        for (const entry of openEntries) {
+          await tx.tendingEntry.update({
+            where: { id: entry.id },
+            data: {
+              status: TendingEntryStatus.SCHEDULED,
+              scheduledFor: nextScheduledFor,
+              openedAt: null,
+              completedAt: null,
+            },
+          });
+        }
+        break;
+      }
+      case ContinueChoice.NEW_PROCESS: {
+        // Create a new Session linked back to this one. Both users start at Stage 0.
+        const created = await tx.session.create({
+          data: {
+            relationshipId: session.relationshipId,
+            status: 'CREATED',
+            type: session.type,
+            previousSessionId: args.sessionId,
+          },
+        });
+        newSessionId = created.id;
+        // Mark current entries COMPLETED and the current session RESOLVED.
+        for (const entry of openEntries) {
+          await tx.tendingEntry.update({
+            where: { id: entry.id },
+            data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
+          });
+        }
+        await tx.session.update({
+          where: { id: args.sessionId },
+          data: { status: 'RESOLVED', resolvedAt: now },
+        });
+        break;
+      }
+      case ContinueChoice.PARTIAL_CLOSURE: {
+        const resolutions = args.orientations.whatComesNext.partialClosure ?? {};
+        nextScheduledFor = addDays(now, DEFAULT_EXTENSION_DAYS);
+        for (const entry of openEntries) {
+          const resolution = resolutions[entry.id] ?? PartialClosureResolution.CONTINUING;
+          const responseId = responseIds[entry.id];
+          if (responseId) {
+            await tx.tendingResponsePartialClosure.upsert({
+              where: {
+                tendingResponseId_tendingEntryId: {
+                  tendingResponseId: responseId,
+                  tendingEntryId: entry.id,
+                },
+              },
+              create: {
+                tendingResponseId: responseId,
+                tendingEntryId: entry.id,
+                resolution,
+              },
+              update: { resolution },
+            });
+          }
+          if (resolution === PartialClosureResolution.RESOLVED) {
+            await tx.tendingEntry.update({
+              where: { id: entry.id },
+              data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
+            });
+          } else {
+            await tx.tendingEntry.update({
+              where: { id: entry.id },
+              data: {
+                status: TendingEntryStatus.SCHEDULED,
+                scheduledFor: nextScheduledFor,
+                openedAt: null,
+                completedAt: null,
+              },
+            });
+          }
+        }
+        break;
+      }
+      case ContinueChoice.FULL_CLOSURE: {
+        for (const entry of openEntries) {
+          await tx.tendingEntry.update({
+            where: { id: entry.id },
+            data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
+          });
+        }
+        await tx.session.update({
+          where: { id: args.sessionId },
+          data: { status: 'RESOLVED', resolvedAt: now },
+        });
+        break;
+      }
+      default:
+        throw new TendingInvalidStateError(`Unsupported continueChoice: ${choice as string}`);
+    }
+  });
+
+  try {
+    await publishSessionEvent(args.sessionId, 'notification.pending_action', {
+      kind: 'tending_checkin_submitted',
+      continueChoice: choice,
+      submittedBy: args.userId,
+      newSessionId,
+    }, args.userId);
+  } catch (error) {
+    logger.warn('[tending] Failed to publish check-in event', { sessionId: args.sessionId, error });
+  }
+
+  const refreshed = (await prisma.tendingEntry.findMany({
+    where: { id: { in: openEntries.map((e) => e.id) } },
+    include: { responses: true },
+  })) as TendingEntryWithResponses[];
+
+  return {
+    entries: refreshed.map((entry) => toEntryDTO(entry, args.userId)),
+    newSessionId,
+    continueChoice: choice,
+    nextScheduledFor,
+  };
 }
 
 export async function openDueTendingEntries(now = new Date()): Promise<{ opened: number; entryIds: string[] }> {
