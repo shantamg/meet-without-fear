@@ -757,7 +757,7 @@ describe('Stage 4 API', () => {
           agreedByA: true,
           agreedByB: true,
           agreedAt: new Date('2026-05-06T10:04:00.000Z'),
-          followUpDate: new Date('2026-05-13T10:00:00.000Z'),
+          followUpDate: new Date('2099-05-13T10:00:00.000Z'),
         },
       ]);
       (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([
@@ -766,7 +766,7 @@ describe('Stage 4 API', () => {
           type: TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
           status: TendingEntryStatus.SCHEDULED,
           agreementId: 'agreement-1',
-          scheduledFor: new Date('2026-05-13T10:00:00.000Z'),
+          scheduledFor: new Date('2099-05-13T10:00:00.000Z'),
           openedAt: null,
           completedAt: null,
           summary: 'Check whether the weekly check-in is helping.',
@@ -789,7 +789,7 @@ describe('Stage 4 API', () => {
                   strategyId: mockStrategyIds[0],
                   agreedByMe: true,
                   agreedByPartner: true,
-                  followUpDate: '2026-05-13T10:00:00.000Z',
+                  followUpDate: '2099-05-13T10:00:00.000Z',
                 }),
               ],
               closedAt: '2026-05-06T10:04:00.000Z',
@@ -800,7 +800,7 @@ describe('Stage 4 API', () => {
                 type: TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
                 status: TendingEntryStatus.SCHEDULED,
                 agreementId: 'agreement-1',
-                scheduledFor: '2026-05-13T10:00:00.000Z',
+                scheduledFor: '2099-05-13T10:00:00.000Z',
               }),
               scheduledCount: 1,
               openCount: 0,
@@ -934,9 +934,9 @@ describe('Stage 4 API', () => {
         user: mockUser,
         params: { id: mockSessionId },
         body: {
-          checkInDate: '2026-05-13T10:00:00.000Z',
+          checkInDate: '2099-05-13T10:00:00.000Z',
           followUpDatesByProposalId: {
-            [mockStrategyIds[0]]: '2026-05-13T10:00:00.000Z',
+            [mockStrategyIds[0]]: '2099-05-13T10:00:00.000Z',
           },
         },
       });
@@ -1031,7 +1031,7 @@ describe('Stage 4 API', () => {
           agreedByA: true,
           agreedByB: true,
           agreedAt: new Date('2026-05-06T10:04:00.000Z'),
-          followUpDate: new Date('2026-05-13T10:00:00.000Z'),
+          followUpDate: new Date('2099-05-13T10:00:00.000Z'),
         },
       ]);
       (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([]);
@@ -1046,7 +1046,7 @@ describe('Stage 4 API', () => {
             status: AgreementStatus.AGREED,
             agreedByA: true,
             agreedByB: true,
-            followUpDate: new Date('2026-05-13T10:00:00.000Z'),
+            followUpDate: new Date('2099-05-13T10:00:00.000Z'),
           }),
         })
       );
@@ -1066,7 +1066,7 @@ describe('Stage 4 API', () => {
             agreementId: 'agreement-1',
             type: TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
             status: TendingEntryStatus.SCHEDULED,
-            scheduledFor: new Date('2026-05-13T10:00:00.000Z'),
+            scheduledFor: new Date('2099-05-13T10:00:00.000Z'),
           }),
         })
       );
