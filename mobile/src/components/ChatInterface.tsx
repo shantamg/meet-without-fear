@@ -160,6 +160,10 @@ interface ChatInterfaceProps {
   onVoicePress?: () => void;
   /** Content of a failed message to restore to the input field */
   failedMessage?: string | null;
+  /** Pre-fill the input with provided text and focus it. */
+  prefillText?: string | null;
+  /** Callback invoked once a prefill has been applied. */
+  onPrefillConsumed?: () => void;
   /** ID of the last chat item the user has seen - used to show "New messages" separator */
   lastSeenChatItemId?: string | null;
   /** Server-backed timestamp from before this screen marked the session viewed. */
@@ -243,6 +247,8 @@ export function ChatInterface({
   onValidateNotQuite,
   onVoicePress,
   failedMessage,
+  prefillText,
+  onPrefillConsumed,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -908,6 +914,8 @@ export function ChatInterface({
             disabled={disabled || isInputDisabled || isLoading}
             onVoicePress={onVoicePress}
             failedMessage={failedMessage}
+            prefillText={prefillText}
+            onPrefillConsumed={onPrefillConsumed}
           />
         )}
         {!isKeyboardVisible && renderAboveInput?.()}

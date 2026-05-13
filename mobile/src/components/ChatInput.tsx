@@ -18,6 +18,10 @@ interface ChatInputProps {
   onVoicePress?: () => void;
   /** Content of a failed message to restore to the input field */
   failedMessage?: string | null;
+  /** Pre-fill the input with provided text and focus it (e.g. Stage 4 brainstorm seed). */
+  prefillText?: string | null;
+  /** Callback invoked once a prefill has been applied (so caller can clear). */
+  onPrefillConsumed?: () => void;
 }
 
 // ============================================================================
@@ -39,6 +43,8 @@ export function ChatInput({
   showCharacterCount = false,
   onVoicePress,
   failedMessage,
+  prefillText,
+  onPrefillConsumed,
 }: ChatInputProps) {
   const styles = useStyles();
   const { palette } = useAppAppearance();
@@ -54,6 +60,16 @@ export function ChatInput({
       setInput(failedMessage);
     }
   }, [failedMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pre-fill from external trigger (Stage 4 brainstorm stub).
+  useEffect(() => {
+    if (prefillText && prefillText.length > 0) {
+      justSentRef.current = false;
+      setInput(prefillText);
+      inputRef.current?.focus();
+      onPrefillConsumed?.();
+    }
+  }, [prefillText]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const canSend = input.trim().length > 0 && !disabled;
   const characterRatio = input.length / maxLength;

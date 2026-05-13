@@ -593,6 +593,65 @@ export async function shareStage4Selections(req: Request, res: Response): Promis
       return;
     }
 
+    // Gate: every open/partial need must be addressed by a willing-active
+    // proposal or explicitly declined ("leave for now") by this user.
+    const [openOrPartialNeeds, willingSelections, declinations] = await Promise.all([
+      prisma.stage4NeedCoverage.findMany({
+        where: {
+          sessionId,
+          coverageStatus: { in: ['OPEN', 'PARTIAL'] },
+        },
+        select: {
+          id: true,
+          needId: true,
+          coverageStatus: true,
+          coveringProposalIds: true,
+        },
+      }),
+      prisma.stage4ProposalSelection.findMany({
+        where: {
+          sessionId,
+          userId: user.id,
+          decision: Stage4SelectionDecision.WILLING,
+        },
+        select: { proposalId: true },
+      }),
+      prisma.stage4NeedDeclination.findMany({
+        where: { sessionId, userId: user.id },
+        select: { needId: true },
+      }),
+    ]);
+
+    const willingProposalIds = new Set(willingSelections.map((s) => s.proposalId));
+    const activeProposalIds = new Set(
+      (
+        await prisma.strategyProposal.findMany({
+          where: { sessionId, status: Stage4ProposalStatus.ACTIVE },
+          select: { id: true },
+        })
+      ).map((p) => p.id)
+    );
+    const declinedNeedIds = new Set(declinations.map((d) => d.needId));
+
+    const ungated = openOrPartialNeeds.filter((row) => {
+      const needIdentifier = row.needId ?? row.id;
+      if (declinedNeedIds.has(needIdentifier)) return false;
+      const hasWillingCover = row.coveringProposalIds.some(
+        (pid) => activeProposalIds.has(pid) && willingProposalIds.has(pid)
+      );
+      return !hasWillingCover;
+    });
+
+    if (ungated.length > 0) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Address or set aside every open need before sharing',
+        400
+      );
+      return;
+    }
+
     await markStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied);
 
     const partnerId = await getPartnerUserId(sessionId, user.id);
@@ -609,6 +668,86 @@ export async function shareStage4Selections(req: Request, res: Response): Promis
   } catch (error) {
     logger.error('[shareStage4Selections] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to share Stage 4 selections', 500);
+  }
+}
+
+/**
+ * Mark a need as "leave for now" — explicitly declines to address it.
+ * POST /sessions/:id/stage4/needs/:needId/decline
+ */
+export async function declineStage4Need(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId, needId } = req.params;
+    const mutable = await getMutableStage4Session(sessionId, user.id);
+    if (!mutable) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (mutable.session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+    if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+
+    await prisma.stage4NeedDeclination.upsert({
+      where: { sessionId_userId_needId: { sessionId, userId: user.id, needId } },
+      update: {},
+      create: { sessionId, userId: user.id, needId },
+    });
+
+    const state = await buildStage4State(sessionId, user.id);
+    successResponse(res, { state });
+  } catch (error) {
+    logger.error('[declineStage4Need] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to decline need', 500);
+  }
+}
+
+/**
+ * Remove a "leave for now" declination — user changed their mind.
+ * DELETE /sessions/:id/stage4/needs/:needId/decline
+ */
+export async function undeclineStage4Need(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId, needId } = req.params;
+    const mutable = await getMutableStage4Session(sessionId, user.id);
+    if (!mutable) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (mutable.session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+    if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+
+    await prisma.stage4NeedDeclination.deleteMany({
+      where: { sessionId, userId: user.id, needId },
+    });
+
+    const state = await buildStage4State(sessionId, user.id);
+    successResponse(res, { state });
+  } catch (error) {
+    logger.error('[undeclineStage4Need] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to undecline need', 500);
   }
 }
 

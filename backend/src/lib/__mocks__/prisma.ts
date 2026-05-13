@@ -46,6 +46,7 @@ export const prisma = {
   stage4ProposalSelection: createMockModel(),
   stage4ProposalRevision: createMockModel(),
   stage4NeedCoverage: createMockModel(),
+  stage4NeedDeclination: createMockModel(),
   stage4Closure: createMockModel(),
   tendingEntry: createMockModel(),
   tendingResponse: createMockModel(),

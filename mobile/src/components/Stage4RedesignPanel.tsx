@@ -25,6 +25,9 @@ interface Stage4RedesignPanelProps {
   onSelectProposal: (proposalId: string, decision: Stage4SelectionDecision) => void;
   onShareSelections?: () => void;
   onReviseSelections?: () => void;
+  onBrainstormNeed?: (needLabel: string) => void;
+  onDeclineNeed?: (needId: string) => void;
+  onUndeclineNeed?: (needId: string) => void;
   onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason, checkInDate: string) => void;
 }
 
@@ -37,6 +40,23 @@ interface Stage4RedesignFooterProps {
   onShareSelections?: () => void;
   onReviseSelections?: () => void;
   onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason, checkInDate: string) => void;
+}
+
+/**
+ * True iff every OPEN or PARTIAL need is either covered by a proposal the user
+ * marked WILLING or explicitly declined ("leave for now") by the user.
+ */
+function allOpenNeedsAddressedOrDeclined(state: GetStage4StateResponse): boolean {
+  const willingProposalIds = new Set(
+    [...state.inventory.sharedProposals, ...state.inventory.individualCommitments]
+      .filter((p) => p.myDecision === Stage4SelectionDecision.WILLING)
+      .map((p) => p.id),
+  );
+  const rows = [...state.coverageAudit.open, ...state.coverageAudit.partial];
+  return rows.every((row) => {
+    if (row.userDeclinedToAddress) return true;
+    return row.coveringProposalIds.some((pid) => willingProposalIds.has(pid));
+  });
 }
 
 const decisionLabels: Record<Stage4SelectionDecision, string> = {
@@ -323,27 +343,76 @@ function NeedRows({
   title,
   rows,
   tone,
+  onBrainstormNeed,
+  onDeclineNeed,
+  onUndeclineNeed,
 }: {
   title: string;
   rows: GetStage4StateResponse['coverageAudit']['covered'];
   tone: 'covered' | 'partial' | 'open';
+  onBrainstormNeed?: (needLabel: string) => void;
+  onDeclineNeed?: (needId: string) => void;
+  onUndeclineNeed?: (needId: string) => void;
 }) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => makeStyles(palette), [palette]);
 
   if (rows.length === 0) return null;
 
+  const showActions = tone === 'open';
+
   return (
     <View style={styles.coverageGroup}>
       <Text style={styles.coverageTitle}>{title}</Text>
-      {rows.map((row, index) => (
-        <View key={row.id || `${row.label}-${index}`} style={styles.needRow}>
-          <View style={[styles.needDot, styles[`${tone}Dot`]]} />
-          <View style={styles.needTextWrap}>
-            <Text style={styles.needLabel}>{row.label}</Text>
+      {rows.map((row, index) => {
+        const declined = Boolean(row.userDeclinedToAddress);
+        const key = row.id || `${row.label}-${index}`;
+        return (
+          <View key={key} style={styles.needRow}>
+            <View style={[styles.needDot, styles[`${tone}Dot`]]} />
+            <View style={styles.needTextWrap}>
+              <Text style={[styles.needLabel, declined && styles.needLabelMuted]}>
+                {row.label}
+              </Text>
+              {showActions && row.id && (
+                declined ? (
+                  <TouchableOpacity
+                    onPress={() => onUndeclineNeed?.(row.id!)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Bring back ${row.label}`}
+                    testID={`stage4-need-undecline-${row.id}`}
+                  >
+                    <Text style={styles.needSetAside}>
+                      Set aside — tap to bring back
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.needActions}>
+                    <TouchableOpacity
+                      onPress={() => onBrainstormNeed?.(row.label)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Brainstorm with MWF about ${row.label}`}
+                      testID={`stage4-need-brainstorm-${row.id}`}
+                      style={styles.needActionButton}
+                    >
+                      <Text style={styles.needActionButtonText}>Brainstorm with MWF</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => onDeclineNeed?.(row.id!)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Leave ${row.label} for now`}
+                      testID={`stage4-need-decline-${row.id}`}
+                      style={styles.needActionButton}
+                    >
+                      <Text style={styles.needActionButtonText}>Leave for now</Text>
+                    </TouchableOpacity>
+                  </View>
+                )
+              )}
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -385,6 +454,7 @@ export function Stage4RedesignFooter({
   const allMyDecisionsMade =
     state.inventory.sharedProposals.length > 0 &&
     state.inventory.sharedProposals.every((p) => Boolean(p.myDecision));
+  const needsGated = allOpenNeedsAddressedOrDeclined(state);
   const who = partnerName || 'They';
 
   if (state.outcome) return null;
@@ -402,7 +472,7 @@ export function Stage4RedesignFooter({
   }
 
   if (!mySelectionSubmitted) {
-    const canShare = allMyDecisionsMade && !isSharing;
+    const canShare = allMyDecisionsMade && needsGated && !isSharing;
     return (
       <View style={styles.footerContainer}>
         <View style={styles.actions}>
@@ -425,6 +495,11 @@ export function Stage4RedesignFooter({
           {!allMyDecisionsMade && (
             <Text style={styles.actionHint}>
               Take a stance on every proposal first.
+            </Text>
+          )}
+          {allMyDecisionsMade && !needsGated && (
+            <Text style={styles.actionHint} testID="stage4-needs-gate-hint">
+              There are still needs unaddressed — brainstorm or set them aside first.
             </Text>
           )}
         </View>
@@ -486,6 +561,9 @@ export function Stage4RedesignPanel({
   onSelectProposal,
   onShareSelections,
   onReviseSelections,
+  onBrainstormNeed,
+  onDeclineNeed,
+  onUndeclineNeed,
   onCloseStage4,
 }: Stage4RedesignPanelProps) {
   const { palette } = useAppAppearance();
@@ -553,7 +631,14 @@ export function Stage4RedesignPanel({
           <>
             <NeedRows title="Covered" rows={state.coverageAudit.covered} tone="covered" />
             <NeedRows title="Partly addressed" rows={state.coverageAudit.partial} tone="partial" />
-            <NeedRows title="Not yet addressed" rows={state.coverageAudit.open} tone="open" />
+            <NeedRows
+              title="Not yet addressed"
+              rows={state.coverageAudit.open}
+              tone="open"
+              onBrainstormNeed={onBrainstormNeed}
+              onDeclineNeed={onDeclineNeed}
+              onUndeclineNeed={onUndeclineNeed}
+            />
           </>
         ) : (
           <Text style={styles.emptyText}>
@@ -605,9 +690,11 @@ export function Stage4RedesignPanel({
         }
 
         // (b) I haven't shared yet → show Share CTA (disabled until every
-        // proposal has a stance) and an inline hint about what's missing.
+        // proposal has a stance AND every open need is addressed-or-declined)
+        // with an inline hint about what's missing.
+        const needsGated = allOpenNeedsAddressedOrDeclined(state);
         if (!mySelectionSubmitted) {
-          const canShare = allMyDecisionsMade && !isSharing;
+          const canShare = allMyDecisionsMade && needsGated && !isSharing;
           return (
             <View style={styles.actions}>
               <TouchableOpacity
@@ -629,6 +716,11 @@ export function Stage4RedesignPanel({
               {!allMyDecisionsMade && (
                 <Text style={styles.actionHint}>
                   Take a stance on every proposal first.
+                </Text>
+              )}
+              {allMyDecisionsMade && !needsGated && (
+                <Text style={styles.actionHint} testID="stage4-needs-gate-hint-inline">
+                  There are still needs unaddressed — brainstorm or set them aside first.
                 </Text>
               )}
             </View>
@@ -840,6 +932,35 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     color: palette.text,
     fontSize: 14,
     lineHeight: 19,
+  },
+  needLabelMuted: {
+    color: palette.textMuted,
+    textDecorationLine: 'line-through',
+  },
+  needActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+  },
+  needActionButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.bgElev,
+  },
+  needActionButtonText: {
+    color: palette.text,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  needSetAside: {
+    color: palette.textMuted,
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   outcomeReason: {
     color: palette.accentText,

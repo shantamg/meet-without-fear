@@ -139,6 +139,7 @@ model Session {
   strategyRankings          StrategyRanking[]
   stage4ProposalSelections  Stage4ProposalSelection[]
   stage4NeedCoverages       Stage4NeedCoverage[]
+  stage4NeedDeclinations    Stage4NeedDeclination[]
   stage4Closure             Stage4Closure?
   tendingEntries            TendingEntry[]
   consentRecords            ConsentRecord[]
@@ -1048,6 +1049,18 @@ model Stage4NeedCoverage {
   updatedAt           DateTime @updatedAt
   createdAt           DateTime @default(now())
 
+  @@index([sessionId])
+}
+
+model Stage4NeedDeclination {
+  id         String   @id @default(cuid())
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String
+  userId     String
+  needId     String
+  declinedAt DateTime @default(now())
+
+  @@unique([sessionId, userId, needId])
   @@index([sessionId])
 }
 
