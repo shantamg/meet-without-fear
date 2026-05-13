@@ -33,6 +33,7 @@ import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
 import { getStage4State as buildStage4State, Stage4StateNotFoundError } from '../services/stage4-state';
+import { stage4HandoffBridgeMessage } from '../services/stage4-prompts';
 import {
   scheduleIndividualCommitmentTendingEntries,
   scheduleSharedAgreementTendingEntries,
@@ -664,6 +665,68 @@ export async function shareStage4Selections(req: Request, res: Response): Promis
         submittedBy: user.id,
         change: 'stage4_selection_submitted',
       });
+    }
+
+    // Stage 4 Phase 6 (Surface 5) — quiet handoff bridge. When this user shares
+    // for the first time AND the partner hasn't shared yet, append a single
+    // templated AI message to their chat so the moment doesn't go silent.
+    try {
+      const partnerHasShared = partnerId
+        ? Boolean(
+            await prisma.stageProgress.findFirst({
+              where: {
+                sessionId,
+                userId: partnerId,
+                stage: 4,
+                gatesSatisfied: { path: ['selectionSubmitted'], equals: true },
+              },
+              select: { id: true },
+            })
+          )
+        : false;
+      if (!partnerHasShared) {
+        const sessionWithMembers = await prisma.session.findUnique({
+          where: { id: sessionId },
+          include: {
+            relationship: {
+              include: {
+                members: {
+                  include: { user: { select: { firstName: true, name: true } } },
+                },
+              },
+            },
+          },
+        });
+        const members = sessionWithMembers?.relationship.members ?? [];
+        const myMember = members.find((m) => m.userId === user.id);
+        const partnerMember = members.find((m) => m.userId !== user.id);
+        const partnerName =
+          myMember?.nickname ||
+          partnerMember?.user.firstName ||
+          partnerMember?.user.name ||
+          undefined;
+        const bridgeContent = stage4HandoffBridgeMessage(partnerName);
+        const alreadyBridged = Boolean(
+          await prisma.message.findFirst({
+            where: { sessionId, forUserId: user.id, role: 'AI', content: bridgeContent },
+            select: { id: true },
+          })
+        );
+        if (!alreadyBridged) {
+          await prisma.message.create({
+            data: {
+              sessionId,
+              senderId: null,
+              forUserId: user.id,
+              role: 'AI',
+              content: bridgeContent,
+              stage: 4,
+            },
+          });
+        }
+      }
+    } catch (bridgeError) {
+      logger.warn('[shareStage4Selections] Failed to persist handoff bridge message', { bridgeError });
     }
 
     const state = await buildStage4State(sessionId, user.id);
