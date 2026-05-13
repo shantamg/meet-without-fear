@@ -64,6 +64,31 @@ function formatDate(value: string | null): string {
   });
 }
 
+function parseSummaryLines(summary: string): Array<{ label: string; items: string[] }> {
+  const sections: Array<{ label: string; items: string[] }> = [];
+  for (const line of summary.split('\n')) {
+    if (!line || line === 'Passive Tending re-entry context.') continue;
+
+    let label: string;
+    let value: string;
+
+    if (line.startsWith('Stage 4 closed as ')) {
+      label = 'Closure';
+      const colonIdx = line.indexOf(': ', 'Stage 4 closed as '.length);
+      value = colonIdx >= 0 ? line.slice(colonIdx + 2) : line;
+    } else {
+      const colonIdx = line.indexOf(': ');
+      if (colonIdx < 0) continue;
+      label = line.slice(0, colonIdx);
+      value = line.slice(colonIdx + 2);
+    }
+
+    const items = value.includes('; ') ? value.split('; ') : [value];
+    sections.push({ label, items });
+  }
+  return sections;
+}
+
 function entryTitle(entry: TendingEntryDTO): string {
   if (entry.type === TendingEntryType.USER_INITIATED_REENTRY) {
     return 'Passive re-entry';
@@ -237,12 +262,17 @@ export function TendingPanel({
             </View>
           )}
 
-          {selectedEntry.summary && (
-            <View style={styles.contextBox}>
-              <Text style={styles.contextLabel}>Context</Text>
-              <Text style={styles.contextText}>{selectedEntry.summary}</Text>
-            </View>
-          )}
+          {selectedEntry.summary &&
+            parseSummaryLines(selectedEntry.summary).map((section, i) => (
+              <View key={i} style={styles.contextBox}>
+                <Text style={styles.contextLabel}>{section.label}</Text>
+                {section.items.map((item, j) => (
+                  <Text key={j} style={styles.contextText}>
+                    {section.items.length > 1 ? `\u2022 ${item}` : item}
+                  </Text>
+                ))}
+              </View>
+            ))}
 
           {canRespond(selectedEntry) ? (
             <View style={styles.responseArea}>
