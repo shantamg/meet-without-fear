@@ -252,6 +252,7 @@ export interface Stage4OutcomeDTO {
   individualCommitments: ProposalCardDTO[];
   openNeeds: UnaddressedNeedDTO[];
   closedAt: string;
+  checkInAt: string | null;
 }
 
 export interface TendingPreviewDTO {
@@ -354,6 +355,9 @@ export interface CloseStage4Request {
   kind?: Stage4ClosureKind;
   reason?: Stage4ClosureReason;
   summary?: string;
+  /** ISO date string. Used as the followUpDate for any generated Agreement rows. */
+  checkInDate: string;
+  /** @deprecated Phase 4 removes this — checkInDate is the single source. */
   followUpDatesByProposalId?: Record<string, string>;
 }
 

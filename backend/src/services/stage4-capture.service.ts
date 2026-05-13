@@ -439,8 +439,6 @@ function extractSelection(text: string, userId: string, proposals: ProposalRow[]
   let decision: Stage4SelectionDecision | null = null;
   if (/\b(?:not willing|won't|do not want|don't want|no to)\b/i.test(text)) {
     decision = Stage4SelectionDecision.NOT_WILLING;
-  } else if (/\b(?:needs discussion|need to discuss|talk more|not sure yet)\b/i.test(text)) {
-    decision = Stage4SelectionDecision.NEEDS_DISCUSSION;
   } else if (/\b(?:willing|yes to|i can try|i'd try|i would try|works for me)\b/i.test(text)) {
     decision = Stage4SelectionDecision.WILLING;
   }

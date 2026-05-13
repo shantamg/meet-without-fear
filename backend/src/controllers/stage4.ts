@@ -136,6 +136,14 @@ const closeStage4RequestSchema = z.object({
   kind: z.nativeEnum(Stage4ClosureKind).optional(),
   reason: z.nativeEnum(Stage4ClosureReason).optional(),
   summary: z.string().max(2000).optional(),
+  checkInDate: z
+    .string({ required_error: 'checkInDate is required' })
+    .min(1, 'checkInDate is required')
+    .refine((value) => !Number.isNaN(new Date(value).getTime()), {
+      message: 'checkInDate must be a valid ISO date string',
+    }),
+  // Optional, deprecated. Kept for backward compatibility — Phase 4 removes it.
+  // TODO(phase-4): remove followUpDatesByProposalId; checkInDate is the single source.
   followUpDatesByProposalId: z.record(z.string()).optional(),
 });
 
@@ -796,10 +804,12 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
         followUpDate: Date | null;
       }> = [];
 
+      const checkInAt = new Date(parseResult.data.checkInDate);
+
       if (closureKind === Stage4ClosureKind.SHARED_AGREEMENT) {
         for (const proposal of mutuallyWillingSharedProposals) {
-          const followUpDate = parseResult.data.followUpDatesByProposalId?.[proposal.id];
-          const parsedFollowUpDate = followUpDate ? new Date(followUpDate) : null;
+          const legacyFollowUp = parseResult.data.followUpDatesByProposalId?.[proposal.id];
+          const parsedFollowUpDate = legacyFollowUp ? new Date(legacyFollowUp) : checkInAt;
           const agreement = await tx.agreement.create({
             data: {
               sharedVesselId: sharedVessel.id,
@@ -852,6 +862,7 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
           sharedAgreementIds: createdAgreementIds,
           individualProposalIds,
           openNeedIds,
+          checkInAt,
           closedByUserId: user.id,
           closedAt: now,
         },

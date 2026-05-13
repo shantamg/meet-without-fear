@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useMemo, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { MinusCircle, Send, RotateCcw, Share2, XCircle } from 'lucide-react-native';
 import {
   GetStage4StateResponse,
@@ -25,7 +25,7 @@ interface Stage4RedesignPanelProps {
   onSelectProposal: (proposalId: string, decision: Stage4SelectionDecision) => void;
   onShareSelections?: () => void;
   onReviseSelections?: () => void;
-  onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason) => void;
+  onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason, checkInDate: string) => void;
 }
 
 interface Stage4RedesignFooterProps {
@@ -36,12 +36,11 @@ interface Stage4RedesignFooterProps {
   isRevising?: boolean;
   onShareSelections?: () => void;
   onReviseSelections?: () => void;
-  onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason) => void;
+  onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason, checkInDate: string) => void;
 }
 
 const decisionLabels: Record<Stage4SelectionDecision, string> = {
   [Stage4SelectionDecision.WILLING]: 'Willing',
-  [Stage4SelectionDecision.NEEDS_DISCUSSION]: 'Discuss',
   [Stage4SelectionDecision.NOT_WILLING]: 'Not willing',
 };
 
@@ -70,6 +69,159 @@ function proposalKindLabel(kind: Stage4ProposalKind): string {
   return kind === Stage4ProposalKind.INDIVIDUAL_COMMITMENT
     ? 'Individual commitment'
     : 'Shared proposal';
+}
+
+function defaultCheckInDate(): string {
+  const date = new Date();
+  date.setDate(date.getDate() + 28);
+  return date.toISOString().slice(0, 10);
+}
+
+const DATE_INPUT_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function CloseControls({
+  canCloseShared,
+  showNoSharedClose,
+  canCloseNoShared,
+  isClosing,
+  partnerName,
+  onCloseStage4,
+}: {
+  canCloseShared: boolean;
+  showNoSharedClose: boolean;
+  canCloseNoShared: boolean;
+  isClosing: boolean;
+  partnerName: string;
+  onCloseStage4: (
+    kind: Stage4ClosureKind,
+    reason: Stage4ClosureReason,
+    checkInDate: string,
+  ) => void;
+}) {
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
+  const [pending, setPending] = useState<
+    | { kind: Stage4ClosureKind; reason: Stage4ClosureReason }
+    | null
+  >(null);
+  const [checkInDate, setCheckInDate] = useState<string>(defaultCheckInDate);
+  const noSharedCloseDisabled = !canCloseNoShared || isClosing;
+  const dateValid = DATE_INPUT_PATTERN.test(checkInDate.trim());
+
+  if (pending) {
+    const isShared = pending.kind === Stage4ClosureKind.SHARED_AGREEMENT;
+    return (
+      <View style={styles.actions}>
+        <Text style={styles.closeConfirmTitle}>
+          {isShared ? 'Close with shared agreement' : 'Close without a shared agreement'}
+        </Text>
+        <Text style={styles.closeConfirmCopy}>
+          {isShared
+            ? `Pick a check-in date. You'll both see this on the shared experiment.`
+            : `That's a valid place to land. Whatever you've named here stays on record.`}
+        </Text>
+        <Text style={styles.dateLabel}>Check-in date (YYYY-MM-DD)</Text>
+        <TextInput
+          style={styles.dateInput}
+          value={checkInDate}
+          onChangeText={setCheckInDate}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={palette.textFaint}
+          autoCapitalize="none"
+          autoCorrect={false}
+          testID="stage4-close-check-in-date"
+          accessibilityLabel="Check-in date"
+        />
+        {!dateValid && (
+          <Text style={styles.actionHint}>Enter a date like 2026-06-09.</Text>
+        )}
+        <TouchableOpacity
+          style={[
+            styles.primaryButton,
+            (!dateValid || isClosing) && styles.primaryButtonDisabled,
+          ]}
+          onPress={() => {
+            if (!dateValid || isClosing) return;
+            onCloseStage4(pending.kind, pending.reason, checkInDate.trim());
+          }}
+          disabled={!dateValid || isClosing}
+          accessibilityRole="button"
+          accessibilityLabel="Confirm close"
+          accessibilityState={{ disabled: !dateValid || isClosing }}
+          testID="stage4-close-confirm"
+        >
+          <Send color={dateValid ? palette.bg : palette.textFaint} size={17} />
+          <Text
+            style={[
+              styles.primaryButtonText,
+              (!dateValid || isClosing) && styles.disabledButtonText,
+            ]}
+          >
+            {isClosing ? 'Closing…' : 'Confirm close'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => setPending(null)}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel close"
+        >
+          <Text style={styles.secondaryButtonText}>Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.actions}>
+      <TouchableOpacity
+        style={[styles.primaryButton, !canCloseShared && styles.primaryButtonDisabled]}
+        onPress={() =>
+          setPending({
+            kind: Stage4ClosureKind.SHARED_AGREEMENT,
+            reason: Stage4ClosureReason.MUTUAL_SELECTION,
+          })
+        }
+        disabled={!canCloseShared || isClosing}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !canCloseShared || isClosing }}
+      >
+        <Send color={canCloseShared ? palette.bg : palette.textFaint} size={17} />
+        <Text style={[styles.primaryButtonText, !canCloseShared && styles.disabledButtonText]}>
+          Close with shared agreement
+        </Text>
+      </TouchableOpacity>
+      {showNoSharedClose && (
+        <TouchableOpacity
+          style={[styles.secondaryButton, noSharedCloseDisabled && styles.secondaryButtonDisabled]}
+          onPress={() =>
+            setPending({
+              kind: Stage4ClosureKind.NO_SHARED_AGREEMENT,
+              reason: Stage4ClosureReason.NO_OVERLAP,
+            })
+          }
+          disabled={noSharedCloseDisabled}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: noSharedCloseDisabled }}
+        >
+          <MinusCircle color={canCloseNoShared ? palette.text : palette.textFaint} size={17} />
+          <Text
+            style={[
+              styles.secondaryButtonText,
+              noSharedCloseDisabled && styles.disabledButtonText,
+            ]}
+          >
+            Close without a shared agreement
+          </Text>
+        </TouchableOpacity>
+      )}
+      {!canCloseShared && (
+        <Text style={styles.actionHint}>
+          A shared agreement is available once you and {partnerName} both say &ldquo;willing&rdquo; to the same proposal.
+        </Text>
+      )}
+    </View>
+  );
 }
 
 function partnerStateLabel(
@@ -129,7 +281,6 @@ function ProposalCard({
       <View style={styles.segmentedControl}>
         {[
           Stage4SelectionDecision.WILLING,
-          Stage4SelectionDecision.NEEDS_DISCUSSION,
           Stage4SelectionDecision.NOT_WILLING,
         ].map((decision) => {
           const selected = proposal.myDecision === decision;
@@ -229,7 +380,6 @@ export function Stage4RedesignFooter({
     state.phase === Stage4Phase.OUTCOME_REVIEW ||
     state.phase === Stage4Phase.SELECTION ||
     state.phase === Stage4Phase.COVERAGE_REVIEW;
-  const noSharedCloseDisabled = !canCloseNoShared || isClosing;
   const mySelectionSubmitted = state.mySelectionStatus === 'SUBMITTED';
   const partnerReady = state.partnerSelectionStatus === 'SUBMITTED';
   const allMyDecisionsMade =
@@ -313,49 +463,14 @@ export function Stage4RedesignFooter({
 
   return (
     <View style={styles.footerContainer}>
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.primaryButton, !canCloseShared && styles.primaryButtonDisabled]}
-          onPress={() =>
-            onCloseStage4(
-              Stage4ClosureKind.SHARED_AGREEMENT,
-              Stage4ClosureReason.MUTUAL_SELECTION,
-            )
-          }
-          disabled={!canCloseShared || isClosing}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !canCloseShared || isClosing }}
-        >
-          <Send color={canCloseShared ? palette.bg : palette.textFaint} size={17} />
-          <Text style={[styles.primaryButtonText, !canCloseShared && styles.disabledButtonText]}>
-            Close with shared agreement
-          </Text>
-        </TouchableOpacity>
-        {showNoSharedClose && (
-          <TouchableOpacity
-            style={[styles.secondaryButton, noSharedCloseDisabled && styles.secondaryButtonDisabled]}
-            onPress={() =>
-              onCloseStage4(
-                Stage4ClosureKind.NO_SHARED_AGREEMENT,
-                Stage4ClosureReason.NO_OVERLAP,
-              )
-            }
-            disabled={noSharedCloseDisabled}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: noSharedCloseDisabled }}
-          >
-            <MinusCircle color={canCloseNoShared ? palette.text : palette.textFaint} size={17} />
-            <Text style={[styles.secondaryButtonText, noSharedCloseDisabled && styles.disabledButtonText]}>
-              Close without a shared agreement
-            </Text>
-          </TouchableOpacity>
-        )}
-        {!canCloseShared && (
-          <Text style={styles.actionHint}>
-            A shared agreement is available once you and {who} both say &ldquo;willing&rdquo; to the same proposal.
-          </Text>
-        )}
-      </View>
+      <CloseControls
+        canCloseShared={canCloseShared}
+        showNoSharedClose={showNoSharedClose}
+        canCloseNoShared={canCloseNoShared}
+        isClosing={isClosing}
+        partnerName={who}
+        onCloseStage4={onCloseStage4}
+      />
     </View>
   );
 }
@@ -397,7 +512,6 @@ export function Stage4RedesignPanel({
     state.phase === Stage4Phase.OUTCOME_REVIEW ||
     state.phase === Stage4Phase.SELECTION ||
     state.phase === Stage4Phase.COVERAGE_REVIEW;
-  const noSharedCloseDisabled = !canCloseNoShared || isClosing;
   const mySelectionSubmitted = state.mySelectionStatus === 'SUBMITTED';
   // Stances stay editable after sharing — changing one auto-unshares on the
   // backend, so the partner never sees a stale stance. Only a finalized
@@ -553,53 +667,14 @@ export function Stage4RedesignPanel({
 
         // (d) Both shared → close buttons.
         return (
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={[styles.primaryButton, !canCloseShared && styles.primaryButtonDisabled]}
-              onPress={() =>
-                onCloseStage4(
-                  Stage4ClosureKind.SHARED_AGREEMENT,
-                  Stage4ClosureReason.MUTUAL_SELECTION
-                )
-              }
-              disabled={!canCloseShared || isClosing}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !canCloseShared || isClosing }}
-            >
-              <Send color={canCloseShared ? palette.bg : palette.textFaint} size={17} />
-              <Text style={[styles.primaryButtonText, !canCloseShared && styles.disabledButtonText]}>
-                Close with shared agreement
-              </Text>
-            </TouchableOpacity>
-
-            {showNoSharedClose && (
-              <TouchableOpacity
-                style={[styles.secondaryButton, noSharedCloseDisabled && styles.secondaryButtonDisabled]}
-                onPress={() =>
-                  onCloseStage4(
-                    Stage4ClosureKind.NO_SHARED_AGREEMENT,
-                    Stage4ClosureReason.NO_OVERLAP
-                  )
-                }
-                disabled={noSharedCloseDisabled}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: noSharedCloseDisabled }}
-              >
-                <MinusCircle color={canCloseNoShared ? palette.text : palette.textFaint} size={17} />
-                <Text style={[
-                  styles.secondaryButtonText,
-                  noSharedCloseDisabled && styles.disabledButtonText,
-                ]}>
-                  Close without a shared agreement
-                </Text>
-              </TouchableOpacity>
-            )}
-            {!canCloseShared && (
-              <Text style={styles.actionHint}>
-                A shared agreement is available once you and {who} both say &ldquo;willing&rdquo; to the same proposal.
-              </Text>
-            )}
-          </View>
+          <CloseControls
+            canCloseShared={canCloseShared}
+            showNoSharedClose={showNoSharedClose}
+            canCloseNoShared={canCloseNoShared}
+            isClosing={isClosing}
+            partnerName={who}
+            onCloseStage4={onCloseStage4}
+          />
         );
       })()}
 
@@ -861,6 +936,33 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     textAlign: 'center',
+  },
+  closeConfirmTitle: {
+    color: palette.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  closeConfirmCopy: {
+    color: palette.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  dateLabel: {
+    color: palette.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  dateInput: {
+    minHeight: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingHorizontal: 12,
+    color: palette.text,
+    fontSize: 15,
+    backgroundColor: palette.bgPane,
   },
   closedNote: {
     flexDirection: 'row',

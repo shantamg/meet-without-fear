@@ -457,7 +457,7 @@ describe('Stage 4 API', () => {
         {
           proposalId: mockStrategyIds[0],
           userId: mockPartnerId,
-          decision: Stage4SelectionDecision.NEEDS_DISCUSSION,
+          decision: Stage4SelectionDecision.NOT_WILLING,
           note: 'Timing is still unclear',
           selectedAt: new Date('2026-05-06T10:03:00.000Z'),
           updatedAt: new Date('2026-05-06T10:03:00.000Z'),
@@ -491,7 +491,7 @@ describe('Stage 4 API', () => {
               sharedProposals: [
                 expect.objectContaining({
                   myDecision: Stage4SelectionDecision.WILLING,
-                  partnerDecisionVisible: Stage4SelectionDecision.NEEDS_DISCUSSION,
+                  partnerDecisionVisible: Stage4SelectionDecision.NOT_WILLING,
                 }),
               ],
             }),
@@ -931,6 +931,7 @@ describe('Stage 4 API', () => {
         user: mockUser,
         params: { id: mockSessionId },
         body: {
+          checkInDate: '2026-05-13T10:00:00.000Z',
           followUpDatesByProposalId: {
             [mockStrategyIds[0]]: '2026-05-13T10:00:00.000Z',
           },
@@ -1090,7 +1091,7 @@ describe('Stage 4 API', () => {
       const req = createMockRequest({
         user: mockUser,
         params: { id: mockSessionId },
-        body: {},
+        body: { checkInDate: '2026-06-03T10:00:00.000Z' },
       });
       const { res, statusMock, jsonMock } = createMockResponse();
 
@@ -1231,6 +1232,7 @@ describe('Stage 4 API', () => {
         params: { id: mockSessionId },
         body: {
           kind: Stage4ClosureKind.SHARED_AGREEMENT,
+          checkInDate: '2026-06-03T10:00:00.000Z',
         },
       });
       const { res, statusMock, jsonMock } = createMockResponse();
@@ -1273,12 +1275,84 @@ describe('Stage 4 API', () => {
       );
     });
 
+    it('rejects close requests that omit checkInDate with VALIDATION_ERROR', async () => {
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: {},
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await closeStage4(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(400);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+        })
+      );
+      expect(prisma.stage4Closure.create).not.toHaveBeenCalled();
+    });
+
+    it('persists Stage4Closure.checkInAt from the request body', async () => {
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: { checkInDate: '2026-06-03T10:00:00.000Z' },
+      });
+      const { res } = createMockResponse();
+
+      (prisma.session.findFirst as jest.Mock)
+        .mockResolvedValueOnce(mockSession())
+        .mockResolvedValueOnce(mockSession());
+      (prisma.stageProgress.findFirst as jest.Mock)
+        .mockResolvedValueOnce({ stage: 4, status: 'IN_PROGRESS', gatesSatisfied: { selectionSubmitted: true } })
+        .mockResolvedValueOnce({ stage: 4, status: 'IN_PROGRESS', gatesSatisfied: { selectionSubmitted: true } });
+      (prisma.stage4Closure.findUnique as jest.Mock)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          kind: Stage4ClosureKind.NO_SHARED_AGREEMENT,
+          reason: Stage4ClosureReason.NO_OVERLAP,
+          summary: 'closed',
+          sharedAgreementIds: [],
+          individualProposalIds: [],
+          openNeedIds: [],
+          closedAt: new Date('2026-05-06T10:04:00.000Z'),
+          checkInAt: new Date('2026-06-03T10:00:00.000Z'),
+        });
+      (prisma.strategyProposal.findMany as jest.Mock)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      (prisma.stage4ProposalSelection.findMany as jest.Mock)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      (prisma.stage4NeedCoverage.findMany as jest.Mock)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      (prisma.sharedVessel.findUnique as jest.Mock).mockResolvedValue({ id: 'shared-vessel-1' });
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.agreement.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([]);
+
+      await closeStage4(req as Request, res as Response);
+
+      expect(prisma.stage4Closure.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            checkInAt: new Date('2026-06-03T10:00:00.000Z'),
+          }),
+        })
+      );
+    });
+
     it('closes a shared agreement when mutual willingness exists even if unrelated active fragments are unreviewed', async () => {
       const req = createMockRequest({
         user: mockUser,
         params: { id: mockSessionId },
         body: {
           kind: Stage4ClosureKind.SHARED_AGREEMENT,
+          checkInDate: '2026-06-03T10:00:00.000Z',
         },
       });
       const { res, statusMock, jsonMock } = createMockResponse();

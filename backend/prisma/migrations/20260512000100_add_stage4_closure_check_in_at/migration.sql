@@ -1,0 +1,1 @@
+ALTER TABLE "Stage4Closure" ADD COLUMN "checkInAt" TIMESTAMP(3);

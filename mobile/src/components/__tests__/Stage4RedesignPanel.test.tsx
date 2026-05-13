@@ -52,7 +52,7 @@ const baseState: GetStage4StateResponse = {
         duration: null,
         measureOfSuccess: null,
         status: Stage4ProposalStatus.ACTIVE,
-        myDecision: Stage4SelectionDecision.NEEDS_DISCUSSION,
+        myDecision: Stage4SelectionDecision.NOT_WILLING,
       },
     ],
     unaddressedNeeds: [
@@ -138,6 +138,17 @@ describe('Stage4RedesignPanel', () => {
     );
   });
 
+  it('offers only the two binary stance options per proposal', () => {
+    render(<Stage4RedesignPanel {...defaultProps} />);
+
+    const willing = screen.getAllByLabelText('Willing for proposal');
+    const notWilling = screen.getAllByLabelText('Not willing for proposal');
+
+    expect(willing.length).toBeGreaterThan(0);
+    expect(notWilling.length).toBeGreaterThan(0);
+    expect(screen.queryByText('Discuss')).toBeNull();
+  });
+
   it('enables shared-agreement closure only when mutual willingness is visible', () => {
     const state: GetStage4StateResponse = {
       ...baseState,
@@ -158,11 +169,46 @@ describe('Stage4RedesignPanel', () => {
     render(<Stage4RedesignPanel {...defaultProps} state={state} />);
 
     fireEvent.press(screen.getByText('Close with shared agreement'));
+    // Pressing the close button only opens the check-in step — it must not
+    // call onCloseStage4 yet, because checkInDate is required.
+    expect(defaultProps.onCloseStage4).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('stage4-close-confirm'));
 
     expect(defaultProps.onCloseStage4).toHaveBeenCalledWith(
       Stage4ClosureKind.SHARED_AGREEMENT,
-      Stage4ClosureReason.MUTUAL_SELECTION
+      Stage4ClosureReason.MUTUAL_SELECTION,
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
     );
+  });
+
+  it('blocks the confirm-close CTA when the check-in date is empty', () => {
+    const state: GetStage4StateResponse = {
+      ...baseState,
+      phase: Stage4Phase.OUTCOME_REVIEW,
+      mySelectionStatus: 'SUBMITTED',
+      partnerSelectionStatus: 'SUBMITTED',
+      inventory: {
+        ...baseState.inventory,
+        sharedProposals: [
+          {
+            ...baseState.inventory.sharedProposals[0],
+            partnerDecisionVisible: Stage4SelectionDecision.WILLING,
+          },
+        ],
+      },
+    };
+
+    render(<Stage4RedesignPanel {...defaultProps} state={state} />);
+
+    fireEvent.press(screen.getByText('Close with shared agreement'));
+    fireEvent.changeText(screen.getByTestId('stage4-close-check-in-date'), '');
+
+    const confirm = screen.getByTestId('stage4-close-confirm');
+    expect(confirm).toBeDisabled();
+
+    fireEvent.press(confirm);
+    expect(defaultProps.onCloseStage4).not.toHaveBeenCalled();
   });
 
   it('enables shared-agreement closure when mutual willingness exists even if other active fragments are unreviewed', () => {
@@ -195,14 +241,13 @@ describe('Stage4RedesignPanel', () => {
     expect(closeButton).not.toBeDisabled();
 
     fireEvent.press(closeButton);
+    fireEvent.press(screen.getByTestId('stage4-close-confirm'));
 
     expect(defaultProps.onCloseStage4).toHaveBeenCalledWith(
       Stage4ClosureKind.SHARED_AGREEMENT,
-      Stage4ClosureReason.MUTUAL_SELECTION
+      Stage4ClosureReason.MUTUAL_SELECTION,
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
     );
-
-    const noSharedButton = screen.getByText('Close without a shared agreement');
-    expect(noSharedButton).not.toBeDisabled();
   });
 
   it('shows the share CTA when stances are complete but not yet shared', () => {
@@ -283,10 +328,12 @@ describe('Stage4RedesignPanel', () => {
     expect(closeButton).not.toBeDisabled();
 
     fireEvent.press(closeButton);
+    fireEvent.press(screen.getByTestId('stage4-close-confirm'));
 
     expect(defaultProps.onCloseStage4).toHaveBeenCalledWith(
       Stage4ClosureKind.NO_SHARED_AGREEMENT,
-      Stage4ClosureReason.NO_OVERLAP
+      Stage4ClosureReason.NO_OVERLAP,
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
     );
   });
 
@@ -302,6 +349,7 @@ describe('Stage4RedesignPanel', () => {
         individualCommitments: [],
         openNeeds: baseState.inventory.unaddressedNeeds,
         closedAt: '2026-05-06T00:00:00.000Z',
+        checkInAt: '2026-06-03T00:00:00.000Z',
       },
     };
 
@@ -324,6 +372,7 @@ describe('Stage4RedesignPanel', () => {
         individualCommitments: [],
         openNeeds: baseState.inventory.unaddressedNeeds,
         closedAt: '2026-05-06T00:00:00.000Z',
+        checkInAt: '2026-06-03T00:00:00.000Z',
       },
     };
 
@@ -363,6 +412,7 @@ describe('Stage4RedesignPanel', () => {
         individualCommitments: [],
         openNeeds: [],
         closedAt: '2026-05-06T00:00:00.000Z',
+        checkInAt: '2026-06-03T00:00:00.000Z',
       },
     };
 

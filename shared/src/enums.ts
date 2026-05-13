@@ -145,7 +145,6 @@ export enum Stage4ProposalStatus {
 export enum Stage4SelectionDecision {
   WILLING = 'WILLING',
   NOT_WILLING = 'NOT_WILLING',
-  NEEDS_DISCUSSION = 'NEEDS_DISCUSSION',
 }
 
 export enum Stage4ClosureKind {
