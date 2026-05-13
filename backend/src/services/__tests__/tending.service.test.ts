@@ -328,6 +328,18 @@ describe('tending.service', () => {
     const result = await openDueTendingEntries(new Date('2026-05-13T10:00:00.000Z'));
 
     expect(result).toEqual({ opened: 1, entryIds: ['tending-1'] });
+    expect(prisma.tendingEntry.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          type: {
+            in: [
+              TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
+              TendingEntryType.SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN,
+            ],
+          },
+        }),
+      })
+    );
     expect(prisma.tendingEntry.updateMany).toHaveBeenCalledWith({
       where: { id: 'tending-1', status: TendingEntryStatus.SCHEDULED },
       data: {
@@ -340,6 +352,19 @@ describe('tending.service', () => {
       'notification.pending_action',
       expect.objectContaining({ kind: 'tending_checkin_opened' })
     );
+  });
+
+  it('opens due individual commitment check-ins alongside shared ones', async () => {
+    (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([
+      { id: 'shared-1', sessionId },
+      { id: 'individual-1', sessionId },
+    ]);
+    (prisma.tendingEntry.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+    const result = await openDueTendingEntries(new Date('2026-05-13T10:00:00.000Z'));
+
+    expect(result).toEqual({ opened: 2, entryIds: ['shared-1', 'individual-1'] });
+    expect(publishSessionEvent).toHaveBeenCalledTimes(2);
   });
 
   it('schedules individual commitment check-ins with INDIVIDUAL scope and owner', async () => {
