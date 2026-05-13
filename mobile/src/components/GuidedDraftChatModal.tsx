@@ -35,6 +35,11 @@ export interface GuidedDraftChatModalProps {
   emptyStateMessage?: string;
   finalButtonTestID?: string;
   testID?: string;
+  /**
+   * Optional sticky header rendered below the title and above the chat,
+   * for showing the artifact being refined (e.g. a quoted proposal text).
+   */
+  anchorHeader?: React.ReactNode;
 }
 
 export function GuidedDraftChatModal({
@@ -56,6 +61,7 @@ export function GuidedDraftChatModal({
   emptyStateMessage,
   finalButtonTestID,
   testID = 'guided-draft-chat-modal',
+  anchorHeader,
 }: GuidedDraftChatModalProps) {
   const insets = useSafeAreaInsets();
   const { palette } = useAppAppearance();
@@ -132,6 +138,11 @@ export function GuidedDraftChatModal({
             </TouchableOpacity>
           </View>
 
+          {anchorHeader ? (
+            <View style={styles.anchorHeader} testID={`${testID}-anchor`}>
+              {anchorHeader}
+            </View>
+          ) : null}
           <ChatInterface
             sessionId={sessionKey}
             messages={messages}
@@ -142,6 +153,7 @@ export function GuidedDraftChatModal({
             renderMessageExtra={renderMessageExtra}
             emptyStateTitle={emptyStateTitle}
             emptyStateMessage={emptyStateMessage}
+            keyboardVerticalOffset={0}
           />
         </SafeAreaView>
       </View>
@@ -174,6 +186,13 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
   },
   closeButton: {
     padding: 4,
+  },
+  anchorHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
   },
   draftCard: {
     marginHorizontal: 16,

@@ -1,12 +1,21 @@
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   MessageRole,
   Stage4SubChatAnchor,
   Stage4SubChatDTO,
+  Stage4SubChatMessageDTO,
   Stage4SubChatStatus,
 } from '@meet-without-fear/shared';
 import { Stage4SubChatDrawer } from '../Stage4SubChatDrawer';
+
+function renderWithClient(ui: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 jest.mock('lucide-react-native', () => {
   const React = require('react');
@@ -14,6 +23,33 @@ jest.mock('lucide-react-native', () => {
     React.createElement('Icon', props);
   return new Proxy({}, { get: () => mockIcon });
 });
+
+jest.mock('../SpeakerButton', () => {
+  return { SpeakerButton: () => null };
+});
+
+jest.mock('../../hooks/useSpeech', () => ({
+  useSpeech: () => ({
+    isSpeaking: false,
+    currentId: null,
+    toggle: jest.fn(),
+  }),
+  useAutoSpeech: () => ({
+    isAutoSpeechEnabled: false,
+  }),
+}));
+
+function msg(
+  overrides: Partial<Stage4SubChatMessageDTO> & { id: string }
+): Stage4SubChatMessageDTO {
+  return {
+    role: MessageRole.AI,
+    content: '',
+    createdAt: '2026-05-12T00:00:00Z',
+    candidate: null,
+    ...overrides,
+  };
+}
 
 function makeSubChat(
   overrides: Partial<Stage4SubChatDTO> = {}
@@ -27,16 +63,14 @@ function makeSubChat(
     status: Stage4SubChatStatus.ACTIVE,
     createdAt: '2026-05-12T00:00:00Z',
     resolvedAt: null,
-    messages: [
-      { id: 'm1', role: MessageRole.AI, content: 'What feels stuck?', createdAt: 'x' },
-    ],
+    messages: [msg({ id: 'm1', content: 'What feels stuck?' })],
     ...overrides,
   };
 }
 
 describe('Stage4SubChatDrawer', () => {
-  it('renders NEEDS_BRAINSTORM with a drafts cluster (no proposal-edit area)', () => {
-    const { getByTestId, queryByTestId } = render(
+  it('renders the anchor label in the subtitle for NEEDS_BRAINSTORM', () => {
+    const { getByText } = renderWithClient(
       <Stage4SubChatDrawer
         visible
         subChat={makeSubChat()}
@@ -46,81 +80,11 @@ describe('Stage4SubChatDrawer', () => {
         onClose={() => {}}
       />
     );
-    expect(getByTestId('stage4-subchat-drawer-drafts')).toBeTruthy();
-    expect(queryByTestId('stage4-subchat-drawer-proposal-edit')).toBeNull();
-    expect(getByTestId('stage4-subchat-drawer-header').props.children).toContain(
-      'feeling like myself'
-    );
+    expect(getByText(/feeling like myself inside this marriage/)).toBeTruthy();
   });
 
-  it('renders PROPOSAL_REFINEMENT with the proposal-edit cluster', () => {
-    const { getByTestId, queryByTestId } = render(
-      <Stage4SubChatDrawer
-        visible
-        subChat={makeSubChat({
-          anchorKind: Stage4SubChatAnchor.PROPOSAL_REFINEMENT,
-          anchorId: 'prop-1',
-        })}
-        anchorLabel="walk together"
-        initialProposalText="walk together each evening"
-        onSendMessage={() => {}}
-        onResolve={() => {}}
-        onClose={() => {}}
-      />
-    );
-    expect(getByTestId('stage4-subchat-drawer-proposal-edit')).toBeTruthy();
-    expect(queryByTestId('stage4-subchat-drawer-drafts')).toBeNull();
-  });
-
-  it('renders NO_OVERLAP with both clusters', () => {
-    const { getByTestId } = render(
-      <Stage4SubChatDrawer
-        visible
-        subChat={makeSubChat({
-          anchorKind: Stage4SubChatAnchor.NO_OVERLAP,
-          anchorId: null,
-        })}
-        onSendMessage={() => {}}
-        onResolve={() => {}}
-        onClose={() => {}}
-      />
-    );
-    expect(getByTestId('stage4-subchat-drawer-drafts')).toBeTruthy();
-    expect(getByTestId('stage4-subchat-drawer-proposal-edit-optional')).toBeTruthy();
-  });
-
-  it('Accept queues a draft; Save & close calls onResolve with acceptedProposals', () => {
-    const onResolve = jest.fn();
-    const { getByTestId } = render(
-      <Stage4SubChatDrawer
-        visible
-        subChat={makeSubChat()}
-        onSendMessage={() => {}}
-        onResolve={onResolve}
-        onClose={() => {}}
-      />
-    );
-    act(() => {
-      fireEvent.changeText(
-        getByTestId('stage4-subchat-drawer-draft-input'),
-        'a walk each evening'
-      );
-    });
-    act(() => {
-      fireEvent.press(getByTestId('stage4-subchat-drawer-draft-accept'));
-    });
-    act(() => {
-      fireEvent.press(getByTestId('stage4-subchat-drawer-save'));
-    });
-    expect(onResolve).toHaveBeenCalledWith({
-      acceptedProposals: [{ description: 'a walk each evening' }],
-      updatedProposals: [],
-    });
-  });
-
-  it('PROPOSAL_REFINEMENT Save & close emits updatedProposals for the anchor proposal', () => {
-    const onResolve = jest.fn();
-    const { getByTestId } = render(
+  it('shows the current proposal in the intro for PROPOSAL_REFINEMENT', () => {
+    const { getByText } = renderWithClient(
       <Stage4SubChatDrawer
         visible
         subChat={makeSubChat({
@@ -129,30 +93,16 @@ describe('Stage4SubChatDrawer', () => {
         })}
         initialProposalText="walk together each evening"
         onSendMessage={() => {}}
-        onResolve={onResolve}
+        onResolve={() => {}}
         onClose={() => {}}
       />
     );
-    act(() => {
-      fireEvent.changeText(
-        getByTestId('stage4-subchat-drawer-proposal-input'),
-        'walk together for 20 minutes'
-      );
-    });
-    act(() => {
-      fireEvent.press(getByTestId('stage4-subchat-drawer-save'));
-    });
-    expect(onResolve).toHaveBeenCalledWith({
-      acceptedProposals: [],
-      updatedProposals: [
-        { proposalId: 'prop-1', description: 'walk together for 20 minutes' },
-      ],
-    });
+    expect(getByText(/walk together each evening/)).toBeTruthy();
   });
 
   it('forwards typed messages to onSendMessage', () => {
     const onSend = jest.fn();
-    const { getByTestId } = render(
+    const { getByTestId } = renderWithClient(
       <Stage4SubChatDrawer
         visible
         subChat={makeSubChat()}
@@ -162,11 +112,98 @@ describe('Stage4SubChatDrawer', () => {
       />
     );
     act(() => {
-      fireEvent.changeText(getByTestId('stage4-subchat-drawer-input'), 'hi');
+      fireEvent.changeText(getByTestId('chat-input'), 'hi');
     });
     act(() => {
-      fireEvent.press(getByTestId('stage4-subchat-drawer-send'));
+      fireEvent.press(getByTestId('send-button'));
     });
     expect(onSend).toHaveBeenCalledWith('hi');
+  });
+
+  it('renders the latest AI candidate in the card and calls onResolve with acceptedProposals for NEEDS_BRAINSTORM', () => {
+    const onResolve = jest.fn();
+    const { getByTestId, getByText } = renderWithClient(
+      <Stage4SubChatDrawer
+        visible
+        subChat={makeSubChat({
+          messages: [
+            msg({
+              id: 'm-old',
+              content: 'How about a daily walk?',
+              candidate: { description: 'a daily walk' },
+            }),
+            msg({ id: 'm-user', role: MessageRole.USER, content: 'shorter' }),
+            msg({
+              id: 'm-new',
+              content: 'A 10-minute walk after dinner each night for one week.',
+              candidate: {
+                description: 'A 10-minute walk after dinner each night for one week.',
+              },
+            }),
+          ],
+        })}
+        onSendMessage={() => {}}
+        onResolve={onResolve}
+        onClose={() => {}}
+      />
+    );
+    expect(
+      getByText('A 10-minute walk after dinner each night for one week.'),
+    ).toBeTruthy();
+
+    act(() => {
+      fireEvent.press(getByTestId('stage4-subchat-drawer-use-candidate'));
+    });
+    expect(onResolve).toHaveBeenCalledWith({
+      acceptedProposals: [
+        {
+          description: 'A 10-minute walk after dinner each night for one week.',
+          duration: null,
+          measureOfSuccess: null,
+        },
+      ],
+      updatedProposals: [],
+    });
+  });
+
+  it('PROPOSAL_REFINEMENT: "Use this version" emits updatedProposals for the anchor proposal', () => {
+    const onResolve = jest.fn();
+    const { getByTestId } = renderWithClient(
+      <Stage4SubChatDrawer
+        visible
+        subChat={makeSubChat({
+          anchorKind: Stage4SubChatAnchor.PROPOSAL_REFINEMENT,
+          anchorId: 'prop-1',
+          messages: [
+            msg({
+              id: 'm1',
+              content: 'Try a 20-minute version.',
+              candidate: {
+                proposalId: 'prop-1',
+                description: 'walk together for 20 minutes',
+              },
+            }),
+          ],
+        })}
+        initialProposalText="walk together each evening"
+        onSendMessage={() => {}}
+        onResolve={onResolve}
+        onClose={() => {}}
+      />
+    );
+    act(() => {
+      fireEvent.press(getByTestId('stage4-subchat-drawer-use-candidate'));
+    });
+    expect(onResolve).toHaveBeenCalledWith({
+      acceptedProposals: [],
+      updatedProposals: [
+        {
+          proposalId: 'prop-1',
+          description: 'walk together for 20 minutes',
+          duration: null,
+          measureOfSuccess: null,
+        },
+      ],
+    });
   });
 });

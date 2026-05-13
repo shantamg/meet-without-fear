@@ -67,6 +67,10 @@ export interface Stage4SubChatRecord {
 // ---------------------------------------------------------------------------
 
 export function toSubChatDTO(record: Stage4SubChatRecord): Stage4SubChatDTO {
+  const refinementAnchorId =
+    record.anchorKind === Stage4SubChatAnchor.PROPOSAL_REFINEMENT
+      ? record.anchorId
+      : null;
   return {
     id: record.id,
     sessionId: record.sessionId,
@@ -76,21 +80,72 @@ export function toSubChatDTO(record: Stage4SubChatRecord): Stage4SubChatDTO {
     status: record.status,
     createdAt: record.createdAt.toISOString(),
     resolvedAt: record.resolvedAt ? record.resolvedAt.toISOString() : null,
-    messages: record.messages.map(toMessageDTO),
+    messages: record.messages.map((m) => toMessageDTO(m, refinementAnchorId)),
   };
 }
 
-function toMessageDTO(m: {
-  id: string;
-  role: SharedMessageRole;
+/**
+ * AI messages may end with a structured proposal block:
+ *   <<<PROPOSAL>>>{"description":"..."}<<<END>>>
+ * We strip that block from the user-facing text and expose it as a structured
+ * candidate so the UI can render a single "Use this version" affordance.
+ * The block is the only sanctioned way for the AI to commit a proposal — see
+ * the persona prompts in stage4-prompts.ts.
+ */
+const PROPOSAL_BLOCK_RE = /<<<PROPOSAL>>>([\s\S]*?)<<<END>>>\s*$/;
+
+function extractCandidate(content: string): {
   content: string;
-  createdAt: Date;
-}): Stage4SubChatMessageDTO {
+  candidate: Stage4ProposalDraft | null;
+} {
+  const match = content.match(PROPOSAL_BLOCK_RE);
+  if (!match) return { content, candidate: null };
+  const stripped = content.slice(0, match.index).trimEnd();
+  try {
+    const parsed = JSON.parse(match[1].trim()) as Partial<Stage4ProposalDraft>;
+    const description =
+      typeof parsed.description === 'string' ? parsed.description.trim() : '';
+    if (!description) return { content: stripped, candidate: null };
+    return {
+      content: stripped,
+      candidate: {
+        description,
+        duration: parsed.duration ?? null,
+        measureOfSuccess: parsed.measureOfSuccess ?? null,
+      },
+    };
+  } catch {
+    return { content: stripped, candidate: null };
+  }
+}
+
+function toMessageDTO(
+  m: {
+    id: string;
+    role: SharedMessageRole;
+    content: string;
+    createdAt: Date;
+  },
+  refinementProposalId: string | null,
+): Stage4SubChatMessageDTO {
+  if (m.role !== SharedMessageRole.AI) {
+    return {
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      createdAt: m.createdAt.toISOString(),
+      candidate: null,
+    };
+  }
+  const { content, candidate } = extractCandidate(m.content);
   return {
     id: m.id,
     role: m.role,
-    content: m.content,
+    content,
     createdAt: m.createdAt.toISOString(),
+    candidate: candidate
+      ? { ...candidate, ...(refinementProposalId ? { proposalId: refinementProposalId } : {}) }
+      : null,
   };
 }
 
@@ -279,7 +334,14 @@ export async function buildSystemPrompt(
     `--- MAIN CHAT HISTORY ---\n${mainChatTranscript || '(no main-chat history yet)'}\n\n` +
     `--- STAGE 4 STATE ---\n${inventoryBlock}\n\n` +
     `--- INSTRUCTIONS ---\n` +
-    `Keep replies short, concrete, and scoped to the anchor. When you have a concrete proposal the user agrees with, suggest they tap "Accept" to add it to the inventory. Do not invent stances on their behalf.`;
+    `Keep replies short, concrete, and scoped to the anchor. The user cannot type proposal text directly — they describe what should change, and you propose a concrete version. When you have a candidate proposal the user can choose to accept, end your message with a single structured block on its own line, exactly:\n` +
+    `<<<PROPOSAL>>>{"description":"<full proposal text in one sentence>"}<<<END>>>\n` +
+    `Rules for the block:\n` +
+    `- Emit it only when you are offering a concrete candidate (one per turn, never multiple).\n` +
+    `- Do not emit it when you're still asking what to change, or when the user has already agreed and there's nothing new to propose.\n` +
+    `- The description is the full proposal text; everything before the block is conversational. Do not refer to the block in the conversational text — the UI renders the candidate as a separate card with a "Use this version" action.\n` +
+    `- Use plain JSON, no markdown fences, no trailing commentary after <<<END>>>.\n` +
+    `Do not invent stances on the user's behalf.`;
 
   return { systemPrompt, mainChatTranscript };
 }
@@ -407,14 +469,26 @@ export async function resolveSubChat(
   const createdIds: string[] = [];
   const updatedIds: string[] = [];
 
+  // For NEEDS_BRAINSTORM, resolve the anchor need's label up front so we can
+  // (a) store the human-readable label in proposal.needsAddressed (the column
+  // is treated as labels by the Stage 4 state builder) and (b) write the
+  // StrategyProposalNeed link row so coverage joins resolve correctly.
+  const anchorNeed =
+    anchorKind === Stage4SubChatAnchor.NEEDS_BRAINSTORM && subChat.anchorId
+      ? await prisma.identifiedNeed.findUnique({
+          where: { id: subChat.anchorId },
+          select: { id: true, need: true },
+        })
+      : null;
+
   await prisma.$transaction(async (tx) => {
     // NEEDS_BRAINSTORM / NO_OVERLAP — create new proposals.
     for (const draft of accepted) {
       const needsAddressed =
         draft.needsAddressed && draft.needsAddressed.length > 0
           ? draft.needsAddressed
-          : anchorKind === Stage4SubChatAnchor.NEEDS_BRAINSTORM && subChat.anchorId
-            ? [subChat.anchorId]
+          : anchorNeed
+            ? [anchorNeed.need]
             : [];
 
       const created = await tx.strategyProposal.create({
@@ -431,6 +505,12 @@ export async function resolveSubChat(
         },
       });
       createdIds.push(created.id);
+
+      if (anchorNeed) {
+        await tx.strategyProposalNeed.create({
+          data: { proposalId: created.id, needId: anchorNeed.id },
+        });
+      }
     }
 
     // PROPOSAL_REFINEMENT / NO_OVERLAP — update existing in place.
