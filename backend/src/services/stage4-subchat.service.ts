@@ -1,0 +1,492 @@
+/**
+ * Stage 4 Sub-chat service (Phase 3 — infrastructure).
+ *
+ * An ephemeral, anchor-scoped chat surface for three Stage 4 moments:
+ *   - NEEDS_BRAINSTORM    (anchor = open IdentifiedNeed)
+ *   - PROPOSAL_REFINEMENT (anchor = StrategyProposal)
+ *   - NO_OVERLAP          (no anchor — inventory at large)
+ *
+ * The AI receives the full main-chat conversation history as part of its
+ * system prompt; the user sees only sub-chat-scoped messages.
+ *
+ * Persona prompts are deliberately minimal placeholders for Phase 3.
+ * Phase 6 tunes them to match the gold rubric.
+ */
+
+import { Prisma } from '@prisma/client';
+import {
+  MessageRole as SharedMessageRole,
+  Stage4ProposalDraft,
+  Stage4ProposalKind,
+  Stage4ProposalStatus,
+  Stage4SubChatAnchor,
+  Stage4SubChatDTO,
+  Stage4SubChatMessageDTO,
+  Stage4SubChatStatus,
+} from '@meet-without-fear/shared';
+import { prisma } from '../lib/prisma';
+import { logger } from '../lib/logger';
+import { getCompletion } from '../lib/bedrock';
+
+const MAIN_CHAT_HISTORY_LIMIT = 60;
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface Stage4SubChatRecord {
+  id: string;
+  sessionId: string;
+  userId: string;
+  anchorKind: Stage4SubChatAnchor;
+  anchorId: string | null;
+  status: Stage4SubChatStatus;
+  createdAt: Date;
+  resolvedAt: Date | null;
+  messages: Array<{
+    id: string;
+    role: SharedMessageRole;
+    content: string;
+    createdAt: Date;
+  }>;
+}
+
+// ---------------------------------------------------------------------------
+// Mappers
+// ---------------------------------------------------------------------------
+
+export function toSubChatDTO(record: Stage4SubChatRecord): Stage4SubChatDTO {
+  return {
+    id: record.id,
+    sessionId: record.sessionId,
+    userId: record.userId,
+    anchorKind: record.anchorKind,
+    anchorId: record.anchorId,
+    status: record.status,
+    createdAt: record.createdAt.toISOString(),
+    resolvedAt: record.resolvedAt ? record.resolvedAt.toISOString() : null,
+    messages: record.messages.map(toMessageDTO),
+  };
+}
+
+function toMessageDTO(m: {
+  id: string;
+  role: SharedMessageRole;
+  content: string;
+  createdAt: Date;
+}): Stage4SubChatMessageDTO {
+  return {
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    createdAt: m.createdAt.toISOString(),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Open / get-or-create
+// ---------------------------------------------------------------------------
+
+export interface OpenSubChatInput {
+  sessionId: string;
+  userId: string;
+  anchorKind: Stage4SubChatAnchor;
+  anchorId?: string | null;
+}
+
+/**
+ * Returns the existing ACTIVE sub-chat for (sessionId, userId, anchorKind,
+ * anchorId) if one exists; otherwise creates a new one.
+ */
+export async function openOrGetActiveSubChat(
+  input: OpenSubChatInput
+): Promise<Stage4SubChatRecord> {
+  const { sessionId, userId, anchorKind } = input;
+  const anchorId = input.anchorId ?? null;
+
+  const existing = await prisma.stage4SubChat.findFirst({
+    where: {
+      sessionId,
+      userId,
+      anchorKind: anchorKind as any,
+      anchorId,
+      status: 'ACTIVE' as any,
+    },
+    include: {
+      messages: { orderBy: { createdAt: 'asc' } },
+    },
+  });
+
+  if (existing) {
+    return existing as unknown as Stage4SubChatRecord;
+  }
+
+  const created = await prisma.stage4SubChat.create({
+    data: {
+      sessionId,
+      userId,
+      anchorKind: anchorKind as any,
+      anchorId,
+      status: 'ACTIVE' as any,
+    },
+    include: { messages: true },
+  });
+  return created as unknown as Stage4SubChatRecord;
+}
+
+export async function getSubChatById(
+  subChatId: string
+): Promise<Stage4SubChatRecord | null> {
+  const row = await prisma.stage4SubChat.findUnique({
+    where: { id: subChatId },
+    include: { messages: { orderBy: { createdAt: 'asc' } } },
+  });
+  return row as unknown as Stage4SubChatRecord | null;
+}
+
+// ---------------------------------------------------------------------------
+// Prompt construction
+// ---------------------------------------------------------------------------
+
+const PERSONA_INSTRUCTIONS: Record<Stage4SubChatAnchor, string> = {
+  [Stage4SubChatAnchor.NEEDS_BRAINSTORM]:
+    "You're helping the user generate small, bounded, observable experiments to address the named need. Stay scoped to this need. When the user agrees on a concrete experiment, surface it as a structured proposal draft they can accept.",
+  [Stage4SubChatAnchor.PROPOSAL_REFINEMENT]:
+    "You're helping the user reshape a specific Stage 4 proposal. Identify what's blocking willingness and propose modifications. Stay scoped to this one proposal.",
+  [Stage4SubChatAnchor.NO_OVERLAP]:
+    "Both partners have shared willingness stances on the inventory and no shared proposal has mutual 'willing'. Help the user refine, combine, or generate new options grounded in their stated needs.",
+};
+
+export interface AnchorContext {
+  anchorKind: Stage4SubChatAnchor;
+  needLabel?: string | null;
+  proposalDescription?: string | null;
+}
+
+export async function loadAnchorContext(
+  _sessionId: string,
+  anchorKind: Stage4SubChatAnchor,
+  anchorId: string | null
+): Promise<AnchorContext> {
+  if (anchorKind === Stage4SubChatAnchor.NEEDS_BRAINSTORM && anchorId) {
+    const need = await prisma.identifiedNeed.findUnique({
+      where: { id: anchorId },
+      select: { need: true },
+    });
+    return { anchorKind, needLabel: need?.need ?? null };
+  }
+  if (anchorKind === Stage4SubChatAnchor.PROPOSAL_REFINEMENT && anchorId) {
+    const proposal = await prisma.strategyProposal.findUnique({
+      where: { id: anchorId },
+      select: { description: true },
+    });
+    return { anchorKind, proposalDescription: proposal?.description ?? null };
+  }
+  return { anchorKind };
+}
+
+interface PromptBuildInput {
+  sessionId: string;
+  userId: string;
+  anchor: AnchorContext;
+  anchorId: string | null;
+}
+
+interface BuiltPrompt {
+  systemPrompt: string;
+  mainChatTranscript: string;
+}
+
+/**
+ * Construct the LLM system prompt: persona instruction, anchor info, full
+ * main-chat history for this user, and current Stage 4 inventory snapshot.
+ *
+ * Exposed for testing so we can assert main-chat history is included.
+ */
+export async function buildSystemPrompt(
+  input: PromptBuildInput
+): Promise<BuiltPrompt> {
+  const { sessionId, userId, anchor, anchorId } = input;
+  const persona = PERSONA_INSTRUCTIONS[anchor.anchorKind];
+
+  const anchorBlock =
+    anchor.anchorKind === Stage4SubChatAnchor.NEEDS_BRAINSTORM
+      ? `Anchor — open need: ${anchor.needLabel ?? '(unknown)'} (id: ${anchorId ?? 'none'})`
+      : anchor.anchorKind === Stage4SubChatAnchor.PROPOSAL_REFINEMENT
+        ? `Anchor — proposal under refinement: ${anchor.proposalDescription ?? '(unknown)'} (id: ${anchorId ?? 'none'})`
+        : `Anchor — no-overlap: the inventory at large.`;
+
+  const [conversationMessages, proposals, selections] = await Promise.all([
+    prisma.message.findMany({
+      where: {
+        sessionId,
+        OR: [
+          { senderId: userId, forUserId: null },
+          { forUserId: userId },
+        ],
+      },
+      orderBy: { timestamp: 'asc' },
+      take: MAIN_CHAT_HISTORY_LIMIT,
+      select: { role: true, content: true },
+    }),
+    prisma.strategyProposal.findMany({
+      where: { sessionId, status: 'ACTIVE' as any },
+      select: {
+        id: true,
+        description: true,
+        needsAddressed: true,
+        kind: true,
+      },
+    }),
+    prisma.stage4ProposalSelection.findMany({
+      where: { sessionId },
+      select: { proposalId: true, userId: true, decision: true },
+    }),
+  ]);
+
+  const mainChatTranscript = conversationMessages
+    .map((m) => `${m.role === 'USER' ? 'USER' : 'AI'}: ${m.content}`)
+    .join('\n\n');
+
+  const inventoryBlock = proposals.length
+    ? proposals
+        .map((p) => {
+          const stances = selections
+            .filter((s) => s.proposalId === p.id)
+            .map((s) => `${s.userId === userId ? 'self' : 'partner'}=${s.decision}`)
+            .join(', ');
+          return `- [${p.kind}] ${p.description}${stances ? ` (stances: ${stances})` : ''}`;
+        })
+        .join('\n')
+    : '(empty)';
+
+  const systemPrompt =
+    `${persona}\n\n` +
+    `${anchorBlock}\n\n` +
+    `--- MAIN CHAT HISTORY ---\n${mainChatTranscript || '(no main-chat history yet)'}\n\n` +
+    `--- STAGE 4 STATE ---\n${inventoryBlock}\n\n` +
+    `--- INSTRUCTIONS ---\n` +
+    `Keep replies short, concrete, and scoped to the anchor. When you have a concrete proposal the user agrees with, suggest they tap "Accept" to add it to the inventory. Do not invent stances on their behalf.`;
+
+  return { systemPrompt, mainChatTranscript };
+}
+
+// ---------------------------------------------------------------------------
+// Send message
+// ---------------------------------------------------------------------------
+
+export interface SendMessageInput {
+  subChatId: string;
+  userId: string;
+  content: string;
+}
+
+export async function appendUserMessageAndRespond(
+  input: SendMessageInput
+): Promise<Stage4SubChatRecord> {
+  const subChat = await prisma.stage4SubChat.findUnique({
+    where: { id: input.subChatId },
+    include: { messages: { orderBy: { createdAt: 'asc' } } },
+  });
+  if (!subChat) {
+    throw new SubChatNotFoundError();
+  }
+  if (subChat.userId !== input.userId) {
+    throw new SubChatForbiddenError();
+  }
+  if (subChat.status !== ('ACTIVE' as any)) {
+    throw new SubChatResolvedError();
+  }
+
+  await prisma.stage4SubChatMessage.create({
+    data: {
+      subChatId: subChat.id,
+      role: 'USER' as any,
+      content: input.content,
+    },
+  });
+
+  const anchor = await loadAnchorContext(
+    subChat.sessionId,
+    subChat.anchorKind as Stage4SubChatAnchor,
+    subChat.anchorId
+  );
+  const { systemPrompt } = await buildSystemPrompt({
+    sessionId: subChat.sessionId,
+    userId: subChat.userId,
+    anchor,
+    anchorId: subChat.anchorId,
+  });
+
+  const llmMessages = [
+    ...subChat.messages.map((m) => ({
+      role: (m.role === ('AI' as any) ? 'assistant' : 'user') as 'user' | 'assistant',
+      content: m.content,
+    })),
+    { role: 'user' as const, content: input.content },
+  ];
+
+  let aiText: string | null = null;
+  try {
+    aiText = await getCompletion({
+      systemPrompt,
+      messages: llmMessages,
+      maxTokens: 768,
+      operation: `stage4-subchat-${subChat.anchorKind}`,
+      sessionId: subChat.sessionId,
+      turnId: `stage4-subchat-${subChat.id}-${Date.now()}`,
+    });
+  } catch (err) {
+    logger.error('[stage4-subchat] LLM error', err);
+  }
+
+  const fallback =
+    'I had trouble responding just now. Could you try saying that again?';
+  await prisma.stage4SubChatMessage.create({
+    data: {
+      subChatId: subChat.id,
+      role: 'AI' as any,
+      content: aiText && aiText.trim().length ? aiText : fallback,
+    },
+  });
+
+  const refreshed = await getSubChatById(subChat.id);
+  if (!refreshed) throw new SubChatNotFoundError();
+  return refreshed;
+}
+
+// ---------------------------------------------------------------------------
+// Resolve
+// ---------------------------------------------------------------------------
+
+export interface ResolveInput {
+  subChatId: string;
+  userId: string;
+  acceptedProposals?: Stage4ProposalDraft[];
+  updatedProposals?: Stage4ProposalDraft[];
+}
+
+export interface ResolveResult {
+  subChat: Stage4SubChatRecord;
+  createdProposalIds: string[];
+  updatedProposalIds: string[];
+}
+
+export async function resolveSubChat(
+  input: ResolveInput
+): Promise<ResolveResult> {
+  const subChat = await prisma.stage4SubChat.findUnique({
+    where: { id: input.subChatId },
+  });
+  if (!subChat) throw new SubChatNotFoundError();
+  if (subChat.userId !== input.userId) throw new SubChatForbiddenError();
+  if (subChat.status !== ('ACTIVE' as any)) {
+    // Idempotent: already resolved — return current state.
+    const current = await getSubChatById(subChat.id);
+    if (!current) throw new SubChatNotFoundError();
+    return { subChat: current, createdProposalIds: [], updatedProposalIds: [] };
+  }
+
+  const anchorKind = subChat.anchorKind as unknown as Stage4SubChatAnchor;
+  const accepted = input.acceptedProposals ?? [];
+  const updated = input.updatedProposals ?? [];
+
+  const createdIds: string[] = [];
+  const updatedIds: string[] = [];
+
+  await prisma.$transaction(async (tx) => {
+    // NEEDS_BRAINSTORM / NO_OVERLAP — create new proposals.
+    for (const draft of accepted) {
+      const needsAddressed =
+        draft.needsAddressed && draft.needsAddressed.length > 0
+          ? draft.needsAddressed
+          : anchorKind === Stage4SubChatAnchor.NEEDS_BRAINSTORM && subChat.anchorId
+            ? [subChat.anchorId]
+            : [];
+
+      const created = await tx.strategyProposal.create({
+        data: {
+          sessionId: subChat.sessionId,
+          createdByUserId: subChat.userId,
+          description: draft.description,
+          needsAddressed,
+          duration: draft.duration ?? null,
+          measureOfSuccess: draft.measureOfSuccess ?? null,
+          kind: Stage4ProposalKind.SHARED_PROPOSAL as any,
+          status: Stage4ProposalStatus.ACTIVE as any,
+          source: 'AI_SUGGESTED' as any,
+        },
+      });
+      createdIds.push(created.id);
+    }
+
+    // PROPOSAL_REFINEMENT / NO_OVERLAP — update existing in place.
+    for (const draft of updated) {
+      if (!draft.proposalId) continue;
+      const updatedRow = await tx.strategyProposal.update({
+        where: { id: draft.proposalId },
+        data: {
+          description: draft.description,
+          needsAddressed: draft.needsAddressed ?? undefined,
+          duration: draft.duration ?? undefined,
+          measureOfSuccess: draft.measureOfSuccess ?? undefined,
+        },
+      });
+      updatedIds.push(updatedRow.id);
+
+      await tx.stage4ProposalRevision.create({
+        data: {
+          proposalId: updatedRow.id,
+          sessionId: subChat.sessionId,
+          actorUserId: subChat.userId,
+          action: 'subchat_refined',
+          after: {
+            description: draft.description,
+            needsAddressed: draft.needsAddressed,
+            duration: draft.duration,
+            measureOfSuccess: draft.measureOfSuccess,
+          } as Prisma.InputJsonValue,
+        },
+      });
+    }
+
+    await tx.stage4SubChat.update({
+      where: { id: subChat.id },
+      data: {
+        status: 'RESOLVED' as any,
+        resolvedAt: new Date(),
+      },
+    });
+  });
+
+  const refreshed = await getSubChatById(subChat.id);
+  if (!refreshed) throw new SubChatNotFoundError();
+  return {
+    subChat: refreshed,
+    createdProposalIds: createdIds,
+    updatedProposalIds: updatedIds,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+export class SubChatNotFoundError extends Error {
+  constructor() {
+    super('Sub-chat not found');
+    this.name = 'SubChatNotFoundError';
+  }
+}
+export class SubChatForbiddenError extends Error {
+  constructor() {
+    super('Sub-chat belongs to a different user');
+    this.name = 'SubChatForbiddenError';
+  }
+}
+export class SubChatResolvedError extends Error {
+  constructor() {
+    super('Sub-chat is already resolved');
+    this.name = 'SubChatResolvedError';
+  }
+}

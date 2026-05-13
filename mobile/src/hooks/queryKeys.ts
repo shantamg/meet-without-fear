@@ -65,6 +65,8 @@ export const stageKeys = {
   // Stage 4: Strategies
   stage4: (sessionId: string) =>
     [...stageKeys.all, 'stage4', sessionId] as const,
+  stage4SubChat: (sessionId: string, subChatId: string) =>
+    [...stageKeys.all, 'stage4', sessionId, 'subchat', subChatId] as const,
   strategies: (sessionId: string) =>
     [...stageKeys.all, 'strategies', sessionId] as const,
   strategiesReveal: (sessionId: string) =>

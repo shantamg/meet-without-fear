@@ -25,7 +25,9 @@ interface Stage4RedesignPanelProps {
   onSelectProposal: (proposalId: string, decision: Stage4SelectionDecision) => void;
   onShareSelections?: () => void;
   onReviseSelections?: () => void;
-  onBrainstormNeed?: (needLabel: string) => void;
+  onBrainstormNeed?: (needLabel: string, needId: string) => void;
+  onRefineProposal?: (proposalId: string, description: string) => void;
+  onKeepRefiningNoOverlap?: () => void;
   onDeclineNeed?: (needId: string) => void;
   onUndeclineNeed?: (needId: string) => void;
   onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason, checkInDate: string) => void;
@@ -39,6 +41,7 @@ interface Stage4RedesignFooterProps {
   isRevising?: boolean;
   onShareSelections?: () => void;
   onReviseSelections?: () => void;
+  onKeepRefiningNoOverlap?: () => void;
   onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason, checkInDate: string) => void;
 }
 
@@ -106,6 +109,7 @@ function CloseControls({
   isClosing,
   partnerName,
   onCloseStage4,
+  onKeepRefiningNoOverlap,
 }: {
   canCloseShared: boolean;
   showNoSharedClose: boolean;
@@ -117,6 +121,7 @@ function CloseControls({
     reason: Stage4ClosureReason,
     checkInDate: string,
   ) => void;
+  onKeepRefiningNoOverlap?: () => void;
 }) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => makeStyles(palette), [palette]);
@@ -211,6 +216,18 @@ function CloseControls({
           Close with shared agreement
         </Text>
       </TouchableOpacity>
+      {showNoSharedClose && canCloseNoShared && !canCloseShared && onKeepRefiningNoOverlap && (
+        <TouchableOpacity
+          style={[styles.primaryButton]}
+          onPress={() => onKeepRefiningNoOverlap()}
+          accessibilityRole="button"
+          accessibilityLabel="Keep refining with MWF"
+          testID="stage4-keep-refining-mwf"
+        >
+          <Send color={palette.bg} size={17} />
+          <Text style={styles.primaryButtonText}>Keep refining with MWF</Text>
+        </TouchableOpacity>
+      )}
       {showNoSharedClose && (
         <TouchableOpacity
           style={[styles.secondaryButton, noSharedCloseDisabled && styles.secondaryButtonDisabled]}
@@ -223,6 +240,7 @@ function CloseControls({
           disabled={noSharedCloseDisabled}
           accessibilityRole="button"
           accessibilityState={{ disabled: noSharedCloseDisabled }}
+          testID="stage4-close-without-shared"
         >
           <MinusCircle color={canCloseNoShared ? palette.text : palette.textFaint} size={17} />
           <Text
@@ -259,12 +277,14 @@ function ProposalCard({
   isSelecting,
   readOnly,
   onSelectProposal,
+  onRefineProposal,
 }: {
   proposal: ProposalCardDTO;
   partnerName: string;
   isSelecting?: boolean;
   readOnly?: boolean;
   onSelectProposal: (proposalId: string, decision: Stage4SelectionDecision) => void;
+  onRefineProposal?: (proposalId: string, description: string) => void;
 }) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => makeStyles(palette), [palette]);
@@ -287,6 +307,19 @@ function ProposalCard({
         <Text style={styles.proposalKind}>{proposalKindLabel(proposal.kind)}</Text>
         {proposal.ownerLabel && (
           <Text style={styles.ownerLabel}>{proposal.ownerLabel}</Text>
+        )}
+        {onRefineProposal && !readOnly && (
+          <TouchableOpacity
+            onPress={() => onRefineProposal(proposal.id, proposal.description)}
+            accessibilityRole="button"
+            accessibilityLabel={`Refine this proposal with MWF`}
+            testID={`stage4-proposal-refine-${proposal.id}`}
+            style={styles.refineButton}
+            hitSlop={8}
+          >
+            <RotateCcw size={14} color={palette.accent} />
+            <Text style={styles.refineButtonText}>Refine this</Text>
+          </TouchableOpacity>
         )}
       </View>
       <Text style={styles.proposalDescription}>{proposal.description}</Text>
@@ -350,7 +383,7 @@ function NeedRows({
   title: string;
   rows: GetStage4StateResponse['coverageAudit']['covered'];
   tone: 'covered' | 'partial' | 'open';
-  onBrainstormNeed?: (needLabel: string) => void;
+  onBrainstormNeed?: (needLabel: string, needId: string) => void;
   onDeclineNeed?: (needId: string) => void;
   onUndeclineNeed?: (needId: string) => void;
 }) {
@@ -389,7 +422,7 @@ function NeedRows({
                 ) : (
                   <View style={styles.needActions}>
                     <TouchableOpacity
-                      onPress={() => onBrainstormNeed?.(row.label)}
+                      onPress={() => onBrainstormNeed?.(row.label, row.id!)}
                       accessibilityRole="button"
                       accessibilityLabel={`Brainstorm with MWF about ${row.label}`}
                       testID={`stage4-need-brainstorm-${row.id}`}
@@ -426,6 +459,7 @@ export function Stage4RedesignFooter({
   onShareSelections,
   onReviseSelections,
   onCloseStage4,
+  onKeepRefiningNoOverlap,
 }: Stage4RedesignFooterProps) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => makeStyles(palette), [palette]);
@@ -545,6 +579,7 @@ export function Stage4RedesignFooter({
         isClosing={isClosing}
         partnerName={who}
         onCloseStage4={onCloseStage4}
+        onKeepRefiningNoOverlap={onKeepRefiningNoOverlap}
       />
     </View>
   );
@@ -562,6 +597,8 @@ export function Stage4RedesignPanel({
   onShareSelections,
   onReviseSelections,
   onBrainstormNeed,
+  onRefineProposal,
+  onKeepRefiningNoOverlap,
   onDeclineNeed,
   onUndeclineNeed,
   onCloseStage4,
@@ -620,6 +657,7 @@ export function Stage4RedesignPanel({
               isSelecting={isSelecting}
               readOnly={proposalSelectionsReadOnly}
               onSelectProposal={onSelectProposal}
+              onRefineProposal={onRefineProposal}
             />
           ))
         )}
@@ -766,6 +804,7 @@ export function Stage4RedesignPanel({
             isClosing={isClosing}
             partnerName={who}
             onCloseStage4={onCloseStage4}
+            onKeepRefiningNoOverlap={onKeepRefiningNoOverlap}
           />
         );
       })()}
@@ -954,6 +993,22 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   needActionButtonText: {
     color: palette.text,
     fontSize: 12,
+    fontWeight: '600',
+  },
+  refineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: palette.accent,
+    marginLeft: 'auto',
+  },
+  refineButtonText: {
+    color: palette.accent,
+    fontSize: 11,
     fontWeight: '600',
   },
   needSetAside: {

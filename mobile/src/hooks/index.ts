@@ -149,6 +149,10 @@ export {
   useCreateAgreement,
   useConfirmAgreement,
   useResolveSession,
+  // Stage 4 Sub-chat (Phase 3)
+  useOpenStage4SubChat,
+  useSendStage4SubChatMessage,
+  useResolveStage4SubChat,
 } from './useStages';
 
 // ============================================================================

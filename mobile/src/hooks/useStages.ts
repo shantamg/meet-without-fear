@@ -2628,3 +2628,107 @@ export function useGateStatus(
     ...options,
   });
 }
+
+// ============================================================================
+// Stage 4 Sub-chat (Phase 3)
+// ============================================================================
+
+import type {
+  OpenStage4SubChatRequest,
+  OpenStage4SubChatResponse,
+  SendStage4SubChatMessageRequest,
+  SendStage4SubChatMessageResponse,
+  ResolveStage4SubChatRequest,
+  ResolveStage4SubChatResponse,
+  Stage4SubChatDTO,
+} from '@meet-without-fear/shared';
+
+/** Open (or get the active) sub-chat for a Stage 4 anchor. */
+export function useOpenStage4SubChat() {
+  return useMutation<
+    OpenStage4SubChatResponse,
+    ApiClientError,
+    { sessionId: string } & OpenStage4SubChatRequest
+  >({
+    mutationFn: async ({ sessionId, anchorKind, anchorId }) =>
+      post<OpenStage4SubChatResponse, OpenStage4SubChatRequest>(
+        `/sessions/${sessionId}/stage4/subchat`,
+        { anchorKind, anchorId: anchorId ?? null },
+      ),
+  });
+}
+
+/** Send a message in a sub-chat; the response contains the appended user + AI messages. */
+export function useSendStage4SubChatMessage() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    SendStage4SubChatMessageResponse,
+    ApiClientError,
+    { sessionId: string; subChatId: string } & SendStage4SubChatMessageRequest,
+    { previous: Stage4SubChatDTO | undefined }
+  >({
+    mutationFn: async ({ sessionId, subChatId, content }) =>
+      post<SendStage4SubChatMessageResponse, SendStage4SubChatMessageRequest>(
+        `/sessions/${sessionId}/stage4/subchat/${subChatId}/messages`,
+        { content },
+      ),
+    onMutate: async ({ sessionId, subChatId, content }) => {
+      const key = stageKeys.stage4SubChat(sessionId, subChatId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<Stage4SubChatDTO>(key);
+      if (previous) {
+        queryClient.setQueryData<Stage4SubChatDTO>(key, {
+          ...previous,
+          messages: [
+            ...previous.messages,
+            {
+              id: `optimistic-${Date.now()}`,
+              role: 'USER' as any,
+              content,
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { sessionId, subChatId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(
+          stageKeys.stage4SubChat(sessionId, subChatId),
+          context.previous,
+        );
+      }
+    },
+    onSuccess: (data, { sessionId, subChatId }) => {
+      queryClient.setQueryData(
+        stageKeys.stage4SubChat(sessionId, subChatId),
+        data.subChat,
+      );
+    },
+  });
+}
+
+/** Resolve a sub-chat with a structured payload (creates / updates proposals). */
+export function useResolveStage4SubChat() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    ResolveStage4SubChatResponse,
+    ApiClientError,
+    { sessionId: string; subChatId: string } & ResolveStage4SubChatRequest
+  >({
+    mutationFn: async ({ sessionId, subChatId, acceptedProposals, updatedProposals }) =>
+      post<ResolveStage4SubChatResponse, ResolveStage4SubChatRequest>(
+        `/sessions/${sessionId}/stage4/subchat/${subChatId}/resolve`,
+        { acceptedProposals, updatedProposals },
+      ),
+    onSuccess: (data, { sessionId, subChatId }) => {
+      queryClient.setQueryData(
+        stageKeys.stage4SubChat(sessionId, subChatId),
+        data.subChat,
+      );
+      // Inventory may have changed — refresh Stage 4 state.
+      refreshStage4Caches(queryClient, sessionId);
+    },
+  });
+}

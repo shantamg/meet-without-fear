@@ -52,6 +52,7 @@ model User {
   removedStage4Proposals   StrategyProposal[]            @relation("Stage4ProposalRemovedBy")
   strategyRankings         StrategyRanking[]
   stage4ProposalSelections Stage4ProposalSelection[]
+  stage4SubChats           Stage4SubChat[]
   tendingResponses         TendingResponse[]
   exerciseCompletions      EmotionalExerciseCompletion[]
   invitationsSent          Invitation[]                  @relation("InvitedBy")
@@ -141,6 +142,7 @@ model Session {
   stage4NeedCoverages       Stage4NeedCoverage[]
   stage4NeedDeclinations    Stage4NeedDeclination[]
   stage4Closure             Stage4Closure?
+  stage4SubChats            Stage4SubChat[]
   tendingEntries            TendingEntry[]
   consentRecords            ConsentRecord[]
   exerciseCompletions       EmotionalExerciseCompletion[]
@@ -210,13 +212,13 @@ model InnerWorkSession {
 
   // Link to partner session for context-aware Inner Thoughts
   // When set, AI has access to partner session context and can reference it
-  linkedPartnerSession   Session? @relation("LinkedInnerThoughts", fields: [linkedPartnerSessionId], references: [id], onDelete: SetNull)
+  linkedPartnerSession   Session?          @relation("LinkedInnerThoughts", fields: [linkedPartnerSessionId], references: [id], onDelete: SetNull)
   linkedPartnerSessionId String?
   linkedAtMessage        InnerWorkMessage? @relation("InnerWorkBranchPoint", fields: [linkedAtMessageId], references: [id], onDelete: SetNull)
   linkedAtMessageId      String?
   linkedAtStage          Int? // Stage when Inner Thoughts was opened (1, 2, 3, 4)
   linkedTrigger          String? // Why it was opened: "empathy_wait", "voluntary", "witness_wait"
-  contextSummarySnapshot String? @db.Text // Point-in-time context passed when a partner session was started
+  contextSummarySnapshot String?           @db.Text // Point-in-time context passed when a partner session was started
 
   @@index([userId, updatedAt])
   @@index([status])
@@ -247,12 +249,12 @@ enum TakeawayLinkType {
 }
 
 model InnerWorkMessage {
-  id        String           @id @default(cuid())
-  session   InnerWorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId String
-  role      MessageRole
-  content   String           @db.Text
-  timestamp DateTime         @default(now())
+  id                String             @id @default(cuid())
+  session           InnerWorkSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId         String
+  role              MessageRole
+  content           String             @db.Text
+  timestamp         DateTime           @default(now())
   branchForSessions InnerWorkSession[] @relation("InnerWorkBranchPoint")
 
   // NOTE: Message-level embedding removed per fact-ledger architecture
@@ -1078,6 +1080,46 @@ model Stage4Closure {
   closedByUserId        String?
   closedAt              DateTime            @default(now())
   createdAt             DateTime            @default(now())
+}
+
+enum Stage4SubChatAnchor {
+  NEEDS_BRAINSTORM
+  PROPOSAL_REFINEMENT
+  NO_OVERLAP
+}
+
+enum Stage4SubChatStatus {
+  ACTIVE
+  RESOLVED
+}
+
+model Stage4SubChat {
+  id         String              @id @default(cuid())
+  session    Session             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  anchorKind Stage4SubChatAnchor
+  anchorId   String?
+  status     Stage4SubChatStatus @default(ACTIVE)
+  createdAt  DateTime            @default(now())
+  resolvedAt DateTime?
+
+  messages Stage4SubChatMessage[]
+
+  @@index([sessionId, userId, status])
+  @@index([sessionId, anchorKind, anchorId, status])
+}
+
+model Stage4SubChatMessage {
+  id        String        @id @default(cuid())
+  subChat   Stage4SubChat @relation(fields: [subChatId], references: [id], onDelete: Cascade)
+  subChatId String
+  role      MessageRole
+  content   String        @db.Text
+  createdAt DateTime      @default(now())
+
+  @@index([subChatId, createdAt])
 }
 
 model TendingEntry {

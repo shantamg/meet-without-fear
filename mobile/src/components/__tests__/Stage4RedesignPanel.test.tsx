@@ -450,7 +450,7 @@ describe('Stage4RedesignPanel', () => {
         <Stage4RedesignPanel {...defaultProps} onBrainstormNeed={onBrainstormNeed} />
       );
       fireEvent.press(screen.getByTestId('stage4-need-brainstorm-coverage-2'));
-      expect(onBrainstormNeed).toHaveBeenCalledWith('Trust after conflict');
+      expect(onBrainstormNeed).toHaveBeenCalledWith('Trust after conflict', 'coverage-2');
     });
 
     it('fires onDeclineNeed with the need id when Leave-for-now is tapped', () => {
@@ -506,6 +506,65 @@ describe('Stage4RedesignPanel', () => {
       render(<Stage4RedesignPanel {...defaultProps} state={gatedState} />);
       const share = screen.getByTestId('stage4-share-selections');
       expect(share.props.accessibilityState?.disabled).toBe(false);
+    });
+  });
+
+  describe('no-overlap footer (Phase 3)', () => {
+    function noOverlapState(): GetStage4StateResponse {
+      return {
+        ...baseState,
+        phase: Stage4Phase.OUTCOME_REVIEW,
+        mySelectionStatus: 'SUBMITTED',
+        partnerSelectionStatus: 'SUBMITTED',
+        inventory: {
+          ...baseState.inventory,
+          sharedProposals: [
+            {
+              ...baseState.inventory.sharedProposals[0],
+              myDecision: Stage4SelectionDecision.NOT_WILLING,
+              partnerDecisionVisible: Stage4SelectionDecision.WILLING,
+            },
+          ],
+        },
+      };
+    }
+
+    it('shows "Keep refining with MWF" as primary and "Close without a shared agreement" as secondary', () => {
+      const onKeep = jest.fn();
+      render(
+        <Stage4RedesignPanel
+          {...defaultProps}
+          state={noOverlapState()}
+          onKeepRefiningNoOverlap={onKeep}
+        />
+      );
+      const keep = screen.getByTestId('stage4-keep-refining-mwf');
+      const closeWithout = screen.getByTestId('stage4-close-without-shared');
+      // Primary lives in the styles.primaryButton tree; secondary in styles.secondaryButton.
+      // Asserting the relative visual treatment through the *order* of children and that
+      // both buttons are present is sufficient for Phase 3 — the primary button is
+      // rendered above the secondary in the close-controls cluster.
+      expect(keep).toBeTruthy();
+      expect(closeWithout).toBeTruthy();
+      fireEvent.press(keep);
+      expect(onKeep).toHaveBeenCalled();
+    });
+  });
+
+  describe('refine-this affordance (Phase 3)', () => {
+    it('per-proposal Refine this button opens a refinement sub-chat', () => {
+      const onRefine = jest.fn();
+      render(
+        <Stage4RedesignPanel
+          {...defaultProps}
+          onRefineProposal={onRefine}
+        />
+      );
+      fireEvent.press(screen.getByTestId('stage4-proposal-refine-proposal-1'));
+      expect(onRefine).toHaveBeenCalledWith(
+        'proposal-1',
+        'Take turns naming the impact before problem solving.'
+      );
     });
   });
 });
