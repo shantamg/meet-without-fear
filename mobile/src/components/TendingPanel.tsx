@@ -5,6 +5,7 @@ import {
   AgreementDTO,
   Stage4OutcomeDTO,
   TendingEntryDTO,
+  TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
 } from '@meet-without-fear/shared';
@@ -20,6 +21,8 @@ interface TendingPanelProps {
   initialEntryId?: string | null;
   isCreatingReentry?: boolean;
   isSubmittingResponse?: boolean;
+  currentUserId?: string;
+  isUpdatingShare?: boolean;
   onCreateReentry: (intent?: string) => void;
   onSubmitResponse: (
     entryId: string,
@@ -29,6 +32,7 @@ interface TendingPanelProps {
       continueChoice: TendingContinueChoice;
     }
   ) => void;
+  onToggleShare?: (entryId: string, nextOptedInShared: boolean) => void;
 }
 
 const responseLabels: Record<TendingStatusChoice, string> = {
@@ -62,7 +66,15 @@ function entryTitle(entry: TendingEntryDTO): string {
   if (entry.type === TendingEntryType.USER_INITIATED_REENTRY) {
     return 'Passive re-entry';
   }
+  if (entry.scope === TendingEntryScope.INDIVIDUAL) {
+    return 'Individual commitment check-in';
+  }
   return 'Agreement check-in';
+}
+
+function entryScopeLabel(entry: TendingEntryDTO): string {
+  if (entry.type === TendingEntryType.USER_INITIATED_REENTRY) return 'Re-entry';
+  return entry.scope === TendingEntryScope.INDIVIDUAL ? 'Individual' : 'Shared';
 }
 
 function entryStatusLabel(status: TendingEntryStatus): string {
@@ -98,8 +110,11 @@ export function TendingPanel({
   initialEntryId,
   isCreatingReentry = false,
   isSubmittingResponse = false,
+  currentUserId,
+  isUpdatingShare = false,
   onCreateReentry,
   onSubmitResponse,
+  onToggleShare,
 }: TendingPanelProps) {
   const [intent, setIntent] = useState('');
   const [reflection, setReflection] = useState('');
@@ -163,11 +178,47 @@ export function TendingPanel({
       {selectedEntry && (
         <View style={styles.card}>
           <View style={styles.entryHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>{entryTitle(selectedEntry)}</Text>
+            <View style={{ flex: 1 }}>
+              <View style={styles.scopeRow}>
+                <Text style={styles.sectionTitle}>{entryTitle(selectedEntry)}</Text>
+                <View
+                  style={[
+                    styles.scopeChip,
+                    selectedEntry.scope === TendingEntryScope.INDIVIDUAL && styles.scopeChipIndividual,
+                  ]}
+                  testID={`tending-scope-chip-${selectedEntry.scope}`}
+                >
+                  <Text style={styles.scopeChipText}>{entryScopeLabel(selectedEntry)}</Text>
+                </View>
+              </View>
               <Text style={styles.entryMeta}>
                 {entryStatusLabel(selectedEntry.status)} · {formatDate(selectedEntry.scheduledFor || selectedEntry.openedAt)}
               </Text>
+              {selectedEntry.scope === TendingEntryScope.INDIVIDUAL &&
+                currentUserId &&
+                selectedEntry.ownerUserId === currentUserId &&
+                onToggleShare && (
+                  <TouchableOpacity
+                    style={[styles.shareToggle, isUpdatingShare && styles.disabledButton]}
+                    onPress={() =>
+                      onToggleShare(selectedEntry.id, !selectedEntry.optedInShared)
+                    }
+                    disabled={isUpdatingShare}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      selectedEntry.optedInShared
+                        ? 'Keep this individual commitment private'
+                        : 'Share this individual commitment with your partner'
+                    }
+                    testID="tending-share-toggle"
+                  >
+                    <Text style={styles.shareToggleText}>
+                      {selectedEntry.optedInShared
+                        ? 'Keep private'
+                        : 'Share with partner'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
             </View>
             {selectedEntry.myResponse && <CheckCircle2 color={colors.success} size={20} />}
           </View>
@@ -484,6 +535,45 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
     lineHeight: 18,
+  },
+  scopeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  scopeChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: colors.bgTertiary,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  scopeChipIndividual: {
+    backgroundColor: colors.bgPrimary,
+    borderColor: colors.accent,
+  },
+  scopeChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+  },
+  shareToggle: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: colors.bgPrimary,
+  },
+  shareToggleText: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
 

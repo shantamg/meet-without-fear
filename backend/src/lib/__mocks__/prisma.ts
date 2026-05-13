@@ -52,6 +52,7 @@ export const prisma = {
   stage4SubChatMessage: createMockModel(),
   tendingEntry: createMockModel(),
   tendingResponse: createMockModel(),
+  strategyProposalNeed: createMockModel(),
   emotionalExerciseCompletion: createMockModel(),
   globalLibraryItem: createMockModel(),
   invitation: createMockModel(),

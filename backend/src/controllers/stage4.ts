@@ -33,7 +33,10 @@ import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
 import { getStage4State as buildStage4State, Stage4StateNotFoundError } from '../services/stage4-state';
-import { scheduleSharedAgreementTendingEntries } from '../services/tending.service';
+import {
+  scheduleIndividualCommitmentTendingEntries,
+  scheduleSharedAgreementTendingEntries,
+} from '../services/tending.service';
 import { z } from 'zod';
 
 // ============================================================================
@@ -295,10 +298,10 @@ function requiresSharedSelection(proposal: Stage4ProposalForClosure): boolean {
   return proposal.kind === Stage4ProposalKind.SHARED_PROPOSAL && proposal.status === Stage4ProposalStatus.ACTIVE;
 }
 
-function getWillingIndividualCommitmentIds(
+function getWillingIndividualCommitments(
   proposals: Stage4ProposalForClosure[],
   selections: Stage4SelectionForClosure[]
-): string[] {
+): Stage4ProposalForClosure[] {
   return proposals
     .filter((proposal) => proposal.kind === Stage4ProposalKind.INDIVIDUAL_COMMITMENT)
     .filter((proposal) =>
@@ -308,9 +311,9 @@ function getWillingIndividualCommitmentIds(
           selection.decision === Stage4SelectionDecision.WILLING &&
           (!proposal.createdByUserId || proposal.createdByUserId === selection.userId)
       )
-    )
-    .map((proposal) => proposal.id);
+    );
 }
+
 
 function buildClosureSummary(
   kind: Stage4ClosureKind,
@@ -886,7 +889,8 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
       .filter(requiresSharedSelection)
       .filter((proposal) => bothPartnersWilling(proposal.id, mutable.session, selectionsByProposal))
       .slice(0, MAX_AGREEMENTS);
-    const individualProposalIds = getWillingIndividualCommitmentIds(proposals, selections);
+    const willingIndividualCommitments = getWillingIndividualCommitments(proposals, selections);
+    const individualProposalIds = willingIndividualCommitments.map((p) => p.id);
     const openNeedIds = coverageRows
       .filter((row) => row.coverageStatus === 'OPEN' || row.coverageStatus === 'PARTIAL')
       .map((row) => row.needId ?? row.id);
@@ -990,6 +994,23 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
         }
 
         await scheduleSharedAgreementTendingEntries(tx, sessionId, agreementsForTending, now);
+      }
+
+      const individualCommitmentsForTending = willingIndividualCommitments
+        .filter((p) => !!p.createdByUserId)
+        .map((p) => ({
+          proposalId: p.id,
+          ownerUserId: p.createdByUserId as string,
+          description: p.description,
+        }));
+      if (individualCommitmentsForTending.length > 0) {
+        await scheduleIndividualCommitmentTendingEntries(
+          tx,
+          sessionId,
+          individualCommitmentsForTending,
+          checkInAt,
+          now
+        );
       }
 
       await tx.stage4Closure.create({

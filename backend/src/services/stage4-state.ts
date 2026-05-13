@@ -178,7 +178,8 @@ function buildProposalCard(
   partnerUserId: string | null,
   selections: Stage4SelectionRow[],
   coverageRows: Stage4NeedCoverageRow[],
-  revealPartnerSelections: boolean
+  revealPartnerSelections: boolean,
+  needLinks: Array<{ needId: string; needText: string }> = []
 ): ProposalCardDTO {
   const mySelection = selections.find(
     (selection) => selection.proposalId === proposal.id && selection.userId === userId
@@ -211,12 +212,22 @@ function buildProposalCard(
           ? 'You'
           : 'Partner'
         : undefined,
-    needsAddressed: linkedCoverage.length > 0
-      ? linkedCoverage
-      : proposal.needsAddressed.map((label) => ({
-          label,
-          coverage: 'COVERED',
-        })),
+    needsAddressed:
+      needLinks.length > 0
+        ? needLinks.map((link) => {
+            const coverage = linkedCoverage.find((row) => row.id === link.needId);
+            return {
+              id: link.needId,
+              label: link.needText,
+              coverage: coverage?.coverage ?? 'COVERED',
+            };
+          })
+        : linkedCoverage.length > 0
+          ? linkedCoverage
+          : proposal.needsAddressed.map((label) => ({
+              label,
+              coverage: 'COVERED',
+            })),
     duration: proposal.duration,
     measureOfSuccess: proposal.measureOfSuccess,
     status: proposal.status,
@@ -363,6 +374,7 @@ export async function getStage4State(
     tendingEntries,
     progressRows,
     declinations,
+    proposalNeedLinks,
   ] = await Promise.all([
     prisma.strategyProposal.findMany({
       where: { sessionId },
@@ -395,6 +407,14 @@ export async function getStage4State(
       where: { sessionId, userId },
       select: { needId: true },
     }) as Promise<{ needId: string }[]>,
+    prisma.strategyProposalNeed.findMany({
+      where: { proposal: { sessionId } },
+      select: {
+        proposalId: true,
+        needId: true,
+        need: { select: { need: true } },
+      },
+    }) as Promise<Array<{ proposalId: string; needId: string; need: { need: string } | null }>>,
   ]);
 
   const mySelections = selections.filter((selection) => selection.userId === userId);
@@ -406,8 +426,24 @@ export async function getStage4State(
   const mySelectionSubmitted = hasSubmittedSelectionGate(progressRows ?? [], userId);
   const partnerSelectionSubmitted = hasSubmittedSelectionGate(progressRows ?? [], partnerUserId);
   const revealPartnerSelections = mySelectionSubmitted && partnerSelectionSubmitted;
+  const linksByProposal = new Map<string, Array<{ needId: string; needText: string }>>();
+  for (const link of proposalNeedLinks) {
+    const text = link.need?.need;
+    if (!text) continue;
+    const arr = linksByProposal.get(link.proposalId) ?? [];
+    arr.push({ needId: link.needId, needText: text });
+    linksByProposal.set(link.proposalId, arr);
+  }
   const proposalCards = activeProposals.map((proposal) =>
-    buildProposalCard(proposal, userId, partnerUserId, selections, coverageRows, revealPartnerSelections)
+    buildProposalCard(
+      proposal,
+      userId,
+      partnerUserId,
+      selections,
+      coverageRows,
+      revealPartnerSelections,
+      linksByProposal.get(proposal.id) ?? []
+    )
   );
   const unaddressedNeeds = buildUnaddressedNeeds(coverageRows, userId, partnerUserId);
   const agreementsDTO = agreements.map((agreement) => buildAgreementDTO(agreement, userIsA));

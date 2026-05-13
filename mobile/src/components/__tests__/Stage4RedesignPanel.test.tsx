@@ -551,6 +551,33 @@ describe('Stage4RedesignPanel', () => {
     });
   });
 
+  describe('linked-need rendering (Phase 4)', () => {
+    it('renders the user\'s original IdentifiedNeed phrasing on the proposal card', () => {
+      const linkedState: GetStage4StateResponse = {
+        ...baseState,
+        inventory: {
+          ...baseState.inventory,
+          sharedProposals: [
+            {
+              ...baseState.inventory.sharedProposals[0],
+              needsAddressed: [
+                {
+                  id: 'need-autonomy',
+                  label: 'autonomy over my own schedule',
+                  coverage: 'COVERED',
+                },
+              ],
+            },
+          ],
+        },
+      };
+      render(<Stage4RedesignPanel {...defaultProps} state={linkedState} />);
+      expect(
+        screen.getByText(/autonomy over my own schedule/i)
+      ).toBeTruthy();
+    });
+  });
+
   describe('refine-this affordance (Phase 3)', () => {
     it('per-proposal Refine this button opens a refinement sub-chat', () => {
       const onRefine = jest.fn();

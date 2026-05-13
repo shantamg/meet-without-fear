@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import {
   TendingEntryDTO,
+  TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
   TendingResponseDTO,
@@ -23,6 +24,9 @@ type TendingEntryWithResponses = {
   sessionId: string;
   agreementId: string | null;
   type: TendingEntryType;
+  scope: TendingEntryScope;
+  ownerUserId: string | null;
+  optedInShared: boolean;
   status: TendingEntryStatus;
   scheduledFor: Date | null;
   openedAt: Date | null;
@@ -86,6 +90,9 @@ function toEntryDTO(entry: TendingEntryWithResponses, userId: string): TendingEn
     sessionId: entry.sessionId,
     agreementId: entry.agreementId,
     type: entry.type,
+    scope: entry.scope,
+    ownerUserId: entry.ownerUserId,
+    optedInShared: entry.optedInShared,
     status: entry.status,
     scheduledFor: iso(entry.scheduledFor),
     openedAt: iso(entry.openedAt),
@@ -137,6 +144,7 @@ export async function scheduleSharedAgreementTendingEntries(
         sessionId,
         agreementId: agreement.id,
         type: TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
+        scope: TendingEntryScope.SHARED,
         status:
           agreement.followUpDate <= now
             ? TendingEntryStatus.OPEN
@@ -152,16 +160,93 @@ export async function scheduleSharedAgreementTendingEntries(
   return createdIds;
 }
 
+type IndividualCommitmentForScheduling = {
+  proposalId: string;
+  ownerUserId: string;
+  description: string;
+};
+
+function buildIndividualCommitmentSummary(commitment: IndividualCommitmentForScheduling): string {
+  return `Check in on your individual commitment: ${commitment.description}`;
+}
+
+export async function scheduleIndividualCommitmentTendingEntries(
+  tx: Tx,
+  sessionId: string,
+  commitments: IndividualCommitmentForScheduling[],
+  scheduledFor: Date,
+  now = new Date()
+): Promise<string[]> {
+  const createdIds: string[] = [];
+  for (const commitment of commitments) {
+    const isDue = scheduledFor <= now;
+    const entry = await tx.tendingEntry.create({
+      data: {
+        sessionId,
+        type: TendingEntryType.SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN,
+        scope: TendingEntryScope.INDIVIDUAL,
+        ownerUserId: commitment.ownerUserId,
+        optedInShared: false,
+        status: isDue ? TendingEntryStatus.OPEN : TendingEntryStatus.SCHEDULED,
+        scheduledFor,
+        openedAt: isDue ? now : null,
+        summary: buildIndividualCommitmentSummary(commitment),
+      },
+    });
+    createdIds.push(entry.id);
+  }
+  return createdIds;
+}
+
 export async function listTendingEntries(sessionId: string, userId: string): Promise<TendingEntryDTO[]> {
   await assertSessionMember(sessionId, userId);
 
   const entries = (await prisma.tendingEntry.findMany({
-    where: { sessionId },
+    where: {
+      sessionId,
+      OR: [
+        { scope: TendingEntryScope.SHARED },
+        { scope: TendingEntryScope.INDIVIDUAL, ownerUserId: userId },
+        { scope: TendingEntryScope.INDIVIDUAL, optedInShared: true },
+      ],
+    },
     orderBy: [{ scheduledFor: 'asc' }, { createdAt: 'asc' }],
     include: { responses: true },
   })) as TendingEntryWithResponses[];
 
   return entries.map((entry) => toEntryDTO(entry, userId));
+}
+
+export async function setIndividualEntryShare(args: {
+  entryId: string;
+  userId: string;
+  optedInShared: boolean;
+}): Promise<TendingEntryDTO> {
+  const entry = await getEntryForUser(args.entryId, args.userId);
+  if (entry.scope !== TendingEntryScope.INDIVIDUAL) {
+    throw new TendingInvalidStateError('Only INDIVIDUAL entries can be shared');
+  }
+  if (entry.ownerUserId !== args.userId) {
+    throw new TendingForbiddenError();
+  }
+
+  await prisma.tendingEntry.update({
+    where: { id: args.entryId },
+    data: { optedInShared: args.optedInShared },
+  });
+
+  try {
+    await publishSessionEvent(entry.sessionId, 'notification.pending_action', {
+      kind: args.optedInShared ? 'tending_entry_shared' : 'tending_entry_unshared',
+      tendingEntryId: args.entryId,
+      ownerUserId: args.userId,
+    }, args.userId);
+  } catch (error) {
+    logger.warn('[tending] Failed to publish share-toggle event', { entryId: args.entryId, error });
+  }
+
+  const updated = await getEntryForUser(args.entryId, args.userId);
+  return toEntryDTO(updated, args.userId);
 }
 
 async function getEntryForUser(entryId: string, userId: string) {
@@ -198,6 +283,9 @@ export async function submitTendingResponse(args: {
   continueChoice?: string;
 }): Promise<TendingEntryDTO> {
   const entry = await getEntryForUser(args.entryId, args.userId);
+  if (entry.scope === TendingEntryScope.INDIVIDUAL && entry.ownerUserId !== args.userId) {
+    throw new TendingForbiddenError();
+  }
   if (entry.status === TendingEntryStatus.SCHEDULED) {
     throw new TendingInvalidStateError('Tending entry is not open yet');
   }
@@ -206,7 +294,9 @@ export async function submitTendingResponse(args: {
   }
 
   const now = new Date();
-  const memberCount = entry.session.relationship.members.length;
+  const memberCount = entry.scope === TendingEntryScope.INDIVIDUAL
+    ? 1
+    : entry.session.relationship.members.length;
   await prisma.$transaction(async (tx) => {
     await tx.tendingResponse.upsert({
       where: {

@@ -1202,7 +1202,15 @@ describe('Stage 4 API', () => {
       await closeStage4(req as Request, res as Response);
 
       expect(prisma.agreement.create).not.toHaveBeenCalled();
-      expect(prisma.tendingEntry.create).not.toHaveBeenCalled();
+      expect(prisma.tendingEntry.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            scope: 'INDIVIDUAL',
+            ownerUserId: mockUser.id,
+            type: 'SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN',
+          }),
+        })
+      );
       expect(prisma.stage4Closure.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({

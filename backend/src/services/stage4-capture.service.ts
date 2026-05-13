@@ -13,6 +13,69 @@ import { logger } from '../lib/logger';
 import { refreshStage4NeedCoverage } from './stage4-coverage.service';
 import { isSupersededStrategy } from '../utils/strategy-dedupe';
 
+function normalizeNeedToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function needLabelMatches(label: string, need: string): boolean {
+  const a = normalizeNeedToken(label);
+  const b = normalizeNeedToken(need);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  const tokensA = new Set(a.split(' ').filter((token) => token.length > 2));
+  const tokensB = new Set(b.split(' ').filter((token) => token.length > 2));
+  if (tokensA.size === 0 || tokensB.size === 0) return false;
+  let shared = 0;
+  for (const token of tokensA) if (tokensB.has(token)) shared += 1;
+  const denom = Math.min(tokensA.size, tokensB.size);
+  return denom > 0 && shared / denom >= 0.5;
+}
+
+export async function linkProposalToIdentifiedNeeds(
+  proposalId: string,
+  sessionId: string,
+  needLabels: string[] | null | undefined
+): Promise<number> {
+  if (!needLabels || needLabels.length === 0) return 0;
+
+  const needs = await prisma.identifiedNeed.findMany({
+    where: { vessel: { sessionId } },
+    select: { id: true, need: true },
+  });
+  if (needs.length === 0) return 0;
+  const candidates = needs;
+
+  const matchedNeedIds = new Set<string>();
+  for (const label of needLabels) {
+    for (const candidate of candidates) {
+      if (needLabelMatches(label, candidate.need)) {
+        matchedNeedIds.add(candidate.id);
+      }
+    }
+  }
+  if (matchedNeedIds.size === 0) return 0;
+
+  let createdCount = 0;
+  for (const needId of matchedNeedIds) {
+    try {
+      await prisma.strategyProposalNeed.upsert({
+        where: { proposalId_needId: { proposalId, needId } },
+        create: { proposalId, needId },
+        update: {},
+      });
+      createdCount += 1;
+    } catch (error) {
+      logger.warn('[stage4-capture] Failed to link proposal to need', { proposalId, needId, error });
+    }
+  }
+  return createdCount;
+}
+
 export type Stage4CaptureInput = {
   sessionId: string;
   userId: string;
@@ -578,6 +641,11 @@ async function applyOperation(
           messageId: input.messageId,
         },
       });
+      await linkProposalToIdentifiedNeeds(
+        superseded.id,
+        input.sessionId,
+        operation.needsAddressed
+      );
       return true;
     }
 
@@ -635,6 +703,11 @@ async function applyOperation(
         messageId: input.messageId,
       },
     });
+    await linkProposalToIdentifiedNeeds(
+      created.id,
+      input.sessionId,
+      operation.needsAddressed
+    );
     return true;
   }
 
@@ -737,6 +810,13 @@ async function applyOperation(
       messageId: input.messageId,
     },
   });
+  if (operation.needsAddressed) {
+    await linkProposalToIdentifiedNeeds(
+      operation.proposalId,
+      input.sessionId,
+      operation.needsAddressed
+    );
+  }
   return true;
 }
 

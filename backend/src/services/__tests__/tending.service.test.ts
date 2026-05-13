@@ -5,10 +5,14 @@ import {
   listTendingEntries,
   openDueTendingEntries,
   publishPartnerInvolvingReentryChoice,
+  scheduleIndividualCommitmentTendingEntries,
   scheduleSharedAgreementTendingEntries,
+  setIndividualEntryShare,
   submitTendingResponse,
+  TendingForbiddenError,
 } from '../tending.service';
 import {
+  TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
 } from '@meet-without-fear/shared';
@@ -332,5 +336,100 @@ describe('tending.service', () => {
       'notification.pending_action',
       expect.objectContaining({ kind: 'tending_checkin_opened' })
     );
+  });
+
+  it('schedules individual commitment check-ins with INDIVIDUAL scope and owner', async () => {
+    (prisma.tendingEntry.create as jest.Mock).mockResolvedValueOnce({ id: 'tending-ind-1' });
+
+    const ids = await scheduleIndividualCommitmentTendingEntries(
+      prisma as any,
+      sessionId,
+      [
+        { proposalId: 'prop-1', ownerUserId: userId, description: 'Daily quiet 5 minutes' },
+      ],
+      new Date('2026-05-13T10:00:00.000Z'),
+      new Date('2026-05-06T10:00:00.000Z')
+    );
+
+    expect(ids).toEqual(['tending-ind-1']);
+    expect(prisma.tendingEntry.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        sessionId,
+        type: TendingEntryType.SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN,
+        scope: TendingEntryScope.INDIVIDUAL,
+        ownerUserId: userId,
+        optedInShared: false,
+        status: TendingEntryStatus.SCHEDULED,
+        scheduledFor: new Date('2026-05-13T10:00:00.000Z'),
+      }),
+    });
+  });
+
+  it('hides another user\'s unshared INDIVIDUAL entry from the partner', async () => {
+    (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+      id: sessionId,
+      relationship: { members: [{ userId }, { userId: partnerId }] },
+    });
+    (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([]);
+
+    await listTendingEntries(sessionId, partnerId);
+
+    expect(prisma.tendingEntry.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          sessionId,
+          OR: [
+            { scope: TendingEntryScope.SHARED },
+            { scope: TendingEntryScope.INDIVIDUAL, ownerUserId: partnerId },
+            { scope: TendingEntryScope.INDIVIDUAL, optedInShared: true },
+          ],
+        }),
+      })
+    );
+  });
+
+  it('owner can flip optedInShared via setIndividualEntryShare; non-owner is forbidden', async () => {
+    const entryRow = {
+      id: 'tending-ind-1',
+      sessionId,
+      agreementId: null,
+      type: TendingEntryType.SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN,
+      scope: TendingEntryScope.INDIVIDUAL,
+      ownerUserId: userId,
+      optedInShared: false,
+      status: TendingEntryStatus.SCHEDULED,
+      scheduledFor: new Date('2026-05-13T10:00:00.000Z'),
+      openedAt: null,
+      completedAt: null,
+      summary: 'Mine',
+      createdAt: new Date('2026-05-06T10:00:00.000Z'),
+      updatedAt: new Date('2026-05-06T10:00:00.000Z'),
+      responses: [],
+      session: { relationship: { members: [{ userId }, { userId: partnerId }] } },
+    };
+    (prisma.tendingEntry.findFirst as jest.Mock)
+      .mockResolvedValueOnce(entryRow)
+      .mockResolvedValueOnce({ ...entryRow, optedInShared: true });
+
+    const dto = await setIndividualEntryShare({
+      entryId: 'tending-ind-1',
+      userId,
+      optedInShared: true,
+    });
+
+    expect(prisma.tendingEntry.update).toHaveBeenCalledWith({
+      where: { id: 'tending-ind-1' },
+      data: { optedInShared: true },
+    });
+    expect(dto.optedInShared).toBe(true);
+
+    (prisma.tendingEntry.findFirst as jest.Mock).mockResolvedValueOnce(entryRow);
+    await expect(
+      setIndividualEntryShare({
+        entryId: 'tending-ind-1',
+        userId: partnerId,
+        optedInShared: true,
+      })
+    ).rejects.toBeInstanceOf(TendingForbiddenError);
   });
 });
