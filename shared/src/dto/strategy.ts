@@ -7,11 +7,14 @@
 import {
   AgreementStatus,
   AgreementType,
+  MessageRole,
   Stage4ClosureKind,
   Stage4ClosureReason,
   Stage4ProposalKind,
   Stage4ProposalStatus,
   Stage4SelectionDecision,
+  Stage4SubChatAnchor,
+  Stage4SubChatStatus,
   TendingEntryStatus,
   TendingEntryType,
 } from '../enums';
@@ -367,4 +370,70 @@ export interface CloseStage4Response {
   closedAt: string;
   outcome: Stage4OutcomeDTO;
   state: GetStage4StateResponse;
+}
+
+// ============================================================================
+// Stage 4 Sub-chat (Phase 3)
+// ============================================================================
+
+export interface Stage4SubChatMessageDTO {
+  id: string;
+  role: MessageRole;
+  content: string;
+  createdAt: string;
+}
+
+export interface Stage4SubChatDTO {
+  id: string;
+  sessionId: string;
+  userId: string;
+  anchorKind: Stage4SubChatAnchor;
+  anchorId: string | null;
+  status: Stage4SubChatStatus;
+  createdAt: string;
+  resolvedAt: string | null;
+  messages: Stage4SubChatMessageDTO[];
+}
+
+export interface OpenStage4SubChatRequest {
+  anchorKind: Stage4SubChatAnchor;
+  anchorId?: string | null;
+}
+
+export interface OpenStage4SubChatResponse {
+  subChat: Stage4SubChatDTO;
+}
+
+export interface SendStage4SubChatMessageRequest {
+  content: string;
+}
+
+export interface SendStage4SubChatMessageResponse {
+  subChat: Stage4SubChatDTO;
+}
+
+export interface Stage4ProposalDraft {
+  /** When set, refers to an existing StrategyProposal (refinement case). */
+  proposalId?: string;
+  description: string;
+  needsAddressed?: string[];
+  duration?: string | null;
+  measureOfSuccess?: string | null;
+}
+
+export interface ResolveStage4SubChatRequest {
+  /** Proposals to create new (NEEDS_BRAINSTORM, NO_OVERLAP). */
+  acceptedProposals?: Stage4ProposalDraft[];
+  /** Existing proposals to update in place (PROPOSAL_REFINEMENT, NO_OVERLAP). */
+  updatedProposals?: Stage4ProposalDraft[];
+}
+
+export interface ResolveStage4SubChatResponse {
+  subChat: Stage4SubChatDTO;
+  createdProposalIds: string[];
+  updatedProposalIds: string[];
+}
+
+export interface GetStage4SubChatResponse {
+  subChat: Stage4SubChatDTO;
 }

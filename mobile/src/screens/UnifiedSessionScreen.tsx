@@ -42,6 +42,7 @@ import { WaitingRoom } from '../components/WaitingRoom';
 import { AgreementCard } from '../components/AgreementCard';
 import { SessionCompletionScreen } from '../components/SessionCompletionScreen';
 import { Stage4RedesignPanel, Stage4RedesignFooter } from '../components/Stage4RedesignPanel';
+import { Stage4SubChatDrawer } from '../components/Stage4SubChatDrawer';
 import { TendingPanel } from '../components/TendingPanel';
 // CuriosityCompactOverlay removed - now using inline approach
 import { CompactChatItem } from '../components/CompactChatItem';
@@ -82,6 +83,9 @@ import {
   useSubmitStage4ProposalSelection,
   useSubmitTendingResponse,
   useTendingEntries,
+  useOpenStage4SubChat,
+  useSendStage4SubChatMessage,
+  useResolveStage4SubChat,
 } from '../hooks/useStages';
 import { deriveEmpathyValidatedIndicator, deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
@@ -1507,14 +1511,113 @@ export function UnifiedSessionScreen({
       }
     );
   }, [shareStage4Selections, sessionId, showError]);
-  // TODO(phase-3): The Brainstorm CTA on an unaddressed need currently just
-  // pre-fills the main chat input with a templated prompt. Phase 3 will rewire
-  // this into a dedicated sub-chat so the brainstorm doesn't pollute the main
-  // transcript.
+  // Phase 3: brainstorm/no-overlap/refinement happen in a Stage 4 sub-chat
+  // (Stage4SubChatDrawer) so they don't pollute the main transcript.
   const [stage4BrainstormPrefill, setStage4BrainstormPrefill] = useState<string | null>(null);
-  const handleBrainstormStage4Need = useCallback((needLabel: string) => {
-    setStage4BrainstormPrefill(`Let's brainstorm for "${needLabel}"`);
-  }, []);
+  const [stage4SubChat, setStage4SubChat] = useState<
+    import('@meet-without-fear/shared').Stage4SubChatDTO | null
+  >(null);
+  const [stage4SubChatAnchorLabel, setStage4SubChatAnchorLabel] = useState<string | null>(null);
+  const [stage4SubChatInitialProposalText, setStage4SubChatInitialProposalText] = useState<
+    string | null
+  >(null);
+  const openStage4SubChat = useOpenStage4SubChat();
+  const sendStage4SubChatMessage = useSendStage4SubChatMessage();
+  const resolveStage4SubChatMutation = useResolveStage4SubChat();
+  const handleBrainstormStage4Need = useCallback(
+    (needLabel: string, needId: string) => {
+      void stage4BrainstormPrefill;
+      setStage4SubChatAnchorLabel(needLabel);
+      setStage4SubChatInitialProposalText(null);
+      openStage4SubChat.mutate(
+        {
+          sessionId,
+          anchorKind: (
+            require('@meet-without-fear/shared') as typeof import('@meet-without-fear/shared')
+          ).Stage4SubChatAnchor.NEEDS_BRAINSTORM,
+          anchorId: needId,
+        },
+        {
+          onSuccess: ({ subChat }) => setStage4SubChat(subChat),
+          onError: () =>
+            showError('Could not open the brainstorm. Please try again.'),
+        }
+      );
+    },
+    [openStage4SubChat, sessionId, showError, stage4BrainstormPrefill]
+  );
+  const handleRefineStage4Proposal = useCallback(
+    (proposalId: string, description: string) => {
+      setStage4SubChatAnchorLabel(description);
+      setStage4SubChatInitialProposalText(description);
+      openStage4SubChat.mutate(
+        {
+          sessionId,
+          anchorKind: (
+            require('@meet-without-fear/shared') as typeof import('@meet-without-fear/shared')
+          ).Stage4SubChatAnchor.PROPOSAL_REFINEMENT,
+          anchorId: proposalId,
+        },
+        {
+          onSuccess: ({ subChat }) => setStage4SubChat(subChat),
+          onError: () =>
+            showError('Could not open the refinement chat. Please try again.'),
+        }
+      );
+    },
+    [openStage4SubChat, sessionId, showError]
+  );
+  const handleKeepRefiningNoOverlap = useCallback(() => {
+    setStage4SubChatAnchorLabel(null);
+    setStage4SubChatInitialProposalText(null);
+    openStage4SubChat.mutate(
+      {
+        sessionId,
+        anchorKind: (
+          require('@meet-without-fear/shared') as typeof import('@meet-without-fear/shared')
+        ).Stage4SubChatAnchor.NO_OVERLAP,
+      },
+      {
+        onSuccess: ({ subChat }) => setStage4SubChat(subChat),
+        onError: () =>
+          showError('Could not open the refinement chat. Please try again.'),
+      }
+    );
+  }, [openStage4SubChat, sessionId, showError]);
+  const handleSendStage4SubChatMessage = useCallback(
+    (content: string) => {
+      if (!stage4SubChat) return;
+      sendStage4SubChatMessage.mutate(
+        { sessionId, subChatId: stage4SubChat.id, content },
+        {
+          onSuccess: ({ subChat }) => setStage4SubChat(subChat),
+          onError: () => showError('Could not send the message. Try again.'),
+        }
+      );
+    },
+    [sendStage4SubChatMessage, sessionId, showError, stage4SubChat]
+  );
+  const handleResolveStage4SubChat = useCallback(
+    (payload: {
+      acceptedProposals: import('@meet-without-fear/shared').Stage4ProposalDraft[];
+      updatedProposals: import('@meet-without-fear/shared').Stage4ProposalDraft[];
+    }) => {
+      if (!stage4SubChat) return;
+      resolveStage4SubChatMutation.mutate(
+        {
+          sessionId,
+          subChatId: stage4SubChat.id,
+          acceptedProposals: payload.acceptedProposals,
+          updatedProposals: payload.updatedProposals,
+        },
+        {
+          onSuccess: () => setStage4SubChat(null),
+          onError: () => showError('Could not save. Try again.'),
+        }
+      );
+    },
+    [resolveStage4SubChatMutation, sessionId, showError, stage4SubChat]
+  );
   const handleDeclineStage4Need = useCallback(
     (needId: string) => {
       declineStage4Need.mutate(
@@ -3313,6 +3416,8 @@ export function UnifiedSessionScreen({
               onShareSelections={handleShareStage4Selections}
               onReviseSelections={handleReviseStage4Selections}
               onBrainstormNeed={handleBrainstormStage4Need}
+              onRefineProposal={handleRefineStage4Proposal}
+              onKeepRefiningNoOverlap={handleKeepRefiningNoOverlap}
               onDeclineNeed={handleDeclineStage4Need}
               onUndeclineNeed={handleUndeclineStage4Need}
               onCloseStage4={handleCloseRedesignedStage4}
@@ -3855,8 +3960,16 @@ export function UnifiedSessionScreen({
                 onSelectProposal={handleStage4Selection}
                 onShareSelections={handleShareStage4Selections}
                 onReviseSelections={handleReviseStage4Selections}
-                onBrainstormNeed={(needLabel) => {
-                  handleBrainstormStage4Need(needLabel);
+                onBrainstormNeed={(needLabel, needId) => {
+                  handleBrainstormStage4Need(needLabel, needId);
+                  setShowStage4Drawer(false);
+                }}
+                onRefineProposal={(proposalId, description) => {
+                  handleRefineStage4Proposal(proposalId, description);
+                  setShowStage4Drawer(false);
+                }}
+                onKeepRefiningNoOverlap={() => {
+                  handleKeepRefiningNoOverlap();
                   setShowStage4Drawer(false);
                 }}
                 onDeclineNeed={handleDeclineStage4Need}
@@ -3877,6 +3990,10 @@ export function UnifiedSessionScreen({
               isRevising={unshareStage4Selections.isPending}
               onShareSelections={handleShareStage4Selections}
               onReviseSelections={handleReviseStage4Selections}
+              onKeepRefiningNoOverlap={() => {
+                handleKeepRefiningNoOverlap();
+                setShowStage4Drawer(false);
+              }}
               onCloseStage4={(kind, reason, checkInDate) => {
                 handleCloseRedesignedStage4(kind, reason, checkInDate);
                 setShowStage4Drawer(false);
@@ -3885,6 +4002,17 @@ export function UnifiedSessionScreen({
           )}
         </SafeAreaView>
       </Modal>
+      <Stage4SubChatDrawer
+        visible={Boolean(stage4SubChat)}
+        subChat={stage4SubChat}
+        anchorLabel={stage4SubChatAnchorLabel}
+        initialProposalText={stage4SubChatInitialProposalText}
+        isSending={sendStage4SubChatMessage.isPending}
+        isResolving={resolveStage4SubChatMutation.isPending}
+        onSendMessage={handleSendStage4SubChatMessage}
+        onResolve={handleResolveStage4SubChat}
+        onClose={() => setStage4SubChat(null)}
+      />
 
       {/* Invitation Ready Modal — replaces the inline 'invitation' panel.
           Opens automatically when the topic is confirmed and the user has not

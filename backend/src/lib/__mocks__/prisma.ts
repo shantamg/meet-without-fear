@@ -48,6 +48,8 @@ export const prisma = {
   stage4NeedCoverage: createMockModel(),
   stage4NeedDeclination: createMockModel(),
   stage4Closure: createMockModel(),
+  stage4SubChat: createMockModel(),
+  stage4SubChatMessage: createMockModel(),
   tendingEntry: createMockModel(),
   tendingResponse: createMockModel(),
   emotionalExerciseCompletion: createMockModel(),
