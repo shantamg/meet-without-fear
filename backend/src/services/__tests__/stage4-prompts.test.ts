@@ -42,7 +42,7 @@ describe('persona templates ground in user phrasing', () => {
   it('needsBrainstormPersona quotes the exact need label verbatim', () => {
     const persona = needsBrainstormPersona('feeling like myself inside this marriage');
     expect(persona).toContain('"feeling like myself inside this marriage"');
-    expect(persona).toMatch(/do not lead with your own ideas/i);
+    expect(persona).toMatch(/do not lead with your own draft/i);
   });
 
   it('needsBrainstormPersona falls back gracefully when label is missing', () => {

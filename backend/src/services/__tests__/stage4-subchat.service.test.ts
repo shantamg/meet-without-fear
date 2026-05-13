@@ -203,6 +203,10 @@ describe('resolveSubChat', () => {
     (prisma.strategyProposal.create as jest.Mock).mockImplementation((args: any) =>
       Promise.resolve({ id: 'new-prop-1', ...args.data })
     );
+    (prisma.identifiedNeed.findUnique as jest.Mock).mockResolvedValue({
+      id: 'need-1',
+      need: 'a clean lawn',
+    });
 
     const result = await resolveSubChat({
       subChatId: 'sub-1',
@@ -214,9 +218,12 @@ describe('resolveSubChat', () => {
 
     expect(prisma.strategyProposal.create).toHaveBeenCalledTimes(1);
     const callArgs = (prisma.strategyProposal.create as jest.Mock).mock.calls[0][0];
-    expect(callArgs.data.needsAddressed).toEqual(['need-1']);
+    expect(callArgs.data.needsAddressed).toEqual(['a clean lawn']);
     expect(callArgs.data.description).toBe('walk together each evening');
     expect(result.createdProposalIds).toEqual(['new-prop-1']);
+    expect(prisma.strategyProposalNeed.create).toHaveBeenCalledWith({
+      data: { proposalId: 'new-prop-1', needId: 'need-1' },
+    });
     expect(prisma.stage4SubChat.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'sub-1' },

@@ -221,11 +221,11 @@ function CloseControls({
           style={[styles.primaryButton]}
           onPress={() => onKeepRefiningNoOverlap()}
           accessibilityRole="button"
-          accessibilityLabel="Keep refining with MWF"
+          accessibilityLabel="Keep refining in chat"
           testID="stage4-keep-refining-mwf"
         >
           <Send color={palette.bg} size={17} />
-          <Text style={styles.primaryButtonText}>Keep refining with MWF</Text>
+          <Text style={styles.primaryButtonText}>Keep refining in chat</Text>
         </TouchableOpacity>
       )}
       {showNoSharedClose && (
@@ -312,7 +312,7 @@ function ProposalCard({
           <TouchableOpacity
             onPress={() => onRefineProposal(proposal.id, proposal.description)}
             accessibilityRole="button"
-            accessibilityLabel={`Refine this proposal with MWF`}
+            accessibilityLabel={`Refine this proposal in chat`}
             testID={`stage4-proposal-refine-${proposal.id}`}
             style={styles.refineButton}
             hitSlop={8}
@@ -424,11 +424,11 @@ function NeedRows({
                     <TouchableOpacity
                       onPress={() => onBrainstormNeed?.(row.label, row.id!)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Brainstorm with MWF about ${row.label}`}
+                      accessibilityLabel={`Brainstorm about ${row.label}`}
                       testID={`stage4-need-brainstorm-${row.id}`}
                       style={styles.needActionButton}
                     >
-                      <Text style={styles.needActionButtonText}>Brainstorm with MWF</Text>
+                      <Text style={styles.needActionButtonText}>Brainstorm in chat</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => onDeclineNeed?.(row.id!)}

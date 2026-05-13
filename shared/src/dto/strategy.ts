@@ -426,6 +426,14 @@ export interface Stage4SubChatMessageDTO {
   role: MessageRole;
   content: string;
   createdAt: string;
+  /**
+   * Structured candidate proposal extracted from the AI's message (when it
+   * has one to offer). The UI surfaces a "Use this version" affordance on
+   * this message. The candidate's `description` is the proposal text;
+   * `proposalId` (when present on a PROPOSAL_REFINEMENT sub-chat) tells the
+   * client to update that proposal in place rather than create a new one.
+   */
+  candidate?: Stage4ProposalDraft | null;
 }
 
 export interface Stage4SubChatDTO {

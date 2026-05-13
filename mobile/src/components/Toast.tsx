@@ -5,9 +5,9 @@
  */
 
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { X } from 'lucide-react-native';
-import { colors } from '@/theme';
+import { useAppAppearance } from '@/theme/appearance';
 
 // ============================================================================
 // Types
@@ -110,7 +110,9 @@ export function Toast({
     dismiss();
   };
 
-  const variantStyles = getVariantStyles(variant);
+  const { palette } = useAppAppearance();
+  const styles = useMemo(() => createStyles(palette), [palette]);
+  const variantStyles = useMemo(() => getVariantStyles(variant, palette), [variant, palette]);
 
   return (
     <Animated.View
@@ -151,7 +153,7 @@ export function Toast({
         hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
         testID="toast-close"
       >
-        <X color={colors.textSecondary} size={20} />
+        <X color={palette.textMuted} size={20} />
       </TouchableOpacity>
     </Animated.View>
   );
@@ -161,28 +163,30 @@ export function Toast({
 // Variant Styles
 // ============================================================================
 
-function getVariantStyles(variant: ToastProps['variant']) {
+type Palette = ReturnType<typeof useAppAppearance>['palette'];
+
+function getVariantStyles(variant: ToastProps['variant'], palette: Palette) {
   switch (variant) {
     case 'success':
       return {
-        container: { borderLeftColor: colors.accent, borderLeftWidth: 4 },
-        title: { color: colors.accent },
-        actionButton: { backgroundColor: colors.accent },
-        actionText: { color: colors.textPrimary },
+        container: { borderLeftColor: palette.success, borderLeftWidth: 4 },
+        title: { color: palette.success },
+        actionButton: { backgroundColor: palette.success },
+        actionText: { color: palette.textOnAccent },
       };
     case 'error':
       return {
-        container: { borderLeftColor: colors.error, borderLeftWidth: 4 },
-        title: { color: colors.error },
-        actionButton: { backgroundColor: colors.error },
-        actionText: { color: colors.textPrimary },
+        container: { borderLeftColor: palette.danger, borderLeftWidth: 4 },
+        title: { color: palette.danger },
+        actionButton: { backgroundColor: palette.danger },
+        actionText: { color: palette.textOnAccent },
       };
     case 'warning':
       return {
-        container: { borderLeftColor: colors.warning, borderLeftWidth: 4 },
-        title: { color: colors.warning },
-        actionButton: { backgroundColor: colors.warning },
-        actionText: { color: colors.textPrimary },
+        container: { borderLeftColor: palette.warning, borderLeftWidth: 4 },
+        title: { color: palette.warning },
+        actionButton: { backgroundColor: palette.warning },
+        actionText: { color: palette.textOnAccent },
       };
     default:
       return {
@@ -198,53 +202,54 @@ function getVariantStyles(variant: ToastProps['variant']) {
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    top: 50,
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.bgSecondary,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-    zIndex: 9999,
-  },
-  content: {
-    flex: 1,
-    marginRight: 8,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  body: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: colors.accent,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  actionText: {
-    color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  closeButton: {
-    padding: 4,
-  },
-});
+const createStyles = (palette: Palette) =>
+  StyleSheet.create({
+    container: {
+      position: 'absolute',
+      top: 50,
+      left: 16,
+      right: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: palette.bgElev,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: palette.border,
+      padding: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 5,
+      zIndex: 9999,
+    },
+    content: {
+      flex: 1,
+      marginRight: 8,
+    },
+    title: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: palette.text,
+    },
+    body: {
+      fontSize: 14,
+      color: palette.textMuted,
+      marginTop: 4,
+    },
+    actionButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: palette.accent,
+      borderRadius: 6,
+      marginRight: 8,
+    },
+    actionText: {
+      color: palette.textOnAccent,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    closeButton: {
+      padding: 4,
+    },
+  });

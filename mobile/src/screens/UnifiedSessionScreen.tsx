@@ -1112,7 +1112,12 @@ export function UnifiedSessionScreen({
 
         // Partner pulled their stances back to revise → surface it so the
         // partner doesn't wonder why their view "lost" data.
-        if ((data as { change?: string }).change === 'stage4_selection_revised') {
+        // Skip when the current user is the one who pulled their own stances back.
+        const payload = data as { change?: string; submittedBy?: string };
+        if (
+          payload.change === 'stage4_selection_revised' &&
+          payload.submittedBy !== user?.id
+        ) {
           showWarning(
             `${partnerName || 'Your other'} pulled their stances back`,
             'You\'ll see them again when they re-share.',
@@ -1593,11 +1598,32 @@ export function UnifiedSessionScreen({
   const handleSendStage4SubChatMessage = useCallback(
     (content: string) => {
       if (!stage4SubChat) return;
+      // Optimistically append the user's message so it appears immediately,
+      // before the server roundtrip. The server response replaces this with
+      // the canonical thread (which includes the persisted user message + AI
+      // reply). Mirrors useRefinementChat's pattern.
+      const optimisticUserMessage = {
+        id: `stage4-subchat-user-optimistic-${Date.now()}`,
+        role: (require('@meet-without-fear/shared') as typeof import('@meet-without-fear/shared'))
+          .MessageRole.USER,
+        content,
+        createdAt: new Date().toISOString(),
+        candidate: null,
+      };
+      const optimisticSubChat = {
+        ...stage4SubChat,
+        messages: [...stage4SubChat.messages, optimisticUserMessage],
+      };
+      setStage4SubChat(optimisticSubChat);
       sendStage4SubChatMessage.mutate(
         { sessionId, subChatId: stage4SubChat.id, content },
         {
           onSuccess: ({ subChat }) => setStage4SubChat(subChat),
-          onError: () => showError('Could not send the message. Try again.'),
+          onError: () => {
+            // Roll back the optimistic append.
+            setStage4SubChat(stage4SubChat);
+            showError('Could not send the message. Try again.');
+          },
         }
       );
     },
@@ -3972,18 +3998,9 @@ export function UnifiedSessionScreen({
                 onSelectProposal={handleStage4Selection}
                 onShareSelections={handleShareStage4Selections}
                 onReviseSelections={handleReviseStage4Selections}
-                onBrainstormNeed={(needLabel, needId) => {
-                  handleBrainstormStage4Need(needLabel, needId);
-                  setShowStage4Drawer(false);
-                }}
-                onRefineProposal={(proposalId, description) => {
-                  handleRefineStage4Proposal(proposalId, description);
-                  setShowStage4Drawer(false);
-                }}
-                onKeepRefiningNoOverlap={() => {
-                  handleKeepRefiningNoOverlap();
-                  setShowStage4Drawer(false);
-                }}
+                onBrainstormNeed={handleBrainstormStage4Need}
+                onRefineProposal={handleRefineStage4Proposal}
+                onKeepRefiningNoOverlap={handleKeepRefiningNoOverlap}
                 onDeclineNeed={handleDeclineStage4Need}
                 onUndeclineNeed={handleUndeclineStage4Need}
                 onCloseStage4={(kind, reason, checkInDate) => {
@@ -4002,29 +4019,29 @@ export function UnifiedSessionScreen({
               isRevising={unshareStage4Selections.isPending}
               onShareSelections={handleShareStage4Selections}
               onReviseSelections={handleReviseStage4Selections}
-              onKeepRefiningNoOverlap={() => {
-                handleKeepRefiningNoOverlap();
-                setShowStage4Drawer(false);
-              }}
+              onKeepRefiningNoOverlap={handleKeepRefiningNoOverlap}
               onCloseStage4={(kind, reason, checkInDate) => {
                 handleCloseRedesignedStage4(kind, reason, checkInDate);
                 setShowStage4Drawer(false);
               }}
             />
           )}
+          {/* Nested inside the Stage 4 Modal so the sub-chat presents on top
+              of "What comes next" — closing the sub-chat returns you here,
+              not all the way out to the partner chat. */}
+          <Stage4SubChatDrawer
+            visible={Boolean(stage4SubChat)}
+            subChat={stage4SubChat}
+            anchorLabel={stage4SubChatAnchorLabel}
+            initialProposalText={stage4SubChatInitialProposalText}
+            isSending={sendStage4SubChatMessage.isPending}
+            isResolving={resolveStage4SubChatMutation.isPending}
+            onSendMessage={handleSendStage4SubChatMessage}
+            onResolve={handleResolveStage4SubChat}
+            onClose={() => setStage4SubChat(null)}
+          />
         </SafeAreaView>
       </Modal>
-      <Stage4SubChatDrawer
-        visible={Boolean(stage4SubChat)}
-        subChat={stage4SubChat}
-        anchorLabel={stage4SubChatAnchorLabel}
-        initialProposalText={stage4SubChatInitialProposalText}
-        isSending={sendStage4SubChatMessage.isPending}
-        isResolving={resolveStage4SubChatMutation.isPending}
-        onSendMessage={handleSendStage4SubChatMessage}
-        onResolve={handleResolveStage4SubChat}
-        onClose={() => setStage4SubChat(null)}
-      />
 
       {/* Invitation Ready Modal — replaces the inline 'invitation' panel.
           Opens automatically when the topic is confirmed and the user has not
@@ -4927,7 +4944,8 @@ const useStyles = () => {
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: 16,
-      paddingBottom: 8,
+      paddingTop: 12,
+      paddingBottom: 16,
     },
     stage4DrawerTitle: {
       fontSize: 18,
