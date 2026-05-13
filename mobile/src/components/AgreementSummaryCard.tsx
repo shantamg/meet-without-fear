@@ -6,7 +6,7 @@
  */
 
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '@/theme';
+import { useAppAppearance } from '@/theme';
 
 interface AgreementSummaryCardProps {
   experiment: string;
@@ -36,28 +36,38 @@ export function AgreementSummaryCard({
   followUpDate,
   testID = 'agreement-summary-card',
 }: AgreementSummaryCardProps) {
+  const { palette, scheme } = useAppAppearance();
+  const cardBg = scheme === 'dark' ? 'rgba(16, 163, 127, 0.1)' : 'rgba(16, 163, 127, 0.08)';
+  const cardBorder = scheme === 'dark' ? 'rgba(16, 163, 127, 0.3)' : 'rgba(16, 163, 127, 0.35)';
+
   return (
-    <View style={styles.container} testID={testID}>
-      <Text style={styles.experiment}>{experiment}</Text>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: cardBg, borderColor: cardBorder },
+      ]}
+      testID={testID}
+    >
+      <Text style={[styles.experiment, { color: palette.text }]}>{experiment}</Text>
 
       {duration && (
-        <View style={styles.detail}>
-          <Text style={styles.detailLabel}>Duration</Text>
-          <Text style={styles.detailValue}>{duration}</Text>
+        <View style={[styles.detail, { borderTopColor: palette.divider }]}>
+          <Text style={[styles.detailLabel, { color: palette.textFaint }]}>Duration</Text>
+          <Text style={[styles.detailValue, { color: palette.textMuted }]}>{duration}</Text>
         </View>
       )}
 
       {measureOfSuccess && (
-        <View style={styles.detail}>
-          <Text style={styles.detailLabel}>Success Measure</Text>
-          <Text style={styles.detailValue}>{measureOfSuccess}</Text>
+        <View style={[styles.detail, { borderTopColor: palette.divider }]}>
+          <Text style={[styles.detailLabel, { color: palette.textFaint }]}>Success Measure</Text>
+          <Text style={[styles.detailValue, { color: palette.textMuted }]}>{measureOfSuccess}</Text>
         </View>
       )}
 
       {followUpDate && (
-        <View style={styles.detail}>
-          <Text style={styles.detailLabel}>Check-in</Text>
-          <Text style={styles.detailValue}>{formatDate(followUpDate)}</Text>
+        <View style={[styles.detail, { borderTopColor: palette.divider }]}>
+          <Text style={[styles.detailLabel, { color: palette.textFaint }]}>Check-in</Text>
+          <Text style={[styles.detailValue, { color: palette.textMuted }]}>{formatDate(followUpDate)}</Text>
         </View>
       )}
     </View>
@@ -67,15 +77,12 @@ export function AgreementSummaryCard({
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: 'rgba(16, 163, 127, 0.1)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 163, 127, 0.3)',
     marginBottom: 12,
   },
   experiment: {
     fontSize: 16,
-    color: colors.textPrimary,
     lineHeight: 22,
     fontWeight: '500',
   },
@@ -85,16 +92,13 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
   detailLabel: {
     fontSize: 13,
-    color: colors.textMuted,
     fontWeight: '500',
   },
   detailValue: {
     fontSize: 13,
-    color: colors.textSecondary,
     fontWeight: '500',
   },
 });
