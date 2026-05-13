@@ -3,7 +3,7 @@ title: Prisma Schema
 sidebar_position: 1
 description: Core Vessel Architecture tables plus pointers to the rest of the Prisma schema (Inner Work, reconciler, memory, needs/people, telemetry).
 slug: /backend/data-model/prisma-schema
-updated: "2026-05-11"
+updated: "2026-05-13"
 ---
 # Prisma Schema
 
@@ -101,6 +101,9 @@ model Session {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   resolvedAt     DateTime?
+  previousSessionId String?   // Links to the prior session when ContinueChoice = NEW_PROCESS
+  previousSession   Session?  @relation("SessionLineage", fields: [previousSessionId], references: [id])
+  nextSessions      Session[] @relation("SessionLineage")
 
   // Explicit topic frame (3-5 word neutral description, e.g., "Tuesday pickup disagreement")
   topicFrame            String?
@@ -662,6 +665,7 @@ model StrategyProposal {
   rankings    StrategyRanking[]
   selections  Stage4ProposalSelection[]
   revisions   Stage4ProposalRevision[]
+  needLinks   StrategyProposalNeed[]
 }
 
 enum StrategySource {
@@ -705,7 +709,6 @@ model Stage4ProposalSelection {
 enum Stage4SelectionDecision {
   WILLING
   NOT_WILLING
-  NEEDS_DISCUSSION
 }
 ```
 
@@ -766,6 +769,7 @@ model Stage4Closure {
   openNeedIds          String[]
   closedByUserId       String
   closedAt             DateTime @default(now())
+  checkInAt            DateTime?  // Scheduled follow-up date for all tending entries
   createdAt            DateTime @default(now())
 }
 
@@ -837,25 +841,37 @@ Post-resolution check-in and re-entry models. Created when Stage 4 closes with a
 
 ```prisma
 model TendingEntry {
-  id           String   @id @default(cuid())
-  session      Session  @relation(fields: [sessionId], references: [id])
-  sessionId    String
-  agreement    Agreement? @relation(fields: [agreementId], references: [id])
-  agreementId  String?
-  type         TendingEntryType
-  status       TendingEntryStatus @default(SCHEDULED)
-  scheduledFor DateTime?
-  openedAt     DateTime?
-  completedAt  DateTime?
-  summary      String?  @db.Text   // Context assembled at creation
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String             @id @default(cuid())
+  session        Session            @relation(fields: [sessionId], references: [id])
+  sessionId      String
+  agreement      Agreement?         @relation(fields: [agreementId], references: [id])
+  agreementId    String?
+  type           TendingEntryType
+  status         TendingEntryStatus @default(SCHEDULED)
+  scope          TendingEntryScope  @default(SHARED)  // SHARED or INDIVIDUAL
+  ownerUserId    String?            // Set for INDIVIDUAL entries; null for SHARED
+  optedInShared  Boolean            @default(false)   // INDIVIDUAL owner can share with partner
+  scheduledFor   DateTime?
+  openedAt       DateTime?
+  completedAt    DateTime?
+  summary        String?            @db.Text   // Context assembled at creation
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
-  responses    TendingResponse[]
+  responses      TendingResponse[]
+  partialClosures TendingResponsePartialClosure[]
+
+  @@index([sessionId, scope, ownerUserId])
+}
+
+enum TendingEntryScope {
+  SHARED
+  INDIVIDUAL
 }
 
 enum TendingEntryType {
   SCHEDULED_SHARED_AGREEMENT_CHECKIN
+  SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN
   USER_INITIATED_REENTRY
 }
 
@@ -875,15 +891,112 @@ One response per entry/user (enforced by upsert in the service).
 
 ```prisma
 model TendingResponse {
-  id             String   @id @default(cuid())
-  tendingEntry   TendingEntry @relation(fields: [tendingEntryId], references: [id])
+  id             String        @id @default(cuid())
+  tendingEntry   TendingEntry  @relation(fields: [tendingEntryId], references: [id])
   tendingEntryId String
-  user           User     @relation(fields: [userId], references: [id])
+  user           User          @relation(fields: [userId], references: [id])
   userId         String
-  status         String   // e.g. "WORKED", "PARTLY", "DID_NOT_WORK"
-  reflection     String?  @db.Text
-  continueChoice String?  // e.g. "CONTINUE", "ADJUST", "CLOSE"
-  submittedAt    DateTime @default(now())
+  status         String        // e.g. "WORKED", "PARTLY", "DID_NOT_WORK"
+  reflection     String?       @db.Text
+  continueChoice ContinueChoice?  // Structured forward path enum (see ContinueChoice below)
+  submittedAt    DateTime      @default(now())
+
+  partialClosures TendingResponsePartialClosure[]
+}
+
+enum ContinueChoice {
+  ANOTHER_ROUND    // Reset Stage 4 to inventory building
+  EXTEND           // Reschedule entries 28 days out
+  NEW_PROCESS      // Create linked Session; both users restart at Stage 0
+  PARTIAL_CLOSURE  // Resolve some entries, continue others
+  FULL_CLOSURE     // Mark all entries COMPLETED; session → RESOLVED
+}
+```
+
+### TendingResponsePartialClosure
+
+Tracks per-entry resolution when `ContinueChoice = PARTIAL_CLOSURE`.
+
+```prisma
+model TendingResponsePartialClosure {
+  id               String          @id @default(cuid())
+  tendingResponse  TendingResponse @relation(fields: [tendingResponseId], references: [id])
+  tendingResponseId String
+  tendingEntry     TendingEntry    @relation(fields: [tendingEntryId], references: [id])
+  tendingEntryId   String
+  resolution       PartialClosureResolution  // RESOLVED or CONTINUING
+  createdAt        DateTime        @default(now())
+
+  @@unique([tendingResponseId, tendingEntryId])
+}
+
+enum PartialClosureResolution {
+  RESOLVED
+  CONTINUING
+}
+```
+
+---
+
+## Stage 4 Sub-Chat
+
+Guided AI sub-conversations anchored to proposal refinement, needs brainstorming, or no-overlap recovery.
+
+### Stage4SubChat
+
+```prisma
+model Stage4SubChat {
+  id         String             @id @default(cuid())
+  session    Session            @relation(fields: [sessionId], references: [id])
+  sessionId  String
+  user       User               @relation(fields: [userId], references: [id])
+  userId     String
+  anchorKind Stage4SubChatAnchor
+  anchorId   String?            // proposalId for PROPOSAL_REFINEMENT; needId for NEEDS_BRAINSTORM
+  status     Stage4SubChatStatus @default(ACTIVE)
+  createdAt  DateTime           @default(now())
+  resolvedAt DateTime?
+
+  messages   Stage4SubChatMessage[]
+}
+
+model Stage4SubChatMessage {
+  id         String      @id @default(cuid())
+  subChat    Stage4SubChat @relation(fields: [subChatId], references: [id])
+  subChatId  String
+  role       MessageRole
+  content    String      @db.Text
+  createdAt  DateTime    @default(now())
+}
+
+enum Stage4SubChatAnchor {
+  NEEDS_BRAINSTORM     // Brainstorm proposals for an unaddressed need
+  PROPOSAL_REFINEMENT  // Refine an existing proposal
+  NO_OVERLAP           // Guided recovery when no mutual willing proposals
+}
+
+enum Stage4SubChatStatus {
+  ACTIVE
+  RESOLVED
+}
+```
+
+---
+
+## Need–Proposal Linkage
+
+### StrategyProposalNeed
+
+Junction table linking proposals to identified needs. Created when `stage4-prompts.ts` populates the `needLinks` relation.
+
+```prisma
+model StrategyProposalNeed {
+  proposal   StrategyProposal @relation(fields: [proposalId], references: [id])
+  proposalId String
+  needId     String
+  createdAt  DateTime         @default(now())
+
+  @@id([proposalId, needId])
 }
 ```
 

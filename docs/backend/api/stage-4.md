@@ -3,7 +3,7 @@ title: "Stage 4 API: Strategic Repair"
 sidebar_position: 11
 description: Endpoints for collaborative strategy proposal, willingness selection, agreement documentation, and Tending check-ins.
 slug: /backend/api/stage-4
-updated: 2026-05-09
+updated: 2026-05-13
 ---
 # Stage 4 API: Strategic Repair
 
@@ -15,7 +15,7 @@ Stage 4 is **sequential** (unlike stages 1-3 which are parallel). Both users mus
 
 > **Two flows coexist in the codebase.**
 >
-> The **redesigned flow** (primary) uses a willingness-selection model: proposals are AI-captured, both users indicate willingness (WILLING / NOT_WILLING / NEEDS_DISCUSSION) per proposal, then stage 4 closes explicitly via `POST /stage4/close`. See [Stage 4 Redesign endpoints](#stage-4-redesign-primary-flow) below.
+> The **redesigned flow** (primary) uses a willingness-selection model: proposals are AI-captured, both users indicate willingness (WILLING / NOT_WILLING) per proposal, then stage 4 closes explicitly via `POST /stage4/close`. See [Stage 4 Redesign endpoints](#stage-4-redesign-primary-flow) below.
 >
 > The **legacy flow** (vestigial) used private ranking followed by overlap reveal. Its endpoints (`/strategies/rank`, `/strategies/overlap`, `/strategies/ready`) remain in the router for backward compatibility but are not the primary resolution path.
 
@@ -47,13 +47,50 @@ GET /api/v1/sessions/:id/stage4
 ```typescript
 interface GetStage4StateResponse {
   phase: Stage4Phase;
-  proposals: ProposalCardDTO[];
+  inventory: ProposalInventoryDTO;
   coverageAudit: Stage4CoverageAuditDTO;
   mySelections: Stage4SelectionDTO[];
-  partnerSelectionsSubmitted: boolean;
-  closure: Stage4ClosureDTO | null;
-  agreements: AgreementDTO[];
+  partnerSelections: Stage4SelectionDTO[];  // visible after both users share
+  mySelectionStatus: 'NOT_SUBMITTED' | 'SUBMITTED' | 'SHARED';
+  partnerSelectionStatus: 'NOT_SUBMITTED' | 'SUBMITTED' | 'SHARED';
+  outcome: Stage4OutcomeDTO | null;
   tendingPreview: TendingPreviewDTO | null;
+}
+
+interface ProposalInventoryDTO {
+  sharedProposals: ProposalCardDTO[];
+  individualCommitments: ProposalCardDTO[];
+  unaddressedNeeds: UnaddressedNeedDTO[];
+}
+
+interface ProposalCardDTO {
+  id: string;
+  kind: Stage4ProposalKind;   // SHARED_PROPOSAL | INDIVIDUAL_COMMITMENT
+  description: string;
+  ownerLabel: 'You' | string;  // partner display name for partner-owned proposals
+  needsAddressed: ProposalNeedCoverageDTO[];
+  duration: string | null;
+  measureOfSuccess: string | null;
+  status: Stage4ProposalStatus; // ACTIVE | REVISED | REMOVED | CONVERTED_TO_AGREEMENT
+  myDecision: Stage4SelectionDecision | null;
+  partnerDecisionVisible: Stage4SelectionDecision | null;  // null until partner shares
+}
+
+interface ProposalNeedCoverageDTO {
+  needLabel: string;
+  coverageStatus: 'COVERED' | 'PARTIAL' | 'OPEN';
+}
+
+interface UnaddressedNeedDTO {
+  needId: string;
+  needLabel: string;
+  sourceUserId: string;
+  declinedAt: string | null;  // set when user marks "leave for now"
+}
+
+enum Stage4SelectionDecision {
+  WILLING     = 'WILLING',
+  NOT_WILLING = 'NOT_WILLING',
 }
 
 enum Stage4Phase {
@@ -64,22 +101,6 @@ enum Stage4Phase {
   CLOSING                    = 'CLOSING',
   CLOSED_SHARED_AGREEMENT    = 'CLOSED_SHARED_AGREEMENT',
   CLOSED_NO_SHARED_AGREEMENT = 'CLOSED_NO_SHARED_AGREEMENT',
-}
-
-interface ProposalCardDTO {
-  id: string;
-  description: string;
-  needsAddressed: string[];
-  duration: string | null;
-  kind: Stage4ProposalKind;   // SHARED_PROPOSAL | INDIVIDUAL_COMMITMENT
-  status: Stage4ProposalStatus; // ACTIVE | REVISED | REMOVED | CONVERTED_TO_AGREEMENT
-  mySelection: Stage4SelectionDecision | null;
-}
-
-enum Stage4SelectionDecision {
-  WILLING          = 'WILLING',
-  NOT_WILLING      = 'NOT_WILLING',
-  NEEDS_DISCUSSION = 'NEEDS_DISCUSSION',
 }
 ```
 
@@ -103,11 +124,8 @@ interface SubmitStage4ProposalSelectionRequest {
 #### Response
 
 ```typescript
-interface SubmitStage4ProposalSelectionResponse {
-  proposalId: string;
-  decision: Stage4SelectionDecision;
-  note: string | null;
-}
+// Returns the full updated GetStage4StateResponse
+type SubmitStage4ProposalSelectionResponse = GetStage4StateResponse;
 ```
 
 Gate link: sets `selectionSubmitted` on `StageProgress.gatesSatisfied` after the caller submits decisions.
@@ -137,7 +155,9 @@ interface SubmitStage4SelectionsRequest {
 ```typescript
 interface SubmitStage4SelectionsResponse {
   submitted: boolean;
-  count: number;
+  submittedAt: string;
+  partnerSubmitted: boolean;
+  state: GetStage4StateResponse;
 }
 ```
 
@@ -157,10 +177,10 @@ POST /api/v1/sessions/:id/stage4/close
 
 ```typescript
 interface CloseStage4Request {
+  checkInDate: string;               // REQUIRED. ISO 8601 date — single follow-up date for all tending entries
   kind?: Stage4ClosureKind;          // Overrides computed kind if provided
   reason?: Stage4ClosureReason;
   summary?: string;                  // max 2000 chars
-  followUpDatesByProposalId?: Record<string, string>;  // proposalId → ISO 8601 date
 }
 
 enum Stage4ClosureKind {
@@ -180,11 +200,158 @@ enum Stage4ClosureReason {
 
 ```typescript
 interface CloseStage4Response {
-  closure: Stage4ClosureDTO;
-  agreements: AgreementDTO[];
-  sessionResolved: boolean;
+  closed: boolean;
+  closedAt: string;
+  outcome: Stage4OutcomeDTO;
+  state: GetStage4StateResponse;
+}
+
+interface Stage4OutcomeDTO {
+  kind: Stage4ClosureKind;
+  reason: Stage4ClosureReason;
+  sharedAgreements: AgreementDTO[];
+  individualCommitments: ProposalCardDTO[];
+  checkInAt: string | null;
 }
 ```
+
+---
+
+### Share Selections
+
+Publishes the caller's willingness decisions to their partner. Before sharing, decisions are private. Once shared, the partner can see your stances on each proposal. Enables symmetric reveal.
+
+```
+POST /api/v1/sessions/:id/stage4/share-selections
+```
+
+Returns the full `GetStage4StateResponse` with updated `mySelectionStatus: 'SHARED'`.
+
+---
+
+### Unshare Selections
+
+Withdraws the caller's shared selections (allowed while partner has not yet shared).
+
+```
+POST /api/v1/sessions/:id/stage4/unshare-selections
+```
+
+Returns the full `GetStage4StateResponse` with updated `mySelectionStatus: 'SUBMITTED'`.
+
+---
+
+### Decline / Undecline a Need
+
+Mark a need as "leave for now" instead of forcing full coverage before closure.
+
+```
+POST /api/v1/sessions/:id/stage4/needs/:needId/decline
+DELETE /api/v1/sessions/:id/stage4/needs/:needId/decline
+```
+
+Both return the full `GetStage4StateResponse`.
+
+---
+
+### Open Sub-Chat
+
+Open a guided AI sub-chat anchored to a specific context (needs brainstorm, proposal refinement, or no-overlap recovery). The sub-chat uses a persona tuned to the anchor kind.
+
+```
+POST /api/v1/sessions/:id/stage4/subchat
+```
+
+#### Request Body
+
+```typescript
+interface OpenStage4SubChatRequest {
+  anchorKind: Stage4SubChatAnchor;
+  anchorId?: string;  // proposalId for PROPOSAL_REFINEMENT; needId for NEEDS_BRAINSTORM
+}
+
+enum Stage4SubChatAnchor {
+  NEEDS_BRAINSTORM    = 'NEEDS_BRAINSTORM',     // Brainstorm proposals for an unaddressed need
+  PROPOSAL_REFINEMENT = 'PROPOSAL_REFINEMENT',  // Refine an existing proposal
+  NO_OVERLAP          = 'NO_OVERLAP',           // Guided recovery when no mutual willing proposals exist
+}
+```
+
+#### Response
+
+```typescript
+interface OpenStage4SubChatResponse {
+  subChat: Stage4SubChatDTO;
+}
+
+interface Stage4SubChatDTO {
+  id: string;
+  anchorKind: Stage4SubChatAnchor;
+  anchorId: string | null;
+  status: Stage4SubChatStatus;   // ACTIVE | RESOLVED
+  messages: Stage4SubChatMessageDTO[];
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+interface Stage4SubChatMessageDTO {
+  id: string;
+  role: 'USER' | 'AI';
+  content: string;
+  proposalDraft?: Stage4ProposalDraft;  // AI-surfaced candidate proposal
+  createdAt: string;
+}
+
+interface Stage4ProposalDraft {
+  description: string;
+  kind: Stage4ProposalKind;
+  duration: string | null;
+  measureOfSuccess: string | null;
+}
+
+enum Stage4SubChatStatus {
+  ACTIVE   = 'ACTIVE',
+  RESOLVED = 'RESOLVED',
+}
+```
+
+---
+
+### Send Sub-Chat Message
+
+```
+POST /api/v1/sessions/:id/stage4/subchat/:subChatId/messages
+```
+
+#### Request Body
+
+```typescript
+interface SendStage4SubChatMessageRequest {
+  content: string;  // max 2000 chars
+}
+```
+
+Returns the updated `Stage4SubChatDTO`.
+
+---
+
+### Resolve Sub-Chat
+
+Accept a proposal draft from the sub-chat (optionally modified) and apply it to the main proposal inventory.
+
+```
+POST /api/v1/sessions/:id/stage4/subchat/:subChatId/resolve
+```
+
+#### Request Body
+
+```typescript
+interface ResolveStage4SubChatRequest {
+  acceptedDraft?: Stage4ProposalDraft;  // omit to resolve without creating a proposal
+}
+```
+
+Returns `{ subChat: Stage4SubChatDTO; state: GetStage4StateResponse }`.
 
 ---
 
@@ -651,11 +818,12 @@ Stage 4 uses these caller-side gate markers on `StageProgress.gatesSatisfied`:
 | Gate | Flow | Requirement |
 |------|------|-------------|
 | `selectionSubmitted` | Redesign (primary) | Caller posted `/stage4/proposals/:id/selection` or `/stage4/selections` |
+| `shareSelectionSubmitted` | Redesign (primary) | Caller posted `/stage4/share-selections` |
 | `readyToRank` | Legacy | Caller posted `/strategies/ready` after contributing at least one strategy |
 | `rankingSubmitted` | Legacy | Caller posted `/strategies/rank` after both users were ready |
 | `agreementCreated` | Legacy | Set by generic `/stages/advance` gate table; not used by redesign closure |
 
-In the redesigned flow, session resolution is driven by `POST /stage4/close`. The `selectionSubmitted` gate is the primary prerequisite checked before closure is allowed. `readyToRank` and `rankingSubmitted` are set but not consulted by `closeStage4`.
+In the redesigned flow, session resolution is driven by `POST /stage4/close`. The caller must have submitted AND shared their selections (`shareSelectionSubmitted`) before closure is allowed. `readyToRank` and `rankingSubmitted` are set but not consulted by `closeStage4`.
 
 In the legacy flow, session resolves when every `Agreement` row is fully confirmed by both partners.
 
@@ -668,9 +836,10 @@ flowchart TD
     Enter[Enter Stage 4] --> Inventory[AI captures proposals from conversation]
     Inventory --> Coverage[Coverage audit: which needs are addressed?]
     Coverage --> Select[Each user submits willingness per proposal]
-    Select --> BothSelected{Both submitted selections?}
-    BothSelected -->|No| Wait[Wait for partner]
-    BothSelected -->|Yes| Review[Outcome review: shared willing proposals visible]
+    Select --> Share[POST /stage4/share-selections]
+    Share --> BothShared{Both shared selections?}
+    BothShared -->|No| Wait[Wait for partner]
+    BothShared -->|Yes| Review[Outcome review: symmetric reveal of willing proposals]
     Review --> Close[POST /stage4/close]
     Close --> SharedAgree{Mutual WILLING overlap?}
     SharedAgree -->|Yes| CLOSED_SHARED[CLOSED_SHARED_AGREEMENT: Agreements created, Tending scheduled]

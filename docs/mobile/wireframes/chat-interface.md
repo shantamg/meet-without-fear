@@ -2,7 +2,7 @@
 title: Chat Interface
 sidebar_position: 3
 description: The primary conversation interface where users interact with the AI.
-updated: 2026-05-10
+updated: 2026-05-13
 status: living
 ---
 # Chat Interface
@@ -187,21 +187,31 @@ flowchart TB
     subgraph RepairChat[Strategic Repair View]
         Header4[Stage 4: Moving Forward]
 
+        subgraph Chat4[Main Chat - Surface 1]
+            AI41[AI facilitates guided proposal work]
+            User41[User responds / brainstorms needs]
+        end
+
         subgraph ProposalArea[Proposals]
-            YourProp[Your proposal: Daily check-in]
-            TheirProp[Their proposal: Weekly date]
-            PropStatus[Awaiting response]
+            YourProp[Your proposal linked to open need]
+            PropResponse[Willing / Not willing]
         end
 
-        subgraph AgreedArea[Agreements]
-            Agreed1[Agreed: 10-min daily conversation]
+        subgraph SubChatDrawer[Sub-Chat Drawer - Surfaces 2-4]
+            SC1[Needs brainstorm subchat]
+            SC2[Proposal refinement subchat]
+            SC3[No-overlap subchat]
         end
 
-        subgraph Chat4[Negotiation]
-            AI41[AI facilitates discussion]
+        subgraph TendingArea[Tending Check-In - Surface 7]
+            Tending[How are you tending to yourself?]
         end
     end
 ```
+
+**Sub-chat drawer pattern**: Surfaces 2–4 open as a bottom drawer (guided sub-chat) layered over the main chat. Each sub-chat has its own AI persona and is dismissed when the user completes the guided flow, returning them to the main chat (Surface 1) with any generated content (needs list, refined proposal, etc.) carried forward.
+
+**Proposal responses use two options only**: "Willing" / "Not willing" — there is no "Discuss" / `NEEDS_DISCUSSION` option in the UI.
 
 ## Session entry flow
 

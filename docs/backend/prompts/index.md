@@ -38,7 +38,7 @@ Meet Without Fear uses Claude models via AWS Bedrock:
 | [Stage 2: Perspective](./stage-2-perspective.md) | 2 | Building empathy guess; also hosts the `MIRROR` mode (redirect judgment) and other internal modes as branches of `buildStage2Prompt` |
 | Stage 2B: Informed Empathy | 21 (internal code) | Refining empathy after receiving partner's shared context (`buildStage2BPrompt`) |
 | [Stage 3: What Matters](./stage-3-needs.md) | 3 | User-driven self-reflection on what truly matters; AI redirects other-focused answers back to the user's own needs (lives inside `buildStage3Prompt`) |
-| [Stage 4: Strategic Repair](./stage-4-repair.md) | 4 | Collaborative strategy creation |
+| [Stage 4: Strategic Repair](./stage-4-repair.md) | 4 | Collaborative strategy creation — seven surfaces: main chat (Surface 1), needs brainstorm subchat (2), proposal refinement subchat (3), no-overlap subchat (4), handoff bridge (5), listen-first for RESOLVED re-entry (6), tending check-in (7) |
 
 ### Cross-Stage
 
@@ -47,6 +47,8 @@ Meet Without Fear uses Claude models via AWS Bedrock:
 | [Emotional Support](./emotional-support.md) | All | Responding to high intensity |
 
 > **Mirror Intervention** is **not** a standalone prompt — it's the `MIRROR` mode inside `buildStage2Prompt`, selected when a user slips into blame. The linked `mirror-intervention.md` page describes the behavior but the code lives in `stage-prompts.ts`.
+
+> **Stage 4 — Seven Surfaces**: Unlike stages 0–3 which each have a single prompt, Stage 4 uses seven distinct surfaces defined in `backend/src/services/stage4-prompts.ts`. Surface 1 (main chat) uses `buildStage4Prompt()` from `stage-prompts.ts` with two conditional dynamic clauses: `coverageReviewOpenNeedsClause()` (lists open needs when in COVERAGE_REVIEW phase) and `RESOLVED_LISTEN_FIRST_CLAUSE` (reflection-only mode when session is RESOLVED). Surfaces 2–4 are sub-chat personas for guided proposal work. Surface 5 is a templated handoff bridge message. Surface 6 is listen-first mode. Surface 7 contains three tending check-in micro-personas.
 
 ### Utility
 
