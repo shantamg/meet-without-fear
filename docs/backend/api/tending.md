@@ -4,7 +4,7 @@ sidebar_position: 12
 description: Post-resolution check-in and re-entry endpoints for follow-through on Stage 4 agreements.
 slug: /backend/api/tending
 created: 2026-05-06
-updated: 2026-05-06
+updated: 2026-05-13
 status: living
 ---
 # Tending API
@@ -13,10 +13,11 @@ Post-resolution check-in and re-entry endpoints. Tending surfaces after a sessio
 
 ## Overview
 
-Two Tending flows exist:
+Three Tending entry types exist:
 
-- **Scheduled check-ins** (`SCHEDULED_SHARED_AGREEMENT_CHECKIN`) — created automatically when `Stage4Closure` records agreements with a `followUpDate`. The cron script `backend/src/scripts/open-due-tending-entries.ts` opens them when their scheduled time arrives.
-- **Passive re-entry** (`USER_INITIATED_REENTRY`) — created on demand when a user returns to a resolved session and wants to reconnect with its outcomes. Context is assembled from the Stage 4 closure summary, agreements, open needs, and individual commitments.
+- **Scheduled shared check-ins** (`SCHEDULED_SHARED_AGREEMENT_CHECKIN`) — created automatically for shared agreements when `Stage4Closure` is recorded. Visible to both session members. The cron script `backend/src/scripts/open-due-tending-entries.ts` opens them when their scheduled time arrives.
+- **Scheduled individual check-ins** (`SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN`) — created for each user's individual commitments with `scope = INDIVIDUAL`. Only the owning user sees these by default; they can opt in to share with their partner via `POST tending/:entryId/share`.
+- **Passive re-entry** (`USER_INITIATED_REENTRY`) — created on demand when a user returns to a resolved session. Context is assembled from the Stage 4 closure summary, agreements, open needs, and individual commitments.
 
 ### Entry status lifecycle
 
@@ -47,27 +48,46 @@ interface TendingEntryDTO {
   id: string;
   type: TendingEntryType;
   status: TendingEntryStatus;
+  scope: TendingEntryScope;       // SHARED | INDIVIDUAL
+  ownerUserId: string | null;     // Set for INDIVIDUAL entries; null for SHARED
+  optedInShared: boolean;         // INDIVIDUAL entry owner has shared with partner
   scheduledFor: string | null;    // ISO 8601; null for re-entry
   openedAt: string | null;
   completedAt: string | null;
   summary: string | null;         // Context assembled at creation time
   myResponse: TendingResponseDTO | null;
   responseCount: number;          // How many partners have responded
+  createdAt: string;
+  updatedAt: string;
+}
+
+enum TendingEntryScope {
+  SHARED     = 'SHARED',
+  INDIVIDUAL = 'INDIVIDUAL',
 }
 
 interface TendingResponseDTO {
   id: string;
   tendingEntryId: string;
   userId: string;
-  status: string;                 // e.g. "WORKED", "PARTLY", "DID_NOT_WORK"
+  status: string;                         // e.g. "WORKED", "PARTLY", "DID_NOT_WORK"
   reflection: string | null;
-  continueChoice: string | null;  // e.g. "CONTINUE", "ADJUST", "CLOSE"
+  continueChoice: ContinueChoice | null;  // Five structured forward paths
   submittedAt: string;
 }
 
+enum ContinueChoice {
+  ANOTHER_ROUND   = 'ANOTHER_ROUND',   // Reset Stage 4 to inventory building
+  EXTEND          = 'EXTEND',          // Keep entries SCHEDULED with new follow-up date (28 days)
+  NEW_PROCESS     = 'NEW_PROCESS',     // Create a fresh Session linked via previousSessionId; both users restart at Stage 0
+  PARTIAL_CLOSURE = 'PARTIAL_CLOSURE', // Resolve some entries, continue others (per-TendingEntry granularity)
+  FULL_CLOSURE    = 'FULL_CLOSURE',    // Mark all entries COMPLETED, move session to RESOLVED
+}
+
 enum TendingEntryType {
-  SCHEDULED_SHARED_AGREEMENT_CHECKIN = 'SCHEDULED_SHARED_AGREEMENT_CHECKIN',
-  USER_INITIATED_REENTRY             = 'USER_INITIATED_REENTRY',
+  SCHEDULED_SHARED_AGREEMENT_CHECKIN      = 'SCHEDULED_SHARED_AGREEMENT_CHECKIN',
+  SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN = 'SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN',
+  USER_INITIATED_REENTRY                  = 'USER_INITIATED_REENTRY',
 }
 
 enum TendingEntryStatus {
@@ -94,9 +114,9 @@ POST /api/v1/sessions/:id/tending/:entryId/responses
 
 ```typescript
 interface SubmitTendingResponseRequest {
-  status: string;             // Required; max 80 chars. e.g. "WORKED", "PARTLY", "DID_NOT_WORK"
-  reflection?: string;        // Optional; max 2000 chars
-  continueChoice?: string;    // Optional; max 80 chars. e.g. "CONTINUE", "ADJUST", "CLOSE"
+  status: string;                    // Required; max 80 chars. e.g. "WORKED", "PARTLY", "DID_NOT_WORK"
+  reflection?: string;               // Optional; max 2000 chars
+  continueChoice?: ContinueChoice;   // Optional; one of the five ContinueChoice enum values
 }
 ```
 
@@ -153,6 +173,83 @@ interface CreateTendingReentryResponse {
 
 ---
 
+## Structured Three-Orientation Check-in
+
+The primary unified endpoint for tending responses. Handles all open entries in one atomic transaction with structured three-part input.
+
+```
+POST /api/v1/sessions/:id/tending/checkin
+```
+
+### Request Body
+
+```typescript
+interface SubmitTendingCheckinRequest {
+  orientations: {
+    whatWorked: {
+      reflection: string;                          // max 2000 chars
+      perEntryNotes?: Record<string, string>;      // entryId → note
+    };
+    whereMoreSupport: {
+      reflection: string;                          // max 2000 chars
+      perEntryNotes?: Record<string, string>;
+    };
+    whatComesNext: {
+      continueChoice: ContinueChoice;
+      partialClosure?: Record<string, PartialClosureResolution>;  // entryId → resolution (PARTIAL_CLOSURE path only)
+    };
+  };
+}
+
+enum PartialClosureResolution {
+  RESOLVED   = 'RESOLVED',
+  CONTINUING = 'CONTINUING',
+}
+```
+
+### Response
+
+```typescript
+interface SubmitTendingCheckinResponse {
+  entries: TendingEntryDTO[];
+  newSessionId?: string;            // Populated when continueChoice = NEW_PROCESS
+  continueChoice: ContinueChoice;
+  nextScheduledFor?: string | null; // ISO 8601; populated when continueChoice = EXTEND
+}
+```
+
+### Behavior by ContinueChoice
+
+| Choice | Effect |
+|--------|--------|
+| `ANOTHER_ROUND` | Clears Stage 4 closure, selections, and need coverage — resets to inventory building |
+| `EXTEND` | Keeps all entries SCHEDULED with a new follow-up date (28 days from now) |
+| `NEW_PROCESS` | Creates a new Session linked via `previousSessionId`; both users begin at Stage 0 |
+| `PARTIAL_CLOSURE` | Resolves entries marked RESOLVED; entries marked CONTINUING stay SCHEDULED |
+| `FULL_CLOSURE` | All entries → COMPLETED; session → RESOLVED |
+
+---
+
+## Share / Unshare an Individual Entry
+
+Allows the owner of an `INDIVIDUAL`-scope entry to share or unshare it with their partner.
+
+```
+POST /api/v1/sessions/:id/tending/:entryId/share
+POST /api/v1/sessions/:id/tending/:entryId/unshare
+```
+
+### Preconditions
+
+- Entry must have `scope = INDIVIDUAL`.
+- Caller must be the entry owner (`ownerUserId`).
+
+### Response
+
+Returns the updated `TendingEntryDTO`.
+
+---
+
 ## Scheduled Entry Opening (Cron)
 
 The script `backend/src/scripts/open-due-tending-entries.ts` is run by cron. It:
@@ -178,7 +275,7 @@ See [Prisma Schema: Tending](../data-model/prisma-schema.md#tending) for the ful
 | `NOT_FOUND` | 404 | Session or entry not found |
 | `VALIDATION_ERROR` | 400 | Entry is not in a state that accepts responses (e.g. SCHEDULED) |
 | `UNAUTHORIZED` | 401 | Missing auth |
-| `FORBIDDEN` | 403 | Caller is not a session member |
+| `FORBIDDEN` | 403 | Caller is not a session member; or caller is not the owner of an INDIVIDUAL entry |
 
 ---
 
