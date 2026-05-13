@@ -25,9 +25,21 @@ interface AgreementSummary {
   followUpDate: string | null;
 }
 
+interface IndividualCommitmentSummary {
+  id: string;
+  description: string;
+}
+
+interface OpenNeedSummary {
+  id: string;
+  label: string;
+}
+
 interface SessionCompletionScreenProps {
   partnerName: string;
   agreements: AgreementSummary[];
+  individualCommitments?: IndividualCommitmentSummary[];
+  openNeeds?: OpenNeedSummary[];
   tendingPanel?: ReactNode;
   onViewHistory: () => void;
   onReturnToSessions: () => void;
@@ -41,6 +53,8 @@ interface SessionCompletionScreenProps {
 export function SessionCompletionScreen({
   partnerName,
   agreements,
+  individualCommitments = [],
+  openNeeds = [],
   tendingPanel,
   onViewHistory,
   onReturnToSessions,
@@ -63,13 +77,13 @@ export function SessionCompletionScreen({
         </Text>
       </View>
 
-      {/* Agreements section */}
-      {agreements.length > 0 && (
-        <View style={styles.agreementsSection}>
-          <Text style={styles.sectionTitle}>
-            {agreements.length === 1 ? 'Your Next Step' : 'Your Next Steps'}
-          </Text>
-          {agreements.map((agreement) => (
+      {/* Shared experiments */}
+      <View style={styles.agreementsSection} testID="shared-experiments-section">
+        <Text style={styles.sectionTitle}>Shared experiments</Text>
+        {agreements.length === 0 ? (
+          <Text style={styles.emptyPlaceholder}>—</Text>
+        ) : (
+          agreements.map((agreement) => (
             <AgreementSummaryCard
               key={agreement.id}
               experiment={agreement.experiment}
@@ -78,9 +92,44 @@ export function SessionCompletionScreen({
               followUpDate={agreement.followUpDate}
               testID={`agreement-summary-${agreement.id}`}
             />
-          ))}
-        </View>
-      )}
+          ))
+        )}
+      </View>
+
+      {/* Individual commitments */}
+      <View style={styles.agreementsSection} testID="individual-commitments-section">
+        <Text style={styles.sectionTitle}>Individual commitments</Text>
+        {individualCommitments.length === 0 ? (
+          <Text style={styles.emptyPlaceholder}>—</Text>
+        ) : (
+          individualCommitments.map((commitment) => (
+            <View
+              key={commitment.id}
+              style={styles.bulletRow}
+              testID={`individual-commitment-${commitment.id}`}
+            >
+              <Text style={styles.bulletText}>{commitment.description}</Text>
+            </View>
+          ))
+        )}
+      </View>
+
+      {/* Named but not addressed */}
+      <View style={styles.agreementsSection} testID="open-needs-section">
+        <Text style={styles.sectionTitle}>Named but not addressed</Text>
+        {openNeeds.length === 0 ? (
+          <Text style={styles.emptyPlaceholder}>—</Text>
+        ) : (
+          openNeeds.map((need) => (
+            <View key={need.id} style={styles.bulletRow} testID={`open-need-${need.id}`}>
+              <Text style={styles.bulletText}>{need.label}</Text>
+            </View>
+          ))
+        )}
+        <Text style={styles.openNeedsCopy}>
+          These remain on record. Not a failure — just yours to hold beyond this.
+        </Text>
+      </View>
 
       {/* Reminder note */}
       {hasFollowUp && (
@@ -170,6 +219,27 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 12,
+  },
+
+  emptyPlaceholder: {
+    color: colors.textMuted,
+    fontSize: 15,
+    paddingVertical: 4,
+  },
+  bulletRow: {
+    paddingVertical: 6,
+  },
+  bulletText: {
+    color: colors.textPrimary,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  openNeedsCopy: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontStyle: 'italic',
+    marginTop: 10,
+    lineHeight: 18,
   },
 
   // Reminder

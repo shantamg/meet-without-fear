@@ -179,7 +179,6 @@ describe('Prisma Schema', () => {
       expect(Stage4ProposalStatus.CONVERTED_TO_AGREEMENT).toBe('CONVERTED_TO_AGREEMENT');
       expect(Stage4SelectionDecision.WILLING).toBe('WILLING');
       expect(Stage4SelectionDecision.NOT_WILLING).toBe('NOT_WILLING');
-      expect(Stage4SelectionDecision.NEEDS_DISCUSSION).toBe('NEEDS_DISCUSSION');
       expect(Stage4ClosureKind.SHARED_AGREEMENT).toBe('SHARED_AGREEMENT');
       expect(Stage4ClosureKind.NO_SHARED_AGREEMENT).toBe('NO_SHARED_AGREEMENT');
       expect(Stage4ClosureReason.MUTUAL_SELECTION).toBe('MUTUAL_SELECTION');

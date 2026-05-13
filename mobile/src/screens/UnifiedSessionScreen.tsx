@@ -1514,11 +1514,12 @@ export function UnifiedSessionScreen({
     );
   }, [unshareStage4Selections, sessionId, showError]);
   const handleCloseRedesignedStage4 = useCallback(
-    (kind: Stage4ClosureKind, reason: Stage4ClosureReason) => {
+    (kind: Stage4ClosureKind, reason: Stage4ClosureReason, checkInDate: string) => {
       closeStage4.mutate({
         sessionId,
         kind,
         reason,
+        checkInDate,
       });
     },
     [closeStage4, sessionId]
@@ -3311,6 +3312,17 @@ export function UnifiedSessionScreen({
             measureOfSuccess: a.measureOfSuccess,
             followUpDate: a.followUpDate,
           }))}
+          individualCommitments={
+            stage4State?.outcome?.individualCommitments.map((c) => ({
+              id: c.id,
+              description: c.description,
+            })) ?? []
+          }
+          openNeeds={
+            stage4State?.outcome?.openNeeds
+              .filter((n): n is typeof n & { id: string } => Boolean(n.id))
+              .map((n) => ({ id: n.id, label: n.label })) ?? []
+          }
           tendingPanel={tendingPanel}
           onViewHistory={() => setViewingResolvedHistory(true)}
           onReturnToSessions={() => onNavigateBack?.()}
@@ -3800,8 +3812,8 @@ export function UnifiedSessionScreen({
                 onSelectProposal={handleStage4Selection}
                 onShareSelections={handleShareStage4Selections}
                 onReviseSelections={handleReviseStage4Selections}
-                onCloseStage4={(kind, reason) => {
-                  handleCloseRedesignedStage4(kind, reason);
+                onCloseStage4={(kind, reason, checkInDate) => {
+                  handleCloseRedesignedStage4(kind, reason, checkInDate);
                   setShowStage4Drawer(false);
                 }}
               />
@@ -3816,8 +3828,8 @@ export function UnifiedSessionScreen({
               isRevising={unshareStage4Selections.isPending}
               onShareSelections={handleShareStage4Selections}
               onReviseSelections={handleReviseStage4Selections}
-              onCloseStage4={(kind, reason) => {
-                handleCloseRedesignedStage4(kind, reason);
+              onCloseStage4={(kind, reason, checkInDate) => {
+                handleCloseRedesignedStage4(kind, reason, checkInDate);
                 setShowStage4Drawer(false);
               }}
             />

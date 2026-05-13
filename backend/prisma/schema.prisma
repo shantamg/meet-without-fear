@@ -973,7 +973,6 @@ enum Stage4ProposalStatus {
 enum Stage4SelectionDecision {
   WILLING
   NOT_WILLING
-  NEEDS_DISCUSSION
 }
 
 enum Stage4ClosureKind {
@@ -1062,6 +1061,7 @@ model Stage4Closure {
   sharedAgreementIds    String[]
   individualProposalIds String[]
   openNeedIds           String[]
+  checkInAt             DateTime?
   closedByUserId        String?
   closedAt              DateTime            @default(now())
   createdAt             DateTime            @default(now())

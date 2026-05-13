@@ -64,6 +64,7 @@ type Stage4ClosureRow = {
   individualProposalIds: string[];
   openNeedIds: string[];
   closedAt: Date;
+  checkInAt: Date | null;
 };
 
 type Stage4ProgressRow = {
@@ -459,6 +460,7 @@ export async function getStage4State(
           individualCommitments: proposalCards.filter((proposal) => closedIndividualIds.has(proposal.id)),
           openNeeds: unaddressedNeeds.filter((need) => need.id && openNeedIds.has(need.id)),
           closedAt: closure.closedAt.toISOString(),
+          checkInAt: closure.checkInAt ? closure.checkInAt.toISOString() : null,
         }
       : null,
     tendingPreview: buildTendingPreview(closure, tendingEntries),
