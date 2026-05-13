@@ -3013,7 +3013,7 @@ export function UnifiedSessionScreen({
         <GuidedActionPanel
           tone="review"
           eyebrow="Resolved"
-          title="Back to A Path Forward"
+          title="A Path Forward"
           subtitle="Return to the summary of what you and your partner agreed."
           primaryAction={{
             label: 'View summary',
