@@ -21,6 +21,8 @@ import {
   submitStage4Selections,
   shareStage4Selections,
   unshareStage4Selections,
+  declineStage4Need,
+  undeclineStage4Need,
   closeStage4,
   proposeStrategy,
   submitRanking,
@@ -64,6 +66,22 @@ router.post(
   requireAuth,
   requireSessionAccess,
   asyncHandler(shareStage4Selections)
+);
+
+// Mark a need as "leave for now"
+router.post(
+  '/sessions/:id/stage4/needs/:needId/decline',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(declineStage4Need)
+);
+
+// Remove a "leave for now" declination
+router.delete(
+  '/sessions/:id/stage4/needs/:needId/decline',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(undeclineStage4Need)
 );
 
 // Withdraw current user's shared Stage 4 selections so they can revise

@@ -74,6 +74,8 @@ import {
   useCloseStage4,
   useShareStage4Selections,
   useUnshareStage4Selections,
+  useDeclineStage4Need,
+  useUndeclineStage4Need,
   useCreateTendingReentry,
   useNeedsComparison,
   useStage4State,
@@ -1457,6 +1459,8 @@ export function UnifiedSessionScreen({
   });
   const shareStage4Selections = useShareStage4Selections();
   const unshareStage4Selections = useUnshareStage4Selections();
+  const declineStage4Need = useDeclineStage4Need();
+  const undeclineStage4Need = useUndeclineStage4Need();
   const closeStage4 = useCloseStage4({
     onSuccess: (response) => {
       if (response.outcome.kind === Stage4ClosureKind.SHARED_AGREEMENT) {
@@ -1503,6 +1507,40 @@ export function UnifiedSessionScreen({
       }
     );
   }, [shareStage4Selections, sessionId, showError]);
+  // TODO(phase-3): The Brainstorm CTA on an unaddressed need currently just
+  // pre-fills the main chat input with a templated prompt. Phase 3 will rewire
+  // this into a dedicated sub-chat so the brainstorm doesn't pollute the main
+  // transcript.
+  const [stage4BrainstormPrefill, setStage4BrainstormPrefill] = useState<string | null>(null);
+  const handleBrainstormStage4Need = useCallback((needLabel: string) => {
+    setStage4BrainstormPrefill(`Let's brainstorm for "${needLabel}"`);
+  }, []);
+  const handleDeclineStage4Need = useCallback(
+    (needId: string) => {
+      declineStage4Need.mutate(
+        { sessionId, needId },
+        {
+          onError: () => {
+            showError('Could not set that aside. Please try again.');
+          },
+        }
+      );
+    },
+    [declineStage4Need, sessionId, showError]
+  );
+  const handleUndeclineStage4Need = useCallback(
+    (needId: string) => {
+      undeclineStage4Need.mutate(
+        { sessionId, needId },
+        {
+          onError: () => {
+            showError('Could not bring that back. Please try again.');
+          },
+        }
+      );
+    },
+    [undeclineStage4Need, sessionId, showError]
+  );
   const handleReviseStage4Selections = useCallback(() => {
     unshareStage4Selections.mutate(
       { sessionId },
@@ -3274,6 +3312,9 @@ export function UnifiedSessionScreen({
               onSelectProposal={handleStage4Selection}
               onShareSelections={handleShareStage4Selections}
               onReviseSelections={handleReviseStage4Selections}
+              onBrainstormNeed={handleBrainstormStage4Need}
+              onDeclineNeed={handleDeclineStage4Need}
+              onUndeclineNeed={handleUndeclineStage4Need}
               onCloseStage4={handleCloseRedesignedStage4}
             />
             {tendingPanel}
@@ -3448,6 +3489,8 @@ export function UnifiedSessionScreen({
           indicators={indicators}
           onSendMessage={sendMessageWithTracking}
           failedMessage={failedMessageContent}
+          prefillText={stage4BrainstormPrefill}
+          onPrefillConsumed={() => setStage4BrainstormPrefill(null)}
           // Cache-First: Ghost dots are derived from last message role in ChatInterface
           // isSending is still needed for brief moment during API call before optimistic message appears
           // isFetchingInitialMessage shows dots while fetching first AI message
@@ -3812,6 +3855,12 @@ export function UnifiedSessionScreen({
                 onSelectProposal={handleStage4Selection}
                 onShareSelections={handleShareStage4Selections}
                 onReviseSelections={handleReviseStage4Selections}
+                onBrainstormNeed={(needLabel) => {
+                  handleBrainstormStage4Need(needLabel);
+                  setShowStage4Drawer(false);
+                }}
+                onDeclineNeed={handleDeclineStage4Need}
+                onUndeclineNeed={handleUndeclineStage4Need}
                 onCloseStage4={(kind, reason, checkInDate) => {
                   handleCloseRedesignedStage4(kind, reason, checkInDate);
                   setShowStage4Drawer(false);

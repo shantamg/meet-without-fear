@@ -126,15 +126,20 @@ function getSourceLabel(
 function buildCoverageAudit(
   coverageRows: Stage4NeedCoverageRow[],
   userId: string,
-  partnerUserId: string | null
+  partnerUserId: string | null,
+  declinedNeedIds: Set<string>
 ): Stage4CoverageAuditDTO {
-  const rows = coverageRows.map((row): CoverageRowDTO => ({
-    id: row.needId ?? row.id,
-    label: row.needLabel,
-    source: getSourceLabel(row.sourceUserId, userId, partnerUserId),
-    coveringProposalIds: row.coveringProposalIds,
-    note: row.note,
-  }));
+  const rows = coverageRows.map((row): CoverageRowDTO => {
+    const rowNeedId = row.needId ?? row.id;
+    return {
+      id: rowNeedId,
+      label: row.needLabel,
+      source: getSourceLabel(row.sourceUserId, userId, partnerUserId),
+      coveringProposalIds: row.coveringProposalIds,
+      note: row.note,
+      userDeclinedToAddress: declinedNeedIds.has(rowNeedId),
+    };
+  });
 
   const byStatus = (status: string) =>
     rows.filter((_, index) => coverageRows[index].coverageStatus === status);
@@ -357,6 +362,7 @@ export async function getStage4State(
     agreements,
     tendingEntries,
     progressRows,
+    declinations,
   ] = await Promise.all([
     prisma.strategyProposal.findMany({
       where: { sessionId },
@@ -385,6 +391,10 @@ export async function getStage4State(
       where: { sessionId, stage: 4 },
       select: { userId: true, gatesSatisfied: true },
     }) as Promise<Stage4ProgressRow[]>,
+    prisma.stage4NeedDeclination.findMany({
+      where: { sessionId, userId },
+      select: { needId: true },
+    }) as Promise<{ needId: string }[]>,
   ]);
 
   const mySelections = selections.filter((selection) => selection.userId === userId);
@@ -430,7 +440,12 @@ export async function getStage4State(
       removedProposalCount: proposals.filter((proposal) => proposal.status === Stage4ProposalStatus.REMOVED).length,
       updatedAt: iso(latestInventoryUpdate) ?? new Date(0).toISOString(),
     },
-    coverageAudit: buildCoverageAudit(coverageRows, userId, partnerUserId),
+    coverageAudit: buildCoverageAudit(
+      coverageRows,
+      userId,
+      partnerUserId,
+      new Set(declinations.map((d) => d.needId))
+    ),
     mySelections: mySelections.map((selection): Stage4SelectionDTO => ({
       proposalId: selection.proposalId,
       decision: selection.decision,

@@ -13,7 +13,7 @@ import {
   UseMutationOptions,
   InfiniteData,
 } from '@tanstack/react-query';
-import { get, post, ApiClientError } from '../lib/api';
+import { get, post, del, ApiClientError } from '../lib/api';
 import { useAuth } from './useAuth';
 import {
   // Response types
@@ -2173,6 +2173,101 @@ export function useUnshareStage4Selections() {
         queryClient.setQueryData<GetStage4StateResponse>(key, {
           ...previous,
           mySelectionStatus: 'NOT_STARTED',
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(stageKeys.stage4(sessionId), context.previous);
+      }
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      refreshStage4Caches(queryClient, sessionId);
+    },
+  });
+}
+
+/**
+ * Mark a Stage 4 need as "leave for now" — explicit declination to address it.
+ */
+export function useDeclineStage4Need() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { state: GetStage4StateResponse },
+    ApiClientError,
+    { sessionId: string; needId: string },
+    { previous: GetStage4StateResponse | undefined }
+  >({
+    mutationFn: async ({ sessionId, needId }) =>
+      post<{ state: GetStage4StateResponse }, Record<string, never>>(
+        `/sessions/${sessionId}/stage4/needs/${needId}/decline`,
+        {} as Record<string, never>
+      ),
+    onMutate: async ({ sessionId, needId }) => {
+      const key = stageKeys.stage4(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<GetStage4StateResponse>(key);
+      if (previous) {
+        const mark = (rows: typeof previous.coverageAudit.open) =>
+          rows.map((row) =>
+            row.id === needId ? { ...row, userDeclinedToAddress: true } : row
+          );
+        queryClient.setQueryData<GetStage4StateResponse>(key, {
+          ...previous,
+          coverageAudit: {
+            ...previous.coverageAudit,
+            open: mark(previous.coverageAudit.open),
+            partial: mark(previous.coverageAudit.partial),
+          },
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(stageKeys.stage4(sessionId), context.previous);
+      }
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      refreshStage4Caches(queryClient, sessionId);
+    },
+  });
+}
+
+/**
+ * Remove a "leave for now" declination — user changed their mind.
+ */
+export function useUndeclineStage4Need() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { state: GetStage4StateResponse },
+    ApiClientError,
+    { sessionId: string; needId: string },
+    { previous: GetStage4StateResponse | undefined }
+  >({
+    mutationFn: async ({ sessionId, needId }) =>
+      del<{ state: GetStage4StateResponse }>(
+        `/sessions/${sessionId}/stage4/needs/${needId}/decline`
+      ),
+    onMutate: async ({ sessionId, needId }) => {
+      const key = stageKeys.stage4(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<GetStage4StateResponse>(key);
+      if (previous) {
+        const unmark = (rows: typeof previous.coverageAudit.open) =>
+          rows.map((row) =>
+            row.id === needId ? { ...row, userDeclinedToAddress: false } : row
+          );
+        queryClient.setQueryData<GetStage4StateResponse>(key, {
+          ...previous,
+          coverageAudit: {
+            ...previous.coverageAudit,
+            open: unmark(previous.coverageAudit.open),
+            partial: unmark(previous.coverageAudit.partial),
+          },
         });
       }
       return { previous };

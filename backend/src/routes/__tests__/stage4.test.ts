@@ -39,6 +39,9 @@ import {
   getStage4State,
   submitStage4ProposalSelection,
   submitStage4Selections,
+  shareStage4Selections,
+  declineStage4Need,
+  undeclineStage4Need,
   closeStage4,
   getStrategies,
   proposeStrategy,
@@ -2299,6 +2302,175 @@ describe('Stage 4 API', () => {
           error: expect.objectContaining({ code: 'NOT_FOUND' }),
         })
       );
+    });
+  });
+
+  describe('Stage 4 need declination', () => {
+    const needId = 'need-1';
+
+    function arrangeMutable() {
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        stage: 4,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      });
+      (prisma.stage4Closure.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.stage4ProposalSelection.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.stage4NeedCoverage.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.agreement.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.stage4NeedDeclination.findMany as jest.Mock).mockResolvedValue([]);
+    }
+
+    it('declines a need (POST decline) and returns updated state', async () => {
+      arrangeMutable();
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId, needId },
+      });
+      const { res, statusMock } = createMockResponse();
+
+      await declineStage4Need(req as Request, res as Response);
+
+      expect(prisma.stage4NeedDeclination.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            sessionId_userId_needId: {
+              sessionId: mockSessionId,
+              userId: mockUser.id,
+              needId,
+            },
+          },
+          create: { sessionId: mockSessionId, userId: mockUser.id, needId },
+        })
+      );
+      expect(statusMock).toHaveBeenCalledWith(200);
+    });
+
+    it('undeclines a need (DELETE decline)', async () => {
+      arrangeMutable();
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId, needId },
+      });
+      const { res, statusMock } = createMockResponse();
+
+      await undeclineStage4Need(req as Request, res as Response);
+
+      expect(prisma.stage4NeedDeclination.deleteMany).toHaveBeenCalledWith({
+        where: { sessionId: mockSessionId, userId: mockUser.id, needId },
+      });
+      expect(statusMock).toHaveBeenCalledWith(200);
+    });
+  });
+
+  describe('POST /sessions/:id/stage4/share-selections', () => {
+    function arrangeForShare(opts: {
+      openCoverage?: Array<{
+        id: string;
+        needId: string | null;
+        coverageStatus: 'OPEN' | 'PARTIAL';
+        coveringProposalIds: string[];
+      }>;
+      willingProposalIds?: string[];
+      activeProposalIds?: string[];
+      declinedNeedIds?: string[];
+    }) {
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        stage: 4,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      });
+      (prisma.stage4Closure.findUnique as jest.Mock).mockResolvedValue(null);
+      // first findMany: activeSharedProposals; second findMany inside gate: activeProposals (any)
+      (prisma.strategyProposal.findMany as jest.Mock)
+        .mockResolvedValueOnce(
+          (opts.activeProposalIds ?? ['prop-a']).map((id) => ({ id }))
+        )
+        .mockResolvedValueOnce(
+          (opts.activeProposalIds ?? ['prop-a']).map((id) => ({ id }))
+        );
+      (prisma.stage4ProposalSelection.findMany as jest.Mock)
+        // first call: mySelections used to ensure stance on all shared proposals
+        .mockResolvedValueOnce(
+          (opts.activeProposalIds ?? ['prop-a']).map((proposalId) => ({ proposalId }))
+        )
+        // second call: WILLING selections for gate
+        .mockResolvedValueOnce(
+          (opts.willingProposalIds ?? []).map((proposalId) => ({ proposalId }))
+        );
+      (prisma.stage4NeedCoverage.findMany as jest.Mock).mockResolvedValue(
+        opts.openCoverage ?? []
+      );
+      (prisma.stage4NeedDeclination.findMany as jest.Mock).mockResolvedValue(
+        (opts.declinedNeedIds ?? []).map((needId) => ({ needId }))
+      );
+      (prisma.agreement.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([]);
+    }
+
+    it('rejects when an open need is neither addressed-willing nor declined', async () => {
+      arrangeForShare({
+        openCoverage: [
+          {
+            id: 'cov-1',
+            needId: 'need-1',
+            coverageStatus: 'OPEN',
+            coveringProposalIds: [],
+          },
+        ],
+        willingProposalIds: ['prop-a'],
+        activeProposalIds: ['prop-a'],
+      });
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await shareStage4Selections(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(400);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: 'VALIDATION_ERROR',
+            message: 'Address or set aside every open need before sharing',
+          }),
+        })
+      );
+    });
+
+    it('allows share when every open need is declined', async () => {
+      arrangeForShare({
+        openCoverage: [
+          {
+            id: 'cov-1',
+            needId: 'need-1',
+            coverageStatus: 'OPEN',
+            coveringProposalIds: [],
+          },
+        ],
+        willingProposalIds: ['prop-a'],
+        activeProposalIds: ['prop-a'],
+        declinedNeedIds: ['need-1'],
+      });
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+      });
+      const { res, statusMock } = createMockResponse();
+
+      await shareStage4Selections(req as Request, res as Response);
+
+      expect(prisma.stageProgress.update).toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(200);
     });
   });
 });

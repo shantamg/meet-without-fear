@@ -227,6 +227,7 @@ export interface CoverageRowDTO {
   source: 'YOU' | 'PARTNER' | 'BOTH' | 'UNKNOWN';
   coveringProposalIds: string[];
   note: string | null;
+  userDeclinedToAddress?: boolean;
 }
 
 export interface Stage4CoverageAuditDTO {

@@ -281,8 +281,23 @@ describe('Stage4RedesignPanel', () => {
 
   it('calls onShareSelections when the share CTA is pressed', () => {
     const onShareSelections = jest.fn();
+    // Open need must be addressed-or-declined for the share gate to allow it.
+    const gatedState: GetStage4StateResponse = {
+      ...baseState,
+      coverageAudit: {
+        ...baseState.coverageAudit,
+        open: baseState.coverageAudit.open.map((row) => ({
+          ...row,
+          userDeclinedToAddress: true,
+        })),
+      },
+    };
     render(
-      <Stage4RedesignPanel {...defaultProps} onShareSelections={onShareSelections} />,
+      <Stage4RedesignPanel
+        {...defaultProps}
+        state={gatedState}
+        onShareSelections={onShareSelections}
+      />,
     );
 
     fireEvent.press(screen.getByLabelText('Share my stances'));
@@ -420,5 +435,77 @@ describe('Stage4RedesignPanel', () => {
 
     expect(screen.getByText('Shared agreement outcome')).toBeTruthy();
     expect(screen.getByText('Both people chose one shared experiment.')).toBeTruthy();
+  });
+
+  describe('Needs gate: brainstorm / leave-for-now', () => {
+    it('renders Brainstorm and Leave-for-now buttons for each open need', () => {
+      render(<Stage4RedesignPanel {...defaultProps} />);
+      expect(screen.getByTestId('stage4-need-brainstorm-coverage-2')).toBeTruthy();
+      expect(screen.getByTestId('stage4-need-decline-coverage-2')).toBeTruthy();
+    });
+
+    it('fires onBrainstormNeed with the need label when Brainstorm is tapped', () => {
+      const onBrainstormNeed = jest.fn();
+      render(
+        <Stage4RedesignPanel {...defaultProps} onBrainstormNeed={onBrainstormNeed} />
+      );
+      fireEvent.press(screen.getByTestId('stage4-need-brainstorm-coverage-2'));
+      expect(onBrainstormNeed).toHaveBeenCalledWith('Trust after conflict');
+    });
+
+    it('fires onDeclineNeed with the need id when Leave-for-now is tapped', () => {
+      const onDeclineNeed = jest.fn();
+      render(<Stage4RedesignPanel {...defaultProps} onDeclineNeed={onDeclineNeed} />);
+      fireEvent.press(screen.getByTestId('stage4-need-decline-coverage-2'));
+      expect(onDeclineNeed).toHaveBeenCalledWith('coverage-2');
+    });
+
+    it('renders the muted "Set aside" affordance when a need is declined', () => {
+      const declinedState: GetStage4StateResponse = {
+        ...baseState,
+        coverageAudit: {
+          ...baseState.coverageAudit,
+          open: baseState.coverageAudit.open.map((row) => ({
+            ...row,
+            userDeclinedToAddress: true,
+          })),
+        },
+      };
+      const onUndeclineNeed = jest.fn();
+      render(
+        <Stage4RedesignPanel
+          {...defaultProps}
+          state={declinedState}
+          onUndeclineNeed={onUndeclineNeed}
+        />
+      );
+      fireEvent.press(screen.getByTestId('stage4-need-undecline-coverage-2'));
+      expect(onUndeclineNeed).toHaveBeenCalledWith('coverage-2');
+    });
+
+    it('disables Share while any open need is neither addressed nor declined', () => {
+      // baseState has one open need with no covering proposal and no declination.
+      // sharedProposals[0] has myDecision = WILLING but it does not cover need-2.
+      render(<Stage4RedesignPanel {...defaultProps} />);
+      const share = screen.getByTestId('stage4-share-selections');
+      expect(share.props.accessibilityState?.disabled).toBe(true);
+      expect(screen.getByTestId('stage4-needs-gate-hint-inline')).toBeTruthy();
+    });
+
+    it('enables Share once every open need is declined', () => {
+      const gatedState: GetStage4StateResponse = {
+        ...baseState,
+        coverageAudit: {
+          ...baseState.coverageAudit,
+          open: baseState.coverageAudit.open.map((row) => ({
+            ...row,
+            userDeclinedToAddress: true,
+          })),
+        },
+      };
+      render(<Stage4RedesignPanel {...defaultProps} state={gatedState} />);
+      const share = screen.getByTestId('stage4-share-selections');
+      expect(share.props.accessibilityState?.disabled).toBe(false);
+    });
   });
 });
