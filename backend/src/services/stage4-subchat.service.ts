@@ -33,6 +33,11 @@ import {
 import { prisma } from '../lib/prisma';
 import { logger } from '../lib/logger';
 import { getCompletion } from '../lib/bedrock';
+import {
+  needsBrainstormPersona,
+  noOverlapPersona,
+  proposalRefinementPersona,
+} from './stage4-prompts';
 
 const MAIN_CHAT_HISTORY_LIMIT = 60;
 
@@ -154,14 +159,16 @@ export async function getSubChatById(
 // Prompt construction
 // ---------------------------------------------------------------------------
 
-const PERSONA_INSTRUCTIONS: Record<Stage4SubChatAnchor, string> = {
-  [Stage4SubChatAnchor.NEEDS_BRAINSTORM]:
-    "You're helping the user generate small, bounded, observable experiments to address the named need. Stay scoped to this need. When the user agrees on a concrete experiment, surface it as a structured proposal draft they can accept.",
-  [Stage4SubChatAnchor.PROPOSAL_REFINEMENT]:
-    "You're helping the user reshape a specific Stage 4 proposal. Identify what's blocking willingness and propose modifications. Stay scoped to this one proposal.",
-  [Stage4SubChatAnchor.NO_OVERLAP]:
-    "Both partners have shared willingness stances on the inventory and no shared proposal has mutual 'willing'. Help the user refine, combine, or generate new options grounded in their stated needs.",
-};
+function personaFor(anchor: AnchorContext): string {
+  switch (anchor.anchorKind) {
+    case Stage4SubChatAnchor.NEEDS_BRAINSTORM:
+      return needsBrainstormPersona(anchor.needLabel);
+    case Stage4SubChatAnchor.PROPOSAL_REFINEMENT:
+      return proposalRefinementPersona(anchor.proposalDescription);
+    case Stage4SubChatAnchor.NO_OVERLAP:
+      return noOverlapPersona();
+  }
+}
 
 export interface AnchorContext {
   anchorKind: Stage4SubChatAnchor;
@@ -213,7 +220,7 @@ export async function buildSystemPrompt(
   input: PromptBuildInput
 ): Promise<BuiltPrompt> {
   const { sessionId, userId, anchor, anchorId } = input;
-  const persona = PERSONA_INSTRUCTIONS[anchor.anchorKind];
+  const persona = personaFor(anchor);
 
   const anchorBlock =
     anchor.anchorKind === Stage4SubChatAnchor.NEEDS_BRAINSTORM

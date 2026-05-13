@@ -44,6 +44,7 @@ import { captureProposedNeedsForUser } from '../services/needs';
 import { cleanVisibleAIText } from '../utils/visible-text';
 import { captureStage4Turn } from '../services/stage4-capture.service';
 import { applyStage4AutoClosureFromSignal } from '../services/stage4-auto-closure.service';
+import { isExplicitAskForInput } from '../services/stage4-prompts';
 
 // ============================================================================
 // Helpers
@@ -112,6 +113,82 @@ async function getStage4InventoryPromptContext(sessionId: string, currentUserId:
       return `- ${details.join(' | ')}`;
     })
     .join('\n');
+}
+
+/**
+ * Stage 4 Phase 6 — open needs (not declined, not yet willing-covered) with
+ * their labels, so the AI can surface one at a time in main chat with the
+ * user's own phrasing.
+ */
+async function getStage4OpenNeedsForPrompt(
+  sessionId: string,
+  userId: string
+): Promise<Array<{ needLabel: string }> | null> {
+  try {
+    const [coverageRows, willingSelections, declinations] = await Promise.all([
+      prisma.stage4NeedCoverage.findMany({
+        where: { sessionId, coverageStatus: { in: ['OPEN', 'PARTIAL'] } },
+        select: { id: true, needId: true, needLabel: true, coveringProposalIds: true },
+      }),
+      prisma.stage4ProposalSelection.findMany({
+        where: { sessionId, userId, decision: 'WILLING' },
+        select: { proposalId: true },
+      }),
+      prisma.stage4NeedDeclination.findMany({
+        where: { sessionId, userId },
+        select: { needId: true },
+      }),
+    ]);
+    if (coverageRows.length === 0) return null;
+    const willingIds = new Set(willingSelections.map((s) => s.proposalId));
+    const declined = new Set(declinations.map((d) => d.needId));
+    const candidateRows = coverageRows.filter((row) => {
+      const needId = row.needId ?? row.id;
+      if (declined.has(needId)) return false;
+      const covered = row.coveringProposalIds.some((pid) => willingIds.has(pid));
+      return !covered;
+    });
+    if (candidateRows.length === 0) return null;
+    const needIds = candidateRows.map((r) => r.needId).filter((n): n is string => Boolean(n));
+    const needs = needIds.length > 0
+      ? await prisma.identifiedNeed.findMany({
+          where: { id: { in: needIds }, vessel: { userId } },
+          select: { id: true, need: true },
+        })
+      : [];
+    const byId = new Map(needs.map((n) => [n.id, n.need] as const));
+    const labels: Array<{ needLabel: string }> = [];
+    for (const row of candidateRows) {
+      // Prefer the user's exact phrasing from IdentifiedNeed; fall back to the
+      // coverage row's needLabel so coverage rows without an IdentifiedNeed
+      // link (or whose link belongs to the partner's vessel) still surface.
+      const label = (row.needId && byId.get(row.needId)) || row.needLabel;
+      if (label) labels.push({ needLabel: label });
+    }
+    return labels.length > 0 ? labels : null;
+  } catch (err) {
+    logger.warn('[getStage4OpenNeedsForPrompt] failed', { error: err });
+    return null;
+  }
+}
+
+/**
+ * Stage 4 Phase 6 (Surface 6) — listen-first mode. Active when the session is
+ * RESOLVED and the user hasn't yet explicitly asked the AI for input since
+ * re-entry. Once any user message in history matches the explicit-ask regex,
+ * advice mode persists for the rest of the conversation.
+ */
+async function isStage4ListenFirstMode(
+  _sessionId: string,
+  _userId: string,
+  sessionStatus: string,
+  history: Array<{ role: string; content: string }>
+): Promise<boolean> {
+  if (sessionStatus !== 'RESOLVED') return false;
+  const askedForInput = history.some(
+    (m) => m.role === 'USER' && isExplicitAskForInput(m.content)
+  );
+  return !askedForInput;
 }
 
 /**
@@ -1506,6 +1583,17 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       ? await getStage4InventoryPromptContext(sessionId, user.id)
       : null;
 
+    const stage4OpenNeeds = currentStage === 4
+      ? await getStage4OpenNeedsForPrompt(sessionId, user.id)
+      : null;
+
+    const stage4ListenFirstMode = await isStage4ListenFirstMode(
+      sessionId,
+      user.id,
+      session.status,
+      history
+    );
+
     const prompt = buildStagePrompt(effectiveStage, {
       userName,
       currentUserId: user.id,
@@ -1522,6 +1610,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       empathyDraft: empathyDraftContent || undefined,
       isRefiningEmpathy: isRefiningEmpathy || undefined,
       stage4InventoryContext,
+      stage4OpenNeeds,
+      stage4ListenFirstMode,
       topicFrame: session.topicFrameConfirmedAt ? session.topicFrame : undefined,
     }, { isInvitationPhase });
 

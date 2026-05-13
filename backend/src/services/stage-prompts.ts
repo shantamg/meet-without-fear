@@ -15,6 +15,10 @@ import { logger } from '../lib/logger';
 import { type ContextBundle } from './context-assembler';
 import { type SurfaceStyle } from './memory-intent';
 import { type CategorizedFact } from './partner-session-classifier';
+import {
+  RESOLVED_LISTEN_FIRST_CLAUSE,
+  coverageReviewOpenNeedsClause,
+} from './stage4-prompts';
 
 // ============================================================================
 // Response Protocol (Semantic Router Format)
@@ -469,6 +473,10 @@ export interface PromptContext {
   previousEmpathyContent?: string | null;
   /** Stage 4: active proposal inventory with stable IDs for typed add/revise/remove decisions */
   stage4InventoryContext?: string | null;
+  /** Stage 4 Phase 6 — open (not declined, not yet willing-covered) needs surfaced for COVERAGE_REVIEW proactive raising */
+  stage4OpenNeeds?: Array<{ needLabel: string }> | null;
+  /** Stage 4 Phase 6 — when true, main-chat persona switches to listen-first reflection mode (session RESOLVED, no check-in yet, user hasn't asked for input) */
+  stage4ListenFirstMode?: boolean;
   /** Partner's progress status for transition messages */
   partnerStatus?: 'not_joined' | 'in_progress' | 'completed';
   /**
@@ -1044,6 +1052,14 @@ When emitting <stage4_proposals>, set ownerUserId to currentUserId for INDIVIDUA
   }
   if (context.emotionalIntensity >= 8) {
     dynamicParts.push('HIGH USER INTENSITY: The user is very activated/distressed. Slow down. Validate first. This is not the moment for brainstorming — ground them before moving to action. Your tone should be calm and steady.');
+  }
+
+  if (context.stage4OpenNeeds && context.stage4OpenNeeds.length > 0) {
+    dynamicParts.push(coverageReviewOpenNeedsClause(context.stage4OpenNeeds));
+  }
+
+  if (context.stage4ListenFirstMode) {
+    dynamicParts.push(RESOLVED_LISTEN_FIRST_CLAUSE);
   }
 
   dynamicParts.push(`User's emotional intensity: ${context.emotionalIntensity}/10`);
