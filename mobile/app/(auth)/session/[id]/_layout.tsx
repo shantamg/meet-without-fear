@@ -51,6 +51,17 @@ export default function SessionLayout() {
           animation: 'slide_from_right',
         }}
       />
+      <Stack.Screen
+        name="tending-checkin"
+        options={{
+          title: 'Tending check-in',
+          headerShown: true,
+          headerStyle: { backgroundColor: palette.bg },
+          headerTintColor: palette.text,
+          headerTitleStyle: { color: palette.text, fontWeight: '600' },
+          presentation: 'modal',
+        }}
+      />
     </Stack>
   );
 }

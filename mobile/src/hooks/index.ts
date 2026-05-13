@@ -143,6 +143,7 @@ export {
   useCloseStage4,
   useTendingEntries,
   useSubmitTendingResponse,
+  useSubmitTendingCheckin,
   useCreateTendingReentry,
   // Agreements
   useAgreements,

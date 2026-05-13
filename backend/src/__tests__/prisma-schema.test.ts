@@ -312,10 +312,10 @@ describe('Prisma Schema', () => {
         tendingEntry: { connect: { id: 'entry-id' } },
         user: { connect: { id: 'user-id' } },
         status: 'PARTLY',
-        continueChoice: 'ADJUST',
+        continueChoice: 'ANOTHER_ROUND',
       };
       expect(entryInput.type).toBe('SCHEDULED_SHARED_AGREEMENT_CHECKIN');
-      expect(responseInput.continueChoice).toBe('ADJUST');
+      expect(responseInput.continueChoice).toBe('ANOTHER_ROUND');
     });
 
     it('allows creating valid GlobalLibraryItem input', () => {
