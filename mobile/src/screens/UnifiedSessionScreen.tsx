@@ -3008,6 +3008,22 @@ export function UnifiedSessionScreen({
   // Render guided input panel (now positioned below the chat input by ChatInterface)
   // -------------------------------------------------------------------------
   const renderAboveInput = useCallback((): React.ReactNode | undefined => {
+    if (session?.status === SessionStatus.RESOLVED && viewingResolvedHistory) {
+      return (
+        <GuidedActionPanel
+          tone="review"
+          eyebrow="Resolved"
+          title="Back to A Path Forward"
+          subtitle="Return to the summary of what you and your partner agreed."
+          primaryAction={{
+            label: 'View summary',
+            onPress: () => setViewingResolvedHistory(false),
+            testID: 'back-to-path-forward-button',
+          }}
+          testID="back-to-path-forward-panel"
+        />
+      );
+    }
     switch (aboveInputPanel) {
       case 'compact-agreement-bar':
         return (
@@ -3220,6 +3236,8 @@ export function UnifiedSessionScreen({
     aboveInputPanel,
     hasRedesignedStage4,
     stage4State,
+    session?.status,
+    viewingResolvedHistory,
     sessionId,
     invitation?.isInviter,
     isInviter,
@@ -3699,7 +3717,9 @@ export function UnifiedSessionScreen({
               : undefined
           }
           renderAboveInput={
-            aboveInputPanel || (hasRedesignedStage4 && !!stage4State)
+            aboveInputPanel ||
+            (hasRedesignedStage4 && !!stage4State) ||
+            (session?.status === SessionStatus.RESOLVED && viewingResolvedHistory)
               ? renderAboveInput
               : undefined
           }
