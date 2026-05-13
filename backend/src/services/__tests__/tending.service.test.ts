@@ -338,6 +338,18 @@ describe('tending.service', () => {
     const result = await openDueTendingEntries(new Date('2026-05-13T10:00:00.000Z'));
 
     expect(result).toEqual({ opened: 1, entryIds: ['tending-1'] });
+    expect(prisma.tendingEntry.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          type: {
+            in: [
+              TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
+              TendingEntryType.SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN,
+            ],
+          },
+        }),
+      })
+    );
     expect(prisma.tendingEntry.updateMany).toHaveBeenCalledWith({
       where: { id: 'tending-1', status: TendingEntryStatus.SCHEDULED },
       data: {
