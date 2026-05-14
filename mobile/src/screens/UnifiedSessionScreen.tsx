@@ -4218,10 +4218,8 @@ export function UnifiedSessionScreen({
           onShareComplete={() => {
             setRefinementOfferId(null);
             trackShareDraftSent(sessionId, (shareOfferData?.suggestion?.action ?? 'OFFER_OPTIONAL') as 'OFFER_SHARING' | 'OFFER_OPTIONAL', true);
-            // Open activity drawer to show updated share status
-            setActivityFocusTarget(null);
-            setShowActivityMenu(true);
-            // Refresh activity menu data
+            // Shared context now appears inline in chat — no need to auto-open the activity drawer.
+            // Refresh activity menu data so it's current if the user opens it later.
             queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
             queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
             queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });

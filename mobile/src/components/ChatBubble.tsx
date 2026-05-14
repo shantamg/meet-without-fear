@@ -218,7 +218,11 @@ export function ChatBubble({
     if (isUser) return styles.userContainer;
     if (isSystem) return styles.systemContainer;
     if (isEmpathyStatement) return styles.empathyStatementContainer;
-    if (isSharedContext) return styles.sharedContextContainer;
+    if (isSharedContext) {
+      return message.sharedContentDirection === 'sent'
+        ? styles.sharedContextSentContainer
+        : styles.sharedContextContainer;
+    }
     if (isShareSuggestion) return styles.shareSuggestionContainer;
     return styles.aiContainer;
   };
@@ -516,6 +520,10 @@ const useStyles = () => {
     // Shared context: subtle container
     sharedContextContainer: {
       alignItems: 'flex-start',
+      marginVertical: t.spacing.md,
+    },
+    sharedContextSentContainer: {
+      alignItems: 'flex-end',
       marginVertical: t.spacing.md,
     },
     sharedContextBubble: {

@@ -340,6 +340,8 @@ export function ActivityDrawer({
   const isDragging = useRef(false);
   const currentSnap = useRef<'3q' | 'full'>('3q');
   const wasOpenedRef = useRef(visible);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   // Track the height above the FlatList (drag handle + header) so the
   // FlatList can be constrained to the visible area of the drawer.
@@ -395,9 +397,9 @@ export function ActivityDrawer({
     ]).start(() => {
       currentSnap.current = '3q';
       setIsMounted(false);
-      onClose();
+      onCloseRef.current();
     });
-  }, [drawerTranslate, backdropOpacity, onClose]);
+  }, [drawerTranslate, backdropOpacity]);
 
   // Trigger open/close animation when visible changes.
   useEffect(() => {
