@@ -338,7 +338,7 @@ function ChatSection({ styles, palette }: { styles: ReturnType<typeof makeStyles
         <SessionChatHeader
           partnerName="Sam"
           partnerOnline
-          stageName="Walking in Their Shoes"
+          conversationTopic="Feeling stuck about household responsibilities"
           leftActionIcon="menu"
           onBackPress={() => {}}
           onPress={() => {}}
