@@ -11,6 +11,7 @@ import {
   NativeScrollEvent,
   LayoutChangeEvent,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MessageDTO, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
 import { MessageRole } from '@meet-without-fear/shared';
 import { ChatBubble, ChatBubbleMessage, MessageDeliveryStatus } from './ChatBubble';
@@ -273,6 +274,7 @@ export function ChatInterface({
   onPrefillConsumed,
 }: ChatInterfaceProps) {
   const styles = useStyles();
+  const safeAreaInsets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
   const scrollMetricsRef = useRef({
     offset: 0,
@@ -1109,7 +1111,7 @@ export function ChatInterface({
         <View style={styles.flatListContainer}>
           {messageList}
         </View>
-        <KeyboardStickyComposer>
+        <KeyboardStickyComposer offset={{ opened: safeAreaInsets.bottom }}>
           {composerControls}
         </KeyboardStickyComposer>
         {auxiliaryControls}

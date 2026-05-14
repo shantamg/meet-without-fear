@@ -8,10 +8,18 @@ import {
 import type { KeyboardAvoidingViewProps as RNKeyboardAvoidingViewProps } from 'react-native';
 import type { ViewProps } from 'react-native';
 
+type KeyboardStickyComposerProps = ViewProps & {
+  offset?: {
+    closed?: number;
+    opened?: number;
+  };
+  enabled?: boolean;
+};
+
 type KeyboardControllerModule = {
   KeyboardProvider?: React.ComponentType<React.PropsWithChildren>;
   KeyboardAvoidingView?: React.ComponentType<React.PropsWithChildren<RNKeyboardAvoidingViewProps>>;
-  KeyboardStickyView?: React.ComponentType<React.PropsWithChildren<ViewProps>>;
+  KeyboardStickyView?: React.ComponentType<React.PropsWithChildren<KeyboardStickyComposerProps>>;
 };
 
 let keyboardControllerModule: KeyboardControllerModule | null | undefined;
@@ -28,7 +36,7 @@ export function hasLinkedKeyboardController(): boolean {
   }
 }
 
-export function KeyboardStickyComposer({ children, ...props }: React.PropsWithChildren<ViewProps>) {
+export function KeyboardStickyComposer({ children, ...props }: React.PropsWithChildren<KeyboardStickyComposerProps>) {
   const ControllerStickyView = getKeyboardControllerModule()?.KeyboardStickyView;
 
   if (ControllerStickyView) {
