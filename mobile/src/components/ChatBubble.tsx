@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { View, Text, Animated } from 'react-native';
+import { View, Text, Animated, Easing } from 'react-native';
 import { MessageRole, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
@@ -175,7 +175,8 @@ export function ChatBubble({
     userEntranceAnim.setValue(0);
     Animated.timing(userEntranceAnim, {
       toValue: 1,
-      duration: 220,
+      duration: 360,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
   }, [shouldAnimateUserEntrance, userEntranceAnim]);
@@ -356,7 +357,7 @@ export function ChatBubble({
     if (isUser && shouldAnimateUserEntrance) {
       const translateY = userEntranceAnim.interpolate({
         inputRange: [0, 1],
-        outputRange: [14, 0],
+        outputRange: [28, 0],
       });
       return (
         <Animated.View style={{ opacity: userEntranceAnim, transform: [{ translateY }] }}>
