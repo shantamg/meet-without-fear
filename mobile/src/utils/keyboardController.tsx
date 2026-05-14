@@ -14,7 +14,7 @@ type KeyboardControllerModule = {
 
 let keyboardControllerModule: KeyboardControllerModule | null | undefined;
 
-function hasLinkedKeyboardController(): boolean {
+export function hasLinkedKeyboardController(): boolean {
   if (NativeModules.KeyboardController) {
     return true;
   }
