@@ -346,8 +346,6 @@ const useStyles = () => {
     stageChapterBar: {
       paddingVertical: 10,
       paddingHorizontal: 18,
-      marginTop: 16,
-      marginBottom: 4,
     },
     stageChapterText: {
       fontSize: 13,

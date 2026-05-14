@@ -10,7 +10,10 @@ import { designFonts, useAppAppearance } from '../theme';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
+  /** Disables sending. The text field can remain editable to avoid keyboard jumps. */
   disabled?: boolean;
+  /** Disables editing the text field itself. */
+  inputDisabled?: boolean;
   placeholder?: string;
   maxLength?: number;
   showCharacterCount?: boolean;
@@ -38,6 +41,7 @@ const CHARACTER_WARNING_THRESHOLD = 0.8;
 export function ChatInput({
   onSend,
   disabled = false,
+  inputDisabled = false,
   placeholder = 'Type a message...',
   maxLength = DEFAULT_MAX_LENGTH,
   showCharacterCount = false,
@@ -123,7 +127,7 @@ export function ChatInput({
           placeholderTextColor={palette.textFaint}
           multiline
           maxLength={maxLength}
-          editable={!disabled}
+          editable={!inputDisabled}
           testID="chat-input"
         />
         {showCharacterCount && (

@@ -110,6 +110,33 @@ describe('SessionChatHeader', () => {
     });
   });
 
+  describe('conversation topic', () => {
+    it('shows the conversation topic below the partner name when provided', () => {
+      const { getByTestId, queryByTestId } = render(
+        <SessionChatHeader
+          partnerName="Alex"
+          conversationTopic="Feeling stuck about household responsibilities"
+        />
+      );
+
+      expect(getByTestId('session-chat-header-conversation-topic')).toHaveTextContent(
+        'Feeling stuck about household responsibilities'
+      );
+      expect(queryByTestId('session-chat-header-online-status')).toBeNull();
+    });
+
+    it('falls back to online status when the conversation topic is blank', () => {
+      const { getByTestId, queryByTestId } = render(
+        <SessionChatHeader partnerName="Alex" conversationTopic="   " />
+      );
+
+      expect(queryByTestId('session-chat-header-conversation-topic')).toBeNull();
+      expect(getByTestId('session-chat-header-online-status')).toHaveTextContent(
+        'offline'
+      );
+    });
+  });
+
   describe('interactions', () => {
     it('calls onPress when header center is pressed', () => {
       const onPress = jest.fn();

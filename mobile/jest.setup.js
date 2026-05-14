@@ -101,6 +101,11 @@ jest.mock('react-native/src/private/specs_DEPRECATED/modules/NativeDeviceInfo', 
 // Mock NativeEventEmitter
 jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter');
 
+// Mock native keyboard controller used for interactive keyboard tracking.
+jest.mock('react-native-keyboard-controller', () =>
+  require('react-native-keyboard-controller/jest')
+);
+
 // Mock UIManager for React Native 0.79+
 jest.mock('react-native/Libraries/ReactNative/UIManager', () => ({
   ...jest.requireActual('react-native/Libraries/ReactNative/UIManager'),

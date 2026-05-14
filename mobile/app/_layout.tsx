@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Platform, StyleSheet, View } from 'react-native';
 
 import { APP_MAX_WIDTH, AppearanceProvider, useAppAppearance } from '@/src/theme';
+import { KeyboardControllerProvider } from '@/src/utils/keyboardController';
 import { SessionDrawerProvider } from '@/src/hooks/useSessionDrawer';
 import { useInvitationLink } from '@/src/hooks/useInvitation';
 import { QueryProvider } from '@/src/providers/QueryProvider';
@@ -136,25 +137,27 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
       <View style={[styles.webFrame, { backgroundColor: palette.bg }]}>
         <NativeAppBanner />
         <GestureHandlerRootView style={[styles.container, { backgroundColor: palette.bg }]}>
-          <SafeAreaProvider>
-            <SessionDrawerProvider>
-              <ToastProvider>
-                {includeMixpanel && <MixpanelInitializer />}
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                    gestureEnabled: false,
-                    contentStyle: { backgroundColor: palette.bg },
-                  }}
-                >
-                  <Stack.Screen name="(public)" />
-                  <Stack.Screen name="(auth)" />
-                  <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-                </Stack>
-                <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-              </ToastProvider>
-            </SessionDrawerProvider>
-          </SafeAreaProvider>
+          <KeyboardControllerProvider>
+            <SafeAreaProvider>
+              <SessionDrawerProvider>
+                <ToastProvider>
+                  {includeMixpanel && <MixpanelInitializer />}
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                      gestureEnabled: false,
+                      contentStyle: { backgroundColor: palette.bg },
+                    }}
+                  >
+                    <Stack.Screen name="(public)" />
+                    <Stack.Screen name="(auth)" />
+                    <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+                  </Stack>
+                  <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+                </ToastProvider>
+              </SessionDrawerProvider>
+            </SafeAreaProvider>
+          </KeyboardControllerProvider>
         </GestureHandlerRootView>
       </View>
     </View>

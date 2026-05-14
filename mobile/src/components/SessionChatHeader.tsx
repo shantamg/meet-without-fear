@@ -49,8 +49,8 @@ export interface SessionChatHeaderProps {
   hasNewActivity?: boolean;
   /** Callback when the activity menu icon is pressed */
   onMenuPress?: () => void;
-  /** Current stage friendly name to display below partner name */
-  stageName?: string;
+  /** Conversation topic to display below partner name */
+  conversationTopic?: string | null;
   /** Custom container style */
   style?: ViewStyle;
   /** Test ID for testing */
@@ -102,7 +102,7 @@ export function SessionChatHeader({
   onBriefStatusPress,
   hasNewActivity = false,
   onMenuPress,
-  stageName,
+  conversationTopic,
   style,
   testID = 'session-chat-header',
 }: SessionChatHeaderProps) {
@@ -125,12 +125,13 @@ export function SessionChatHeader({
 
   const displayName = partnerName || 'Meet Without Fear';
   const leftActionLabel = leftActionIcon === 'menu' ? 'Open session drawer' : 'Go back';
+  const headerTopic = conversationTopic?.trim();
 
   // Center content - always partner name + status (whether tabs or not)
   const centerContent = (
     <View style={styles.centerSection}>
       <View style={styles.nameRow}>
-        {!hideOnlineStatus && stageName && <StatusDot isOnline={isOnline} />}
+        {!hideOnlineStatus && headerTopic && <StatusDot isOnline={isOnline} />}
         <Text
           style={styles.partnerName}
           numberOfLines={1}
@@ -139,13 +140,14 @@ export function SessionChatHeader({
           {displayName}
         </Text>
       </View>
-      {stageName ? (
+      {headerTopic ? (
         <Text
-          style={styles.stageNameText}
+          style={styles.topicText}
           numberOfLines={1}
-          testID={`${testID}-stage-name`}
+          ellipsizeMode="tail"
+          testID={`${testID}-conversation-topic`}
         >
-          {stageName}
+          {headerTopic}
         </Text>
       ) : !hideOnlineStatus ? (
         <View style={styles.statusRow}>
@@ -352,12 +354,13 @@ const useStyles = () => {
     onlineTextActive: {
       color: palette.success,
     },
-    stageNameText: {
+    topicText: {
       fontSize: 10.5,
       color: palette.textMuted,
       textAlign: 'center' as const,
       marginTop: 1,
       fontFamily: designFonts.sans,
+      maxWidth: '100%' as const,
     },
     briefStatus: {
       fontSize: t.typography.fontSize.sm,
