@@ -794,11 +794,19 @@ export function ChatInterface({
   }, [isLoadingMore, styles]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize } = event.nativeEvent;
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     scrollMetricsRef.current = {
       offset: contentOffset.y,
       contentHeight: contentSize.height,
     };
+
+    // Detect overscroll (rubber band past oldest content in inverted list)
+    const maxOffset = Math.max(0, contentSize.height - layoutMeasurement.height);
+    const overscrolled = contentOffset.y > maxOffset + 5;
+    if (overscrolled !== isOverscrolledRef.current) {
+      isOverscrolledRef.current = overscrolled;
+      if (overscrolled) setCurrentStageMeta(null);
+    }
   }, []);
 
   const handleContentSizeChange = useCallback((_width: number, height: number) => {
@@ -867,32 +875,66 @@ export function ChatInterface({
     color: string;
   } | null>(null);
 
-  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 1 }).current;
-  const lastKnownStage = useRef<{ name: string; color: string } | null>(null);
+  // Use a high threshold so the sticky appears as soon as the inline bar
+  // starts going behind the header (not after it's fully off-screen).
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 95 }).current;
+  const stageBarsRef = useRef<Array<{ index: number; name: string; color: string }>>([]);
+  const isOverscrolledRef = useRef(false);
 
-  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: Array<{ item: ChatListItem }> }) => {
-    // Only show the sticky header when ALL inline stage bars have scrolled
-    // off-screen. Otherwise we get a duplicate (sticky + inline both visible).
-    const anyStageBarVisible = viewableItems.some(
-      (v) => isIndicator(v.item) && v.item.indicatorType === 'stage-chapter',
-    );
+  // Pre-compute stage bar positions whenever the list changes
+  useEffect(() => {
+    const bars: Array<{ index: number; name: string; color: string }> = [];
+    listItems.forEach((item, index) => {
+      if (isIndicator(item) && item.indicatorType === 'stage-chapter') {
+        bars.push({
+          index,
+          name: item.metadata?.stageName || 'New Chapter',
+          color: item.metadata?.stageColor || '#8B9DC3',
+        });
+      }
+    });
+    stageBarsRef.current = bars;
+  }, [listItems]);
 
-    if (anyStageBarVisible) {
-      // An inline bar is on screen — hide the sticky to avoid duplication
-      let latestStage: { name: string; color: string } | null = null;
-      for (const v of viewableItems) {
-        if (isIndicator(v.item) && v.item.indicatorType === 'stage-chapter') {
-          latestStage = {
-            name: v.item.metadata?.stageName || 'New Chapter',
-            color: v.item.metadata?.stageColor || '#8B9DC3',
-          };
+  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: Array<{ item: ChatListItem; index: number | null }> }) => {
+    // Suppress sticky during overscroll (rubber band effect)
+    if (isOverscrolledRef.current) {
+      setCurrentStageMeta(null);
+      return;
+    }
+
+    const visibleIndices = new Set<number>();
+    for (const v of viewableItems) {
+      if (v.index != null) visibleIndices.add(v.index);
+    }
+
+    const bars = stageBarsRef.current;
+
+    // In an inverted FlatList, higher data index = higher on screen.
+    // A bar that scrolled off the TOP has a high index and is NOT visible.
+    // Find the non-visible bar with the highest index.
+    let stickyBar: { index: number; name: string; color: string } | null = null;
+    for (const bar of bars) {
+      if (!visibleIndices.has(bar.index)) {
+        if (!stickyBar || bar.index > stickyBar.index) {
+          stickyBar = bar;
         }
       }
+    }
+
+    if (stickyBar) {
+      // Only show if there are visible items BELOW this bar on screen
+      // (lower index = lower on screen in inverted list).
+      // This prevents showing the sticky for bars that scrolled off the BOTTOM.
+      const hasContentBelow = viewableItems.some(
+        (v) => v.index != null && v.index < stickyBar!.index,
+      );
+      setCurrentStageMeta(
+        hasContentBelow ? { name: stickyBar.name, color: stickyBar.color } : null,
+      );
+    } else {
+      // All bars visible or no bars exist — no sticky needed
       setCurrentStageMeta(null);
-      lastKnownStage.current = latestStage;
-    } else if (lastKnownStage.current) {
-      // No inline bar visible — show the sticky with the last known stage
-      setCurrentStageMeta(lastKnownStage.current);
     }
   }, []);
 
