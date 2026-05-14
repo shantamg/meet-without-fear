@@ -200,23 +200,6 @@ export function ChatBubble({
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const getStatusText = (status: MessageDeliveryStatus): string => {
-    switch (status) {
-      case 'sending':
-        return 'Sending...';
-      case 'streaming':
-        return 'Responding...';
-      case 'sent':
-        return 'Sent';
-      case 'delivered':
-        return 'Delivered';
-      case 'read':
-        return 'Read';
-      case 'error':
-        return 'Failed to send';
-    }
-  };
-
   const getSharedContentStatusText = (status: SharedContentDeliveryStatus | undefined): string => {
     switch (status) {
       case 'sending':
@@ -422,18 +405,6 @@ export function ChatBubble({
         {showTimestamp && (
           <Text style={[styles.time, isSystem && styles.systemTime]}>
             {formatTime(message.timestamp)}
-          </Text>
-        )}
-        {isUser && message.status && (
-          <Text
-            style={[
-              styles.statusText,
-              message.status === 'sending' && styles.statusSending,
-              message.status === 'read' && styles.statusRead,
-              message.status === 'error' && styles.statusError,
-            ]}
-          >
-            {getStatusText(message.status)}
           </Text>
         )}
       </View>
@@ -649,20 +620,6 @@ const useStyles = () => {
     },
     systemTime: {
       textAlign: 'center',
-    },
-    statusText: {
-      fontSize: t.typography.fontSize.xs,
-      color: palette.textFaint,
-      fontFamily: designFonts.sans,
-    },
-    statusSending: {
-      fontStyle: 'italic',
-    },
-    statusRead: {
-      color: palette.accent,
-    },
-    statusError: {
-      color: palette.danger,
     },
   }));
 };
