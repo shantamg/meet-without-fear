@@ -339,17 +339,31 @@ export function ChatInterface({
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
-    const showSub = Keyboard.addListener(showEvent, () => {
+    const scheduleKeyboardLayout = (event: Parameters<typeof Keyboard.scheduleLayoutAnimation>[0]) => {
+      if (Platform.OS === 'ios') {
+        Keyboard.scheduleLayoutAnimation(event);
+      }
+    };
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      scheduleKeyboardLayout(event);
       setIsKeyboardVisible(true);
       if (isNearBottomRef.current || shouldStickToBottomRef.current) {
         scrollToBottom(false);
       }
     });
-    const hideSub = Keyboard.addListener(hideEvent, () => setIsKeyboardVisible(false));
+    const hideSub = Keyboard.addListener(hideEvent, (event) => {
+      scheduleKeyboardLayout(event);
+      setIsKeyboardVisible(false);
+    });
+    const changeFrameSub = Platform.OS === 'ios'
+      ? Keyboard.addListener('keyboardWillChangeFrame', scheduleKeyboardLayout)
+      : null;
 
     return () => {
       showSub.remove();
       hideSub.remove();
+      changeFrameSub?.remove();
     };
   }, [scrollToBottom]);
 
