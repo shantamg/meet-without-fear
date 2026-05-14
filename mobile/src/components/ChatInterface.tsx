@@ -950,6 +950,10 @@ export function ChatInterface({
     shouldStickToBottomRef.current = isNearBottom;
   }, []);
 
+  const handleScrollBeginDrag = useCallback(() => {
+    Keyboard.dismiss();
+  }, []);
+
   const handleContentSizeChange = useCallback((_width: number, height: number) => {
     const snapshot = historyLoadSnapshotRef.current;
 
@@ -1068,6 +1072,7 @@ export function ChatInterface({
         onStartReached={handleEndReached}
         onStartReachedThreshold={0.2}
         onLayout={handleListLayout}
+        onScrollBeginDrag={handleScrollBeginDrag}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         onContentSizeChange={handleContentSizeChange}
