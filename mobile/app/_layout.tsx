@@ -5,6 +5,7 @@ import { useFonts } from 'expo-font';
 import * as Sentry from '@sentry/react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Platform, StyleSheet, View } from 'react-native';
 
@@ -136,25 +137,27 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
       <View style={[styles.webFrame, { backgroundColor: palette.bg }]}>
         <NativeAppBanner />
         <GestureHandlerRootView style={[styles.container, { backgroundColor: palette.bg }]}>
-          <SafeAreaProvider>
-            <SessionDrawerProvider>
-              <ToastProvider>
-                {includeMixpanel && <MixpanelInitializer />}
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                    gestureEnabled: false,
-                    contentStyle: { backgroundColor: palette.bg },
-                  }}
-                >
-                  <Stack.Screen name="(public)" />
-                  <Stack.Screen name="(auth)" />
-                  <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-                </Stack>
-                <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-              </ToastProvider>
-            </SessionDrawerProvider>
-          </SafeAreaProvider>
+          <KeyboardProvider>
+            <SafeAreaProvider>
+              <SessionDrawerProvider>
+                <ToastProvider>
+                  {includeMixpanel && <MixpanelInitializer />}
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                      gestureEnabled: false,
+                      contentStyle: { backgroundColor: palette.bg },
+                    }}
+                  >
+                    <Stack.Screen name="(public)" />
+                    <Stack.Screen name="(auth)" />
+                    <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+                  </Stack>
+                  <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+                </ToastProvider>
+              </SessionDrawerProvider>
+            </SafeAreaProvider>
+          </KeyboardProvider>
         </GestureHandlerRootView>
       </View>
     </View>

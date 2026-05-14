@@ -4,7 +4,6 @@ import {
   Text,
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   ListRenderItem,
   ActivityIndicator,
@@ -12,6 +11,7 @@ import {
   NativeScrollEvent,
   LayoutChangeEvent,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import type { MessageDTO, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
 import { MessageRole } from '@meet-without-fear/shared';
 import { ChatBubble, ChatBubbleMessage, MessageDeliveryStatus } from './ChatBubble';
@@ -339,31 +339,19 @@ export function ChatInterface({
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
-    const scheduleKeyboardLayout = (event: Parameters<typeof Keyboard.scheduleLayoutAnimation>[0]) => {
-      if (Platform.OS === 'ios') {
-        Keyboard.scheduleLayoutAnimation(event);
-      }
-    };
-
-    const showSub = Keyboard.addListener(showEvent, (event) => {
-      scheduleKeyboardLayout(event);
+    const showSub = Keyboard.addListener(showEvent, () => {
       setIsKeyboardVisible(true);
       if (isNearBottomRef.current || shouldStickToBottomRef.current) {
         scrollToBottom(false);
       }
     });
-    const hideSub = Keyboard.addListener(hideEvent, (event) => {
-      scheduleKeyboardLayout(event);
+    const hideSub = Keyboard.addListener(hideEvent, () => {
       setIsKeyboardVisible(false);
     });
-    const changeFrameSub = Platform.OS === 'ios'
-      ? Keyboard.addListener('keyboardWillChangeFrame', scheduleKeyboardLayout)
-      : null;
 
     return () => {
       showSub.remove();
       hideSub.remove();
-      changeFrameSub?.remove();
     };
   }, [scrollToBottom]);
 
