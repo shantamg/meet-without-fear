@@ -1,7 +1,9 @@
 import React from 'react';
 import {
   KeyboardAvoidingView as RNKeyboardAvoidingView,
+  NativeModules,
   Platform,
+  TurboModuleRegistry,
 } from 'react-native';
 import type { KeyboardAvoidingViewProps as RNKeyboardAvoidingViewProps } from 'react-native';
 
@@ -12,6 +14,18 @@ type KeyboardControllerModule = {
 
 let keyboardControllerModule: KeyboardControllerModule | null | undefined;
 
+function hasLinkedKeyboardController(): boolean {
+  if (NativeModules.KeyboardController) {
+    return true;
+  }
+
+  try {
+    return Boolean(TurboModuleRegistry.get('KeyboardController'));
+  } catch {
+    return false;
+  }
+}
+
 function getKeyboardControllerModule(): KeyboardControllerModule | null {
   if (Platform.OS === 'web') {
     return null;
@@ -19,6 +33,11 @@ function getKeyboardControllerModule(): KeyboardControllerModule | null {
 
   if (keyboardControllerModule !== undefined) {
     return keyboardControllerModule;
+  }
+
+  if (!hasLinkedKeyboardController()) {
+    keyboardControllerModule = null;
+    return null;
   }
 
   try {
