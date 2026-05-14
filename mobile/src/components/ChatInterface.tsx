@@ -4,7 +4,6 @@ import {
   Text,
   FlatList,
   Keyboard,
-  InputAccessoryView,
   Platform,
   ListRenderItem,
   ActivityIndicator,
@@ -24,7 +23,7 @@ import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 import { getAnimationIdentity, isPreRegisteredAnimatedId } from '../utils/animationBridge';
-import { hasLinkedKeyboardController, KeyboardAwareAvoidingView } from '../utils/keyboardController';
+import { KeyboardAwareAvoidingView } from '../utils/keyboardController';
 
 // ============================================================================
 // Types
@@ -214,7 +213,6 @@ interface ChatInterfaceProps {
 const DEFAULT_EMPTY_TITLE = 'Start the Conversation';
 const DEFAULT_EMPTY_MESSAGE =
   "Share what's on your mind. I'm here to listen and help you work through it.";
-const DEFAULT_IOS_COMPOSER_SPACER_HEIGHT = 164;
 
 const seenAnimatedItemIdsByScope = new Map<string, Set<string>>();
 let localAnimationScopeCounter = 0;
@@ -421,8 +419,6 @@ export function ChatInterface({
 
   // Track the ID of the chat item currently being animated.
   const [animatingItemId, setAnimatingItemId] = useState<string | null>(null);
-  const [bottomContainerHeight, setBottomContainerHeight] = useState(0);
-  const useIOSAccessoryComposer = Platform.OS === 'ios' && !hasLinkedKeyboardController();
 
   // Speech functionality
   const { isSpeaking, currentId, toggle: toggleSpeech } = useSpeech();
@@ -966,7 +962,7 @@ export function ChatInterface({
     // the user was already reading at the bottom.
     if (!isLoadingHistoryRef.current || !snapshot) {
       scrollMetricsRef.current.contentHeight = height;
-      if ((isNearBottomRef.current || shouldStickToBottomRef.current) && !(useIOSAccessoryComposer && isKeyboardVisible)) {
+      if (isNearBottomRef.current || shouldStickToBottomRef.current) {
         scrollToBottom(false);
       }
       return;
@@ -987,14 +983,14 @@ export function ChatInterface({
       historyLoadSnapshotRef.current = null;
       isLoadingHistoryRef.current = false;
     }
-  }, [isKeyboardVisible, scrollToBottom, useIOSAccessoryComposer]);
+  }, [scrollToBottom]);
 
   const handleListLayout = useCallback((event: LayoutChangeEvent) => {
     scrollMetricsRef.current.layoutHeight = event.nativeEvent.layout.height;
-    if ((isNearBottomRef.current || shouldStickToBottomRef.current) && !(useIOSAccessoryComposer && isKeyboardVisible)) {
+    if (isNearBottomRef.current || shouldStickToBottomRef.current) {
       scrollToBottom(false);
     }
-  }, [isKeyboardVisible, scrollToBottom, useIOSAccessoryComposer]);
+  }, [scrollToBottom]);
 
   const handleEndReached = useCallback(() => {
     if (hasMore && !isLoadingMore && onLoadMore) {
@@ -1042,44 +1038,12 @@ export function ChatInterface({
   // New Activity Pill: floating indicator for off-screen new items
   // ---------------------------------------------------------------------------
 
-  const bottomControls = (
-    <View
-      style={styles.bottomContainer}
-      onLayout={(event) => {
-        if (!useIOSAccessoryComposer) return;
-        const nextHeight = Math.ceil(event.nativeEvent.layout.height);
-        setBottomContainerHeight((currentHeight) => (
-          Math.abs(currentHeight - nextHeight) > 2 ? nextHeight : currentHeight
-        ));
-      }}
+  return (
+    <KeyboardAwareAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={keyboardVerticalOffset}
     >
-      {showEmotionSlider && onEmotionChange && (
-        <EmotionSlider
-          value={emotionValue}
-          onChange={onEmotionChange}
-          onHighEmotion={onHighEmotion}
-          compact={compactEmotionSlider}
-          testID="chat-emotion-slider"
-        />
-      )}
-      {!hideInput && (
-        <ChatInput
-          onSend={onSendMessage}
-          disabled={disabled || isInputDisabled || isLoading}
-          inputDisabled={disabled || isLoading}
-          onVoicePress={onVoicePress}
-          failedMessage={failedMessage}
-          prefillText={prefillText}
-          onPrefillConsumed={onPrefillConsumed}
-        />
-      )}
-      {!isKeyboardVisible && renderAboveInput?.()}
-      {!isKeyboardVisible && renderBelowInput?.()}
-    </View>
-  );
-
-  const chatContent = (
-    <>
       <FlatList
         ref={flatListRef}
         data={listItems}
@@ -1089,9 +1053,6 @@ export function ChatInterface({
         stickyHeaderIndices={stickyHeaderIndices}
         contentContainerStyle={[
           styles.messageList,
-          useIOSAccessoryComposer && {
-            paddingBottom: Math.max(bottomContainerHeight, DEFAULT_IOS_COMPOSER_SPACER_HEIGHT),
-          },
           listItems.length === 0 && (customEmptyState ? styles.customMessageListEmpty : styles.messageListEmpty),
         ]}
         ListHeaderComponent={renderLoadingHeader}
@@ -1113,29 +1074,30 @@ export function ChatInterface({
         scrollEventThrottle={16}
         onContentSizeChange={handleContentSizeChange}
       />
-      {useIOSAccessoryComposer ? (
-        <InputAccessoryView>
-          {bottomControls}
-        </InputAccessoryView>
-      ) : bottomControls}
-    </>
-  );
-
-  if (useIOSAccessoryComposer) {
-    return (
-      <View style={styles.container}>
-        {chatContent}
+      <View style={styles.bottomContainer}>
+        {showEmotionSlider && onEmotionChange && (
+          <EmotionSlider
+            value={emotionValue}
+            onChange={onEmotionChange}
+            onHighEmotion={onHighEmotion}
+            compact={compactEmotionSlider}
+            testID="chat-emotion-slider"
+          />
+        )}
+        {!hideInput && (
+          <ChatInput
+            onSend={onSendMessage}
+            disabled={disabled || isInputDisabled || isLoading}
+            inputDisabled={disabled || isLoading}
+            onVoicePress={onVoicePress}
+            failedMessage={failedMessage}
+            prefillText={prefillText}
+            onPrefillConsumed={onPrefillConsumed}
+          />
+        )}
+        {!isKeyboardVisible && renderAboveInput?.()}
+        {!isKeyboardVisible && renderBelowInput?.()}
       </View>
-    );
-  }
-
-  return (
-    <KeyboardAwareAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={keyboardVerticalOffset}
-    >
-      {chatContent}
     </KeyboardAwareAvoidingView>
   );
 }
