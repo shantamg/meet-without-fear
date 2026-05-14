@@ -6,15 +6,17 @@ import {
   TurboModuleRegistry,
 } from 'react-native';
 import type { KeyboardAvoidingViewProps as RNKeyboardAvoidingViewProps } from 'react-native';
+import type { ViewProps } from 'react-native';
 
 type KeyboardControllerModule = {
   KeyboardProvider?: React.ComponentType<React.PropsWithChildren>;
   KeyboardAvoidingView?: React.ComponentType<React.PropsWithChildren<RNKeyboardAvoidingViewProps>>;
+  KeyboardStickyView?: React.ComponentType<React.PropsWithChildren<ViewProps>>;
 };
 
 let keyboardControllerModule: KeyboardControllerModule | null | undefined;
 
-function hasLinkedKeyboardController(): boolean {
+export function hasLinkedKeyboardController(): boolean {
   if (NativeModules.KeyboardController) {
     return true;
   }
@@ -24,6 +26,20 @@ function hasLinkedKeyboardController(): boolean {
   } catch {
     return false;
   }
+}
+
+export function KeyboardStickyComposer({ children, ...props }: React.PropsWithChildren<ViewProps>) {
+  const ControllerStickyView = getKeyboardControllerModule()?.KeyboardStickyView;
+
+  if (ControllerStickyView) {
+    return (
+      <ControllerStickyView {...props}>
+        {children}
+      </ControllerStickyView>
+    );
+  }
+
+  return <>{children}</>;
 }
 
 function getKeyboardControllerModule(): KeyboardControllerModule | null {

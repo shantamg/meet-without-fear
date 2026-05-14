@@ -23,7 +23,7 @@ import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 import { getAnimationIdentity, isPreRegisteredAnimatedId } from '../utils/animationBridge';
-import { KeyboardAwareAvoidingView } from '../utils/keyboardController';
+import { hasLinkedKeyboardController, KeyboardAwareAvoidingView, KeyboardStickyComposer } from '../utils/keyboardController';
 
 // ============================================================================
 // Types
@@ -1038,66 +1038,91 @@ export function ChatInterface({
   // New Activity Pill: floating indicator for off-screen new items
   // ---------------------------------------------------------------------------
 
+  const bottomControls = (
+    <View style={styles.bottomContainer}>
+      {showEmotionSlider && onEmotionChange && (
+        <EmotionSlider
+          value={emotionValue}
+          onChange={onEmotionChange}
+          onHighEmotion={onHighEmotion}
+          compact={compactEmotionSlider}
+          testID="chat-emotion-slider"
+        />
+      )}
+      {!hideInput && (
+        <ChatInput
+          onSend={onSendMessage}
+          disabled={disabled || isInputDisabled || isLoading}
+          inputDisabled={disabled || isLoading}
+          onVoicePress={onVoicePress}
+          failedMessage={failedMessage}
+          prefillText={prefillText}
+          onPrefillConsumed={onPrefillConsumed}
+        />
+      )}
+      {!isKeyboardVisible && renderAboveInput?.()}
+      {!isKeyboardVisible && renderBelowInput?.()}
+    </View>
+  );
+
+  const messageList = (
+    <FlatList
+      ref={flatListRef}
+      data={listItems}
+      keyExtractor={keyExtractor}
+      renderItem={renderItem}
+      style={styles.flatList}
+      stickyHeaderIndices={stickyHeaderIndices}
+      contentContainerStyle={[
+        styles.messageList,
+        listItems.length === 0 && (customEmptyState ? styles.customMessageListEmpty : styles.messageListEmpty),
+      ]}
+      ListHeaderComponent={renderLoadingHeader}
+      ListFooterComponent={
+        <>
+          {renderBelowChat?.()}
+          {renderHeader?.()}
+        </>
+      }
+      ListEmptyComponent={emptyStateElement}
+      showsVerticalScrollIndicator={false}
+      keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+      keyboardShouldPersistTaps="handled"
+      testID="chat-message-list"
+      onStartReached={handleEndReached}
+      onStartReachedThreshold={0.2}
+      onLayout={handleListLayout}
+      onScroll={handleScroll}
+      scrollEventThrottle={16}
+      onContentSizeChange={handleContentSizeChange}
+    />
+  );
+
+  if (Platform.OS === 'ios' && hasLinkedKeyboardController()) {
+    return (
+      <View style={styles.container}>
+        <KeyboardAwareAvoidingView
+          style={styles.flatListContainer}
+          behavior="height"
+          keyboardVerticalOffset={keyboardVerticalOffset}
+        >
+          {messageList}
+        </KeyboardAwareAvoidingView>
+        <KeyboardStickyComposer>
+          {bottomControls}
+        </KeyboardStickyComposer>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAwareAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
-      <FlatList
-        ref={flatListRef}
-        data={listItems}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        style={styles.flatList}
-        stickyHeaderIndices={stickyHeaderIndices}
-        contentContainerStyle={[
-          styles.messageList,
-          listItems.length === 0 && (customEmptyState ? styles.customMessageListEmpty : styles.messageListEmpty),
-        ]}
-        ListHeaderComponent={renderLoadingHeader}
-        ListFooterComponent={
-          <>
-            {renderBelowChat?.()}
-            {renderHeader?.()}
-          </>
-        }
-        ListEmptyComponent={emptyStateElement}
-        showsVerticalScrollIndicator={false}
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        keyboardShouldPersistTaps="handled"
-        testID="chat-message-list"
-        onStartReached={handleEndReached}
-        onStartReachedThreshold={0.2}
-        onLayout={handleListLayout}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        onContentSizeChange={handleContentSizeChange}
-      />
-      <View style={styles.bottomContainer}>
-        {showEmotionSlider && onEmotionChange && (
-          <EmotionSlider
-            value={emotionValue}
-            onChange={onEmotionChange}
-            onHighEmotion={onHighEmotion}
-            compact={compactEmotionSlider}
-            testID="chat-emotion-slider"
-          />
-        )}
-        {!hideInput && (
-          <ChatInput
-            onSend={onSendMessage}
-            disabled={disabled || isInputDisabled || isLoading}
-            inputDisabled={disabled || isLoading}
-            onVoicePress={onVoicePress}
-            failedMessage={failedMessage}
-            prefillText={prefillText}
-            onPrefillConsumed={onPrefillConsumed}
-          />
-        )}
-        {!isKeyboardVisible && renderAboveInput?.()}
-        {!isKeyboardVisible && renderBelowInput?.()}
-      </View>
+      {messageList}
+      {bottomControls}
     </KeyboardAwareAvoidingView>
   );
 }
@@ -1115,6 +1140,10 @@ const useStyles = () => {
     },
     flatList: {
       flex: 1,
+    },
+    flatListContainer: {
+      flex: 1,
+      backgroundColor: palette.bg,
     },
     messageList: {
       paddingVertical: 18,
