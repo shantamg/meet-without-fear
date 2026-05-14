@@ -1038,7 +1038,14 @@ export function ChatInterface({
   // New Activity Pill: floating indicator for off-screen new items
   // ---------------------------------------------------------------------------
 
-  const bottomControls = (
+  const auxiliaryControls = !isKeyboardVisible ? (
+    <>
+      {renderAboveInput?.()}
+      {renderBelowInput?.()}
+    </>
+  ) : null;
+
+  const composerControls = (
     <View style={styles.bottomContainer}>
       {showEmotionSlider && onEmotionChange && (
         <EmotionSlider
@@ -1060,8 +1067,6 @@ export function ChatInterface({
           onPrefillConsumed={onPrefillConsumed}
         />
       )}
-      {!isKeyboardVisible && renderAboveInput?.()}
-      {!isKeyboardVisible && renderBelowInput?.()}
     </View>
   );
 
@@ -1109,8 +1114,9 @@ export function ChatInterface({
           {messageList}
         </KeyboardAwareAvoidingView>
         <KeyboardStickyComposer>
-          {bottomControls}
+          {composerControls}
         </KeyboardStickyComposer>
+        {auxiliaryControls}
       </View>
     );
   }
@@ -1122,7 +1128,8 @@ export function ChatInterface({
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
       {messageList}
-      {bottomControls}
+      {composerControls}
+      {auxiliaryControls}
     </KeyboardAwareAvoidingView>
   );
 }
