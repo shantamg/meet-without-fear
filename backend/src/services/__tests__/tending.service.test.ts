@@ -23,11 +23,6 @@ import {
 
 jest.mock('../../lib/prisma');
 jest.mock('../realtime');
-jest.mock('../conversation-summarizer', () => ({
-  getSessionSummary: jest.fn().mockResolvedValue({
-    summary: { text: 'They agreed to test a calmer planning rhythm.' },
-  }),
-}));
 
 describe('tending.service', () => {
   const sessionId = 'session-1';

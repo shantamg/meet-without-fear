@@ -12,7 +12,6 @@ import {
 import { prisma } from '../lib/prisma';
 import { logger } from '../lib/logger';
 import { publishSessionEvent } from './realtime';
-import { getSessionSummary } from './conversation-summarizer';
 
 type Tx = Prisma.TransactionClient;
 
@@ -351,7 +350,7 @@ export async function submitTendingResponse(args: {
 }
 
 async function buildReentrySummary(sessionId: string, userId: string, intent?: string): Promise<string> {
-  const [closure, sharedVessel, openNeeds, summaryData] = await Promise.all([
+  const [closure, sharedVessel, openNeeds] = await Promise.all([
     prisma.stage4Closure.findUnique({ where: { sessionId } }),
     prisma.sharedVessel.findUnique({
       where: { sessionId },
@@ -366,7 +365,6 @@ async function buildReentrySummary(sessionId: string, userId: string, intent?: s
       where: { sessionId, coverageStatus: { in: ['OPEN', 'PARTIAL'] } },
       orderBy: { updatedAt: 'desc' },
     }),
-    getSessionSummary(sessionId, userId).catch(() => null),
   ]);
 
   const individualIds = closure?.individualProposalIds ?? [];
@@ -390,7 +388,6 @@ async function buildReentrySummary(sessionId: string, userId: string, intent?: s
     openNeeds.length
       ? `Still-open needs: ${openNeeds.map((need) => need.needLabel).join('; ')}`
       : null,
-    summaryData ? `Session summary: ${summaryData.summary.text}` : null,
   ];
 
   return lines.filter(Boolean).join('\n');
