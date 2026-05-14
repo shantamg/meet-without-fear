@@ -24,6 +24,7 @@ import tendingRoutes from './tending';
 import ttsRoutes from './tts';
 import voiceRoutes from './voice';
 import e2eRoutes from './e2e';
+import versionRoutes from './version';
 import { logger } from '../lib/logger';
 
 const router = Router();
@@ -32,6 +33,7 @@ logger.info('[Routes] Loading main router...');
 
 // Mount all route modules
 router.use('/brain', brainRoutes);
+router.use(versionRoutes); // Public mobile app version check
 router.use('/auth', authRoutes);
 router.use('/tts', ttsRoutes);
 router.use(voiceRoutes); // Voice transcription token endpoint
