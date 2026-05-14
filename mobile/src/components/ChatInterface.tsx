@@ -1062,6 +1062,8 @@ export function ChatInterface({
         }
         ListEmptyComponent={emptyStateElement}
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        keyboardShouldPersistTaps="handled"
         testID="chat-message-list"
         onStartReached={handleEndReached}
         onStartReachedThreshold={0.2}

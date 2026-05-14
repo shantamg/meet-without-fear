@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, Text, Platform, Keyboard, type TextInput as TextInputType } from 'react-native';
+import { View, TextInput, TouchableOpacity, Text, Platform, type TextInput as TextInputType } from 'react-native';
 import { ArrowUp, Mic } from 'lucide-react-native';
 import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
@@ -91,9 +91,6 @@ export function ChatInput({
     inputRef.current?.clear();
     try {
       onSend(message);
-      requestAnimationFrame(() => {
-        Keyboard.dismiss();
-      });
     } finally {
       // Reset flag after a short delay to allow autocorrect events to be ignored.
       // Must be in finally block so the flag is always cleared even if onSend throws.
