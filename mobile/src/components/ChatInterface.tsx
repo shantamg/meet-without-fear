@@ -1106,13 +1106,9 @@ export function ChatInterface({
   if (Platform.OS === 'ios' && hasLinkedKeyboardController()) {
     return (
       <View style={styles.container}>
-        <KeyboardAwareAvoidingView
-          style={styles.flatListContainer}
-          behavior="height"
-          keyboardVerticalOffset={keyboardVerticalOffset}
-        >
+        <View style={styles.flatListContainer}>
           {messageList}
-        </KeyboardAwareAvoidingView>
+        </View>
         <KeyboardStickyComposer>
           {composerControls}
         </KeyboardStickyComposer>
