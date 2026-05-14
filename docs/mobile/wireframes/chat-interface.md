@@ -2,7 +2,7 @@
 title: Chat Interface
 sidebar_position: 3
 description: The primary conversation interface where users interact with the AI.
-updated: 2026-05-13
+updated: 2026-05-14
 status: living
 ---
 # Chat Interface
@@ -77,6 +77,14 @@ Characteristics:
 - User-colored background
 - Timestamp
 - Sent/read status
+
+### Shared Context Card
+
+When a user shares their Stage 2 context (empathy attempt) with their partner, it appears inline in the chat timeline as a distinct card (`isSharedContext` bubble type):
+
+- **Receiver-side**: left-aligned — partner sees it on the left like an AI message
+- **Sender-side**: right-aligned — the sharing user sees their own card on the right (`message.sharedContentDirection === 'sent'` triggers `sharedContextSentContainer`)
+- After sharing, the activity drawer does **not** auto-open; the shared context card appears inline and the activity menu data refreshes silently so it's current if the user opens it manually.
 
 ## Stage-Specific Variations
 
@@ -213,6 +221,17 @@ flowchart TB
 
 **Proposal responses use two options only**: "Willing" / "Not willing" — there is no "Discuss" / `NEEDS_DISCUSSION` option in the UI.
 
+### Resolved session history view
+
+When a session is in `RESOLVED` status, users can scroll back through the full chat history (`viewingResolvedHistory = true`). While in this mode a `GuidedActionPanel` (tone `review`) appears above the input:
+
+- **Eyebrow**: "Resolved"
+- **Title**: "A Path Forward"
+- **Subtitle**: "Return to the summary of what you and your partner agreed."
+- **Primary action**: "View summary" — tapping sets `viewingResolvedHistory` back to `false` and returns the user to the Stage 4 summary view.
+
+This panel is rendered by `renderAboveInput` and wired via the condition `session?.status === SessionStatus.RESOLVED && viewingResolvedHistory`.
+
 ## Session entry flow
 
 Before the chat list renders, `UnifiedSessionScreen` checks three guard states in order:
@@ -308,7 +327,7 @@ The chat input hosts an inline emotion slider (`barometerValue` / `handleBaromet
 | Tone | Used for |
 |---|---|
 | `topic` | Stage 0 — topic-frame confirmation above the input |
-| `review` | Stage 2 — empathy draft review / revisit |
+| `review` | Stage 2 — empathy draft review / revisit; resolved sessions — back-to-summary CTA while viewing chat history |
 | `share` | Stage 2 — share suggestion |
 | `success` | Stage 1 — feel-heard confirmation |
 | `needs` | Stage 3 — needs reveal / validate |
