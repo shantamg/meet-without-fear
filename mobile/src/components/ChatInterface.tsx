@@ -1060,6 +1060,7 @@ export function ChatInterface({
           <ChatInput
             onSend={onSendMessage}
             disabled={disabled || isInputDisabled || isLoading}
+            inputDisabled={disabled || isLoading}
             onVoicePress={onVoicePress}
             failedMessage={failedMessage}
             prefillText={prefillText}

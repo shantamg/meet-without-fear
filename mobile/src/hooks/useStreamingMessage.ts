@@ -593,7 +593,7 @@ export function useStreamingMessage(
       textCompleteReceivedRef.current = false;
 
       // Create optimistic user message
-      const optimisticUserMessage: MessageDTO = {
+      const optimisticUserMessage: CachedStreamingMessage = {
         id: optimisticUserIdRef.current,
         sessionId,
         senderId: null,
@@ -601,6 +601,7 @@ export function useStreamingMessage(
         content,
         stage: currentStage ?? Stage.ONBOARDING,
         timestamp: new Date().toISOString(),
+        status: 'sending',
       };
 
       // Add optimistic user message to cache
@@ -869,7 +870,9 @@ export function useStreamingMessage(
                 aiMessageIdRef.current = data.messageId;
               }
               if (realUserIdRef.current && activeUserMessageIdRef.current.startsWith('optimistic-user-')) {
+                bridgeAnimatedId(activeUserMessageIdRef.current, realUserIdRef.current);
                 replaceMessageIdInCache(sessionId, activeUserMessageIdRef.current, realUserIdRef.current, currentStage);
+                updateMessageInCache(sessionId, realUserIdRef.current, { status: 'sent' } as Partial<CachedStreamingMessage>, currentStage);
                 activeUserMessageIdRef.current = realUserIdRef.current;
               }
 

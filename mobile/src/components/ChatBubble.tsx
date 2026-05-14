@@ -90,6 +90,8 @@ export function ChatBubble({
   const hasAnimatedRef = useRef(false);
   const hasStartedRef = useRef(false);
   const animationIdentityRef = useRef(animationIdentity ?? message.id);
+  const userEntrancePlayedRef = useRef(false);
+  const userEntranceAnim = useRef(new Animated.Value(1)).current;
 
   // Determine if this message type uses fade-in animation (non-AI, non-USER animated messages)
   const willAnimate = !isUser && !isAI && enableTypewriter && !message.skipTypewriter;
@@ -105,7 +107,9 @@ export function ChatBubble({
     animationIdentityRef.current = currentAnimationIdentity;
     hasAnimatedRef.current = false;
     hasStartedRef.current = false;
+    userEntrancePlayedRef.current = false;
     fadeAnim.setValue(1);
+    userEntranceAnim.setValue(1);
   }
 
   // Store callbacks in refs to avoid re-triggering animation
@@ -118,6 +122,11 @@ export function ChatBubble({
 
   // Determine if we should use typewriter effect (AI messages only)
   const shouldUseTypewriter = isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
+  const shouldAnimateUserEntrance =
+    isUser &&
+    enableTypewriter &&
+    !message.skipTypewriter &&
+    (message.status === 'sending' || message.id.startsWith('optimistic-user-'));
 
   // Determine if we should use fade-in effect (non-AI, non-USER messages that should animate)
   const shouldUseFadeIn = !isUser && !isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
@@ -156,6 +165,20 @@ export function ChatBubble({
       });
     }
   }, [shouldUseFadeIn, isNextToAnimate, fadeAnim]);
+
+  useEffect(() => {
+    if (!shouldAnimateUserEntrance || userEntrancePlayedRef.current) {
+      return;
+    }
+
+    userEntrancePlayedRef.current = true;
+    userEntranceAnim.setValue(0);
+    Animated.timing(userEntranceAnim, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+  }, [shouldAnimateUserEntrance, userEntranceAnim]);
 
   // Call onStart when typewriter begins - use effect to avoid setState during render
   // Only starts when this message is next in the animation queue (onAnimationStart is provided)
@@ -345,6 +368,18 @@ export function ChatBubble({
         return <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>;
       }
       return content;
+    }
+
+    if (isUser && shouldAnimateUserEntrance) {
+      const translateY = userEntranceAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [14, 0],
+      });
+      return (
+        <Animated.View style={{ opacity: userEntranceAnim, transform: [{ translateY }] }}>
+          <Text style={getTextStyle()}>{message.content}</Text>
+        </Animated.View>
+      );
     }
 
     // Use typewriter effect for new AI messages - animates word-by-word at consistent pace
