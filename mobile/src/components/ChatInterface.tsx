@@ -281,8 +281,6 @@ export function ChatInterface({
   });
   const isNearBottomRef = useRef(true);
   const shouldStickToBottomRef = useRef(true);
-  const dragStartOffsetRef = useRef<number | null>(null);
-  const dragStartedNearBottomRef = useRef(false);
   const scrollRetryTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scrollRetryAnimationFrameRef = useRef<number | null>(null);
   const localAnimationScopeRef = useRef<string | null>(null);
@@ -950,22 +948,6 @@ export function ChatInterface({
     };
     isNearBottomRef.current = isNearBottom;
     shouldStickToBottomRef.current = isNearBottom;
-
-    if (
-      isKeyboardVisible &&
-      dragStartedNearBottomRef.current &&
-      dragStartOffsetRef.current !== null &&
-      contentOffset.y < dragStartOffsetRef.current - 24
-    ) {
-      Keyboard.dismiss();
-      dragStartOffsetRef.current = null;
-      dragStartedNearBottomRef.current = false;
-    }
-  }, [isKeyboardVisible]);
-
-  const handleScrollBeginDrag = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    dragStartOffsetRef.current = event.nativeEvent.contentOffset.y;
-    dragStartedNearBottomRef.current = isNearBottomRef.current;
   }, []);
 
   const handleContentSizeChange = useCallback((_width: number, height: number) => {
@@ -1086,7 +1068,6 @@ export function ChatInterface({
         onStartReached={handleEndReached}
         onStartReachedThreshold={0.2}
         onLayout={handleListLayout}
-        onScrollBeginDrag={handleScrollBeginDrag}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         onContentSizeChange={handleContentSizeChange}
