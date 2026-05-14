@@ -103,6 +103,7 @@ export interface UseInfiniteMessagesOptions {
 export interface UseInfiniteMessagesResult {
   data: InfiniteData<GetMessagesResponse> | undefined;
   isLoading: boolean;
+  isFetching: boolean;
   isError: boolean;
   error: Error | null;
   fetchNextPage: () => void;
@@ -154,6 +155,7 @@ export function useInfiniteMessages(
   return {
     data: result.data,
     isLoading: result.isLoading,
+    isFetching: result.isFetching,
     isError: result.isError,
     error: result.error,
     fetchNextPage: result.fetchNextPage,

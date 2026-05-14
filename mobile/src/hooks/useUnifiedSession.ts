@@ -266,6 +266,7 @@ export function useUnifiedSession(
   const {
     data: messagesData,
     isLoading: loadingMessages,
+    isFetching: fetchingMessages,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -1199,6 +1200,7 @@ export function useUnifiedSession(
   return {
     // Loading state
     isLoading: loadingSession || loadingProgress || loadingMessages,
+    isFetchingMessages: fetchingMessages && !isFetchingNextPage,
     loadError: accessDenied ? null : stateError,
     refetchSession: refetchState,
     accessDenied,

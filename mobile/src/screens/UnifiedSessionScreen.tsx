@@ -557,6 +557,7 @@ export function UnifiedSessionScreen({
   const {
     // Loading
     isLoading,
+    isFetchingMessages,
     loadError,
     refetchSession,
     accessDenied,
@@ -1867,6 +1868,15 @@ export function UnifiedSessionScreen({
       setMoodCheckLoading(false);
     });
   }, [sessionId]);
+  const [hasReleasedInitialSessionRender, setHasReleasedInitialSessionRender] = useState(false);
+  const isInitialSessionRenderReady = !isLoading && !isFetchingMessages && !moodCheckLoading;
+
+  useEffect(() => {
+    if (isInitialSessionRenderReady) {
+      setHasReleasedInitialSessionRender(true);
+    }
+  }, [isInitialSessionRenderReady]);
+
   // When viewing a resolved session, allow toggling to chat history
   const [viewingResolvedHistory, setViewingResolvedHistory] = useState(false);
 
@@ -3366,7 +3376,7 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // Loading State
   // -------------------------------------------------------------------------
-  if (isLoading) {
+  if (isLoading || !hasReleasedInitialSessionRender) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={styles.accentColor.color} />
