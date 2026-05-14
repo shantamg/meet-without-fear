@@ -10,6 +10,19 @@ import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+/** Pick white or dark text based on background luminance. */
+function getContrastTextColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.55 ? '#1a1815' : '#ffffff';
+}
+
+// ============================================================================
 // Semantic Color System
 // ============================================================================
 
@@ -65,6 +78,8 @@ interface ChatIndicatorProps {
     partnerName?: string;
     /** Stage name for stage-chapter indicators */
     stageName?: string;
+    /** Stage accent color for stage-chapter bar background */
+    stageColor?: string;
   };
 }
 
@@ -139,7 +154,7 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
   };
 
   // Whether this indicator links to another page (shows arrow)
-  const hasArrow = type === 'context-shared' 
+  const hasArrow = type === 'context-shared'
     || type === 'empathy-shared'
     || type === 'needs-identified'
     || type === 'common-ground-found'
@@ -235,30 +250,19 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
     }
   };
 
-  // Special rendering for stage-chapter indicators
+  // Special rendering for stage-chapter indicators — full-width colored bar
   if (type === 'stage-chapter') {
-    const stageChapterStyle = {
-      fontSize: 15,
-      textTransform: 'none' as const,
-      letterSpacing: 0,
-      fontWeight: '400' as const,
-      color: semanticColors.informational.text,
-      fontFamily: designFonts.serif,
-    };
-
-    const chapterContent = (
-      <View style={styles.lineContainer}>
-        <Text style={[styles.text, stageChapterStyle]}>{'\u2014\u2014\u2014'}</Text>
-        <View style={styles.textContainer}>
-          <Text style={[styles.text, stageChapterStyle]}>{getIndicatorText()}</Text>
-        </View>
-        <Text style={[styles.text, stageChapterStyle]}>{'\u2014\u2014\u2014'}</Text>
-      </View>
-    );
+    const stageColor = metadata?.stageColor || semanticColors.informational.text;
+    const barTextColor = getContrastTextColor(stageColor);
 
     return (
-      <View style={styles.container} testID={testID || 'chat-indicator-stage-chapter'}>
-        {chapterContent}
+      <View
+        style={[styles.stageChapterBar, { backgroundColor: stageColor }]}
+        testID={testID || 'chat-indicator-stage-chapter'}
+      >
+        <Text style={[styles.stageChapterText, { color: barTextColor }]}>
+          {getIndicatorText()}
+        </Text>
       </View>
     );
   }
@@ -337,6 +341,18 @@ const useStyles = () => {
     arrow: {
       fontSize: 16,
       fontWeight: '600',
+    },
+    // Stage chapter bar — full-width colored bar at stage transitions
+    stageChapterBar: {
+      paddingVertical: 10,
+      paddingHorizontal: 18,
+      marginVertical: 4,
+    },
+    stageChapterText: {
+      fontSize: 13,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
     },
     // Invitation sent: yellow/amber tint - separate line and text styles
     invitationSentLine: {

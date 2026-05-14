@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import {
   Stage,
+  STAGE_COLORS,
   MessageRole,
   SessionStatus,
   MemorySuggestion,
@@ -231,7 +232,7 @@ function deriveChapterMarkers(
           indicatorType: 'stage-chapter',
           id: `stage-chapter-${stage}`,
           timestamp: msg.timestamp,
-          metadata: { stageName: friendlyName },
+          metadata: { stageName: friendlyName, stageColor: STAGE_COLORS[stage as Stage] },
         });
       }
     }
