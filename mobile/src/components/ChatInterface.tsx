@@ -214,7 +214,6 @@ interface ChatInterfaceProps {
 const DEFAULT_EMPTY_TITLE = 'Start the Conversation';
 const DEFAULT_EMPTY_MESSAGE =
   "Share what's on your mind. I'm here to listen and help you work through it.";
-const DEFAULT_IOS_COMPOSER_SPACER_HEIGHT = 164;
 
 const seenAnimatedItemIdsByScope = new Map<string, Set<string>>();
 let localAnimationScopeCounter = 0;
@@ -977,7 +976,7 @@ export function ChatInterface({
     // the user was already reading at the bottom.
     if (!isLoadingHistoryRef.current || !snapshot) {
       scrollMetricsRef.current.contentHeight = height;
-      if ((isNearBottomRef.current || shouldStickToBottomRef.current) && !(Platform.OS === 'ios' && isKeyboardVisible)) {
+      if (isNearBottomRef.current || shouldStickToBottomRef.current) {
         scrollToBottom(false);
       }
       return;
@@ -998,14 +997,14 @@ export function ChatInterface({
       historyLoadSnapshotRef.current = null;
       isLoadingHistoryRef.current = false;
     }
-  }, [isKeyboardVisible, scrollToBottom]);
+  }, [scrollToBottom]);
 
   const handleListLayout = useCallback((event: LayoutChangeEvent) => {
     scrollMetricsRef.current.layoutHeight = event.nativeEvent.layout.height;
-    if ((isNearBottomRef.current || shouldStickToBottomRef.current) && !(Platform.OS === 'ios' && isKeyboardVisible)) {
+    if (isNearBottomRef.current || shouldStickToBottomRef.current) {
       scrollToBottom(false);
     }
-  }, [isKeyboardVisible, scrollToBottom]);
+  }, [scrollToBottom]);
 
   const handleEndReached = useCallback(() => {
     if (hasMore && !isLoadingMore && onLoadMore) {
@@ -1058,10 +1057,7 @@ export function ChatInterface({
       style={styles.bottomContainer}
       onLayout={(event) => {
         if (Platform.OS === 'ios') {
-          const nextHeight = Math.ceil(event.nativeEvent.layout.height);
-          setBottomContainerHeight((currentHeight) => (
-            Math.abs(currentHeight - nextHeight) > 2 ? nextHeight : currentHeight
-          ));
+          setBottomContainerHeight(event.nativeEvent.layout.height);
         }
       }}
     >
@@ -1101,9 +1097,7 @@ export function ChatInterface({
         stickyHeaderIndices={stickyHeaderIndices}
         contentContainerStyle={[
           styles.messageList,
-          Platform.OS === 'ios' && {
-            paddingBottom: Math.max(bottomContainerHeight, DEFAULT_IOS_COMPOSER_SPACER_HEIGHT),
-          },
+          Platform.OS === 'ios' && bottomContainerHeight > 0 && { paddingBottom: bottomContainerHeight },
           listItems.length === 0 && (customEmptyState ? styles.customMessageListEmpty : styles.messageListEmpty),
         ]}
         ListHeaderComponent={renderLoadingHeader}
