@@ -868,29 +868,32 @@ export function ChatInterface({
   } | null>(null);
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 1 }).current;
+  const lastKnownStage = useRef<{ name: string; color: string } | null>(null);
 
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: Array<{ item: ChatListItem }> }) => {
-    // In an inverted list, the "topmost" visible item is the one with the highest
-    // index. Find the stage-chapter indicator among visible items that has the
-    // highest index — that corresponds to the oldest visible stage bar, which is
-    // visually at the top of the screen.
-    let topStage: { name: string; color: string } | null = null;
+    // Only show the sticky header when ALL inline stage bars have scrolled
+    // off-screen. Otherwise we get a duplicate (sticky + inline both visible).
+    const anyStageBarVisible = viewableItems.some(
+      (v) => isIndicator(v.item) && v.item.indicatorType === 'stage-chapter',
+    );
 
-    for (const v of viewableItems) {
-      if (isIndicator(v.item) && v.item.indicatorType === 'stage-chapter') {
-        topStage = {
-          name: v.item.metadata?.stageName || 'New Chapter',
-          color: v.item.metadata?.stageColor || '#8B9DC3',
-        };
+    if (anyStageBarVisible) {
+      // An inline bar is on screen — hide the sticky to avoid duplication
+      let latestStage: { name: string; color: string } | null = null;
+      for (const v of viewableItems) {
+        if (isIndicator(v.item) && v.item.indicatorType === 'stage-chapter') {
+          latestStage = {
+            name: v.item.metadata?.stageName || 'New Chapter',
+            color: v.item.metadata?.stageColor || '#8B9DC3',
+          };
+        }
       }
+      setCurrentStageMeta(null);
+      lastKnownStage.current = latestStage;
+    } else if (lastKnownStage.current) {
+      // No inline bar visible — show the sticky with the last known stage
+      setCurrentStageMeta(lastKnownStage.current);
     }
-
-    // Also check: if no stage-chapter is visible, derive from the topmost (oldest) visible message's context
-    // For now, only update when a stage bar is actually on screen
-    setCurrentStageMeta((prev) => {
-      if (topStage) return topStage;
-      return prev; // keep last known stage when scrolling between stages
-    });
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -1008,6 +1011,7 @@ const useStyles = () => {
       fontWeight: '700',
       letterSpacing: 0.8,
       textTransform: 'uppercase',
+      textAlign: 'center',
     },
     flatList: {
       flex: 1,

@@ -346,13 +346,15 @@ const useStyles = () => {
     stageChapterBar: {
       paddingVertical: 10,
       paddingHorizontal: 18,
-      marginVertical: 4,
+      marginTop: 16,
+      marginBottom: 4,
     },
     stageChapterText: {
       fontSize: 13,
       fontWeight: '700',
       letterSpacing: 0.8,
       textTransform: 'uppercase',
+      textAlign: 'center',
     },
     // Invitation sent: yellow/amber tint - separate line and text styles
     invitationSentLine: {
