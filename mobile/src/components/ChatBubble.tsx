@@ -85,13 +85,18 @@ export function ChatBubble({
   const isShareSuggestion = (message.role as string) === 'SHARE_SUGGESTION';
   const isAI = !isUser && !isSystem && !isEmpathyStatement && !isSharedContext && !isShareSuggestion;
   const isIntervention = message.isIntervention ?? false;
+  const shouldAnimateUserEntrance =
+    isUser &&
+    enableTypewriter &&
+    !message.skipTypewriter &&
+    (message.status === 'sending' || message.id.startsWith('optimistic-user-'));
 
   // Track if this specific message instance has completed animation
   const hasAnimatedRef = useRef(false);
   const hasStartedRef = useRef(false);
   const animationIdentityRef = useRef(animationIdentity ?? message.id);
   const userEntrancePlayedRef = useRef(false);
-  const userEntranceAnim = useRef(new Animated.Value(1)).current;
+  const userEntranceAnim = useRef(new Animated.Value(shouldAnimateUserEntrance ? 0 : 1)).current;
 
   // Determine if this message type uses fade-in animation (non-AI, non-USER animated messages)
   const willAnimate = !isUser && !isAI && enableTypewriter && !message.skipTypewriter;
@@ -109,7 +114,7 @@ export function ChatBubble({
     hasStartedRef.current = false;
     userEntrancePlayedRef.current = false;
     fadeAnim.setValue(1);
-    userEntranceAnim.setValue(1);
+    userEntranceAnim.setValue(shouldAnimateUserEntrance ? 0 : 1);
   }
 
   // Store callbacks in refs to avoid re-triggering animation
@@ -122,11 +127,6 @@ export function ChatBubble({
 
   // Determine if we should use typewriter effect (AI messages only)
   const shouldUseTypewriter = isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
-  const shouldAnimateUserEntrance =
-    isUser &&
-    enableTypewriter &&
-    !message.skipTypewriter &&
-    (message.status === 'sending' || message.id.startsWith('optimistic-user-'));
 
   // Determine if we should use fade-in effect (non-AI, non-USER messages that should animate)
   const shouldUseFadeIn = !isUser && !isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
@@ -172,7 +172,6 @@ export function ChatBubble({
     }
 
     userEntrancePlayedRef.current = true;
-    userEntranceAnim.setValue(0);
     Animated.timing(userEntranceAnim, {
       toValue: 1,
       duration: 360,
@@ -354,18 +353,6 @@ export function ChatBubble({
       return content;
     }
 
-    if (isUser && shouldAnimateUserEntrance) {
-      const translateY = userEntranceAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [28, 0],
-      });
-      return (
-        <Animated.View style={{ opacity: userEntranceAnim, transform: [{ translateY }] }}>
-          <Text style={getTextStyle()}>{message.content}</Text>
-        </Animated.View>
-      );
-    }
-
     // Use typewriter effect for new AI messages - animates word-by-word at consistent pace
     // This normalizes display speed regardless of how fast streaming arrives
     if (shouldUseTypewriter) {
@@ -386,9 +373,17 @@ export function ChatBubble({
     return <Text style={getTextStyle()}>{message.content}</Text>;
   };
 
+  const userEntranceTranslateY = userEntranceAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [36, 0],
+  });
+  const containerAnimationStyle = shouldAnimateUserEntrance
+    ? { opacity: userEntranceAnim, transform: [{ translateY: userEntranceTranslateY }] }
+    : null;
+
   return (
-    <View
-      style={[styles.container, getContainerStyle()]}
+    <Animated.View
+      style={[styles.container, getContainerStyle(), containerAnimationStyle]}
       testID={`chat-bubble-${message.id}`}
     >
       <View style={[styles.bubble, isAI && styles.aiBubbleContainer, getBubbleStyle()]}>
@@ -409,7 +404,7 @@ export function ChatBubble({
           </Text>
         )}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

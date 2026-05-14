@@ -359,8 +359,8 @@ export function ChatInterface({
   // If the last message is from USER, we're waiting for AI response → show typing indicator
   // If the last message is from AI/SYSTEM, response has arrived → hide typing indicator
   // This eliminates the need for a separate waitingForAIResponse boolean state
-  const isWaitingForAI = useMemo(() => {
-    if (messages.length === 0) return false;
+  const newestChatFlowMessage = useMemo(() => {
+    if (messages.length === 0) return null;
     // Find the newest message by timestamp among chat-flow roles (USER/AI).
     // Synthetic messages (EMPATHY_STATEMENT, SHARED_CONTEXT, etc.) may be
     // appended at the end of the array but have older timestamps — using
@@ -375,21 +375,45 @@ export function ChatInterface({
         newest = m;
       }
     }
-    return newest?.role === MessageRole.USER;
+    return newest;
   }, [messages]);
+  const isWaitingForAI = newestChatFlowMessage?.role === MessageRole.USER;
+  const shouldDelayTypingIndicator =
+    isWaitingForAI &&
+    !isLoading &&
+    (newestChatFlowMessage?.status === 'sending' || newestChatFlowMessage?.id.startsWith('optimistic-user-'));
 
   // Combined loading state: explicit isLoading OR derived from last message
   // This allows both:
   // 1. Legacy behavior (passing isLoading for initial fetch, confirmation, etc.)
   // 2. Cache-First behavior (deriving from last message role)
   const showTypingIndicator = isLoading || isWaitingForAI;
+  const [showDelayedTypingIndicator, setShowDelayedTypingIndicator] = useState(false);
 
   useEffect(() => {
-    if (showTypingIndicator && (isNearBottomRef.current || shouldStickToBottomRef.current)) {
+    if (!showTypingIndicator) {
+      setShowDelayedTypingIndicator(false);
+      return;
+    }
+
+    if (!shouldDelayTypingIndicator) {
+      setShowDelayedTypingIndicator(true);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setShowDelayedTypingIndicator(true);
+    }, 420);
+
+    return () => clearTimeout(timeoutId);
+  }, [showTypingIndicator, shouldDelayTypingIndicator]);
+
+  useEffect(() => {
+    if (showDelayedTypingIndicator && (isNearBottomRef.current || shouldStickToBottomRef.current)) {
       shouldStickToBottomRef.current = true;
       scrollToBottom(false);
     }
-  }, [showTypingIndicator, scrollToBottom]);
+  }, [showDelayedTypingIndicator, scrollToBottom]);
 
   // Track the ID of the chat item currently being animated.
   const [animatingItemId, setAnimatingItemId] = useState<string | null>(null);
@@ -869,16 +893,16 @@ export function ChatInterface({
           }
         }}
       >
-        {showTypingIndicator && <TypingIndicator />}
+        {showDelayedTypingIndicator && <TypingIndicator />}
       </View>
     );
-  }, [showTypingIndicator, styles, scrollToBottom]);
+  }, [showDelayedTypingIndicator, styles, scrollToBottom]);
 
   // Memoize the empty state element (not a callback!) to prevent remounts
   // NOTE: styles are excluded from deps because useStyles() creates new refs each render
   // but the actual style values are stable (theme-based)
   const emptyStateElement = useMemo(() => {
-    if (showTypingIndicator) return null;
+    if (showDelayedTypingIndicator) return null;
     // Use custom empty state if provided (e.g., onboarding compact)
     // Custom empty state starts at the top (flex-start) instead of centered
     if (customEmptyState) {
@@ -897,7 +921,7 @@ export function ChatInterface({
       </View>
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showTypingIndicator, emptyStateTitle, emptyStateMessage, customEmptyState]);
+  }, [showDelayedTypingIndicator, emptyStateTitle, emptyStateMessage, customEmptyState]);
 
   // Header is visually at the top (Loading Spinner)
   const renderLoadingHeader = useCallback(() => {
