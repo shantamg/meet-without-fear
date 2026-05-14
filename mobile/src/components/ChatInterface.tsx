@@ -11,7 +11,6 @@ import {
   NativeScrollEvent,
   LayoutChangeEvent,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import type { MessageDTO, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
 import { MessageRole } from '@meet-without-fear/shared';
 import { ChatBubble, ChatBubbleMessage, MessageDeliveryStatus } from './ChatBubble';
@@ -24,6 +23,7 @@ import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 import { getAnimationIdentity, isPreRegisteredAnimatedId } from '../utils/animationBridge';
+import { KeyboardAwareAvoidingView } from '../utils/keyboardController';
 
 // ============================================================================
 // Types
@@ -1039,7 +1039,7 @@ export function ChatInterface({
   // ---------------------------------------------------------------------------
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={keyboardVerticalOffset}
@@ -1098,7 +1098,7 @@ export function ChatInterface({
         {!isKeyboardVisible && renderAboveInput?.()}
         {!isKeyboardVisible && renderBelowInput?.()}
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAwareAvoidingView>
   );
 }
 

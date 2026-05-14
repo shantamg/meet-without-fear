@@ -5,11 +5,11 @@ import { useFonts } from 'expo-font';
 import * as Sentry from '@sentry/react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Platform, StyleSheet, View } from 'react-native';
 
 import { APP_MAX_WIDTH, AppearanceProvider, useAppAppearance } from '@/src/theme';
+import { KeyboardControllerProvider } from '@/src/utils/keyboardController';
 import { SessionDrawerProvider } from '@/src/hooks/useSessionDrawer';
 import { useInvitationLink } from '@/src/hooks/useInvitation';
 import { QueryProvider } from '@/src/providers/QueryProvider';
@@ -137,7 +137,7 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
       <View style={[styles.webFrame, { backgroundColor: palette.bg }]}>
         <NativeAppBanner />
         <GestureHandlerRootView style={[styles.container, { backgroundColor: palette.bg }]}>
-          <KeyboardProvider>
+          <KeyboardControllerProvider>
             <SafeAreaProvider>
               <SessionDrawerProvider>
                 <ToastProvider>
@@ -157,7 +157,7 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
                 </ToastProvider>
               </SessionDrawerProvider>
             </SafeAreaProvider>
-          </KeyboardProvider>
+          </KeyboardControllerProvider>
         </GestureHandlerRootView>
       </View>
     </View>
