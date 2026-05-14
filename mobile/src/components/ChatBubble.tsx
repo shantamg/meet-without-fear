@@ -88,7 +88,6 @@ export function ChatBubble({
   const shouldAnimateUserEntrance =
     isUser &&
     enableTypewriter &&
-    !message.skipTypewriter &&
     (message.status === 'sending' || message.id.startsWith('optimistic-user-'));
 
   // Track if this specific message instance has completed animation
