@@ -5,6 +5,7 @@ import {
   Platform,
   TurboModuleRegistry,
 } from 'react-native';
+import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
 import type { KeyboardAvoidingViewProps as RNKeyboardAvoidingViewProps } from 'react-native';
 import type { ViewProps } from 'react-native';
 
@@ -20,6 +21,10 @@ type KeyboardControllerModule = {
   KeyboardProvider?: React.ComponentType<React.PropsWithChildren>;
   KeyboardAvoidingView?: React.ComponentType<React.PropsWithChildren<RNKeyboardAvoidingViewProps>>;
   KeyboardStickyView?: React.ComponentType<React.PropsWithChildren<KeyboardStickyComposerProps>>;
+  useReanimatedKeyboardAnimation?: () => {
+    height: { value: number };
+    progress: { value: number };
+  };
 };
 
 let keyboardControllerModule: KeyboardControllerModule | null | undefined;
@@ -37,17 +42,45 @@ export function hasLinkedKeyboardController(): boolean {
 }
 
 export function KeyboardStickyComposer({ children, ...props }: React.PropsWithChildren<KeyboardStickyComposerProps>) {
-  const ControllerStickyView = getKeyboardControllerModule()?.KeyboardStickyView;
+  const module = getKeyboardControllerModule();
 
-  if (ControllerStickyView) {
+  if (module?.useReanimatedKeyboardAnimation) {
     return (
-      <ControllerStickyView {...props}>
+      <LinkedKeyboardStickyComposer
+        {...props}
+        useReanimatedKeyboardAnimation={module.useReanimatedKeyboardAnimation}
+      >
         {children}
-      </ControllerStickyView>
+      </LinkedKeyboardStickyComposer>
     );
   }
 
   return <>{children}</>;
+}
+
+function LinkedKeyboardStickyComposer({
+  children,
+  offset: { closed = 0, opened = 0 } = {},
+  style,
+  enabled = true,
+  useReanimatedKeyboardAnimation,
+  ...props
+}: React.PropsWithChildren<KeyboardStickyComposerProps> & {
+  useReanimatedKeyboardAnimation: NonNullable<KeyboardControllerModule['useReanimatedKeyboardAnimation']>;
+}) {
+  const { height, progress } = useReanimatedKeyboardAnimation();
+  const animatedStyle = useAnimatedStyle(() => {
+    const insetOffset = progress.value > 0.001 ? opened : closed;
+    return {
+      transform: [{ translateY: enabled ? height.value + insetOffset : closed }],
+    };
+  }, [closed, opened, enabled]);
+
+  return (
+    <Reanimated.View style={[style, animatedStyle]} {...props}>
+      {children}
+    </Reanimated.View>
+  );
 }
 
 function getKeyboardControllerModule(): KeyboardControllerModule | null {
