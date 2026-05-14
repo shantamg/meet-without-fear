@@ -51,6 +51,8 @@ export interface ChatIndicatorItem {
     partnerName?: string;
     /** Stage name for stage-chapter indicators */
     stageName?: string;
+    /** Stage accent color for stage-chapter bar background */
+    stageColor?: string;
   };
 }
 
@@ -858,8 +860,51 @@ export function ChatInterface({
   }, [isLoadingMore]);
 
   // ---------------------------------------------------------------------------
+  // Sticky Stage Header: shows the current stage at the top of the chat
+  // ---------------------------------------------------------------------------
+  const [currentStageMeta, setCurrentStageMeta] = useState<{
+    name: string;
+    color: string;
+  } | null>(null);
+
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 1 }).current;
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: Array<{ item: ChatListItem }> }) => {
+    // In an inverted list, the "topmost" visible item is the one with the highest
+    // index. Find the stage-chapter indicator among visible items that has the
+    // highest index — that corresponds to the oldest visible stage bar, which is
+    // visually at the top of the screen.
+    let topStage: { name: string; color: string } | null = null;
+
+    for (const v of viewableItems) {
+      if (isIndicator(v.item) && v.item.indicatorType === 'stage-chapter') {
+        topStage = {
+          name: v.item.metadata?.stageName || 'New Chapter',
+          color: v.item.metadata?.stageColor || '#8B9DC3',
+        };
+      }
+    }
+
+    // Also check: if no stage-chapter is visible, derive from the topmost (oldest) visible message's context
+    // For now, only update when a stage bar is actually on screen
+    setCurrentStageMeta((prev) => {
+      if (topStage) return topStage;
+      return prev; // keep last known stage when scrolling between stages
+    });
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // New Activity Pill: floating indicator for off-screen new items
   // ---------------------------------------------------------------------------
+
+  /** Pick white or dark text based on background luminance. */
+  const getContrastText = useCallback((hex: string): string => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.55 ? '#1a1815' : '#ffffff';
+  }, []);
 
   return (
     <KeyboardAvoidingView
@@ -867,6 +912,17 @@ export function ChatInterface({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
+      {/* Sticky stage header overlay */}
+      {currentStageMeta && listItems.length > 0 && (
+        <View
+          style={[styles.stickyStageHeader, { backgroundColor: currentStageMeta.color }]}
+          pointerEvents="none"
+        >
+          <Text style={[styles.stickyStageText, { color: getContrastText(currentStageMeta.color) }]}>
+            {currentStageMeta.name}
+          </Text>
+        </View>
+      )}
       <FlatList
         ref={flatListRef}
         inverted
@@ -874,6 +930,8 @@ export function ChatInterface({
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         style={styles.flatList}
+        viewabilityConfig={viewabilityConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
         // Stabilizer: maintains position when spinners appear/disappear
         maintainVisibleContentPosition={{
           minIndexForVisible: 0,
@@ -935,6 +993,21 @@ const useStyles = () => {
     container: {
       flex: 1,
       backgroundColor: palette.bg,
+    },
+    stickyStageHeader: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 10,
+      paddingVertical: 6,
+      paddingHorizontal: 18,
+    },
+    stickyStageText: {
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
     },
     flatList: {
       flex: 1,

@@ -61,6 +61,16 @@ export const STAGE_FRIENDLY_NAMES: Record<Stage, string> = {
   [Stage.INFORMED_EMPATHY]: 'Deeper Understanding',
 };
 
+/** Stage accent colors for visual stage indicators in the chat timeline. */
+export const STAGE_COLORS: Record<Stage, string> = {
+  [Stage.ONBOARDING]: '#8B9DC3',
+  [Stage.WITNESS]: '#D4A574',
+  [Stage.PERSPECTIVE_STRETCH]: '#7BC47F',
+  [Stage.NEED_MAPPING]: '#C084C0',
+  [Stage.STRATEGIC_REPAIR]: '#E8A87C',
+  [Stage.INFORMED_EMPATHY]: '#7BC47F',
+};
+
 // ============================================================================
 // User & Content
 // ============================================================================
