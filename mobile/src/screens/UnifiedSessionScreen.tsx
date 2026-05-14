@@ -215,9 +215,21 @@ const SUPPRESSED_CHAPTER_STAGES = new Set([Stage.ONBOARDING, Stage.INFORMED_EMPA
  */
 function deriveChapterMarkers(
   messages: ChatMessage[],
+  anchors?: Partial<Record<Stage, string | null | undefined>>,
 ): ChatIndicatorItem[] {
   const markers: ChatIndicatorItem[] = [];
   const seenStages = new Set<number>();
+  const markerTimestampForStage = (stage: Stage, fallbackTimestamp: string): string | undefined => {
+    const anchorTimestamp = anchors?.[stage];
+
+    switch (stage) {
+      case Stage.WITNESS:
+      case Stage.PERSPECTIVE_STRETCH:
+        return anchorTimestamp || undefined;
+      default:
+        return anchorTimestamp || fallbackTimestamp;
+    }
+  };
 
   for (const msg of messages) {
     const stage = msg.stage as number | undefined;
@@ -227,11 +239,14 @@ function deriveChapterMarkers(
 
       const friendlyName = STAGE_FRIENDLY_NAMES[stage];
       if (friendlyName) {
+        const markerTimestamp = markerTimestampForStage(stage as Stage, msg.timestamp);
+        if (!markerTimestamp) continue;
+
         markers.push({
           type: 'indicator',
           indicatorType: 'stage-chapter',
           id: `stage-chapter-${stage}`,
-          timestamp: msg.timestamp,
+          timestamp: markerTimestamp,
           metadata: { stageName: friendlyName, stageColor: STAGE_COLORS[stage as Stage] },
         });
       }
@@ -2186,6 +2201,9 @@ export function UnifiedSessionScreen({
 
   // Build indicators array using centralized deriveIndicators function
   // This moves indicator logic to the utils layer, making it testable and reusable
+  const invitationMessageConfirmedAt = invitation?.messageConfirmedAt;
+  const invitationAcceptedAt = invitation?.acceptedAt;
+
   const indicators = useMemo((): ChatIndicatorItem[] => {
     // Prepare session data for the selector
     const sessionData: SessionIndicatorData = {
@@ -2193,9 +2211,9 @@ export function UnifiedSessionScreen({
       sessionStatus: session?.status,
       currentUserId: user?.id,
       partnerName: partnerName || 'Partner',
-      invitation: invitation ? {
-        messageConfirmedAt: invitation.messageConfirmedAt,
-        acceptedAt: invitation.acceptedAt,
+      invitation: invitationMessageConfirmedAt || invitationAcceptedAt ? {
+        messageConfirmedAt: invitationMessageConfirmedAt,
+        acceptedAt: invitationAcceptedAt,
       } : undefined,
       milestones: {
         // Use ref as backup to prevent flickering during mutation
@@ -2265,11 +2283,18 @@ export function UnifiedSessionScreen({
     }
 
     // --- Stage chapter markers ---
-    const chapterIndicators = deriveChapterMarkers(messages);
+    // Chapter bars should appear at the milestone that opens the chapter, not
+    // wherever the first message in that stage happens to sort.
+    const chapterIndicators = deriveChapterMarkers(messages, {
+      [Stage.WITNESS]: isInviter
+        ? invitationMessageConfirmedAt
+        : invitationAcceptedAt,
+      [Stage.PERSPECTIVE_STRETCH]: milestones?.feelHeardConfirmedAt,
+    });
     allIndicators.push(...chapterIndicators);
 
     return allIndicators;
-  }, [isInviter, session?.status, invitation?.messageConfirmedAt, invitation?.acceptedAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
+  }, [isInviter, session?.status, invitationMessageConfirmedAt, invitationAcceptedAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
 
 
 
@@ -3457,7 +3482,7 @@ export function UnifiedSessionScreen({
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
             onBackPress={onNavigateBack}
             onPress={() => setShowPartnerInfo(true)}
-            stageName="Closed"
+            conversationTopic={topicFrame}
             testID="session-chat-header"
           />
           {partnerInfoDrawer}
@@ -3502,7 +3527,7 @@ export function UnifiedSessionScreen({
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
           onBackPress={onNavigateBack}
           onPress={() => setShowPartnerInfo(true)}
-          stageName="Closed"
+          conversationTopic={topicFrame}
           testID="session-chat-header"
         />
         {partnerInfoDrawer}
@@ -3552,7 +3577,7 @@ export function UnifiedSessionScreen({
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
             onBackPress={onNavigateBack}
             onPress={() => setShowPartnerInfo(true)}
-            stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
+            conversationTopic={topicFrame}
             testID="session-chat-header"
           />
           {partnerInfoDrawer}
@@ -3589,7 +3614,7 @@ export function UnifiedSessionScreen({
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
             onBackPress={onNavigateBack}
             onPress={() => setShowPartnerInfo(true)}
-            stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
+            conversationTopic={topicFrame}
             testID="session-chat-header"
           />
           {partnerInfoDrawer}
@@ -3638,7 +3663,7 @@ export function UnifiedSessionScreen({
             : undefined
         }
         onPress={() => setShowPartnerInfo(true)}
-        stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
+        conversationTopic={topicFrame}
         testID="session-chat-header"
       />
       {partnerInfoDrawer}
@@ -4476,7 +4501,7 @@ const useStyles = () => {
       top: 49,
       right: 12,
       maxWidth: 240,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderRadius: t.radius.md,
       paddingHorizontal: t.spacing.md,
       paddingVertical: t.spacing.sm,
@@ -4486,7 +4511,7 @@ const useStyles = () => {
       shadowOffset: { width: 0, height: 4 },
       elevation: 8,
       borderWidth: 1,
-      borderColor: t.colors.border,
+      borderColor: palette.borderStrong,
     },
     shareLaterTooltipTail: {
       position: 'absolute' as const,
@@ -4499,11 +4524,11 @@ const useStyles = () => {
       borderBottomWidth: 8,
       borderLeftColor: 'transparent' as const,
       borderRightColor: 'transparent' as const,
-      borderBottomColor: t.colors.bgSecondary,
+      borderBottomColor: palette.bgElev,
     },
     shareLaterTooltipText: {
       fontSize: t.typography.fontSize.sm,
-      color: t.colors.textPrimary,
+      color: palette.text,
       lineHeight: 20,
       marginBottom: t.spacing.sm,
     },
@@ -4512,7 +4537,7 @@ const useStyles = () => {
       paddingHorizontal: t.spacing.md,
       paddingVertical: t.spacing.xs,
       borderRadius: t.radius.sm,
-      backgroundColor: t.colors.accent,
+      backgroundColor: palette.accent,
     },
     shareLaterTooltipButtonText: {
       color: t.colors.textOnAccent,

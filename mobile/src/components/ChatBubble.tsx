@@ -36,6 +36,10 @@ interface ChatBubbleProps {
   onAnimationStart?: () => void;
   /** Callback when animation completes */
   onAnimationComplete?: () => void;
+  /** Callback as typewriter/fade progress changes layout */
+  onAnimationProgress?: () => void;
+  /** Stable identity for animation state when a temporary message id is reconciled. */
+  animationIdentity?: string;
   /** Whether speech is currently playing for this message */
   isSpeaking?: boolean;
   /** Callback when speaker button is pressed */
@@ -63,6 +67,8 @@ export function ChatBubble({
   enableTypewriter = true,
   onAnimationStart,
   onAnimationComplete,
+  onAnimationProgress,
+  animationIdentity,
   isSpeaking = false,
   onSpeakerPress,
   hideSpeaker = false,
@@ -83,7 +89,7 @@ export function ChatBubble({
   // Track if this specific message instance has completed animation
   const hasAnimatedRef = useRef(false);
   const hasStartedRef = useRef(false);
-  const messageIdRef = useRef(message.id);
+  const animationIdentityRef = useRef(animationIdentity ?? message.id);
 
   // Determine if this message type uses fade-in animation (non-AI, non-USER animated messages)
   const willAnimate = !isUser && !isAI && enableTypewriter && !message.skipTypewriter;
@@ -92,9 +98,11 @@ export function ChatBubble({
   // Always start at 1 (visible) — the fade-in effect sets to 0 and animates when triggered
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
-  // Reset animation state if message ID changes
-  if (messageIdRef.current !== message.id) {
-    messageIdRef.current = message.id;
+  // Reset animation state if the animation identity changes. The display id
+  // can change when a streaming placeholder is reconciled to its persisted id.
+  const currentAnimationIdentity = animationIdentity ?? message.id;
+  if (animationIdentityRef.current !== currentAnimationIdentity) {
+    animationIdentityRef.current = currentAnimationIdentity;
     hasAnimatedRef.current = false;
     hasStartedRef.current = false;
     fadeAnim.setValue(1);
@@ -103,8 +111,10 @@ export function ChatBubble({
   // Store callbacks in refs to avoid re-triggering animation
   const onStartRef = useRef(onAnimationStart);
   const onCompleteRef = useRef(onAnimationComplete);
+  const onProgressRef = useRef(onAnimationProgress);
   onStartRef.current = onAnimationStart;
   onCompleteRef.current = onAnimationComplete;
+  onProgressRef.current = onAnimationProgress;
 
   // Determine if we should use typewriter effect (AI messages only)
   const shouldUseTypewriter = isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
@@ -346,7 +356,9 @@ export function ChatBubble({
           style={getTextStyle()}
           wordDelay={40}
           fadeDuration={120}
+          completeWhenCaughtUp={message.status !== 'streaming'}
           onComplete={handleComplete}
+          onProgress={() => onProgressRef.current?.()}
         />
       );
     }

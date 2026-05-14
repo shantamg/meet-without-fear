@@ -1,9 +1,10 @@
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stage } from '@meet-without-fear/shared';
+import { MessageRole, Stage } from '@meet-without-fear/shared';
 import { useStreamingMessage } from '../useStreamingMessage';
 import { messageKeys, sessionKeys, stageKeys, timelineKeys } from '../queryKeys';
+import { getAnimationIdentity } from '../../utils/animationBridge';
 
 jest.mock('../../lib/api', () => ({
   getAuthToken: jest.fn().mockResolvedValue('test-token'),
@@ -11,11 +12,17 @@ jest.mock('../../lib/api', () => ({
   getE2EAuthHeaders: jest.fn().mockReturnValue(null),
 }));
 
-const mockEventSourceInstances: Array<{ close: jest.Mock }> = [];
+type MockSseEvent = { data?: string; message?: string };
+type MockEventSourceInstance = {
+  listeners: Record<string, Array<(event: MockSseEvent) => void>>;
+  close: jest.Mock;
+};
+
+const mockEventSourceInstances: MockEventSourceInstance[] = [];
 
 jest.mock('react-native-sse', () => {
   class MockEventSource {
-    listeners: Record<string, Array<(event: { data?: string; message?: string }) => void>> = {};
+    listeners: Record<string, Array<(event: MockSseEvent) => void>> = {};
     close = jest.fn();
 
     constructor() {
@@ -24,7 +31,7 @@ jest.mock('react-native-sse', () => {
 
     addEventListener(
       eventName: string,
-      listener: (event: { data?: string; message?: string }) => void
+      listener: (event: MockSseEvent) => void
     ) {
       this.listeners[eventName] = this.listeners[eventName] || [];
       this.listeners[eventName].push(listener);
@@ -100,5 +107,68 @@ describe('useStreamingMessage', () => {
     unmount();
     queryClient.clear();
     warnSpy.mockRestore();
+  });
+
+  it('keeps cached AI messages marked streaming until text_complete', async () => {
+    const queryClient = createQueryClient();
+
+    const { result, unmount } = renderHook(() => useStreamingMessage(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.sendMessage({
+        sessionId: 'session-123',
+        content: 'Tell me more',
+        currentStage: Stage.WITNESS,
+      });
+    });
+
+    const eventSource = mockEventSourceInstances[0];
+
+    act(() => {
+      eventSource.listeners.chunk[0]({ data: JSON.stringify({ text: 'Hello' }) });
+    });
+
+    let cachedMessages = queryClient.getQueryData<{ messages: Array<{ role: MessageRole; status?: string; content: string }> }>(
+      messageKeys.list('session-123')
+    )?.messages;
+    let cachedAIMessage = cachedMessages?.find((message) => message.role === MessageRole.AI);
+
+    expect(cachedAIMessage).toMatchObject({
+      content: 'Hello',
+      status: 'streaming',
+    });
+
+    act(() => {
+      eventSource.listeners.text_complete[0]({ data: JSON.stringify({ metadata: {} }) });
+    });
+
+    cachedMessages = queryClient.getQueryData<{ messages: Array<{ role: MessageRole; status?: string; content: string }> }>(
+      messageKeys.list('session-123')
+    )?.messages;
+    cachedAIMessage = cachedMessages?.find((message) => message.role === MessageRole.AI);
+
+    expect(cachedAIMessage).toMatchObject({
+      content: 'Hello',
+      status: 'sent',
+    });
+
+    act(() => {
+      eventSource.listeners.complete[0]({
+        data: JSON.stringify({ messageId: 'server-ai-message-1', metadata: {} }),
+      });
+    });
+
+    cachedMessages = queryClient.getQueryData<{ messages: Array<{ id: string; role: MessageRole; status?: string; content: string }> }>(
+      messageKeys.list('session-123')
+    )?.messages;
+    cachedAIMessage = cachedMessages?.find((message) => message.role === MessageRole.AI);
+
+    expect(cachedAIMessage?.id).toBe('server-ai-message-1');
+    expect(getAnimationIdentity('server-ai-message-1')).toMatch(/^streaming-/);
+
+    unmount();
+    queryClient.clear();
   });
 });

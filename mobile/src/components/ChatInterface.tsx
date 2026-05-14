@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  LayoutChangeEvent,
 } from 'react-native';
 import type { MessageDTO, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
 import { MessageRole } from '@meet-without-fear/shared';
@@ -22,7 +23,7 @@ import { EmpathyValidationCard } from './EmpathyValidationCard';
 import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
-import { isPreRegisteredAnimatedId } from '../utils/animationBridge';
+import { getAnimationIdentity, isPreRegisteredAnimatedId } from '../utils/animationBridge';
 
 // ============================================================================
 // Types
@@ -99,6 +100,25 @@ function isCustomCard(item: ChatListItem): item is ChatCustomCardItem {
 
 function isCustomEmptyState(item: ChatListItem): item is CustomEmptyStateItem {
   return 'type' in item && item.type === 'custom-empty-state';
+}
+
+function getSameMomentSortRank(item: ChatListItem): number {
+  if (isIndicator(item)) {
+    switch (item.indicatorType) {
+      case 'invitation-sent':
+      case 'invitation-accepted':
+      case 'feel-heard':
+        return 0;
+      case 'stage-chapter':
+        return 1;
+      default:
+        return 1;
+    }
+  }
+
+  if (isValidationCard(item)) return 3;
+  if (isCustomCard(item)) return 3;
+  return 2;
 }
 
 interface ChatInterfaceProps {
@@ -254,6 +274,15 @@ export function ChatInterface({
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
+  const scrollMetricsRef = useRef({
+    offset: 0,
+    contentHeight: 0,
+    layoutHeight: 0,
+  });
+  const isNearBottomRef = useRef(true);
+  const shouldStickToBottomRef = useRef(true);
+  const scrollRetryTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const scrollRetryAnimationFrameRef = useRef<number | null>(null);
   const localAnimationScopeRef = useRef<string | null>(null);
   if (localAnimationScopeRef.current === null) {
     localAnimationScopeRef.current = createLocalAnimationScope();
@@ -268,18 +297,61 @@ export function ChatInterface({
     seenAnimatedItemIdsRef.current = getSeenAnimatedItemIds(animationScope);
   }
 
+  const scrollToBottom = useCallback((animated: boolean) => {
+    scrollRetryTimeoutsRef.current.forEach(clearTimeout);
+    scrollRetryTimeoutsRef.current = [];
+    if (scrollRetryAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(scrollRetryAnimationFrameRef.current);
+    }
+
+    const run = () => {
+      const { contentHeight, layoutHeight } = scrollMetricsRef.current;
+      const maxOffset = Math.max(0, contentHeight - layoutHeight);
+
+      if (contentHeight > 0 && layoutHeight > 0) {
+        flatListRef.current?.scrollToOffset({ offset: maxOffset, animated });
+        return;
+      }
+
+      flatListRef.current?.scrollToEnd({ animated });
+    };
+
+    scrollRetryAnimationFrameRef.current = requestAnimationFrame(run);
+    scrollRetryTimeoutsRef.current = [
+      setTimeout(run, 40),
+      setTimeout(run, 120),
+      setTimeout(run, 260),
+      setTimeout(run, 500),
+      setTimeout(run, 800),
+    ];
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      scrollRetryTimeoutsRef.current.forEach(clearTimeout);
+      if (scrollRetryAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(scrollRetryAnimationFrameRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
-    const showSub = Keyboard.addListener(showEvent, () => setIsKeyboardVisible(true));
+    const showSub = Keyboard.addListener(showEvent, () => {
+      setIsKeyboardVisible(true);
+      if (isNearBottomRef.current || shouldStickToBottomRef.current) {
+        scrollToBottom(false);
+      }
+    });
     const hideSub = Keyboard.addListener(hideEvent, () => setIsKeyboardVisible(false));
 
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, []);
+  }, [scrollToBottom]);
 
   // ---------------------------------------------------------------------------
   // Cache-First Architecture: Derive "waiting for AI" from last message role
@@ -312,6 +384,13 @@ export function ChatInterface({
   // 2. Cache-First behavior (deriving from last message role)
   const showTypingIndicator = isLoading || isWaitingForAI;
 
+  useEffect(() => {
+    if (showTypingIndicator && (isNearBottomRef.current || shouldStickToBottomRef.current)) {
+      shouldStickToBottomRef.current = true;
+      scrollToBottom(false);
+    }
+  }, [showTypingIndicator, scrollToBottom]);
+
   // Track the ID of the chat item currently being animated.
   const [animatingItemId, setAnimatingItemId] = useState<string | null>(null);
 
@@ -325,8 +404,11 @@ export function ChatInterface({
   const animatedItemIdsRef = useRef<Set<string>>(new Set());
 
   const markItemAnimationSeen = useCallback((itemId: string) => {
+    const animationIdentity = getAnimationIdentity(itemId);
     animatedItemIdsRef.current.add(itemId);
+    animatedItemIdsRef.current.add(animationIdentity);
     seenAnimatedItemIdsRef.current.add(itemId);
+    seenAnimatedItemIdsRef.current.add(animationIdentity);
   }, []);
 
   // STABLE SORT: Ensure order never flip-flops if timestamps are identical
@@ -334,36 +416,42 @@ export function ChatInterface({
     // 1. Combine messages, indicators, and validation cards
     const items: ChatListItem[] = [...messages, ...indicators, ...(validationCards || []), ...(customCards || [])];
 
-    // 2. Sort Newest First (standard chat sort)
+    // 2. Sort Oldest First so native sticky headers own the visual start of
+    // each section. New messages are kept at the bottom via explicit scroll.
     items.sort((a, b) => {
       const aTime = 'timestamp' in a && a.timestamp ? new Date(a.timestamp).getTime() : 0;
       const bTime = 'timestamp' in b && b.timestamp ? new Date(b.timestamp).getTime() : 0;
-      // Primary sort: Time (newest first) - with 1 second tolerance for items created in sequence
-      const timeDiff = bTime - aTime;
-      if (Math.abs(timeDiff) > 1000) return timeDiff;
+      // Primary sort: Time (oldest first). Chat messages must keep exact
+      // chronological order; otherwise a fast AI reply can land before the
+      // user message that triggered it and get suppressed by the animation
+      // queue's "user already replied" guard.
+      const timeDiff = aTime - bTime;
 
-      // For items within 1 second: indicators should appear ABOVE messages at the same time
-      // (older position = higher index in the sorted array)
+      const rankDiff = getSameMomentSortRank(a) - getSameMomentSortRank(b);
+      if (Math.abs(timeDiff) <= 1000 && rankDiff !== 0) return rankDiff;
+      if (timeDiff !== 0) return timeDiff;
+
+      // For items within 1 second: indicators should appear above messages at
+      // the same time.
       const aIsIndicator = isIndicator(a);
       const bIsIndicator = isIndicator(b);
-      if (aIsIndicator && !bIsIndicator) return 1; // a (indicator) comes after b (message) in array = appears higher
-      if (bIsIndicator && !aIsIndicator) return -1; // b (indicator) comes after a (message) in array = appears higher
+      if (aIsIndicator && !bIsIndicator) return -1;
+      if (bIsIndicator && !aIsIndicator) return 1;
 
       // Validation cards should appear BELOW messages at the same time
-      // (newer position = lower index in the sorted array)
       const aIsValidation = isValidationCard(a);
       const bIsValidation = isValidationCard(b);
-      if (aIsValidation && !bIsValidation) return -1; // validation card appears after/below message
-      if (bIsValidation && !aIsValidation) return 1;
+      if (aIsValidation && !bIsValidation) return 1;
+      if (bIsValidation && !aIsValidation) return -1;
 
       // Custom cards should appear below the prompt/message that introduced them.
       const aIsCustomCard = isCustomCard(a);
       const bIsCustomCard = isCustomCard(b);
-      if (aIsCustomCard && !bIsCustomCard) return -1;
-      if (bIsCustomCard && !aIsCustomCard) return 1;
+      if (aIsCustomCard && !bIsCustomCard) return 1;
+      if (bIsCustomCard && !aIsCustomCard) return -1;
 
       // Fallback: ID comparison for stability
-      return b.id.localeCompare(a.id);
+      return a.id.localeCompare(b.id);
     });
 
     // 3. Inject Compact Item (Custom Empty State)
@@ -372,11 +460,7 @@ export function ChatInterface({
     // - New sessions (no indicators): Compact appears as first item
     // - Accepted invitations (with indicators): Compact appears below indicators
     if (customEmptyState && messages.length === 0) {
-      // Unshift adds to Index 0.
-      // In an INVERTED list, Index 0 is the Visual BOTTOM (closest to input).
-      // For new sessions: Compact is the only item (appears at bottom)
-      // For accepted invitations: Compact appears below the "ACCEPTED INVITATION" indicator
-      items.unshift({
+      items.push({
         type: 'custom-empty-state',
         id: 'custom-empty-state-item',
       });
@@ -384,11 +468,6 @@ export function ChatInterface({
 
     return items;
   }, [messages, indicators, validationCards, customCards, customEmptyState, lastSeenChatItemId, lastViewedAt]);
-
-  const scrollMetricsRef = useRef({
-    offset: 0,
-    contentHeight: 0,
-  });
 
   // Track when we're actively loading history to prevent scroll interference
   const isLoadingHistoryRef = useRef(false);
@@ -408,7 +487,7 @@ export function ChatInterface({
       return;
     }
 
-    const newestItem = listItems[0];
+    const newestItem = listItems[listItems.length - 1];
     if (!newestItem) return;
 
     const currentTimestamp = 'timestamp' in newestItem && newestItem.timestamp
@@ -420,23 +499,23 @@ export function ChatInterface({
     // Update ref immediately
     newestMessageTimestampRef.current = currentTimestamp;
 
-    // If this is the very first load (previous is 0), no special scroll needed
-    // Let the inverted FlatList naturally show content at the bottom
+    // If this is the very first load, jump to the bottom after layout.
     if (previousTimestamp === 0) {
+      shouldStickToBottomRef.current = true;
+      scrollToBottom(false);
       return;
     }
 
     // If the new message is NEWER than what we saw before, it's a new chat message
     // SCROLL TO BOTTOM
     if (currentTimestamp > previousTimestamp) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-      }, 100);
+      shouldStickToBottomRef.current = true;
+      scrollToBottom(true);
     }
 
     // If currentTimestamp === previousTimestamp, we just loaded history
     // DO NOT SCROLL - the newest message hasn't changed
-  }, [listItems]);
+  }, [listItems, scrollToBottom]);
 
   // Snapshot boundary: captures all message IDs present on first meaningful render.
   // Messages in the snapshot render instantly. Messages not in the snapshot may animate.
@@ -488,7 +567,7 @@ export function ChatInterface({
   }, [listItems, lastSeenChatItemId]);
 
   const isAtOrBeforeSeenBoundary = useCallback((item: ChatListItem, index: number) => {
-    if (lastSeenItemIndex >= 0 && index >= lastSeenItemIndex) {
+    if (lastSeenItemIndex >= 0 && index <= lastSeenItemIndex) {
       return true;
     }
 
@@ -504,23 +583,26 @@ export function ChatInterface({
 
   const shouldAnimateItem = useCallback((item: ChatListItem, index: number) => {
     if (isIndicator(item) || isValidationCard(item) || isCustomEmptyState(item)) return false;
-    if (animatedItemIdsRef.current.has(item.id)) return false;
-    if (seenAnimatedItemIdsRef.current.has(item.id)) return false;
-    if (isPreRegisteredAnimatedId(item.id)) return false;
-    if (isAtOrBeforeSeenBoundary(item, index)) return false;
+    const animationIdentity = getAnimationIdentity(item.id);
+    if (animatedItemIdsRef.current.has(item.id) || animatedItemIdsRef.current.has(animationIdentity)) return false;
+    if (seenAnimatedItemIdsRef.current.has(item.id) || seenAnimatedItemIdsRef.current.has(animationIdentity)) return false;
+    if (isPreRegisteredAnimatedId(item.id) || isPreRegisteredAnimatedId(animationIdentity)) return false;
 
     if (isCustomCard(item)) {
+      if (isAtOrBeforeSeenBoundary(item, index)) return false;
       return item.animate === true;
     }
 
     const message = item as ChatMessage;
     if (message.role === MessageRole.USER) return false;
     if (message.id.startsWith('optimistic-')) return false;
+    const wasPresentAtMount = mountSnapshotIdsRef.current.has(message.id);
+    if (wasPresentAtMount && isAtOrBeforeSeenBoundary(item, index)) return false;
 
     // If the user has already replied after this assistant/system message,
     // the message must be visible immediately. It is no longer a live pending
     // animation candidate, and hiding it leaves blank transcript gaps.
-    for (let i = index - 1; i >= 0; i--) {
+    for (let i = index + 1; i < listItems.length; i++) {
       const laterItem = listItems[i];
       if (isIndicator(laterItem) || isValidationCard(laterItem) || isCustomEmptyState(laterItem) || isCustomCard(laterItem)) continue;
       if ((laterItem as ChatMessage).role === MessageRole.USER) {
@@ -576,16 +658,16 @@ export function ChatInterface({
   const nextAnimatableMessageId = useMemo(() => {
     if (animatingItemId !== null) return null;
 
-    // listItems is sorted newest first (descending by timestamp)
-    // Iterate from the END (oldest) to find the oldest animatable message
-    for (let i = listItems.length - 1; i >= 0; i--) {
+    // listItems is sorted oldest first. Iterate forward to animate in
+    // chronological order.
+    for (let i = 0; i < listItems.length; i++) {
       const item = listItems[i];
       if (!shouldAnimateItem(item, i)) continue;
 
       // Skip if a user message exists after this AI message chronologically
       // (user already saw and responded — no need to animate)
       let hasUserResponseAfter = false;
-      for (let j = i - 1; j >= 0; j--) {
+      for (let j = i + 1; j < listItems.length; j++) {
         const laterItem = listItems[j];
         if (isIndicator(laterItem) || isValidationCard(laterItem) || isCustomEmptyState(laterItem) || isCustomCard(laterItem)) continue;
         if ((laterItem as ChatMessage).role === MessageRole.USER) {
@@ -594,7 +676,7 @@ export function ChatInterface({
         }
       }
       if (hasUserResponseAfter) continue;
-      return item.id;
+      return getAnimationIdentity(item.id);
     }
     return null;
   }, [listItems, animatingItemId, shouldAnimateItem]);
@@ -604,17 +686,29 @@ export function ChatInterface({
   // button-only actions from replaying older visible messages one by one.
   useEffect(() => {
     if (animatingItemId !== null) {
-      const animatingIndex = listItems.findIndex((item) => item.id === animatingItemId);
+      const animatingIndex = listItems.findIndex((item) => getAnimationIdentity(item.id) === animatingItemId);
       const animatingItem = animatingIndex >= 0 ? listItems[animatingIndex] : null;
-      if (!animatingItem || !shouldAnimateItem(animatingItem, animatingIndex)) {
-        markItemAnimationSeen(animatingItemId);
+
+      if (animatingItem && !isIndicator(animatingItem) && !isValidationCard(animatingItem) && !isCustomEmptyState(animatingItem) && !isCustomCard(animatingItem)) {
+        const message = animatingItem as ChatMessage;
+        const hasUserResponseAfter = listItems.slice(animatingIndex + 1).some((laterItem) => {
+          if (isIndicator(laterItem) || isValidationCard(laterItem) || isCustomEmptyState(laterItem) || isCustomCard(laterItem)) return false;
+          return (laterItem as ChatMessage).role === MessageRole.USER;
+        });
+
+        if (message.status !== 'streaming' && hasUserResponseAfter) {
+          markItemAnimationSeen(animatingItemId);
+          setAnimatingItemId(null);
+        }
+      } else if (!animatingItem) {
         setAnimatingItemId(null);
       }
     }
 
     listItems.forEach((item, index) => {
       if (isIndicator(item) || isValidationCard(item) || isCustomEmptyState(item)) return;
-      if (item.id === nextAnimatableMessageId || item.id === animatingItemId) return;
+      const animationIdentity = getAnimationIdentity(item.id);
+      if (animationIdentity === nextAnimatableMessageId || animationIdentity === animatingItemId) return;
 
       if (isCustomCard(item)) {
         if (item.animate === true && !shouldAnimateItem(item, index)) {
@@ -636,7 +730,12 @@ export function ChatInterface({
   useEffect(() => {
     const isAnimating = animatingItemId !== null;
     onTypewriterStateChange?.(isAnimating);
-  }, [animatingItemId, onTypewriterStateChange]);
+
+    if (isAnimating && (isNearBottomRef.current || shouldStickToBottomRef.current)) {
+      shouldStickToBottomRef.current = true;
+      scrollToBottom(false);
+    }
+  }, [animatingItemId, onTypewriterStateChange, scrollToBottom]);
 
   const renderItem: ListRenderItem<ChatListItem> = useCallback(({ item }) => {
     // 1. Render Custom Empty State (Compact)
@@ -685,7 +784,8 @@ export function ChatInterface({
     if (isCustomCard(item)) {
       const itemIndex = listItems.findIndex((listItem) => listItem.id === item.id);
       const shouldAnimate = itemIndex >= 0 ? shouldAnimateItem(item, itemIndex) : false;
-      const isNextAnimatable = item.id === nextAnimatableMessageId;
+      const animationIdentity = getAnimationIdentity(item.id);
+      const isNextAnimatable = animationIdentity === nextAnimatableMessageId;
 
       return (
         <>
@@ -704,15 +804,16 @@ export function ChatInterface({
     // 5. Render Messages
     // At this point, item must be a ChatMessage (we've already handled indicators, validation cards, custom cards, and custom empty state)
     const message = item as ChatMessage;
+    const animationIdentity = getAnimationIdentity(message.id);
     
     const itemIndex = listItems.findIndex((listItem) => listItem.id === message.id);
-    const isCurrentlyAnimating = message.id === animatingItemId;
+    const isCurrentlyAnimating = animationIdentity === animatingItemId;
     const isAIMessage = message.role !== MessageRole.USER;
 
     const shouldAnimateTypewriter = itemIndex >= 0 ? shouldAnimateItem(message, itemIndex) : false;
 
     // Track animation for the next message in queue (oldest unanimatied)
-    const isNextAnimatable = message.id === nextAnimatableMessageId;
+    const isNextAnimatable = animationIdentity === nextAnimatableMessageId;
 
     const bubbleMessage: ChatBubbleMessage = {
       id: message.id,
@@ -730,7 +831,14 @@ export function ChatInterface({
       <>
         <ChatBubble
           message={bubbleMessage}
-          onAnimationStart={isNextAnimatable ? () => setAnimatingItemId(message.id) : undefined}
+          animationIdentity={animationIdentity}
+          onAnimationStart={isNextAnimatable ? () => setAnimatingItemId(animationIdentity) : undefined}
+          onAnimationProgress={() => {
+            if (isNearBottomRef.current || shouldStickToBottomRef.current) {
+              shouldStickToBottomRef.current = true;
+              scrollToBottom(false);
+            }
+          }}
           onAnimationComplete={(isNextAnimatable || isCurrentlyAnimating) ? () => {
             markItemAnimationSeen(message.id);
             setAnimatingItemId(null);
@@ -743,20 +851,28 @@ export function ChatInterface({
         {renderMessageExtra?.(message)}
       </>
     );
-  }, [listItems, shouldAnimateItem, nextAnimatableMessageId, animatingItemId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra, onContextSharedPress, onValidateAccurate, onValidateNotQuite, markItemAnimationSeen]);
+  }, [listItems, shouldAnimateItem, nextAnimatableMessageId, animatingItemId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra, onContextSharedPress, onValidateAccurate, onValidateNotQuite, markItemAnimationSeen, scrollToBottom]);
 
-  const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
+  const keyExtractor = useCallback((item: ChatListItem) => getAnimationIdentity(item.id), []);
 
-  // In inverted list: Header is visually at BOTTOM (Typing Indicator)
+  // Footer is visually at the bottom (Typing Indicator)
   // We always render a container with minHeight to prevent layout shift
   // when the indicator disappears and the AI message appears
   const renderHeader = useCallback(() => {
     return (
-      <View style={styles.typingIndicatorContainer}>
+      <View
+        style={styles.typingIndicatorContainer}
+        onLayout={() => {
+          if (isNearBottomRef.current || shouldStickToBottomRef.current) {
+            shouldStickToBottomRef.current = true;
+            scrollToBottom(false);
+          }
+        }}
+      >
         {showTypingIndicator && <TypingIndicator />}
       </View>
     );
-  }, [showTypingIndicator, styles]);
+  }, [showTypingIndicator, styles, scrollToBottom]);
 
   // Memoize the empty state element (not a callback!) to prevent remounts
   // NOTE: styles are excluded from deps because useStyles() creates new refs each render
@@ -783,8 +899,8 @@ export function ChatInterface({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showTypingIndicator, emptyStateTitle, emptyStateMessage, customEmptyState]);
 
-  // In inverted list: Footer is visually at TOP (Loading Spinner)
-  const renderFooter = useCallback(() => {
+  // Header is visually at the top (Loading Spinner)
+  const renderLoadingHeader = useCallback(() => {
     if (!isLoadingMore) return null;
     return (
       <View style={styles.loadingMore}>
@@ -795,18 +911,19 @@ export function ChatInterface({
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom = Math.max(
+      0,
+      contentSize.height - layoutMeasurement.height - contentOffset.y,
+    );
+    const isNearBottom = distanceFromBottom < 80;
+
     scrollMetricsRef.current = {
       offset: contentOffset.y,
       contentHeight: contentSize.height,
+      layoutHeight: layoutMeasurement.height,
     };
-
-    // Detect overscroll (rubber band past oldest content in inverted list)
-    const maxOffset = Math.max(0, contentSize.height - layoutMeasurement.height);
-    const overscrolled = contentOffset.y > maxOffset + 5;
-    if (overscrolled !== isOverscrolledRef.current) {
-      isOverscrolledRef.current = overscrolled;
-      if (overscrolled) setCurrentStageMeta(null);
-    }
+    isNearBottomRef.current = isNearBottom;
+    shouldStickToBottomRef.current = isNearBottom;
   }, []);
 
   const handleContentSizeChange = useCallback((_width: number, height: number) => {
@@ -815,8 +932,13 @@ export function ChatInterface({
     // Always keep scroll metrics updated
     scrollMetricsRef.current.contentHeight = height;
 
-    // If we're not in history loading mode, nothing to restore
+    // If we're not in history loading mode, keep the bottom pinned only when
+    // the user was already reading at the bottom.
     if (!isLoadingHistoryRef.current || !snapshot) {
+      scrollMetricsRef.current.contentHeight = height;
+      if (isNearBottomRef.current || shouldStickToBottomRef.current) {
+        scrollToBottom(false);
+      }
       return;
     }
 
@@ -835,7 +957,14 @@ export function ChatInterface({
       historyLoadSnapshotRef.current = null;
       isLoadingHistoryRef.current = false;
     }
-  }, []);
+  }, [scrollToBottom]);
+
+  const handleListLayout = useCallback((event: LayoutChangeEvent) => {
+    scrollMetricsRef.current.layoutHeight = event.nativeEvent.layout.height;
+    if (isNearBottomRef.current || shouldStickToBottomRef.current) {
+      scrollToBottom(false);
+    }
+  }, [scrollToBottom]);
 
   const handleEndReached = useCallback(() => {
     if (hasMore && !isLoadingMore && onLoadMore) {
@@ -867,89 +996,21 @@ export function ChatInterface({
     }
   }, [isLoadingMore]);
 
-  // ---------------------------------------------------------------------------
-  // Sticky Stage Header: shows the current stage at the top of the chat
-  // ---------------------------------------------------------------------------
-  const [currentStageMeta, setCurrentStageMeta] = useState<{
-    name: string;
-    color: string;
-  } | null>(null);
-
-  // Use a high threshold so the sticky appears as soon as the inline bar
-  // starts going behind the header (not after it's fully off-screen).
-  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 95 }).current;
-  const stageBarsRef = useRef<Array<{ index: number; name: string; color: string }>>([]);
-  const isOverscrolledRef = useRef(false);
-
-  // Pre-compute stage bar positions whenever the list changes
-  useEffect(() => {
-    const bars: Array<{ index: number; name: string; color: string }> = [];
-    listItems.forEach((item, index) => {
+  const stickyHeaderIndices = useMemo(() => {
+    // VirtualizedList counts ListHeaderComponent as scroll child 0, so data
+    // rows are offset by one when passed through stickyHeaderIndices.
+    const listHeaderOffset = 1;
+    return listItems.reduce<number[]>((indices, item, index) => {
       if (isIndicator(item) && item.indicatorType === 'stage-chapter') {
-        bars.push({
-          index,
-          name: item.metadata?.stageName || 'New Chapter',
-          color: item.metadata?.stageColor || '#8B9DC3',
-        });
+        indices.push(index + listHeaderOffset);
       }
-    });
-    stageBarsRef.current = bars;
+      return indices;
+    }, []);
   }, [listItems]);
-
-  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: Array<{ item: ChatListItem; index: number | null }> }) => {
-    // Suppress sticky during overscroll (rubber band effect)
-    if (isOverscrolledRef.current) {
-      setCurrentStageMeta(null);
-      return;
-    }
-
-    const visibleIndices = new Set<number>();
-    for (const v of viewableItems) {
-      if (v.index != null) visibleIndices.add(v.index);
-    }
-
-    const bars = stageBarsRef.current;
-
-    // In an inverted FlatList, higher data index = higher on screen.
-    // A bar that scrolled off the TOP has a high index and is NOT visible.
-    // Find the non-visible bar with the highest index.
-    let stickyBar: { index: number; name: string; color: string } | null = null;
-    for (const bar of bars) {
-      if (!visibleIndices.has(bar.index)) {
-        if (!stickyBar || bar.index > stickyBar.index) {
-          stickyBar = bar;
-        }
-      }
-    }
-
-    if (stickyBar) {
-      // Only show if there are visible items BELOW this bar on screen
-      // (lower index = lower on screen in inverted list).
-      // This prevents showing the sticky for bars that scrolled off the BOTTOM.
-      const hasContentBelow = viewableItems.some(
-        (v) => v.index != null && v.index < stickyBar!.index,
-      );
-      setCurrentStageMeta(
-        hasContentBelow ? { name: stickyBar.name, color: stickyBar.color } : null,
-      );
-    } else {
-      // All bars visible or no bars exist — no sticky needed
-      setCurrentStageMeta(null);
-    }
-  }, []);
 
   // ---------------------------------------------------------------------------
   // New Activity Pill: floating indicator for off-screen new items
   // ---------------------------------------------------------------------------
-
-  /** Pick white or dark text based on background luminance. */
-  const getContrastText = useCallback((hex: string): string => {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return luminance > 0.55 ? '#1a1815' : '#ffffff';
-  }, []);
 
   return (
     <KeyboardAvoidingView
@@ -957,46 +1018,30 @@ export function ChatInterface({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
-      {/* Sticky stage header overlay */}
-      {currentStageMeta && listItems.length > 0 && (
-        <View
-          style={[styles.stickyStageHeader, { backgroundColor: currentStageMeta.color }]}
-          pointerEvents="none"
-        >
-          <Text style={[styles.stickyStageText, { color: getContrastText(currentStageMeta.color) }]}>
-            {currentStageMeta.name}
-          </Text>
-        </View>
-      )}
       <FlatList
         ref={flatListRef}
-        inverted
         data={listItems}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         style={styles.flatList}
-        viewabilityConfig={viewabilityConfig}
-        onViewableItemsChanged={onViewableItemsChanged}
-        // Stabilizer: maintains position when spinners appear/disappear
-        maintainVisibleContentPosition={{
-          minIndexForVisible: 0,
-        }}
+        stickyHeaderIndices={stickyHeaderIndices}
         contentContainerStyle={[
           styles.messageList,
           listItems.length === 0 && (customEmptyState ? styles.customMessageListEmpty : styles.messageListEmpty),
         ]}
-        ListHeaderComponent={
+        ListHeaderComponent={renderLoadingHeader}
+        ListFooterComponent={
           <>
             {renderBelowChat?.()}
             {renderHeader?.()}
           </>
         }
-        ListFooterComponent={renderFooter}
         ListEmptyComponent={emptyStateElement}
         showsVerticalScrollIndicator={false}
         testID="chat-message-list"
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.2}
+        onStartReached={handleEndReached}
+        onStartReachedThreshold={0.2}
+        onLayout={handleListLayout}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         onContentSizeChange={handleContentSizeChange}
@@ -1039,22 +1084,6 @@ const useStyles = () => {
       flex: 1,
       backgroundColor: palette.bg,
     },
-    stickyStageHeader: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 10,
-      paddingVertical: 6,
-      paddingHorizontal: 18,
-    },
-    stickyStageText: {
-      fontSize: 12,
-      fontWeight: '700',
-      letterSpacing: 0.8,
-      textTransform: 'uppercase',
-      textAlign: 'center',
-    },
     flatList: {
       flex: 1,
     },
@@ -1069,11 +1098,9 @@ const useStyles = () => {
     },
     customMessageListEmpty: {
       flexGrow: 1,
-      // In inverted list, flex-end aligns to visual TOP
-      justifyContent: 'flex-end',
+      justifyContent: 'flex-start',
     },
     loadingMore: {
-      // In inverted list, this appears at visual TOP
       paddingVertical: t.spacing.xl,
       alignItems: 'center',
     },
@@ -1093,8 +1120,6 @@ const useStyles = () => {
     },
     emptyState: {
       flex: 1,
-      // Counter-flip the inverted list for empty state text
-      transform: [{ scaleY: -1 }],
       justifyContent: 'center',
       alignItems: 'center',
       paddingHorizontal: t.spacing['3xl'],
@@ -1102,9 +1127,6 @@ const useStyles = () => {
     },
     customEmptyState: {
       flex: 1,
-      // Counter-flip the inverted list for empty state content
-      transform: [{ scaleY: -1 }],
-      // Start content at the top (in flipped view this is flex-start)
       justifyContent: 'flex-start',
     },
     emptyStateTitle: {

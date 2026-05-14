@@ -19,7 +19,7 @@ import {
 } from '@meet-without-fear/shared';
 import { messageKeys, sessionKeys, stageKeys, timelineKeys } from './queryKeys';
 import { getPersistedMessageRefreshQueryKeys } from '../utils/realtimeInvalidation';
-import { preRegisterAnimatedId } from '../utils/animationBridge';
+import { bridgeAnimatedId } from '../utils/animationBridge';
 
 // ============================================================================
 // Types
@@ -63,6 +63,10 @@ export interface StreamMetadata {
 
 /** Status of a streaming message */
 export type StreamStatus = 'idle' | 'sending' | 'streaming' | 'complete' | 'error';
+
+type CachedStreamingMessage = MessageDTO & {
+  status?: 'sending' | 'streaming' | 'sent' | 'error';
+};
 
 /** Parameters for sending a streaming message */
 export interface SendStreamingMessageParams {
@@ -167,7 +171,7 @@ export function useStreamingMessage(
    * Add a message to the cache
    */
   const addMessageToCache = useCallback(
-    (sessionId: string, message: MessageDTO, stage?: Stage) => {
+    (sessionId: string, message: CachedStreamingMessage, stage?: Stage) => {
       const updateCache = (old: GetMessagesResponse | undefined) => {
         if (!old) {
           return { messages: [message], hasMore: false };
@@ -660,7 +664,7 @@ export function useStreamingMessage(
           if (placeholderCreated) return;
           placeholderCreated = true;
           setStatus('streaming');
-          const placeholderAIMessage: MessageDTO = {
+          const placeholderAIMessage: CachedStreamingMessage = {
             id: aiMessageIdRef.current,
             sessionId,
             senderId: null,
@@ -668,6 +672,7 @@ export function useStreamingMessage(
             content: '',
             stage: currentStage ?? Stage.ONBOARDING,
             timestamp: new Date().toISOString(),
+            status: 'streaming',
           };
           addMessageToCache(sessionId, placeholderAIMessage, currentStage);
         };
@@ -724,7 +729,7 @@ export function useStreamingMessage(
             }
 
             const updateCache = () => {
-              const updatedAIMessage: MessageDTO = {
+              const updatedAIMessage: CachedStreamingMessage = {
                 id: aiMessageIdRef.current,
                 sessionId,
                 senderId: null,
@@ -732,6 +737,7 @@ export function useStreamingMessage(
                 content: accumulatedTextRef.current,
                 stage: currentStage ?? Stage.ONBOARDING,
                 timestamp: new Date().toISOString(),
+                status: 'streaming',
               };
               addMessageToCache(sessionId, updatedAIMessage, currentStage);
               lastCacheUpdateRef.current = Date.now();
@@ -794,7 +800,7 @@ export function useStreamingMessage(
             console.log(`[useStreamingMessage] [TIMING] text_complete parsed`);
 
             // Update cache with final content
-            const finalAIMessage: MessageDTO = {
+            const finalAIMessage: CachedStreamingMessage = {
               id: aiMessageIdRef.current,
               sessionId,
               senderId: null,
@@ -802,6 +808,7 @@ export function useStreamingMessage(
               content: accumulatedTextRef.current,
               stage: currentStage ?? Stage.ONBOARDING,
               timestamp: new Date().toISOString(),
+              status: 'sent',
             };
             addMessageToCache(sessionId, finalAIMessage, currentStage);
 
@@ -857,8 +864,8 @@ export function useStreamingMessage(
               // This prevents ChatInterface from re-animating messages whose IDs
               // change from streaming placeholders to real UUIDs during refetch.
               if (data.messageId && aiMessageIdRef.current.startsWith('streaming-')) {
+                bridgeAnimatedId(aiMessageIdRef.current, data.messageId);
                 replaceMessageIdInCache(sessionId, aiMessageIdRef.current, data.messageId, currentStage);
-                preRegisterAnimatedId(data.messageId);
                 aiMessageIdRef.current = data.messageId;
               }
               if (realUserIdRef.current && activeUserMessageIdRef.current.startsWith('optimistic-user-')) {
@@ -870,7 +877,7 @@ export function useStreamingMessage(
 
               // If text_complete wasn't received (fallback), handle completion here
               if (!textCompleteReceivedRef.current) {
-                const finalAIMessage: MessageDTO = {
+                const finalAIMessage: CachedStreamingMessage = {
                   id: aiMessageIdRef.current,
                   sessionId,
                   senderId: null,
@@ -878,6 +885,7 @@ export function useStreamingMessage(
                   content: accumulatedTextRef.current,
                   stage: currentStage ?? Stage.ONBOARDING,
                   timestamp: new Date().toISOString(),
+                  status: 'sent',
                 };
                 addMessageToCache(sessionId, finalAIMessage, currentStage);
 
