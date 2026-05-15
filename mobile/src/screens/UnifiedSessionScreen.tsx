@@ -51,8 +51,6 @@ import { CompactAgreementBar } from '../components/CompactAgreementBar';
 import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
-import { ActivityDrawer } from '../components/ActivityDrawer';
-import type { ActivityDrawerFocusTarget } from '../components/ActivityDrawer';
 import { PartnerInfoDrawer } from '../components/PartnerInfoDrawer';
 import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
@@ -71,7 +69,6 @@ import { useRealtime, useUserSessionUpdates } from '../hooks/useRealtime';
 import { stageKeys, messageKeys, sessionKeys, notificationKeys } from '../hooks/queryKeys';
 import { useAIMessageHandler } from '../hooks/useMessages';
 import { useSharingStatus } from '../hooks/useSharingStatus';
-import { usePendingActions } from '../hooks/usePendingActions';
 import {
   useCloseStage4,
   useShareStage4Selections,
@@ -674,11 +671,7 @@ export function UnifiedSessionScreen({
   } = useUnifiedSession(sessionId);
   const sessionQueriesEnabled = !accessDenied && !loadError;
 
-  // Server-side pending actions for badge count (replaces client-side computation)
-  // Gate behind a clean session load to prevent polling when session state fails (#428, #522)
-  const pendingActionsQuery = usePendingActions(sessionId, { enabled: sessionQueriesEnabled });
-
-  // Sharing status for the header button. Keep these duplicate header queries
+  // Sharing status for empathy validation data. Keep these queries
   // behind the same stage/access gates as useUnifiedSession so the badge does
   // not reintroduce the Stage 2 share-offer request storm this PR removes.
   const sharingStatus = useSharingStatus(sessionId, {
@@ -1312,11 +1305,6 @@ export function UnifiedSessionScreen({
     handleConfirmInvitationMessage();
   }, [handleConfirmInvitationMessage]);
 
-  // -------------------------------------------------------------------------
-  // Activity Menu Modal
-  // -------------------------------------------------------------------------
-  const [showActivityMenu, setShowActivityMenu] = useState(false);
-  const [activityFocusTarget, setActivityFocusTarget] = useState<ActivityDrawerFocusTarget | null>(null);
   const [showPartnerInfo, setShowPartnerInfo] = useState(false);
   const topicFrame = invitation && 'topicFrame' in invitation
     ? (invitation.topicFrame as string | null)
@@ -2688,8 +2676,7 @@ export function UnifiedSessionScreen({
 
   const partnerAccepted = !!invitation?.acceptedAt;
 
-  // Shared share-invitation handler used by both the InvitationReadyModal and
-  // the ActivityDrawer's "Share invitation" button.
+  // Shared share-invitation handler used by the InvitationReadyModal.
   const handleShareInvitation = useCallback(async (): Promise<boolean> => {
     if (!invitationUrl) return false;
     try {
@@ -3183,7 +3170,6 @@ export function UnifiedSessionScreen({
               primaryAction={{
                 label: 'Review',
                 onPress: () => {
-                  setShowActivityMenu(false);
                   setNeedsDrawerMode('reveal');
                   setShowNeedsDrawer(true);
                 },
@@ -3362,7 +3348,6 @@ export function UnifiedSessionScreen({
               status={needsStatus}
               compact
               onReview={() => {
-                setShowActivityMenu(false);
                 setNeedsDrawerMode(getNeedsDrawerModeForNeedsStatus(needsStatus));
                 setShowNeedsDrawer(true);
               }}
@@ -3669,25 +3654,6 @@ export function UnifiedSessionScreen({
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
           hideOnlineStatus={isInvitationPhase}
           onBackPress={onNavigateBack}
-          onBriefStatusPress={
-            session?.status === SessionStatus.INVITED && invitation?.isInviter
-              ? () => {
-                  setShowShareLaterTooltip(false);
-                  setActivityFocusTarget(null);
-                  setShowActivityMenu(true);
-                }
-              : undefined
-          }
-          hasNewActivity={!isInOnboardingUnsigned ? (pendingActionsQuery.data?.actions?.length ?? 0) > 0 : false}
-          onMenuPress={
-            !isInOnboardingUnsigned
-              ? () => {
-                  setShowShareLaterTooltip(false);
-                  setActivityFocusTarget(null);
-                  setShowActivityMenu(true);
-                }
-              : undefined
-          }
           onPress={() => setShowPartnerInfo(true)}
           conversationTopic={topicFrame}
           testID="session-chat-header"
@@ -3753,15 +3719,6 @@ export function UnifiedSessionScreen({
           // arriving while viewing don't trigger a separator
           lastSeenChatItemId={lastSeenChatItemIdForSeparator}
           lastViewedAt={lastViewedAtForAnimation}
-          // Open activity menu and focus the corresponding "Context shared" / "Empathy shared" item.
-          onContextSharedPress={(timestamp, isFromMe, indicatorType) => {
-            setActivityFocusTarget({
-              type: indicatorType === 'empathy-shared' ? 'empathy' : 'context',
-              direction: isFromMe === false ? 'received' : 'sent',
-              timestamp,
-            });
-            setShowActivityMenu(true);
-          }}
           customCards={chatCustomCards}
           // Show compact as custom empty state during onboarding when not signed.
           customEmptyState={
@@ -3984,7 +3941,7 @@ export function UnifiedSessionScreen({
             markCompleted('responded-to-share-offer');
             trackShareTopicAccepted(sessionId, shareOfferData.suggestion!.action as 'OFFER_SHARING' | 'OFFER_OPTIONAL');
             // Open refinement modal so user can chat about and refine the draft
-            // before sharing (same flow as ActivityDrawer's "Refine" button)
+            // before sharing
             if (shareOfferData?.suggestion) {
               setRefinementInitialSuggestion(shareOfferData.suggestion.suggestedContent || '');
               setRefinementOfferId(shareOfferData.suggestion.offerId);
@@ -4228,45 +4185,6 @@ export function UnifiedSessionScreen({
         </View>
       )}
 
-      {/* Activity Drawer - bottom sheet with timeline items */}
-      <ActivityDrawer
-        visible={showActivityMenu}
-        sessionId={sessionId}
-        partnerName={partnerName}
-        sessionStatus={session?.status}
-        focusTarget={activityFocusTarget}
-        onClose={() => {
-          setShowActivityMenu(false);
-          setActivityFocusTarget(null);
-        }}
-        onOpenRefinement={(offerId, suggestion) => {
-          setShowActivityMenu(false);
-          setRefinementInitialSuggestion(suggestion);
-          setRefinementOfferId(offerId);
-        }}
-        onShareAsIs={(_offerId) => {
-          setShowActivityMenu(false);
-          trackShareDraftSent(sessionId, (shareOfferData?.suggestion?.action ?? 'OFFER_OPTIONAL') as 'OFFER_SHARING' | 'OFFER_OPTIONAL', false);
-          handleRespondToShareOffer('accept');
-        }}
-        onOpenEmpathyDetail={(_attemptId, _content) => {
-          setShowActivityMenu(false);
-          setShowEmpathyDrawer(true);
-        }}
-        topicFrame={topicFrameConfirmed ? (topicFrame || undefined) : undefined}
-        invitationTimestamp={isInviter ? (invitation?.messageConfirmedAt || undefined) : undefined}
-        partnerAccepted={partnerAccepted}
-        onShareInvitation={
-          isInviter && invitationUrl && !partnerAccepted
-            ? () => {
-                handleShareInvitation();
-              }
-            : undefined
-        }
-        partnerEmpathyValidated={isEmpathyValidated || (partnerEmpathyData?.validated ?? false)}
-        testID="activity-drawer"
-      />
-
       {/* Refinement Modal - AI-guided chat for refining share offer content */}
       {refinementOfferId && (
         <RefinementModalScreen
@@ -4279,8 +4197,7 @@ export function UnifiedSessionScreen({
           onShareComplete={() => {
             setRefinementOfferId(null);
             trackShareDraftSent(sessionId, (shareOfferData?.suggestion?.action ?? 'OFFER_OPTIONAL') as 'OFFER_SHARING' | 'OFFER_OPTIONAL', true);
-            // Shared context now appears inline in chat — no need to auto-open the activity drawer.
-            // Refresh activity menu data so it's current if the user opens it later.
+            // Shared context appears inline in chat. Refresh share data.
             queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
             queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
             queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });

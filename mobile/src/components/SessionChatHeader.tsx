@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import { BookOpen, Menu } from 'lucide-react-native';
+import { Menu } from 'lucide-react-native';
 import { ConnectionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
@@ -45,10 +45,6 @@ export interface SessionChatHeaderProps {
   onPress?: () => void;
   /** Optional callback when brief status is pressed (e.g., to show invitation options) */
   onBriefStatusPress?: () => void;
-  /** Whether there is new activity to indicate with a dot badge */
-  hasNewActivity?: boolean;
-  /** Callback when the activity menu icon is pressed */
-  onMenuPress?: () => void;
   /** Conversation topic to display below partner name */
   conversationTopic?: string | null;
   /** Custom container style */
@@ -100,8 +96,6 @@ export function SessionChatHeader({
   leftActionIcon = 'back',
   onPress,
   onBriefStatusPress,
-  hasNewActivity = false,
-  onMenuPress,
   conversationTopic,
   style,
   testID = 'session-chat-header',
@@ -206,24 +200,7 @@ export function SessionChatHeader({
 
       {/* Right section: Activity menu icon or brief status */}
       <View style={styles.rightSection}>
-        {onMenuPress ? (
-          <TouchableOpacity
-            style={styles.menuButton}
-            onPress={onMenuPress}
-            accessibilityRole="button"
-            accessibilityLabel={hasNewActivity ? "Open exchange history, new activity" : "Open exchange history"}
-            testID={`${testID}-menu-button`}
-          >
-            <BookOpen color={palette.textMuted} size={20} />
-            {hasNewActivity && (
-              <View
-                style={styles.activityDot}
-                testID={`${testID}-activity-dot`}
-                accessibilityLabel="New activity available"
-              />
-            )}
-          </TouchableOpacity>
-        ) : briefStatus ? (
+        {briefStatus ? (
           onBriefStatusPress ? (
             <TouchableOpacity
               style={styles.briefStatusPill}
@@ -307,24 +284,6 @@ const useStyles = () => {
     },
     rightSpacer: {
       width: 32,
-    },
-    // Activity menu button
-    menuButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
-      position: 'relative',
-    },
-    activityDot: {
-      position: 'absolute' as const,
-      top: 4,
-      right: 2,
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: palette.accent,
     },
     partnerName: {
       fontSize: 20,

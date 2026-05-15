@@ -342,7 +342,6 @@ function ChatSection({ styles, palette }: { styles: ReturnType<typeof makeStyles
           leftActionIcon="menu"
           onBackPress={() => {}}
           onPress={() => {}}
-          hasNewActivity
         />
         <View style={styles.chatPreview}>
           <ChatIndicator type="stage-chapter" metadata={{ stageName: 'Your Story' }} />
