@@ -216,7 +216,7 @@ const SUPPRESSED_CHAPTER_STAGES = new Set([Stage.ONBOARDING, Stage.INFORMED_EMPA
  * Derive chapter marker indicators from message stage transitions.
  * Inserts a chapter indicator at the first message of each new stage.
  */
-function deriveChapterMarkers(
+export function deriveChapterMarkers(
   messages: ChatMessage[],
   anchors?: Partial<Record<Stage, string | null | undefined>>,
 ): ChatIndicatorItem[] {
@@ -227,7 +227,7 @@ function deriveChapterMarkers(
 
     switch (stage) {
       case Stage.WITNESS:
-        return fallbackTimestamp;
+        return anchorTimestamp || fallbackTimestamp;
       case Stage.PERSPECTIVE_STRETCH:
         return anchorTimestamp || undefined;
       default:
@@ -2236,6 +2236,7 @@ export function UnifiedSessionScreen({
         acceptedAt: invitationAcceptedAt,
       } : undefined,
       milestones: {
+        witnessStartedAt: milestones?.witnessStartedAt ?? null,
         // Use ref as backup to prevent flickering during mutation
         feelHeardConfirmedAt: milestones?.feelHeardConfirmedAt ??
           (hasEverConfirmedFeelHeard.current || isConfirmingFeelHeard ? new Date().toISOString() : null),
@@ -2305,14 +2306,15 @@ export function UnifiedSessionScreen({
     // --- Stage chapter markers ---
     // Chapter bars usually appear at the milestone that opens the chapter.
     // Witness is the exception: invitees first see the topic intro card, so
-    // its chapter marker is anchored to the first Witness prompt instead.
+    // its chapter marker is anchored to the canonical Witness stage start.
     const chapterIndicators = deriveChapterMarkers(messages, {
+      [Stage.WITNESS]: milestones?.witnessStartedAt,
       [Stage.PERSPECTIVE_STRETCH]: milestones?.feelHeardConfirmedAt,
     });
     allIndicators.push(...chapterIndicators);
 
     return allIndicators;
-  }, [isInviter, session?.status, invitationMessageConfirmedAt, invitationAcceptedAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
+  }, [isInviter, session?.status, invitationMessageConfirmedAt, invitationAcceptedAt, milestones?.witnessStartedAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
 
 
 

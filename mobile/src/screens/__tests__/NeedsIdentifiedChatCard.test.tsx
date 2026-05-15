@@ -1,11 +1,13 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import {
+  deriveChapterMarkers,
   getEmpathyValidationCardStatus,
   getNeedsDrawerModeForNeedsStatus,
   isLocalEmpathyValidationCurrent,
   NeedsIdentifiedChatCard,
 } from '../UnifiedSessionScreen';
+import { Stage } from '@meet-without-fear/shared';
 
 jest.mock('../../lib/api', () => ({
   ApiClientError: class ApiClientError extends Error {},
@@ -69,5 +71,39 @@ describe('NeedsIdentifiedChatCard', () => {
       { attemptId: 'attempt-1', revisionCount: 1, statusVersion: 4 },
       { id: 'attempt-1', revisionCount: 2, statusVersion: 5 }
     )).toBe(false);
+  });
+});
+
+describe('deriveChapterMarkers', () => {
+  it('anchors Your Story to the Witness stage start when the opening prompt is stored as onboarding', () => {
+    const messages: Parameters<typeof deriveChapterMarkers>[0] = [
+      {
+        id: 'opening-prompt',
+        role: 'AI',
+        content: "I'd like to hear your side now.",
+        timestamp: '2026-05-14T04:51:59.395Z',
+        stage: Stage.ONBOARDING,
+      },
+      {
+        id: 'first-witness-response',
+        role: 'USER',
+        content: 'I actually think the work has been going pretty well.',
+        timestamp: '2026-05-14T04:53:43.402Z',
+        stage: Stage.WITNESS,
+      },
+    ];
+
+    const markers = deriveChapterMarkers(
+      messages,
+      { [Stage.WITNESS]: '2026-05-14T04:51:56.139Z' }
+    );
+
+    expect(markers).toEqual([
+      expect.objectContaining({
+        id: 'stage-chapter-1',
+        timestamp: '2026-05-14T04:51:56.139Z',
+        metadata: expect.objectContaining({ stageName: 'Your Story' }),
+      }),
+    ]);
   });
 });
