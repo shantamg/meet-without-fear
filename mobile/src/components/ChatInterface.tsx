@@ -396,7 +396,7 @@ export function ChatInterface({
 
     const showSub = Keyboard.addListener(showEvent, () => {
       LayoutAnimation.configureNext(auxiliaryControlsLayoutAnimation);
-      setAuxiliaryControlsVisible(false);
+      setAuxiliaryControlsVisible(true);
       setIsKeyboardVisible(true);
       if (isNearBottomRef.current || shouldStickToBottomRef.current) {
         scrollToBottom(false);

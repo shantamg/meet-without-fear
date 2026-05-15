@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  type ViewStyle,
 } from 'react-native';
 import {
   Check,
@@ -40,6 +41,7 @@ export interface GuidedActionPanelProps {
   primaryAction?: GuidedActionButton;
   secondaryAction?: GuidedActionButton;
   compact?: boolean;
+  pressable?: boolean;
   testID?: string;
 }
 
@@ -61,6 +63,10 @@ function ToneIcon({ tone, color }: { tone: GuidedActionTone; color: string }) {
   }
 }
 
+function getCompactButtonWidth(label: string): number {
+  return Math.min(190, Math.max(76, label.length * 7 + 28));
+}
+
 export function GuidedActionPanel({
   tone,
   eyebrow,
@@ -69,34 +75,49 @@ export function GuidedActionPanel({
   primaryAction,
   secondaryAction,
   compact = false,
+  pressable = false,
   testID,
 }: GuidedActionPanelProps) {
   const { palette } = useAppAppearance();
   const accent = tone === 'success' ? palette.success : palette.accent;
   const actions = [secondaryAction, primaryAction].filter(Boolean) as GuidedActionButton[];
+  const [panelWidth, setPanelWidth] = useState(0);
+  const showPressableRow = pressable && !!primaryAction && !secondaryAction;
+  const centerSingleLinePressable = showPressableRow && compact && !eyebrow && !subtitle;
+  const compactInlineActions = !showPressableRow && compact && actions.length > 0 && panelWidth >= 390;
+  const containerStyle: ViewStyle[] = [
+    styles.container,
+    ...(compact ? [styles.containerCompact] : []),
+    { borderLeftColor: accent, backgroundColor: palette.bg, borderTopColor: palette.border },
+  ];
 
-  return (
-    <View
-      style={[
-        styles.container,
-        compact && styles.containerCompact,
-        { borderLeftColor: accent, backgroundColor: palette.bg, borderTopColor: palette.border },
-      ]}
-      testID={testID}
-    >
-      <View style={styles.iconWrap}>
-        <View style={[styles.icon, { backgroundColor: palette.chipBg }]}>
+  const content = (
+    <>
+      <View style={[styles.iconWrap, centerSingleLinePressable && styles.iconWrapCentered]}>
+        <View style={[styles.icon, compact && styles.iconCompact, { backgroundColor: palette.chipBg }]}>
           <ToneIcon tone={tone} color={accent} />
         </View>
       </View>
-      <View style={styles.body}>
-        {eyebrow ? (
-          <Text style={[styles.eyebrow, { color: accent }]}>{eyebrow}</Text>
-        ) : null}
-        <Text style={[styles.title, { color: palette.text }]}>{title}</Text>
-        {subtitle ? <Text style={[styles.subtitle, { color: palette.textMuted }]}>{subtitle}</Text> : null}
-        {actions.length > 0 ? (
-          <View style={[styles.actions, actions.length === 1 && styles.actionsSingle]}>
+      <View style={[
+        styles.body,
+        compactInlineActions && styles.bodyCompactWithAction,
+        centerSingleLinePressable && styles.bodySingleLinePressable,
+      ]}>
+        <View style={styles.textBlock}>
+          {eyebrow ? (
+            <Text style={[styles.eyebrow, compact && styles.eyebrowCompact, { color: accent }]}>{eyebrow}</Text>
+          ) : null}
+          <Text style={[styles.title, compact && styles.titleCompact, { color: palette.text }]}>{title}</Text>
+          {subtitle ? <Text style={[styles.subtitle, compact && styles.subtitleCompact, { color: palette.textMuted }]}>{subtitle}</Text> : null}
+        </View>
+        {!showPressableRow && actions.length > 0 ? (
+          <View style={[
+            styles.actions,
+            compact && styles.actionsCompact,
+            compactInlineActions && styles.actionsCompactInline,
+            compact && !compactInlineActions && styles.actionsCompactStacked,
+            actions.length === 1 && (!compact || compactInlineActions) && styles.actionsSingle,
+          ]}>
             {actions.map((action) => {
               const isPrimary = action === primaryAction;
               return (
@@ -107,6 +128,8 @@ export function GuidedActionPanel({
                     isPrimary
                       ? [styles.primaryButton, { backgroundColor: accent, borderColor: accent }]
                       : [styles.secondaryButton, { backgroundColor: palette.bgElev, borderColor: palette.border }],
+                    compact && styles.buttonCompact,
+                    compact && { minWidth: getCompactButtonWidth(action.label) },
                     action.disabled && styles.buttonDisabled,
                   ]}
                   onPress={action.onPress}
@@ -119,6 +142,7 @@ export function GuidedActionPanel({
                   ) : (
                     <Text style={[
                       styles.buttonText,
+                      compact && styles.buttonTextCompact,
                       isPrimary ? [styles.primaryButtonText, { color: '#fffaf0' }] : [styles.secondaryButtonText, { color: accent }],
                     ]}>
                       {action.label}
@@ -130,6 +154,33 @@ export function GuidedActionPanel({
           </View>
         ) : null}
       </View>
+    </>
+  );
+
+  if (showPressableRow) {
+    return (
+      <TouchableOpacity
+        style={containerStyle}
+        testID={testID}
+        onLayout={(event) => setPanelWidth(event.nativeEvent.layout.width)}
+        onPress={primaryAction.onPress}
+        disabled={primaryAction.disabled || primaryAction.loading}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel={primaryAction.label}
+      >
+        {content}
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <View
+      style={containerStyle}
+      testID={testID}
+      onLayout={(event) => setPanelWidth(event.nativeEvent.layout.width)}
+    >
+      {content}
     </View>
   );
 }
@@ -151,6 +202,10 @@ const styles = StyleSheet.create({
   iconWrap: {
     paddingTop: PANEL_ICON_TOP_ALIGNMENT_OFFSET,
   },
+  iconWrapCentered: {
+    paddingTop: 0,
+    justifyContent: 'center',
+  },
   icon: {
     width: spacing['3xl'],
     height: spacing['3xl'],
@@ -159,9 +214,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.userBg,
   },
+  iconCompact: {
+    width: spacing['2xl'],
+    height: spacing['2xl'],
+  },
   body: {
     flex: 1,
     minWidth: 0,
+  },
+  bodyCompactWithAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  textBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  bodySingleLinePressable: {
+    justifyContent: 'center',
   },
   eyebrow: {
     fontSize: typography.fontSize.xs,
@@ -171,12 +242,19 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     fontFamily: designFonts.mono,
   },
+  eyebrowCompact: {
+    marginBottom: 2,
+  },
   title: {
     fontSize: typography.fontSize.md,
     fontWeight: '700',
     lineHeight: spacing.xl,
     color: colors.textPrimary,
     fontFamily: designFonts.sans,
+  },
+  titleCompact: {
+    fontSize: typography.fontSize.base,
+    lineHeight: spacing.lg,
   },
   subtitle: {
     marginTop: spacing.xs,
@@ -185,10 +263,24 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontFamily: designFonts.sans,
   },
+  subtitleCompact: {
+    fontSize: typography.fontSize.sm,
+    lineHeight: spacing.lg,
+  },
   actions: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.md,
+  },
+  actionsCompact: {
+    marginTop: spacing.sm,
+  },
+  actionsCompactInline: {
+    marginTop: 0,
+    flexShrink: 0,
+  },
+  actionsCompactStacked: {
+    justifyContent: 'center',
   },
   actionsSingle: {
     justifyContent: 'flex-end',
@@ -202,6 +294,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
   },
+  buttonCompact: {
+    flexGrow: 0,
+    flexShrink: 0,
+    minHeight: spacing['2xl'],
+    minWidth: 72,
+    paddingHorizontal: spacing.lg,
+  },
   primaryButton: {},
   secondaryButton: {
     backgroundColor: colors.bgSecondary,
@@ -214,6 +313,10 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     fontWeight: '700',
     fontFamily: designFonts.sans,
+  },
+  buttonTextCompact: {
+    fontSize: typography.fontSize.sm,
+    flexShrink: 0,
   },
   primaryButtonText: {
     color: colors.textOnAccent,

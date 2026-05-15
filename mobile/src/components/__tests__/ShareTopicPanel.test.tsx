@@ -36,12 +36,12 @@ describe('ShareTopicPanel', () => {
   describe('content', () => {
     it('displays the suggestion text with partner name', () => {
       render(<ShareTopicPanel {...defaultProps} />);
-      expect(screen.getByText('Share this with Partner?')).toBeTruthy();
+      expect(screen.getByText('Opportunity to share with Partner')).toBeTruthy();
     });
 
     it('displays correct name when partnerName changes', () => {
       render(<ShareTopicPanel {...defaultProps} partnerName="Alex" />);
-      expect(screen.getByText('Share this with Alex?')).toBeTruthy();
+      expect(screen.getByText('Opportunity to share with Alex')).toBeTruthy();
     });
   });
 
