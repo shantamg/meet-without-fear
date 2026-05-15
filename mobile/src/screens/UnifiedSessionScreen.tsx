@@ -3081,7 +3081,7 @@ export function UnifiedSessionScreen({
             tone="topic"
             eyebrow="Topic frame"
             title={topicFrame}
-            subtitle="This stays above the input at the end of Stage 0. To change it, tell me below."
+            compact
             primaryAction={{
               label: 'Use this topic',
               onPress: handleConfirmTopicFrame,
@@ -3115,12 +3115,11 @@ export function UnifiedSessionScreen({
               <GuidedActionPanel
                 tone="review"
                 eyebrow={isRefiningEmpathy ? 'Revision' : 'Empathy draft'}
-                title={isRefiningEmpathy ? 'Revisit what you’ll share' : 'Review what you’ll share'}
-                subtitle={isRefiningEmpathy
-                  ? `${partnerName} shared more context. Check whether your understanding should change.`
-                  : `Open your draft before sending it to ${partnerName}.`}
+                title={isRefiningEmpathy ? 'Review the update' : 'Ready to review'}
+                compact
+                pressable
                 primaryAction={{
-                  label: 'Review',
+                  label: isRefiningEmpathy ? 'Review revision' : 'Review what you’ll share',
                   onPress: () => setShowEmpathyDrawer(true),
                   testID: 'empathy-review-button',
                 }}
@@ -3252,6 +3251,7 @@ export function UnifiedSessionScreen({
               tone="review"
               title={title}
               compact
+              pressable
               primaryAction={{
                 label,
                 onPress: () => setShowStage4Drawer(true),

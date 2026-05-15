@@ -464,7 +464,6 @@ function renderTrigger(
         <FeelHeardConfirmation
           key={trigger.id}
           onConfirm={() => onAction(trigger.id, TriggerAction.FEEL_HEARD_CONFIRMED)}
-          onContinue={() => onAction(trigger.id, TriggerAction.FEEL_HEARD_CONTINUE)}
         />
       );
 

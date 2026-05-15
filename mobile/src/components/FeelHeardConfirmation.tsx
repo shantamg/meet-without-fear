@@ -13,7 +13,6 @@ import { GuidedActionPanel } from './GuidedActionPanel';
 
 interface FeelHeardConfirmationProps {
   onConfirm: () => void;
-  onContinue?: () => void;
   isPending?: boolean;
 }
 
@@ -23,19 +22,13 @@ interface FeelHeardConfirmationProps {
 
 export function FeelHeardConfirmation({
   onConfirm,
-  onContinue,
   isPending = false,
 }: FeelHeardConfirmationProps) {
   return (
     <GuidedActionPanel
       tone="success"
-      title="Do you feel heard enough to continue?"
-      secondaryAction={onContinue ? {
-        label: 'Not yet',
-        onPress: onContinue,
-        disabled: isPending,
-        testID: 'feel-heard-not-yet',
-      } : undefined}
+      title="Feel heard enough to continue?"
+      compact
       primaryAction={{
         label: 'I feel heard',
         onPress: onConfirm,
