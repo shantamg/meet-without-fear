@@ -53,7 +53,7 @@ export const stageKeys = {
 
   // Pending actions (for activity menu)
   // Written by: notification.pending_action Ably event (invalidate)
-  // Read by: usePendingActions, ActivityMenuModal (received items + badge count)
+  // Read by: usePendingActions
   pendingActions: (sessionId: string) =>
     [...stageKeys.all, 'pending-actions', sessionId] as const,
 
