@@ -1527,7 +1527,8 @@ export function useConfirmNeeds(
     UseMutationOptions<
       ConfirmNeedsResponse,
       ApiClientError,
-      { sessionId: string; needIds: string[]; adjustments?: NeedAdjustment[] }
+      { sessionId: string; needIds: string[]; adjustments?: NeedAdjustment[] },
+      { previousNeeds: GetNeedsResponse | undefined }
     >,
     'mutationFn'
   >
@@ -1540,6 +1541,30 @@ export function useConfirmNeeds(
         needIds,
         adjustments,
       });
+    },
+    onMutate: async ({ sessionId, needIds }) => {
+      await queryClient.cancelQueries({ queryKey: stageKeys.needs(sessionId) });
+      const previousNeeds = queryClient.getQueryData<GetNeedsResponse>(
+        stageKeys.needs(sessionId),
+      );
+      queryClient.setQueryData<GetNeedsResponse>(
+        stageKeys.needs(sessionId),
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            needs: old.needs.map((n) =>
+              needIds.includes(n.id) ? { ...n, confirmed: true } : n,
+            ),
+          };
+        },
+      );
+      return { previousNeeds };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previousNeeds) {
+        queryClient.setQueryData(stageKeys.needs(sessionId), context.previousNeeds);
+      }
     },
     onSuccess: (_, { sessionId }) => {
       patchStage3Gates(queryClient, sessionId, {

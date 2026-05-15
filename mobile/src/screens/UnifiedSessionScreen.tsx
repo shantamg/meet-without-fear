@@ -4025,6 +4025,7 @@ export function UnifiedSessionScreen({
             });
           } else {
             handleConfirmAllNeeds(() => {
+              markCompleted('confirmed-needs');
               setShowNeedsDrawer(false);
             });
           }

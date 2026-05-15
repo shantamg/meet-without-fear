@@ -383,6 +383,7 @@ function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
     needsAvailable,
     allNeedsConfirmed,
     needsShared,
+    hasConfirmedNeedsLocal,
     sessionStatus,
   } = inputs;
 
@@ -395,8 +396,8 @@ function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
     return false;
   }
 
-  // Already shared - reveal/waiting state owns the next step.
-  if (needsShared || allNeedsConfirmed) {
+  // Already shared or confirmed - reveal/waiting state owns the next step.
+  if (needsShared || allNeedsConfirmed || hasConfirmedNeedsLocal) {
     return false;
   }
 
@@ -419,7 +420,7 @@ function computeShowNeedsSharePanel(inputs: ChatUIStateInputs): boolean {
 
   const currentStage = myStage ?? Stage.ONBOARDING;
   if (currentStage !== Stage.NEED_MAPPING) return false;
-  if (!needsAvailable || !allNeedsConfirmed) return false;
+  if (!needsAvailable || (!allNeedsConfirmed && !hasConfirmedNeedsLocal)) return false;
   if (needsShared || needsRevealReady) return false;
   return true;
 }
