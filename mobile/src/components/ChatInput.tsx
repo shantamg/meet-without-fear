@@ -25,6 +25,8 @@ interface ChatInputProps {
   prefillText?: string | null;
   /** Callback invoked once a prefill has been applied (so caller can clear). */
   onPrefillConsumed?: () => void;
+  /** Whether the software keyboard is currently visible. */
+  keyboardVisible?: boolean;
 }
 
 // ============================================================================
@@ -49,8 +51,9 @@ export function ChatInput({
   failedMessage,
   prefillText,
   onPrefillConsumed,
+  keyboardVisible = false,
 }: ChatInputProps) {
-  const styles = useStyles();
+  const styles = useStyles(keyboardVisible);
   const { palette } = useAppAppearance();
   const [input, setInput] = useState('');
   const inputRef = useRef<TextInputType>(null);
@@ -164,15 +167,15 @@ export function ChatInput({
 // Styles
 // ============================================================================
 
-const useStyles = () => {
+const useStyles = (keyboardVisible: boolean) => {
   const { palette } = useAppAppearance();
   return createStyles((t) => ({
     container: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      paddingHorizontal: 14,
-      paddingTop: 12,
-      paddingBottom: 18,
+      paddingHorizontal: t.spacing.lg,
+      paddingTop: t.spacing.md,
+      paddingBottom: keyboardVisible ? t.spacing.sm : t.spacing.xl,
       borderTopWidth: 1,
       borderTopColor: palette.border,
       backgroundColor: palette.bg,
@@ -187,8 +190,8 @@ const useStyles = () => {
     },
     input: {
       paddingHorizontal: t.spacing.lg,
-      paddingTop: 12,
-      paddingBottom: 12,
+      paddingTop: t.spacing.md,
+      paddingBottom: t.spacing.md,
       fontSize: 14,
       maxHeight: 140,
       color: palette.text,

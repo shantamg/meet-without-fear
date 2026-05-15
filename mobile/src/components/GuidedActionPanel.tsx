@@ -13,9 +13,16 @@ import {
   Pencil,
   Target,
 } from 'lucide-react-native';
-import { colors, designFonts, useAppAppearance } from '@/theme';
+import { colors, designFonts, radius, spacing, typography, useAppAppearance } from '@/theme';
 
 type GuidedActionTone = 'topic' | 'review' | 'share' | 'success' | 'needs';
+
+const PANEL_BORDER_ACCENT_WIDTH = 3;
+const PANEL_ICON_SIZE = 17;
+const PANEL_ICON_STROKE_WIDTH = 2.4;
+const PANEL_BUTTON_MIN_HEIGHT = spacing['3xl'] + spacing.sm;
+const PANEL_ICON_TOP_ALIGNMENT_OFFSET = 1;
+const PANEL_EYEBROW_LETTER_SPACING = 0.8;
 
 interface GuidedActionButton {
   label: string;
@@ -37,7 +44,7 @@ export interface GuidedActionPanelProps {
 }
 
 function ToneIcon({ tone, color }: { tone: GuidedActionTone; color: string }) {
-  const iconProps = { color, size: 17, strokeWidth: 2.4 };
+  const iconProps = { color, size: PANEL_ICON_SIZE, strokeWidth: PANEL_ICON_STROKE_WIDTH };
   switch (tone) {
     case 'topic':
       return <Target {...iconProps} />;
@@ -130,24 +137,24 @@ export function GuidedActionPanel({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     backgroundColor: colors.bgPrimary,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    borderLeftWidth: 3,
+    borderLeftWidth: PANEL_BORDER_ACCENT_WIDTH,
   },
   containerCompact: {
-    paddingVertical: 10,
+    paddingVertical: spacing.sm,
   },
   iconWrap: {
-    paddingTop: 1,
+    paddingTop: PANEL_ICON_TOP_ALIGNMENT_OFFSET,
   },
   icon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: spacing['3xl'],
+    height: spacing['3xl'],
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.userBg,
@@ -157,43 +164,43 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   eyebrow: {
-    fontSize: 11,
+    fontSize: typography.fontSize.xs,
     fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 3,
+    letterSpacing: PANEL_EYEBROW_LETTER_SPACING,
+    marginBottom: spacing.xs,
     fontFamily: designFonts.mono,
   },
   title: {
-    fontSize: 15,
+    fontSize: typography.fontSize.md,
     fontWeight: '700',
-    lineHeight: 20,
+    lineHeight: spacing.xl,
     color: colors.textPrimary,
     fontFamily: designFonts.sans,
   },
   subtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    lineHeight: 18,
+    marginTop: spacing.xs,
+    fontSize: typography.fontSize.base,
+    lineHeight: spacing.xl,
     color: colors.textSecondary,
     fontFamily: designFonts.sans,
   },
   actions: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 10,
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
   actionsSingle: {
     justifyContent: 'flex-end',
   },
   button: {
     flex: 1,
-    minHeight: 38,
-    borderRadius: 10,
+    minHeight: PANEL_BUTTON_MIN_HEIGHT,
+    borderRadius: radius.md,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
   },
   primaryButton: {},
   secondaryButton: {
@@ -204,7 +211,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    fontSize: 14,
+    fontSize: typography.fontSize.base,
     fontWeight: '700',
     fontFamily: designFonts.sans,
   },

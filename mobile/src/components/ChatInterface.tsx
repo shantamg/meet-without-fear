@@ -7,6 +7,7 @@ import {
   Platform,
   ListRenderItem,
   ActivityIndicator,
+  LayoutAnimation,
   NativeSyntheticEvent,
   NativeScrollEvent,
   LayoutChangeEvent,
@@ -86,6 +87,23 @@ export interface ChatCustomCardItem {
 }
 
 export type ChatListItem = ChatMessage | ChatIndicatorItem | ChatValidationCardItem | ChatCustomCardItem | CustomEmptyStateItem;
+
+const AUXILIARY_CONTROLS_LAYOUT_ANIMATION_MS = 110;
+
+const auxiliaryControlsLayoutAnimation = {
+  duration: AUXILIARY_CONTROLS_LAYOUT_ANIMATION_MS,
+  create: {
+    type: LayoutAnimation.Types.easeInEaseOut,
+    property: LayoutAnimation.Properties.opacity,
+  },
+  update: {
+    type: LayoutAnimation.Types.easeInEaseOut,
+  },
+  delete: {
+    type: LayoutAnimation.Types.easeInEaseOut,
+    property: LayoutAnimation.Properties.opacity,
+  },
+};
 
 function isIndicator(item: ChatListItem): item is ChatIndicatorItem {
   return 'type' in item && item.type === 'indicator';
@@ -279,6 +297,8 @@ export function ChatInterface({
   const styles = useStyles();
   const safeAreaInsets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
+  const flatListContainerRef = useRef<View>(null);
+  const composerContainerRef = useRef<View>(null);
   const scrollMetricsRef = useRef({
     offset: 0,
     contentHeight: 0,
@@ -299,6 +319,9 @@ export function ChatInterface({
   const animationScopeRef = useRef(animationScope);
   const seenAnimatedItemIdsRef = useRef(getSeenAnimatedItemIds(animationScope));
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [composerHeight, setComposerHeight] = useState(0);
+  const [messageListBottomInset, setMessageListBottomInset] = useState(0);
+  const [auxiliaryControlsVisible, setAuxiliaryControlsVisible] = useState(true);
 
   if (animationScopeRef.current !== animationScope) {
     animationScopeRef.current = animationScope;
@@ -368,20 +391,32 @@ export function ChatInterface({
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const shownEvent = 'keyboardDidShow';
+    const hiddenEvent = 'keyboardDidHide';
 
     const showSub = Keyboard.addListener(showEvent, () => {
+      LayoutAnimation.configureNext(auxiliaryControlsLayoutAnimation);
+      setAuxiliaryControlsVisible(false);
       setIsKeyboardVisible(true);
       if (isNearBottomRef.current || shouldStickToBottomRef.current) {
         scrollToBottom(false);
       }
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
+      setMessageListBottomInset(0);
       setIsKeyboardVisible(false);
+    });
+    const shownSub = Keyboard.addListener(shownEvent, () => {});
+    const hiddenSub = Keyboard.addListener(hiddenEvent, () => {
+      LayoutAnimation.configureNext(auxiliaryControlsLayoutAnimation);
+      setAuxiliaryControlsVisible(true);
     });
 
     return () => {
       showSub.remove();
       hideSub.remove();
+      shownSub.remove();
+      hiddenSub.remove();
     };
   }, [scrollToBottom]);
 
@@ -587,9 +622,9 @@ export function ChatInterface({
   if (isInitialLoadRef.current && messages.length > 0) {
     const shouldSkip = skipInitialHistory && messages.length === 1;
     if (!shouldSkip) {
-      messages.forEach((m) => {
-        mountSnapshotIdsRef.current.add(m.id);
-        seenAnimatedItemIdsRef.current.add(m.id);
+      listItems.forEach((item) => {
+        mountSnapshotIdsRef.current.add(item.id);
+        seenAnimatedItemIdsRef.current.add(item.id);
       });
     }
     isInitialLoadRef.current = false;
@@ -797,10 +832,21 @@ export function ChatInterface({
     }
   }, [animatingItemId, onTypewriterStateChange, scrollToBottom]);
 
-  const renderItem: ListRenderItem<ChatListItem> = useCallback(({ item }) => {
+  const renderItem: ListRenderItem<ChatListItem> = useCallback(({ item, index }) => {
+    const nextItem = listItems[index + 1];
+    const shouldPadBeforeChapter =
+      nextItem !== undefined &&
+      isIndicator(nextItem) &&
+      nextItem.indicatorType === 'stage-chapter';
+    const withChapterLeadIn = (content: React.ReactElement) => (
+      shouldPadBeforeChapter
+        ? <View style={styles.beforeChapterLeadIn}>{content}</View>
+        : content
+    );
+
     // 1. Render Custom Empty State (Compact)
     if (isCustomEmptyState(item)) {
-      return (
+      return withChapterLeadIn(
         <View style={styles.customEmptyStateItem} testID="chat-custom-empty-state-item">
           {customEmptyState}
         </View>
@@ -809,25 +855,38 @@ export function ChatInterface({
 
     // 2. Render Indicators
     if (isIndicator(item)) {
+      const itemIndex = listItems.findIndex((listItem) => listItem.id === item.id);
+      const animationIdentity = getAnimationIdentity(item.id);
+      const shouldAnimateStageChapter =
+        item.indicatorType === 'stage-chapter' &&
+        itemIndex >= 0 &&
+        !isAtOrBeforeSeenBoundary(item, itemIndex) &&
+        !animatedItemIdsRef.current.has(item.id) &&
+        !animatedItemIdsRef.current.has(animationIdentity) &&
+        !seenAnimatedItemIdsRef.current.has(item.id) &&
+        !seenAnimatedItemIdsRef.current.has(animationIdentity);
+
       // Shared content and share suggestion indicators are tappable to open the Activity Drawer
       const isTappableIndicator = item.indicatorType === 'context-shared'
         || item.indicatorType === 'empathy-shared';
       const onPress = isTappableIndicator && onContextSharedPress
         ? () => onContextSharedPress(item.timestamp, item.metadata?.isFromMe, item.indicatorType)
         : undefined;
-      return (
+      return withChapterLeadIn(
         <ChatIndicator
           type={item.indicatorType}
           timestamp={item.timestamp}
           onPress={onPress}
           metadata={item.metadata}
+          animateEntrance={shouldAnimateStageChapter}
+          onEntranceComplete={shouldAnimateStageChapter ? () => markItemAnimationSeen(item.id) : undefined}
         />
       );
     }
 
     // 3. Render Validation Cards
     if (isValidationCard(item)) {
-      return (
+      return withChapterLeadIn(
         <EmpathyValidationCard
           partnerName={item.partnerName}
           empathyContent={item.empathyContent}
@@ -847,7 +906,7 @@ export function ChatInterface({
       const animationIdentity = getAnimationIdentity(item.id);
       const isNextAnimatable = animationIdentity === nextAnimatableMessageId;
 
-      return (
+      return withChapterLeadIn(
         <>
           {item.render({
             skipAnimation: !shouldAnimate || !isNextAnimatable,
@@ -887,7 +946,7 @@ export function ChatInterface({
       sharedContentDirection: message.sharedContentDirection,
     };
 
-    return (
+    return withChapterLeadIn(
       <>
         <ChatBubble
           message={bubbleMessage}
@@ -1026,6 +1085,60 @@ export function ChatInterface({
     }
   }, [scrollToBottom]);
 
+  const updateMessageListBottomInset = useCallback(() => {
+    if (!isKeyboardVisible) {
+      setMessageListBottomInset(0);
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      flatListContainerRef.current?.measureInWindow((_listX, listY, _listWidth, listHeight) => {
+        composerContainerRef.current?.measureInWindow((_composerX, composerY) => {
+          const listBottom = listY + listHeight;
+          const nextInset = Math.max(0, Math.ceil(listBottom - composerY));
+
+          setMessageListBottomInset((currentInset) => (
+            Math.abs(currentInset - nextInset) > 1 ? nextInset : currentInset
+          ));
+        });
+      });
+    });
+  }, [isKeyboardVisible]);
+
+  const handleComposerLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = event.nativeEvent.layout.height;
+    setComposerHeight((currentHeight) => (
+      Math.abs(currentHeight - nextHeight) > 1 ? nextHeight : currentHeight
+    ));
+  }, []);
+
+  useEffect(() => {
+    updateMessageListBottomInset();
+
+    if (!isKeyboardVisible) {
+      return;
+    }
+
+    const timeoutIds = [
+      setTimeout(updateMessageListBottomInset, 80),
+      setTimeout(updateMessageListBottomInset, 180),
+      setTimeout(updateMessageListBottomInset, 320),
+    ];
+
+    return () => timeoutIds.forEach(clearTimeout);
+  }, [
+    auxiliaryControlsVisible,
+    composerHeight,
+    isKeyboardVisible,
+    updateMessageListBottomInset,
+  ]);
+
+  useEffect(() => {
+    if (isKeyboardVisible) return;
+
+    setAuxiliaryControlsVisible(Boolean(renderAboveInput || renderBelowInput));
+  }, [isKeyboardVisible, renderAboveInput, renderBelowInput]);
+
   const handleEndReached = useCallback(() => {
     if (!initialBottomScrollCompleteRef.current || !userHasDraggedTranscriptRef.current) {
       return;
@@ -1085,15 +1198,24 @@ export function ChatInterface({
   // New Activity Pill: floating indicator for off-screen new items
   // ---------------------------------------------------------------------------
 
-  const auxiliaryControls = !isKeyboardVisible ? (
-    <>
-      {renderAboveInput?.()}
-      {renderBelowInput?.()}
-    </>
+  const hasAuxiliaryControls = Boolean(renderAboveInput || renderBelowInput);
+  const auxiliaryControls = hasAuxiliaryControls && auxiliaryControlsVisible ? (
+    <View style={styles.auxiliaryControls}>
+        {renderAboveInput?.()}
+        {renderBelowInput?.()}
+    </View>
   ) : null;
 
+  const keyboardOpenMessageListInset = isKeyboardVisible && messageListBottomInset > 0
+    ? { paddingBottom: messageListBottomInset }
+    : null;
+
   const composerControls = (
-    <View style={styles.bottomContainer}>
+    <View
+      ref={composerContainerRef}
+      style={[styles.bottomContainer, isKeyboardVisible && styles.bottomContainerKeyboardOpen]}
+      onLayout={handleComposerLayout}
+    >
       {showEmotionSlider && onEmotionChange && (
         <EmotionSlider
           value={emotionValue}
@@ -1108,12 +1230,14 @@ export function ChatInterface({
           onSend={onSendMessage}
           disabled={disabled || isInputDisabled || isLoading}
           inputDisabled={disabled || isLoading}
+          keyboardVisible={isKeyboardVisible}
           onVoicePress={onVoicePress}
           failedMessage={failedMessage}
           prefillText={prefillText}
           onPrefillConsumed={onPrefillConsumed}
         />
       )}
+      {auxiliaryControls}
     </View>
   );
 
@@ -1127,6 +1251,7 @@ export function ChatInterface({
       stickyHeaderIndices={stickyHeaderIndices}
       contentContainerStyle={[
         styles.messageList,
+        keyboardOpenMessageListInset,
         listItems.length === 0 && (customEmptyState ? styles.customMessageListEmpty : styles.messageListEmpty),
       ]}
       ListHeaderComponent={renderLoadingHeader}
@@ -1158,13 +1283,12 @@ export function ChatInterface({
   if (Platform.OS === 'ios' && hasLinkedKeyboardController()) {
     return (
       <View style={styles.container}>
-        <View style={styles.flatListContainer}>
+        <View ref={flatListContainerRef} style={styles.flatListContainer}>
           {messageList}
         </View>
         <KeyboardStickyComposer offset={{ opened: safeAreaInsets.bottom }}>
           {composerControls}
         </KeyboardStickyComposer>
-        {auxiliaryControls}
       </View>
     );
   }
@@ -1175,9 +1299,10 @@ export function ChatInterface({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
-      {messageList}
+      <View ref={flatListContainerRef} style={styles.flatListContainer}>
+        {messageList}
+      </View>
       {composerControls}
-      {auxiliaryControls}
     </KeyboardAwareAvoidingView>
   );
 }
@@ -1228,6 +1353,9 @@ const useStyles = () => {
       paddingTop: t.spacing.md,
       paddingBottom: t.spacing.md,
     },
+    beforeChapterLeadIn: {
+      paddingBottom: t.spacing.xl,
+    },
     loadingSpinner: {
       color: palette.textMuted,
     },
@@ -1258,10 +1386,16 @@ const useStyles = () => {
       fontFamily: designFonts.sans,
     },
     bottomContainer: {
-      // Container for emotion slider, panels above input, and input
+      // Container for the keyboard-sticky composer stack.
       // This ensures KeyboardAvoidingView adjusts relative to this container's bottom
       // rather than just the input field itself
       paddingBottom: t.spacing.sm,
+    },
+    bottomContainerKeyboardOpen: {
+      paddingBottom: 0,
+    },
+    auxiliaryControls: {
+      overflow: 'hidden',
     },
   }));
 };

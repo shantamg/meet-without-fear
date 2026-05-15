@@ -11,6 +11,12 @@ import type { WaitingStatusState } from '../utils/getWaitingStatus';
 import { getWaitingStatusConfig } from '../config/waitingStatusConfig';
 import { designFonts, useAppAppearance } from '../theme';
 
+const WAITING_BANNER_EXPANDED_MAX_HEIGHT = 150;
+const WAITING_BANNER_ENTER_OFFSET = 20;
+const WAITING_BANNER_TEXT_LINE_HEIGHT = 22;
+const WAITING_BANNER_SUBTEXT_LINE_HEIGHT = 18;
+const WAITING_BANNER_ACTION_MIN_HEIGHT = 44;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -62,12 +68,12 @@ export function WaitingBanner({
           opacity: animationValue,
           maxHeight: animationValue.interpolate({
             inputRange: [0, 1],
-            outputRange: [0, 150],
+            outputRange: [0, WAITING_BANNER_EXPANDED_MAX_HEIGHT],
           }),
           transform: [{
             translateY: animationValue.interpolate({
               inputRange: [0, 1],
-              outputRange: [20, 0],
+              outputRange: [WAITING_BANNER_ENTER_OFFSET, 0],
             }),
           }],
           overflow: 'hidden' as const,
@@ -159,22 +165,22 @@ const useStyles = () =>
     },
     text: {
       fontSize: t.typography.fontSize.md,
-      lineHeight: 22,
+      lineHeight: WAITING_BANNER_TEXT_LINE_HEIGHT,
       color: palette.textMuted,
       textAlign: 'center',
       fontFamily: designFonts.sans,
     },
     subtext: {
-      fontSize: 12,
-      lineHeight: 18,
+      fontSize: t.typography.fontSize.sm,
+      lineHeight: WAITING_BANNER_SUBTEXT_LINE_HEIGHT,
       color: palette.textFaint,
       textAlign: 'center',
-      marginTop: 2,
+      marginTop: t.spacing.xs,
       fontFamily: designFonts.sans,
     },
     exerciseLink: {
       marginTop: t.spacing.sm,
-      minHeight: 44,
+      minHeight: WAITING_BANNER_ACTION_MIN_HEIGHT,
       justifyContent: 'center',
     },
     exerciseLinkText: {
@@ -185,9 +191,9 @@ const useStyles = () =>
     },
     actionButton: {
       marginTop: t.spacing.sm,
-      minHeight: 44,
+      minHeight: WAITING_BANNER_ACTION_MIN_HEIGHT,
       paddingHorizontal: t.spacing.lg,
-      borderRadius: 12,
+      borderRadius: t.radius.md,
       backgroundColor: palette.accent,
       alignItems: 'center',
       justifyContent: 'center',
