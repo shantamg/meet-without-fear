@@ -2350,27 +2350,34 @@ export function UnifiedSessionScreen({
     }
 
     if (partnerAttempt?.content && (partnerAttempt.revealedAt || partnerAttempt.sharedAt)) {
-      const partnerTimestamp = partnerAttempt.revealedAt || partnerAttempt.sharedAt;
-      const hasPartnerAttemptMessage = baseMessages.some(
-        (message) =>
-          isSameEmpathyAttemptMessage(message, partnerAttempt.sourceUserId, {
-            content: partnerAttempt.content,
-            sharedAt: partnerTimestamp,
-          }),
-      );
+      // When the partner's empathy has been revealed and we're in Stage 2,
+      // the validation card handles this content — skip the "Delivered" bubble.
+      const validationCardWillShow =
+        !!partnerAttempt.revealedAt && myProgress?.stage === Stage.PERSPECTIVE_STRETCH;
 
-      if (!hasPartnerAttemptMessage) {
-        baseMessages.push({
-          id: `partner-empathy-${partnerAttempt.id}`,
-          sessionId,
-          senderId: partnerAttempt.sourceUserId,
-          role: MessageRole.EMPATHY_STATEMENT,
-          content: partnerAttempt.content,
-          stage: Stage.PERSPECTIVE_STRETCH,
-          timestamp: partnerTimestamp,
-          sharedContentDeliveryStatus: 'delivered',
-          sharedContentDirection: 'received',
-        });
+      if (!validationCardWillShow) {
+        const partnerTimestamp = partnerAttempt.revealedAt || partnerAttempt.sharedAt;
+        const hasPartnerAttemptMessage = baseMessages.some(
+          (message) =>
+            isSameEmpathyAttemptMessage(message, partnerAttempt.sourceUserId, {
+              content: partnerAttempt.content,
+              sharedAt: partnerTimestamp,
+            }),
+        );
+
+        if (!hasPartnerAttemptMessage) {
+          baseMessages.push({
+            id: `partner-empathy-${partnerAttempt.id}`,
+            sessionId,
+            senderId: partnerAttempt.sourceUserId,
+            role: MessageRole.EMPATHY_STATEMENT,
+            content: partnerAttempt.content,
+            stage: Stage.PERSPECTIVE_STRETCH,
+            timestamp: partnerTimestamp,
+            sharedContentDeliveryStatus: 'delivered',
+            sharedContentDirection: 'received',
+          });
+        }
       }
     }
 
@@ -2488,6 +2495,7 @@ export function UnifiedSessionScreen({
     empathyStatusData?.myAttempt,
     empathyStatusData?.mySharedContext,
     empathyStatusData?.partnerAttempt,
+    myProgress?.stage,
     sessionId,
     user?.id,
   ]);
