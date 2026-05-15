@@ -397,6 +397,35 @@ describe('ChatBubble', () => {
     expect(screen.getByText('Loaded history response')).toBeTruthy();
   });
 
+  it('does not typewriter persisted unread messages on initial session open', () => {
+    const baseTime = new Date('2026-05-14T12:00:00.000Z').getTime();
+
+    render(
+      <ChatInterface
+        messages={[
+          createMockMessage({
+            id: 'seen-user-message',
+            role: MessageRole.USER,
+            content: 'Already seen user message',
+            timestamp: new Date(baseTime).toISOString(),
+          }),
+          createMockMessage({
+            id: 'persisted-unread-ai',
+            role: MessageRole.AI,
+            content: 'Persisted unread response should render immediately',
+            timestamp: new Date(baseTime + 1000).toISOString(),
+          }),
+        ]}
+        onSendMessage={jest.fn()}
+        sessionId="initial-unread-history-test"
+        lastViewedAt={new Date(baseTime).toISOString()}
+      />
+    );
+
+    expect(screen.getByText('Persisted unread response should render immediately')).toBeTruthy();
+    expect(screen.queryByTestId('typewriter-text')).toBeNull();
+  });
+
   it('displays message content correctly', () => {
     const messages = [
       createMockMessage({ id: '1', content: 'This is a test message with special characters: @#$%' }),

@@ -29,6 +29,7 @@ import {
   Stage,
   SessionStateResponse,
   TimelineResponse,
+  GetMessagesResponse,
   ChatItemType,
   IndicatorType,
   IndicatorItem,
@@ -38,6 +39,7 @@ import {
 import {
   sessionKeys,
   stageKeys,
+  messageKeys,
   timelineKeys,
   notificationKeys,
 } from './queryKeys';
@@ -877,8 +879,20 @@ export function useSessionState(
         queryClient.setQueryData(stageKeys.progress(sessionId), data.progress);
       }
 
-      // Don't hydrate messageKeys.list — UI reads from messageKeys.infinite,
-      // and overwriting here can clobber optimistic transition messages.
+      // Hydrate only the infinite cache when empty. The session-state endpoint
+      // already returns the initial message page, and this prevents the chat
+      // from rendering blank while the separate infinite query starts. Do not
+      // overwrite existing data because mutations and realtime events update
+      // this cache optimistically after initial load.
+      if (!queryClient.getQueryData(messageKeys.infinite(sessionId))) {
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.infinite(sessionId),
+          {
+            pages: [data.messages],
+            pageParams: [undefined],
+          }
+        );
+      }
 
       if (data.invitation && !queryClient.getQueryData(sessionKeys.sessionInvitation(sessionId))) {
         queryClient.setQueryData(sessionKeys.sessionInvitation(sessionId), {

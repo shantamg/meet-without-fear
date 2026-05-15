@@ -171,6 +171,8 @@ interface ChatInterfaceProps {
   onTypewriterComplete?: () => void;
   /** Callback to report if typewriter is currently animating */
   onTypewriterStateChange?: (isAnimating: boolean) => void;
+  /** Called once the first transcript layout pass has completed. */
+  onInitialRenderReady?: () => void;
   /** Custom element to render when there are no messages (e.g., onboarding compact) */
   customEmptyState?: React.ReactNode;
   /** Keyboard vertical offset for iOS (accounts for header + status bar) */
@@ -258,6 +260,7 @@ export function ChatInterface({
   isLoadingMore = false,
   onTypewriterComplete,
   onTypewriterStateChange,
+  onInitialRenderReady,
   customEmptyState,
   keyboardVerticalOffset = 100,
   skipInitialHistory = false,
@@ -283,6 +286,9 @@ export function ChatInterface({
   });
   const isNearBottomRef = useRef(true);
   const shouldStickToBottomRef = useRef(true);
+  const initialBottomScrollCompleteRef = useRef(false);
+  const hasReportedInitialRenderReadyRef = useRef(false);
+  const userHasDraggedTranscriptRef = useRef(false);
   const scrollRetryTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scrollRetryAnimationFrameRef = useRef<number | null>(null);
   const localAnimationScopeRef = useRef<string | null>(null);
@@ -299,6 +305,18 @@ export function ChatInterface({
     seenAnimatedItemIdsRef.current = getSeenAnimatedItemIds(animationScope);
   }
 
+  const reportInitialRenderReady = useCallback(() => {
+    if (hasReportedInitialRenderReadyRef.current) return;
+    if (scrollMetricsRef.current.layoutHeight <= 0) return;
+
+    hasReportedInitialRenderReadyRef.current = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        onInitialRenderReady?.();
+      });
+    });
+  }, [onInitialRenderReady]);
+
   const scrollToBottom = useCallback((animated: boolean) => {
     scrollRetryTimeoutsRef.current.forEach(clearTimeout);
     scrollRetryTimeoutsRef.current = [];
@@ -312,6 +330,10 @@ export function ChatInterface({
 
       if (contentHeight > 0 && layoutHeight > 0) {
         flatListRef.current?.scrollToOffset({ offset: maxOffset, animated });
+        if (!animated) {
+          initialBottomScrollCompleteRef.current = true;
+          reportInitialRenderReady();
+        }
         return;
       }
 
@@ -326,7 +348,13 @@ export function ChatInterface({
       setTimeout(run, 500),
       setTimeout(run, 800),
     ];
-  }, []);
+  }, [reportInitialRenderReady]);
+
+  useEffect(() => {
+    initialBottomScrollCompleteRef.current = false;
+    hasReportedInitialRenderReadyRef.current = false;
+    userHasDraggedTranscriptRef.current = false;
+  }, [sessionId]);
 
   useEffect(() => {
     return () => {
@@ -625,7 +653,11 @@ export function ChatInterface({
     if (message.role === MessageRole.USER) return false;
     if (message.id.startsWith('optimistic-')) return false;
     const wasPresentAtMount = mountSnapshotIdsRef.current.has(message.id);
-    if (wasPresentAtMount && isAtOrBeforeSeenBoundary(item, index)) return false;
+    // Anything present in the first rendered transcript is history for this
+    // screen open. Keep the unread separator if needed, but do not replay
+    // persisted messages one-by-one on entry; that makes restored sessions
+    // appear to load progressively and shifts the viewport.
+    if (wasPresentAtMount) return false;
 
     // If the user has already replied after this assistant/system message,
     // the message must be visible immediately. It is no longer a live pending
@@ -995,6 +1027,10 @@ export function ChatInterface({
   }, [scrollToBottom]);
 
   const handleEndReached = useCallback(() => {
+    if (!initialBottomScrollCompleteRef.current || !userHasDraggedTranscriptRef.current) {
+      return;
+    }
+
     if (hasMore && !isLoadingMore && onLoadMore) {
       // Set flag BEFORE calling onLoadMore to prevent any scroll effects
       isLoadingHistoryRef.current = true;
@@ -1008,6 +1044,10 @@ export function ChatInterface({
       onLoadMore();
     }
   }, [hasMore, isLoadingMore, onLoadMore]);
+
+  const handleScrollBeginDrag = useCallback(() => {
+    userHasDraggedTranscriptRef.current = true;
+  }, []);
 
   // Cleanup: If loading finishes but no content was added, reset state
   useEffect(() => {
@@ -1035,6 +1075,11 @@ export function ChatInterface({
       return indices;
     }, []);
   }, [listItems]);
+
+  // The backend/query layer controls how many transcript rows are loaded.
+  // Once a page is in memory, render it in one pass so opening a session does
+  // not visibly fill the transcript row-by-row as VirtualizedList batches cells.
+  const loadedTranscriptRowCount = Math.max(1, listItems.length);
 
   // ---------------------------------------------------------------------------
   // New Activity Pill: floating indicator for off-screen new items
@@ -1098,8 +1143,13 @@ export function ChatInterface({
       testID="chat-message-list"
       onStartReached={handleEndReached}
       onStartReachedThreshold={0.2}
+      initialNumToRender={loadedTranscriptRowCount}
+      maxToRenderPerBatch={loadedTranscriptRowCount}
+      updateCellsBatchingPeriod={0}
+      removeClippedSubviews={false}
       onLayout={handleListLayout}
       onScroll={handleScroll}
+      onScrollBeginDrag={handleScrollBeginDrag}
       scrollEventThrottle={16}
       onContentSizeChange={handleContentSizeChange}
     />

@@ -1869,7 +1869,13 @@ export function UnifiedSessionScreen({
     });
   }, [sessionId]);
   const [hasReleasedInitialSessionRender, setHasReleasedInitialSessionRender] = useState(false);
+  const [hasCompletedInitialChatRender, setHasCompletedInitialChatRender] = useState(false);
   const isInitialSessionRenderReady = !isLoading && !isFetchingMessages && !moodCheckLoading;
+
+  useEffect(() => {
+    setHasReleasedInitialSessionRender(false);
+    setHasCompletedInitialChatRender(false);
+  }, [sessionId]);
 
   useEffect(() => {
     if (isInitialSessionRenderReady) {
@@ -3646,45 +3652,53 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <SessionChatHeader
-        partnerName={partnerName}
-        partnerOnline={partnerOnline}
-        connectionStatus={connectionStatus}
-        briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-        hideOnlineStatus={isInvitationPhase}
-        onBackPress={onNavigateBack}
-        onBriefStatusPress={
-          session?.status === SessionStatus.INVITED && invitation?.isInviter
-            ? () => {
-                setShowShareLaterTooltip(false);
-                setActivityFocusTarget(null);
-                setShowActivityMenu(true);
-              }
-            : undefined
-        }
-        hasNewActivity={!isInOnboardingUnsigned ? (pendingActionsQuery.data?.actions?.length ?? 0) > 0 : false}
-        onMenuPress={
-          !isInOnboardingUnsigned
-            ? () => {
-                setShowShareLaterTooltip(false);
-                setActivityFocusTarget(null);
-                setShowActivityMenu(true);
-              }
-            : undefined
-        }
-        onPress={() => setShowPartnerInfo(true)}
-        conversationTopic={topicFrame}
-        testID="session-chat-header"
-      />
-      {partnerInfoDrawer}
-      {/* Chat content - Share is now a separate route */}
-      {(
-      <View style={styles.content}>
-        <ChatInterface
+      <View
+        style={[
+          styles.initialSessionSurface,
+          !hasCompletedInitialChatRender && styles.initialSessionSurfaceHidden,
+        ]}
+        pointerEvents={hasCompletedInitialChatRender ? 'auto' : 'none'}
+      >
+        <SessionChatHeader
+          partnerName={partnerName}
+          partnerOnline={partnerOnline}
+          connectionStatus={connectionStatus}
+          briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+          hideOnlineStatus={isInvitationPhase}
+          onBackPress={onNavigateBack}
+          onBriefStatusPress={
+            session?.status === SessionStatus.INVITED && invitation?.isInviter
+              ? () => {
+                  setShowShareLaterTooltip(false);
+                  setActivityFocusTarget(null);
+                  setShowActivityMenu(true);
+                }
+              : undefined
+          }
+          hasNewActivity={!isInOnboardingUnsigned ? (pendingActionsQuery.data?.actions?.length ?? 0) > 0 : false}
+          onMenuPress={
+            !isInOnboardingUnsigned
+              ? () => {
+                  setShowShareLaterTooltip(false);
+                  setActivityFocusTarget(null);
+                  setShowActivityMenu(true);
+                }
+              : undefined
+          }
+          onPress={() => setShowPartnerInfo(true)}
+          conversationTopic={topicFrame}
+          testID="session-chat-header"
+        />
+        {partnerInfoDrawer}
+        {/* Chat content - Share is now a separate route */}
+        {(
+        <View style={styles.content}>
+          <ChatInterface
           sessionId={sessionId}
           messages={displayMessages}
           indicators={indicators}
           onSendMessage={sendMessageWithTracking}
+          onInitialRenderReady={() => setHasCompletedInitialChatRender(true)}
           failedMessage={failedMessageContent}
           prefillText={stage4BrainstormPrefill}
           onPrefillConsumed={() => setStage4BrainstormPrefill(null)}
@@ -3785,14 +3799,22 @@ export function UnifiedSessionScreen({
           validationCards={validationCards}
           onValidateAccurate={handleValidationAccurate}
           onValidateNotQuite={handleValidationNotQuite}
-        />
+          />
 
-        {/* Waiting banner removed - now handled by the guided input panel renderer */}
+          {/* Waiting banner removed - now handled by the guided input panel renderer */}
 
-        {/* Note: Compact is now rendered via renderCustomEmptyState in ChatInterface */}
+          {/* Note: Compact is now rendered via renderCustomEmptyState in ChatInterface */}
 
-        {/* Inline cards and memory suggestion now rendered via renderBelowChat prop in ChatInterface */}
+          {/* Inline cards and memory suggestion now rendered via renderBelowChat prop in ChatInterface */}
+        </View>
+        )}
       </View>
+
+      {!hasCompletedInitialChatRender && (
+        <View style={styles.loadingOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={styles.accentColor.color} />
+          <Text style={styles.loadingText}>Loading session...</Text>
+        </View>
       )}
 
       {/* Overlays */}
@@ -4286,6 +4308,23 @@ const useStyles = () => {
     },
     content: {
       flex: 1,
+    },
+    initialSessionSurface: {
+      flex: 1,
+    },
+    initialSessionSurfaceHidden: {
+      opacity: 0,
+    },
+    loadingOverlay: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: palette.bg,
+      padding: 20,
     },
     centerContainer: {
       flex: 1,
