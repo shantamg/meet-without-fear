@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import { Menu } from 'lucide-react-native';
+import { Menu, Share2 } from 'lucide-react-native';
 import { ConnectionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
@@ -45,6 +45,13 @@ export interface SessionChatHeaderProps {
   onPress?: () => void;
   /** Optional callback when brief status is pressed (e.g., to show invitation options) */
   onBriefStatusPress?: () => void;
+  /** Optional right-side icon action. Takes precedence over briefStatus. */
+  rightAction?: {
+    icon: 'share';
+    accessibilityLabel: string;
+    onPress: () => void;
+    testID?: string;
+  };
   /** Conversation topic to display below partner name */
   conversationTopic?: string | null;
   /** Custom container style */
@@ -96,6 +103,7 @@ export function SessionChatHeader({
   leftActionIcon = 'back',
   onPress,
   onBriefStatusPress,
+  rightAction,
   conversationTopic,
   style,
   testID = 'session-chat-header',
@@ -120,6 +128,7 @@ export function SessionChatHeader({
   const displayName = partnerName || 'Meet Without Fear';
   const leftActionLabel = leftActionIcon === 'menu' ? 'Open session drawer' : 'Go back';
   const headerTopic = conversationTopic?.trim();
+  const rightActionTestID = rightAction?.testID ?? `${testID}-right-action`;
 
   // Center content - always partner name + status (whether tabs or not)
   const centerContent = (
@@ -200,7 +209,18 @@ export function SessionChatHeader({
 
       {/* Right section: Activity menu icon or brief status */}
       <View style={styles.rightSection}>
-        {briefStatus ? (
+        {rightAction ? (
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={rightAction.onPress}
+            accessibilityRole="button"
+            accessibilityLabel={rightAction.accessibilityLabel}
+            testID={rightActionTestID}
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
+            {rightAction.icon === 'share' && <Share2 color={palette.textMuted} size={22} />}
+          </TouchableOpacity>
+        ) : briefStatus ? (
           onBriefStatusPress ? (
             <TouchableOpacity
               style={styles.briefStatusPill}
@@ -284,6 +304,13 @@ const useStyles = () => {
     },
     rightSpacer: {
       width: 32,
+    },
+    iconButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     partnerName: {
       fontSize: 20,
