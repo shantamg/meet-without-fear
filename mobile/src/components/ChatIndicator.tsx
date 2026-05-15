@@ -5,22 +5,14 @@
  * Used for things like "Invitation Sent" markers.
  */
 
-import { View, Text, TouchableOpacity } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, Animated, Easing } from 'react-native';
 import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
 
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/** Pick white or dark text based on background luminance. */
-function getContrastTextColor(hex: string): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.55 ? '#1a1815' : '#ffffff';
-}
 
 // ============================================================================
 // Semantic Color System
@@ -81,15 +73,49 @@ interface ChatIndicatorProps {
     /** Stage accent color for stage-chapter bar background */
     stageColor?: string;
   };
+  /** Slide stage chapter markers in when they first appear live. */
+  animateEntrance?: boolean;
+  onEntranceComplete?: () => void;
 }
+
+const STAGE_CHAPTER_ENTRANCE_DURATION_MS = 260;
+const STAGE_CHAPTER_ENTRANCE_OFFSET = 36;
 
 // ============================================================================
 // Component
 // ============================================================================
 
-export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: ChatIndicatorProps) {
+export function ChatIndicator({
+  type,
+  timestamp,
+  testID,
+  onPress,
+  metadata,
+  animateEntrance = false,
+  onEntranceComplete,
+}: ChatIndicatorProps) {
   const styles = useStyles();
   const { palette } = useAppAppearance();
+  const entranceAnim = useRef(new Animated.Value(animateEntrance ? 0 : 1)).current;
+
+  useEffect(() => {
+    if (!animateEntrance) {
+      entranceAnim.setValue(1);
+      return;
+    }
+
+    entranceAnim.setValue(0);
+    Animated.timing(entranceAnim, {
+      toValue: 1,
+      duration: STAGE_CHAPTER_ENTRANCE_DURATION_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        onEntranceComplete?.();
+      }
+    });
+  }, [animateEntrance, entranceAnim, onEntranceComplete]);
 
   const semanticColors = {
     informational: { text: palette.accentText, line: palette.borderStrong },
@@ -250,20 +276,32 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
     }
   };
 
-  // Special rendering for stage-chapter indicators — full-width colored bar
+  // Special rendering for stage-chapter indicators — full-width sticky section header
   if (type === 'stage-chapter') {
     const stageColor = metadata?.stageColor || semanticColors.informational.text;
-    const barTextColor = getContrastTextColor(stageColor);
 
     return (
-      <View
-        style={[styles.stageChapterBar, { backgroundColor: stageColor }]}
+      <Animated.View
+        style={[
+          styles.stageChapterBar,
+          {
+            borderTopColor: stageColor,
+            borderBottomColor: stageColor,
+            opacity: entranceAnim,
+            transform: [{
+              translateX: entranceAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-STAGE_CHAPTER_ENTRANCE_OFFSET, 0],
+              }),
+            }],
+          },
+        ]}
         testID={testID || 'chat-indicator-stage-chapter'}
       >
-        <Text style={[styles.stageChapterText, { color: barTextColor }]}>
+        <Text style={[styles.stageChapterText, { color: stageColor }]}>
           {getIndicatorText()}
         </Text>
-      </View>
+      </Animated.View>
     );
   }
 
@@ -342,9 +380,12 @@ const useStyles = () => {
       fontSize: 16,
       fontWeight: '600',
     },
-    // Stage chapter bar — full-width colored bar at stage transitions
+    // Stage chapter bar — full-width sticky section header at stage transitions
     stageChapterBar: {
-      paddingVertical: 10,
+      backgroundColor: palette.bg,
+      borderTopWidth: 0.5,
+      borderBottomWidth: 0.5,
+      paddingVertical: 6,
       paddingHorizontal: 18,
     },
     stageChapterText: {

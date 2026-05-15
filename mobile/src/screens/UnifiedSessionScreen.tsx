@@ -130,6 +130,9 @@ interface UnifiedSessionScreenProps {
   onStageComplete?: (stage: Stage) => void;
 }
 
+const NEEDS_REVIEW_PANEL_EXPANDED_MAX_HEIGHT = 420;
+const NEEDS_REVIEW_PANEL_ENTER_OFFSET = 20;
+
 /**
  * Get brief status text for the header based on session status
  * @param status - The session status
@@ -224,6 +227,7 @@ function deriveChapterMarkers(
 
     switch (stage) {
       case Stage.WITNESS:
+        return fallbackTimestamp;
       case Stage.PERSPECTIVE_STRETCH:
         return anchorTimestamp || undefined;
       default:
@@ -2299,12 +2303,10 @@ export function UnifiedSessionScreen({
     }
 
     // --- Stage chapter markers ---
-    // Chapter bars should appear at the milestone that opens the chapter, not
-    // wherever the first message in that stage happens to sort.
+    // Chapter bars usually appear at the milestone that opens the chapter.
+    // Witness is the exception: invitees first see the topic intro card, so
+    // its chapter marker is anchored to the first Witness prompt instead.
     const chapterIndicators = deriveChapterMarkers(messages, {
-      [Stage.WITNESS]: isInviter
-        ? invitationMessageConfirmedAt
-        : invitationAcceptedAt,
       [Stage.PERSPECTIVE_STRETCH]: milestones?.feelHeardConfirmedAt,
     });
     allIndicators.push(...chapterIndicators);
@@ -3260,9 +3262,8 @@ export function UnifiedSessionScreen({
           return (
             <GuidedActionPanel
               tone="review"
-              eyebrow="What comes next"
               title={title}
-              subtitle={subtitle}
+              compact
               primaryAction={{
                 label,
                 onPress: () => setShowStage4Drawer(true),
@@ -3337,12 +3338,12 @@ export function UnifiedSessionScreen({
             opacity: needsReviewAnim,
             maxHeight: needsReviewAnim.interpolate({
               inputRange: [0, 1],
-              outputRange: [0, 420],
+              outputRange: [0, NEEDS_REVIEW_PANEL_EXPANDED_MAX_HEIGHT],
             }),
             transform: [{
               translateY: needsReviewAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [20, 0],
+                outputRange: [NEEDS_REVIEW_PANEL_ENTER_OFFSET, 0],
               }),
             }],
             overflow: 'hidden',
