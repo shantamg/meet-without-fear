@@ -9,6 +9,7 @@
 // ============================================================================
 
 export { useAuth, useAuthProvider, AuthContext, useUpdateMood, authKeys } from './useAuth';
+export { useVersionCheck } from './useVersionCheck';
 export type { User, AuthContextValue } from './useAuth';
 
 // ============================================================================

@@ -18,6 +18,8 @@ import { MixpanelInitializer } from '@/src/components/MixpanelInitializer';
 import { NativeAppBanner } from '@/src/components/NativeAppBanner';
 import { E2EAuthProvider, isE2EMode } from '@/src/providers/E2EAuthProvider';
 import { useOTAUpdate } from '@/src/hooks/useOTAUpdate';
+import { useVersionCheck } from '@/src/hooks/useVersionCheck';
+import { UpdateBanner } from '@/src/components/UpdateBanner';
 
 /** Keys that may contain user names / PII — strip from Sentry context. */
 const PII_KEYS = new Set([
@@ -131,6 +133,8 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
   // Capture invitation deep links to AsyncStorage (backup for home screen pickup)
   useInvitationLink();
   const { palette, scheme } = useAppAppearance();
+  const { versionInfo, showVersionBanner, dismissVersionBanner } = useVersionCheck();
+  const { showUpdateBanner, applyUpdate, dismissUpdate } = useOTAUpdate();
 
   return (
     <View style={[styles.webBackdrop, { backgroundColor: palette.bg }]}>
@@ -153,6 +157,16 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
                     <Stack.Screen name="(auth)" />
                     <Stack.Screen name="+not-found" options={{ headerShown: true }} />
                   </Stack>
+                  {showUpdateBanner ? (
+                    <UpdateBanner onApply={applyUpdate} onDismiss={dismissUpdate} />
+                  ) : showVersionBanner && versionInfo ? (
+                    <UpdateBanner
+                      updateStatus={versionInfo.updateStatus}
+                      message={versionInfo.message}
+                      downloadUrl={versionInfo.downloadUrl}
+                      onDismiss={dismissVersionBanner}
+                    />
+                  ) : null}
                   <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
                 </ToastProvider>
               </SessionDrawerProvider>
@@ -168,10 +182,6 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
  * Root layout component
  */
 function RootLayout() {
-  // Check for OTA updates at root level so it runs even on the sign-in screen.
-  // Without this, users stuck on a broken sign-in can never receive the fix via OTA.
-  useOTAUpdate();
-
   const [fontsLoaded, fontError] = useFonts({
     InstrumentSerif: require('../assets/fonts/InstrumentSerif-Regular.ttf'),
     InstrumentSerifItalic: require('../assets/fonts/InstrumentSerif-Italic.ttf'),
