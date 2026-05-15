@@ -16,7 +16,7 @@ import { Prisma } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { confirmNeedsRequestSchema, ConsentContentType, MessageRole, NeedCategory } from '@meet-without-fear/shared';
-import { notifyPartner, publishSessionEvent } from '../services/realtime';
+import { notifyPartner, publishMessageAIResponse, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
 import { captureProposedNeedsForUser } from '../services/needs';
@@ -639,7 +639,6 @@ export async function consentToShareNeeds(
       },
     });
 
-    const { publishMessageAIResponse } = await import('../services/realtime');
     await publishMessageAIResponse(sessionId, user.id, {
       id: guidanceMessage.id,
       sessionId,
@@ -857,7 +856,6 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
         },
       });
 
-      const { publishMessageAIResponse } = await import('../services/realtime');
       await publishMessageAIResponse(sessionId, user.id, {
         id: guidanceMessage.id,
         sessionId,

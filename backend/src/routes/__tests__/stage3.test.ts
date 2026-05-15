@@ -13,7 +13,12 @@ import { prisma } from '../../lib/prisma';
 jest.mock('../../lib/prisma');
 
 // Mock realtime service
-jest.mock('../../services/realtime');
+jest.mock('../../services/realtime', () => ({
+  ...jest.requireActual('../../services/realtime'),
+  notifyPartner: jest.fn().mockResolvedValue(undefined),
+  publishSessionEvent: jest.fn().mockResolvedValue(undefined),
+  publishMessageAIResponse: jest.fn().mockResolvedValue(undefined),
+}));
 
 
 // Helper to create mock request
@@ -634,6 +639,16 @@ describe('Stage 3 API', () => {
         gatesSatisfied: { needsConfirmed: true, needsShared: true },
       });
 
+      (prisma.message.create as jest.Mock).mockResolvedValue({
+        id: 'msg-guidance-1',
+        sessionId: mockSessionId,
+        senderId: null,
+        content: 'Your needs have been shared.',
+        timestamp: new Date(),
+        role: 'AI',
+        stage: 3,
+      });
+
       const req = createMockRequest({
         user: mockUser,
         params: { id: mockSessionId },
@@ -703,6 +718,16 @@ describe('Stage 3 API', () => {
       (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
         ...mockStageProgress,
         gatesSatisfied: { needsConfirmed: true, needsShared: true },
+      });
+
+      (prisma.message.create as jest.Mock).mockResolvedValue({
+        id: 'msg-guidance-2',
+        sessionId: mockSessionId,
+        senderId: null,
+        content: 'Both of you have shared your needs.',
+        timestamp: new Date(),
+        role: 'AI',
+        stage: 3,
       });
 
       const req = createMockRequest({
