@@ -182,7 +182,7 @@ The frontend doesn't reconstruct session state from `GET /sessions/:id` alone. U
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| `GET`  | `/api/v1/sessions/:id/state` | Consolidated session + stage + gate state |
+| `GET`  | `/api/v1/sessions/:id/state` | Consolidated session + stage + gate state. Response includes a `milestones` object with timestamps: `feelHeardConfirmedAt`, `witnessStartedAt` (Stage 1 entry time), and others. Messages are paginated — up to 500 returned with a `hasMore` flag for older history. |
 | `GET`  | `/api/v1/sessions/:id/timeline` | Ordered ChatItem timeline (messages + indicators) |
 | `GET`  | `/api/v1/sessions/:id/progress` | Per-user `StageProgress` + gate satisfaction |
 | `POST` | `/api/v1/sessions/:id/stages/advance` | Advance the caller's stage when all gates for the current stage are satisfied |

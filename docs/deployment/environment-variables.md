@@ -3,6 +3,9 @@ title: Environment Variables
 sidebar_position: 3
 description: All required environment variables for Meet Without Fear services.
 slug: /deployment/environment-variables
+created: 2026-03-11
+updated: 2026-05-15
+status: living
 ---
 # Environment Variables
 
