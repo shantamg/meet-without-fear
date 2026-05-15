@@ -97,6 +97,10 @@ export function NeedsDrawer({
   position3QRef.current = position3Q;
   positionFullRef.current = insets.top;
 
+  // Stable ref for onClose so closeDrawer identity doesn't change on every render
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   // -------------------------------------------------------------------------
   // Animation refs
   // -------------------------------------------------------------------------
@@ -170,9 +174,9 @@ export function NeedsDrawer({
       wasOpened.current = false;
       isClosing.current = false;
       setIsMounted(false);
-      onClose();
+      onCloseRef.current();
     });
-  }, [drawerTranslate, backdropOpacity, onClose]);
+  }, [drawerTranslate, backdropOpacity]);
 
   useEffect(() => {
     if (visible) {

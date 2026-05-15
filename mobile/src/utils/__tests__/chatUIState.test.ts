@@ -964,7 +964,7 @@ describe('Needs Review Panel Visibility', () => {
     expect(result.panels.showNeedsReviewPanel).toBe(false);
   });
 
-  it('still shows when only the confirm latch is set and needs are not shared', () => {
+  it('hides review and shows share when local confirm latch is set before server catches up', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -976,7 +976,9 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(true);
+    expect(result.panels.showNeedsReviewPanel).toBe(false);
+    expect(result.panels.showNeedsSharePanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('needs-share');
   });
 
   it('does not show when no needs available', () => {
