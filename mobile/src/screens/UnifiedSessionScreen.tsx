@@ -1365,12 +1365,25 @@ export function UnifiedSessionScreen({
   // Invitation panel dismissal (allows the user to defer sharing).
   // -------------------------------------------------------------------------
   const [invitationPanelDismissed, setInvitationPanelDismissed] = useState(false);
+  const [showInvitationReadyModal, setShowInvitationReadyModal] = useState(false);
 
-  // Tooltip shown after "Later" — points at the book icon to teach the user
-  // they can share later from the activity drawer. Session-local only.
+  // Tooltip shown after "Later" — points at the header share icon to teach the
+  // user they can share later. Session-local only.
   const [showShareLaterTooltip, setShowShareLaterTooltip] = useState(false);
   const [shareLaterTooltipShownThisSession, setShareLaterTooltipShownThisSession] =
     useState(false);
+
+  const handleDismissInvitationReadyModal = useCallback(() => {
+    setShowInvitationReadyModal(false);
+    setInvitationPanelDismissed(true);
+    if (!invitationConfirmed) {
+      confirmInvitationAndAwaitFollowUp();
+    }
+    if (!shareLaterTooltipShownThisSession) {
+      setShowShareLaterTooltip(true);
+      setShareLaterTooltipShownThisSession(true);
+    }
+  }, [confirmInvitationAndAwaitFollowUp, invitationConfirmed, shareLaterTooltipShownThisSession]);
 
   // Refinement Modal
   const [refinementOfferId, setRefinementOfferId] = useState<string | null>(null);
@@ -2675,6 +2688,22 @@ export function UnifiedSessionScreen({
   }, [invitation?.id]);
 
   const partnerAccepted = !!invitation?.acceptedAt;
+  const canSharePendingInvitation = isInviter &&
+    session?.status === SessionStatus.INVITED &&
+    !!invitationUrl &&
+    !!topicFrame &&
+    !partnerAccepted;
+  const pendingInvitationShareAction = canSharePendingInvitation
+    ? {
+        icon: 'share' as const,
+        accessibilityLabel: 'Share invitation',
+        onPress: () => {
+          setShowShareLaterTooltip(false);
+          setShowInvitationReadyModal(true);
+        },
+        testID: 'session-chat-header-share-invitation',
+      }
+    : undefined;
 
   // Shared share-invitation handler used by the InvitationReadyModal.
   const handleShareInvitation = useCallback(async (): Promise<boolean> => {
@@ -3484,6 +3513,7 @@ export function UnifiedSessionScreen({
             partnerOnline={partnerOnline}
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+            rightAction={pendingInvitationShareAction}
             onBackPress={onNavigateBack}
             onPress={() => setShowPartnerInfo(true)}
             conversationTopic={topicFrame}
@@ -3529,6 +3559,7 @@ export function UnifiedSessionScreen({
           partnerOnline={partnerOnline}
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+          rightAction={pendingInvitationShareAction}
           onBackPress={onNavigateBack}
           onPress={() => setShowPartnerInfo(true)}
           conversationTopic={topicFrame}
@@ -3579,6 +3610,7 @@ export function UnifiedSessionScreen({
             partnerOnline={partnerOnline}
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+            rightAction={pendingInvitationShareAction}
             onBackPress={onNavigateBack}
             onPress={() => setShowPartnerInfo(true)}
             conversationTopic={topicFrame}
@@ -3616,6 +3648,7 @@ export function UnifiedSessionScreen({
             partnerOnline={partnerOnline}
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+            rightAction={pendingInvitationShareAction}
             onBackPress={onNavigateBack}
             onPress={() => setShowPartnerInfo(true)}
             conversationTopic={topicFrame}
@@ -3652,6 +3685,7 @@ export function UnifiedSessionScreen({
           partnerOnline={partnerOnline}
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+          rightAction={pendingInvitationShareAction}
           hideOnlineStatus={isInvitationPhase}
           onBackPress={onNavigateBack}
           onPress={() => setShowPartnerInfo(true)}
@@ -4084,24 +4118,17 @@ export function UnifiedSessionScreen({
       {/* Invitation Ready Modal — replaces the inline 'invitation' panel.
           Opens automatically when the topic is confirmed and the user has not
           yet shared or dismissed; "Later" then surfaces an onboarding tooltip
-          pointing at the book icon. */}
+          pointing at the header share icon. */}
       <Modal
         visible={
-          (shouldShowInvitationPanel || auditFixture === 'invitation-ready') &&
+          (shouldShowInvitationPanel || showInvitationReadyModal || auditFixture === 'invitation-ready') &&
           !!topicFrame &&
           !!invitationUrl &&
           !partnerAccepted
         }
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          setInvitationPanelDismissed(true);
-          confirmInvitationAndAwaitFollowUp();
-          if (!shareLaterTooltipShownThisSession) {
-            setShowShareLaterTooltip(true);
-            setShareLaterTooltipShownThisSession(true);
-          }
-        }}
+        onRequestClose={handleDismissInvitationReadyModal}
       >
         <View style={styles.invitationModalBackdrop}>
           <View
@@ -4110,14 +4137,7 @@ export function UnifiedSessionScreen({
           >
             <TouchableOpacity
               style={styles.invitationModalCloseButton}
-              onPress={() => {
-                setInvitationPanelDismissed(true);
-                confirmInvitationAndAwaitFollowUp();
-                if (!shareLaterTooltipShownThisSession) {
-                  setShowShareLaterTooltip(true);
-                  setShareLaterTooltipShownThisSession(true);
-                }
-              }}
+              onPress={handleDismissInvitationReadyModal}
               accessibilityRole="button"
               accessibilityLabel="Close"
               testID="invitation-modal-close-button"
@@ -4137,8 +4157,11 @@ export function UnifiedSessionScreen({
                 onPress={async () => {
                   const didShare = await handleShareInvitation();
                   if (didShare) {
+                    setShowInvitationReadyModal(false);
                     setInvitationPanelDismissed(true);
-                    confirmInvitationAndAwaitFollowUp();
+                    if (!invitationConfirmed) {
+                      confirmInvitationAndAwaitFollowUp();
+                    }
                   }
                 }}
                 accessibilityRole="button"

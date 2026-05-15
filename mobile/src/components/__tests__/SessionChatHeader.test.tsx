@@ -108,6 +108,26 @@ describe('SessionChatHeader', () => {
 
       expect(queryByTestId('session-chat-header-brief-status')).toBeNull();
     });
+
+    it('renders right action instead of brief status when provided', () => {
+      const onPress = jest.fn();
+      const { getByTestId, queryByTestId } = render(
+        <SessionChatHeader
+          partnerName="Alex"
+          briefStatus="invited"
+          rightAction={{
+            icon: 'share',
+            accessibilityLabel: 'Share invitation',
+            onPress,
+          }}
+        />
+      );
+
+      fireEvent.press(getByTestId('session-chat-header-right-action'));
+
+      expect(onPress).toHaveBeenCalledTimes(1);
+      expect(queryByTestId('session-chat-header-brief-status')).toBeNull();
+    });
   });
 
   describe('conversation topic', () => {
