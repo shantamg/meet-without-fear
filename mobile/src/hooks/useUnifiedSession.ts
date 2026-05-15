@@ -358,7 +358,7 @@ export function useUnifiedSession(
   const { mutate: skipRefinement } = useSkipRefinement();
   const { mutate: confirmNeeds, isPending: isConfirmingNeeds } = useConfirmNeeds();
   const { mutate: consentShareNeeds } = useConsentShareNeeds();
-  const { mutate: validateNeedsMutation } = useValidateNeeds();
+  const { mutate: validateNeedsMutation, isPending: isValidatingNeeds } = useValidateNeeds();
   const { mutate: proposeStrategy, isPending: isProposing } = useProposeStrategy();
   const { mutate: requestSuggestions, isPending: isGenerating } =
     useRequestStrategySuggestions();
@@ -1298,6 +1298,7 @@ export function useUnifiedSession(
     isRespondingToShareOffer,
     isProposing,
     isConfirmingNeeds,
+    isValidatingNeeds,
 
     // Actions
     sendMessage: handleSendMessage,

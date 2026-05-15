@@ -54,6 +54,7 @@ export interface NeedsDrawerProps {
   partnerName?: string;
   onValidateNeeds?: () => void;
   onNeedsNotValidYet?: () => void;
+  isValidating?: boolean;
   testID?: string;
 }
 
@@ -82,6 +83,7 @@ export function NeedsDrawer({
   partnerName = 'Partner',
   onValidateNeeds,
   onNeedsNotValidYet,
+  isValidating = false,
   testID = 'needs-drawer',
 }: NeedsDrawerProps) {
   const insets = useSafeAreaInsets();
@@ -382,17 +384,25 @@ export function NeedsDrawer({
           )}
           {onValidateNeeds && (
             <TouchableOpacity
-              style={styles.primaryButton}
+              style={[
+                styles.primaryButton,
+                isValidating && styles.primaryButtonDisabled,
+              ]}
               onPress={() => {
-                onValidateNeeds();
-                closeDrawer();
+                if (!isValidating) {
+                  onValidateNeeds();
+                  closeDrawer();
+                }
               }}
               activeOpacity={0.7}
+              disabled={isValidating}
               testID={`${testID}-validate-needs`}
               accessibilityRole="button"
               accessibilityLabel="Validate needs"
             >
-              <Text style={styles.primaryButtonText}>Validate needs</Text>
+              <Text style={styles.primaryButtonText}>
+                {isValidating ? 'Validating...' : 'Validate needs'}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
