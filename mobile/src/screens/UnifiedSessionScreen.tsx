@@ -2562,10 +2562,12 @@ export function UnifiedSessionScreen({
   }, [markLocalEmpathyValidation, handleValidatePartnerEmpathy]);
 
   const handleValidationNotQuite = useCallback(() => {
+    Keyboard.dismiss();
     setShowAccuracyFeedbackDrawer(true);
   }, []);
 
   const openFeedbackCoachWithRoughFeedback = useCallback((roughFeedback: string) => {
+    Keyboard.dismiss();
     setFeedbackCoachRoughFeedback(roughFeedback);
     feedbackCoachInitializedRef.current = false;
     setShowFeedbackCoachChat(true);
@@ -2706,6 +2708,7 @@ export function UnifiedSessionScreen({
         icon: 'share' as const,
         accessibilityLabel: 'Share invitation',
         onPress: () => {
+          Keyboard.dismiss();
           setShowShareLaterTooltip(false);
           setShowInvitationReadyModal(true);
         },
@@ -2840,6 +2843,7 @@ export function UnifiedSessionScreen({
           }))}
           status={needsStatus}
           onReview={() => {
+            Keyboard.dismiss();
             setNeedsDrawerMode(getNeedsDrawerModeForNeedsStatus(needsStatus));
             setShowNeedsDrawer(true);
           }}
@@ -3157,7 +3161,7 @@ export function UnifiedSessionScreen({
                 pressable
                 primaryAction={{
                   label: isRefiningEmpathy ? 'Review revision' : 'Review what you’ll share',
-                  onPress: () => setShowEmpathyDrawer(true),
+                  onPress: () => { Keyboard.dismiss(); setShowEmpathyDrawer(true); },
                   testID: 'empathy-review-button',
                 }}
                 testID="empathy-review-panel"
@@ -3177,6 +3181,7 @@ export function UnifiedSessionScreen({
                 action={shareOfferData.suggestion.action}
                 partnerName={partnerName}
                 onPress={() => {
+                  Keyboard.dismiss();
                   setShowShareTopicDrawer(true);
                 }}
               />
@@ -3206,6 +3211,7 @@ export function UnifiedSessionScreen({
               primaryAction={{
                 label: 'Review',
                 onPress: () => {
+                  Keyboard.dismiss();
                   setNeedsDrawerMode('reveal');
                   setShowNeedsDrawer(true);
                 },
@@ -3225,7 +3231,7 @@ export function UnifiedSessionScreen({
             onExercisePress={() => openOverlay('support-options')}
             onActionPress={
               waitingStatus === 'stage4-selections-pending'
-                ? () => setShowStage4Drawer(true)
+                ? () => { Keyboard.dismiss(); setShowStage4Drawer(true); }
                 : undefined
             }
             testID="waiting-banner"
@@ -3291,7 +3297,7 @@ export function UnifiedSessionScreen({
               pressable
               primaryAction={{
                 label,
-                onPress: () => setShowStage4Drawer(true),
+                onPress: () => { Keyboard.dismiss(); setShowStage4Drawer(true); },
                 testID: 'stage4-review-button',
               }}
               testID="stage4-review-panel"
@@ -3385,6 +3391,7 @@ export function UnifiedSessionScreen({
               status={needsStatus}
               compact
               onReview={() => {
+                Keyboard.dismiss();
                 setNeedsDrawerMode(getNeedsDrawerModeForNeedsStatus(needsStatus));
                 setShowNeedsDrawer(true);
               }}
