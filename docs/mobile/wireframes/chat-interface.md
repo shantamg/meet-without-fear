@@ -84,7 +84,7 @@ When a user shares their Stage 2 context (empathy attempt) with their partner, i
 
 - **Receiver-side**: left-aligned — partner sees it on the left like an AI message
 - **Sender-side**: right-aligned — the sharing user sees their own card on the right (`message.sharedContentDirection === 'sent'` triggers `sharedContextSentContainer`)
-- After sharing, the activity drawer does **not** auto-open; the shared context card appears inline and the activity menu data refreshes silently so it's current if the user opens it manually.
+- After sharing, the shared context card appears inline in the chat timeline — no drawer or modal opens.
 
 ## Stage-Specific Variations
 
