@@ -55,6 +55,8 @@ import {
 } from './useStages';
 import { shouldFetchShareOffer } from '../utils/shareOfferEligibility';
 
+const SESSION_TRANSCRIPT_MESSAGE_LIMIT = 500;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -271,7 +273,7 @@ export function useUnifiedSession(
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteMessages(
-    { sessionId: sessionId!, limit: 25 },
+    { sessionId: sessionId!, limit: SESSION_TRANSCRIPT_MESSAGE_LIMIT },
     { enabled: !!sessionId && !accessDenied && stateResolved }
   );
 
