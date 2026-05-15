@@ -620,6 +620,7 @@ export function UnifiedSessionScreen({
     isResubmittingEmpathy,
     isRespondingToShareOffer,
     isConfirmingNeeds,
+    isValidatingNeeds,
 
     // Memory suggestion
     memorySuggestion,
@@ -4040,21 +4041,32 @@ export function UnifiedSessionScreen({
         confirmNeedsLabel={allNeedsConfirmed ? 'Share my needs' : 'Confirm my needs'}
         confirmingNeedsLabel={allNeedsConfirmed ? 'Sharing...' : 'Confirming...'}
         isConfirming={isConfirmingNeeds}
+        isValidating={isValidatingNeeds}
         partnerNeeds={(needsComparisonData?.partnerNeeds ?? []).map((n) => ({
           id: n.id,
           category: String(n.category) || n.need,
           need: n.need,
           confirmed: n.confirmed,
         }))}
-        onValidateNeeds={() => {
-          markCompleted('validated-needs');
-          handleValidateNeedsReveal(() => onStageComplete?.(Stage.NEED_MAPPING));
-        }}
-        onNeedsNotValidYet={() => {
-          handleNeedsNotValidYet(() => {
-            setShowNeedsDrawer(false);
-          });
-        }}
+        onValidateNeeds={
+          completedActions.has('validated-needs') ||
+          (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsValidated === true
+            ? undefined
+            : () => {
+                markCompleted('validated-needs');
+                handleValidateNeedsReveal(() => onStageComplete?.(Stage.NEED_MAPPING));
+              }
+        }
+        onNeedsNotValidYet={
+          completedActions.has('validated-needs') ||
+          (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsValidated === true
+            ? undefined
+            : () => {
+                handleNeedsNotValidYet(() => {
+                  setShowNeedsDrawer(false);
+                });
+              }
+        }
         partnerName={partnerName}
         testID="needs-drawer"
       />
