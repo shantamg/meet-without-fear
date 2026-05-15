@@ -2,7 +2,7 @@
 title: Chat Interface
 sidebar_position: 3
 description: The primary conversation interface where users interact with the AI.
-updated: 2026-05-14
+updated: 2026-05-15
 status: living
 ---
 # Chat Interface
@@ -18,6 +18,7 @@ flowchart TB
             StageTitle[Stage 1: The Witness]
             StageDesc[Share your perspective]
             ProgressDots[Progress indicators]
+            RightAction[Right action slot - optional]
         end
 
         subgraph Messages[Message Area - Scrollable]
@@ -36,6 +37,8 @@ flowchart TB
         end
     end
 ```
+
+**Chat header right action**: `SessionChatHeader` accepts an optional `rightAction: { icon, onPress, accessibilityLabel }` prop. Currently used to surface a share icon when the partner's status is "pending invitation" — tapping it opens the invitation-share modal so the user can resend or copy their invite link without leaving the chat screen.
 
 ## Message Bubbles
 
@@ -84,7 +87,7 @@ When a user shares their Stage 2 context (empathy attempt) with their partner, i
 
 - **Receiver-side**: left-aligned — partner sees it on the left like an AI message
 - **Sender-side**: right-aligned — the sharing user sees their own card on the right (`message.sharedContentDirection === 'sent'` triggers `sharedContextSentContainer`)
-- After sharing, the activity drawer does **not** auto-open; the shared context card appears inline and the activity menu data refreshes silently so it's current if the user opens it manually.
+- After sharing, the shared context card appears inline in the timeline — no drawer or modal auto-opens. (The `ActivityDrawer` / `ActivityMenuModal` were removed in #602; sharing history is no longer surfaced via a separate drawer.)
 
 ## Stage-Specific Variations
 
@@ -252,6 +255,15 @@ When the app returns from background after ≥5 seconds, `BiometricLockOverlay` 
 
 After a session turn completes, `useNotifications.ts` evaluates `shouldAskForSessionNotifications()`. When conditions are met the app shows a full-screen `NotificationPermissionDrawer` with the copy: *"Know when it is your turn again"* and a preview of the notification ("Your partner is ready"). Accepting calls `requestSessionNotifications()` which triggers the OS permission dialog and registers the Expo push token.
 
+### Native App Update Prompt (`UpdateBanner`)
+
+`useVersionCheck` polls `GET /api/version/check` on app foreground. When the backend signals an update is available, `UpdateBanner` is rendered as a full-screen modal overlay on top of the app:
+
+- **Required update** — user cannot dismiss; prompted to update now with a download link.
+- **Optional update** — user can dismiss ("Maybe later") or tap "Update now."
+
+The hook checks once per app session and respects a per-device snooze so optional prompts don't repeat within the same session. Version info (latest build number, minimum required build, download URLs) is configured via `APP_*` environment variables on the backend.
+
 ## Empty States
 
 ### Opening not acknowledged (onboarding)
@@ -334,9 +346,25 @@ The chat input hosts an inline emotion slider (`barometerValue` / `handleBaromet
 
 Each panel shows an eyebrow label, title, optional subtitle, and one or two action buttons. The input field remains visible while any `GuidedActionPanel` is displayed — it is not hidden by the panel (this is intentional: users can continue the conversation even while an action is pending).
 
+**Compact mode**: `GuidedActionPanel` accepts a `compact` prop (boolean) and a `pressable` prop that render the panel as a condensed single-line row instead of the full card layout. Used when the action needs to stay unobtrusive inline — e.g. `ShareTopicPanel` renders with `compact={true} pressable={true}` to show a tappable row rather than a full bottom card.
+
 ## Typewriter + inline Stage 2 cards
 
 The chat list tracks `isTypewriterAnimating` (set while a new AI message is being typed in) so it can delay the appearance of inline cards until the text has finished. In Stage 2 (`PERSPECTIVE_STRETCH`), the list renders **validation cards** directly in the timeline (`validationCards`) with "Accurate / Partially / Off" buttons wired to `handleValidationAccurate` / `handleValidationNotQuite` instead of routing users to a separate screen. The "Not quite yet" path opens `AccuracyFeedbackDrawer` for rough notes and then `GuidedDraftChatModal` as the Feedback Coach before the final feedback is submitted.
+
+## Stage color bars and sticky header
+
+Each stage transition is visually marked in the chat timeline by a full-width colored stage bar (`ChatIndicator` with `type: 'stage-chapter'`). These bars carry `metadata.stageColor` and use a fixed emotional-arc palette defined in `shared/src/enums.ts` (`STAGE_COLORS`):
+
+| Stage | Color |
+|---|---|
+| `ONBOARDING` | Blue (`#8B9DC3`) |
+| `WITNESS` | Tan/amber (`#D4A574`) |
+| `PERSPECTIVE_STRETCH` | Green (`#8FAF8F`) |
+| `NEED_MAPPING` | Purple (`#9B8EC4`) |
+| `STRATEGIC_REPAIR` | Coral (`#C4886E`) |
+
+When a stage bar scrolls past the top of the viewport, `ChatInterface` uses `stickyHeaderIndices` to pin it as a sticky overlay at the top of the list. The sticky header shows the stage name and is hidden when the inline bar is still visible (no duplication). This gives users persistent context about which stage they're in while scrolling through long conversations.
 
 ## Stage label map
 

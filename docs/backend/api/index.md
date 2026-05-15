@@ -4,7 +4,7 @@ sidebar_position: 1
 description: REST API endpoints for the Meet Without Fear backend. All endpoints use JSON request/response bodies.
 slug: /backend/api
 created: 2026-03-11
-updated: 2026-05-06
+updated: 2026-05-15
 status: living
 ---
 # API Specification
@@ -215,6 +215,7 @@ The routes below are live; consult the source directly until dedicated pages exi
 
 | Area | Base path | Source |
 |------|-----------|--------|
+| Native app version check | `GET /api/version/check` | `backend/src/routes/version.ts` |
 | Gratitude practice | `/api/v1/gratitude` | `backend/src/routes/gratitude.ts` |
 | Meditation | `/api/v1/meditation` | `backend/src/routes/meditation.ts` |
 | Needs assessment (solo) | `/api/v1/needs` | `backend/src/routes/needs-assessment.ts` |
