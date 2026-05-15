@@ -377,6 +377,7 @@ export async function getProgress(req: Request, res: Response): Promise<void> {
     } | null;
 
     const milestones = {
+      witnessStartedAt: myStage1Record?.startedAt?.toISOString() ?? null,
       feelHeardConfirmedAt: stage1Gates?.feelHeardConfirmedAt ?? null,
       needsIdentifiedAt: stage3Gates?.needsIdentifiedAt ?? null,
       commonGroundFoundAt: stage3Gates?.commonGroundFoundAt ?? null,

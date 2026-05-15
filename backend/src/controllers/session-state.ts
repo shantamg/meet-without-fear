@@ -289,6 +289,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
       feelHeardConfirmedAt?: string;
     } | null;
     const milestones = {
+      witnessStartedAt: myStage1Record?.startedAt?.toISOString() ?? null,
       feelHeardConfirmedAt: stage1Gates?.feelHeardConfirmedAt ?? null,
     };
 

@@ -76,6 +76,7 @@ export interface SessionStateResponse {
     };
     canAdvance: boolean;
     milestones: {
+      witnessStartedAt: string | null;
       feelHeardConfirmedAt: string | null;
     };
   };
