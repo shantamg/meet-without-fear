@@ -3,7 +3,7 @@ title: "Stage 3 API: What Matters"
 sidebar_position: 10
 description: Endpoints for identifying needs, confirming them, and validating revealed needs with a partner.
 slug: /backend/api/stage-3
-updated: "2026-05-05"
+updated: "2026-05-16"
 ---
 # Stage 3 API: What Matters
 
@@ -274,6 +274,9 @@ interface ConsentShareNeedsResponse {
 1. Creates `ConsentRecord` rows with `targetType = IDENTIFIED_NEED`
 2. Sets the caller's `needsShared` gate
 3. Notifies clients when both users have consented and the side-by-side reveal is ready
+4. Creates and publishes an AI guidance message to the caller via `publishMessageAIResponse`:
+   - If partner has already shared: *"Both of you have shared your needs. You can now review them side by side and validate whether they feel accurate."*
+   - If waiting for partner: *"Your needs have been shared. Once your partner shares theirs, you'll be able to review them side by side."*
 
 Validation: needIds must reference confirmed needs; at least 1. Consenting sets the caller's `needsShared` gate and moves the caller's Stage-3 status to `GATE_PENDING`. The partner-side check `partnerProgress.gatesSatisfied.needsShared === true` (surfaced via the `hasPartnerSharedNeeds` helper) is what unblocks the needs-validation step.
 
@@ -328,6 +331,8 @@ When both partners validate (`canAdvance === true`):
 1. Both partners' Stage-3 status transitions to `COMPLETED`
 2. Both partners' Stage-4 progress records are created (`IN_PROGRESS`)
 3. A transition message is published to both users
+
+When `validated === false`, an AI guidance message is created and published to the caller: *"No problem — take your time reviewing. You can chat about anything that doesn't feel right, and review the needs again when you're ready."*
 
 Pre-conditions: both partners must have consented to share needs (`needsShared` gate) before calling this endpoint. The `hasPartnerSharedNeeds` check is enforced server-side.
 
