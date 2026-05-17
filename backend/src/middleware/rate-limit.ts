@@ -85,6 +85,27 @@ export const authRateLimit = rateLimit({
 });
 
 /**
+ * Rate limiter for public invitation lookup endpoint.
+ * IP-only keying (no authenticated user), 10 requests per minute.
+ */
+export const invitationLookupRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  keyGenerator: (req: Request) => req.ip || 'unknown',
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: {
+      code: 'RATE_LIMITED',
+      message: 'Too many requests. Please wait a moment.',
+    },
+  },
+  skip: () => process.env.E2E_AUTH_BYPASS === 'true' && process.env.NODE_ENV !== 'production',
+  validate,
+});
+
+/**
  * Global rate limiter as a safety net.
  * 100 requests per minute per user.
  */

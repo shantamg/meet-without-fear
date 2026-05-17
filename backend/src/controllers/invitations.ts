@@ -520,7 +520,6 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
           select: {
             id: true,
             status: true,
-            topicFrame: true,
           },
         },
       },
@@ -539,7 +538,6 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
       invitation: {
         id: invitation.id,
         invitedBy: {
-          id: invitation.invitedBy.id,
           name: invitation.invitedBy.name,
         },
         name: invitation.name,
@@ -547,8 +545,8 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
         createdAt: invitation.createdAt,
         expiresAt: invitation.expiresAt,
         session: {
-          ...invitation.session,
-          topicFrame: invitation.session.topicFrame ?? null,
+          id: invitation.session.id,
+          status: invitation.session.status,
         },
       },
     });

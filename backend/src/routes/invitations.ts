@@ -13,6 +13,7 @@ import {
 } from '../controllers/invitations';
 import { requireAuth, requireSessionAccess } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errors';
+import { invitationLookupRateLimit } from '../middleware/rate-limit';
 
 const router = Router();
 
@@ -35,7 +36,7 @@ router.post('/sessions', requireAuth, asyncHandler(createSession));
  * @description Get invitation details (public info for accepting/declining)
  * @access Public - but only returns limited info
  */
-router.get('/invitations/:id', asyncHandler(getInvitation));
+router.get('/invitations/:id', invitationLookupRateLimit, asyncHandler(getInvitation));
 
 /**
  * @route POST /api/v1/invitations/:id/accept
