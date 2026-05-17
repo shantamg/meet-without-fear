@@ -1097,7 +1097,7 @@ describe('useStages', () => {
             selections: [
               {
                 proposalId: 'proposal-1',
-                decision: Stage4SelectionDecision.NEEDS_DISCUSSION,
+                decision: Stage4SelectionDecision.NOT_WILLING,
               },
             ],
           });
@@ -1107,7 +1107,7 @@ describe('useStages', () => {
           selections: [
             {
               proposalId: 'proposal-1',
-              decision: Stage4SelectionDecision.NEEDS_DISCUSSION,
+              decision: Stage4SelectionDecision.NOT_WILLING,
             },
           ],
         });

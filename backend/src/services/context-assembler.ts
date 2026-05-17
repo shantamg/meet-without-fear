@@ -10,6 +10,7 @@
 
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
+import { EmpathyStatus, SharedContentDeliveryStatus } from '@prisma/client';
 import {
   type MemoryIntentResult,
   type RetrievalDepth,
@@ -30,6 +31,41 @@ export interface ContextMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+}
+
+export interface StageHistoryMessage {
+  role: 'user' | 'assistant' | 'empathy_statement' | 'shared_context' | 'system';
+  content: string;
+  stage: number;
+  timestamp: string;
+}
+
+export interface PriorStageSummary {
+  stage: number;
+  lifecycleStatus?: string;
+  completedAt?: string;
+  userTurnCount: number;
+  assistantTurnCount: number;
+  highlights: StageHistoryMessage[];
+}
+
+export interface PriorStageSummaries {
+  stages: PriorStageSummary[];
+}
+
+export interface ConsentedShareStateItem {
+  kind: 'empathy_attempt' | 'additional_context';
+  direction: 'user_to_partner' | 'partner_to_user';
+  lifecycleStatus: string;
+  content?: string;
+  sharedAt?: string;
+  deliveredAt?: string;
+  revealedAt?: string;
+  validatedAt?: string;
+}
+
+export interface ConsentedShareState {
+  items: ConsentedShareStateItem[];
 }
 
 /**
@@ -146,6 +182,31 @@ export interface ContextBundle {
     gatesSatisfied: Record<string, unknown>;
   };
 
+  // Confirmed conversation topic. This is orientation context only; the
+  // confirmation timestamp on Session remains the source of truth.
+  topicFrame?: {
+    text: string;
+    confirmedAt: string;
+  };
+
+  // Condensed prior-stage context from this user's own lane only.
+  // StageProgress remains the gate source of truth; these summaries are only
+  // continuity context for what has already been said and persisted.
+  priorStageSummaries?: PriorStageSummaries;
+
+  // Typed consent/share lifecycle state for orientation only.
+  // Content is included only when owned by this user or delivered/revealed to
+  // them; StageProgress and lifecycle tables remain the gate source of truth.
+  consentedShareState?: ConsentedShareState;
+
+  // Full current-stage history for this user's own lane only.
+  // This is prompt orientation context, not a replacement for StageProgress or
+  // lifecycle tables when deciding gates.
+  currentStageHistory?: {
+    stage: number;
+    messages: StageHistoryMessage[];
+  };
+
   // User info
   userName: string;
   partnerName?: string;
@@ -209,8 +270,11 @@ export async function assembleContextBundle(
   // Note: buildInnerThoughtsContext depends on conversationContext, so it runs after.
   const turnBufferSize = getTurnBufferSize(stage, intent.intent);
 
-  const [conversationContext, emotionalThread, priorThemes, sessionSummary, userMemories, notableFacts, globalFacts, lastUserTurnAt] = await Promise.all([
+  const [conversationContext, currentStageHistory, priorStageSummaries, consentedShareState, emotionalThread, priorThemes, sessionSummary, userMemories, notableFacts, globalFacts, lastUserTurnAt] = await Promise.all([
     buildConversationContext(sessionId, userId, turnBufferSize, depth),
+    buildCurrentUserStageHistory(sessionId, userId, stage, depth),
+    buildPriorStageSummaries(sessionId, userId, stage, depth),
+    buildConsentedShareState(sessionId, userId, depth),
     buildEmotionalThread(sessionId, userId, depth),
     (depth === 'full' || depth === 'light')
       ? buildPriorThemes(sessionId, userId, session.relationshipId)
@@ -260,6 +324,15 @@ export async function assembleContextBundle(
       stage,
       gatesSatisfied,
     },
+    topicFrame: session.topicFrame && session.topicFrameConfirmedAt
+      ? {
+          text: session.topicFrame,
+          confirmedAt: session.topicFrameConfirmedAt.toISOString(),
+        }
+      : undefined,
+    priorStageSummaries,
+    consentedShareState,
+    currentStageHistory,
     userName,
     partnerName,
     intent,
@@ -310,6 +383,246 @@ async function buildConversationContext(
     content: m.content,
     timestamp: m.timestamp.toISOString(),
   }));
+}
+
+async function buildCurrentUserStageHistory(
+  sessionId: string,
+  userId: string,
+  stage: number,
+  depth: RetrievalDepth
+): Promise<ContextBundle['currentStageHistory'] | undefined> {
+  if (depth === 'none') return undefined;
+
+  const messages = await prisma.message.findMany({
+    where: {
+      sessionId,
+      stage,
+      OR: [
+        { senderId: userId },
+        { senderId: null, forUserId: userId },
+        { forUserId: userId, role: { in: ['EMPATHY_STATEMENT', 'SHARED_CONTEXT'] } },
+      ],
+    },
+    orderBy: { timestamp: 'asc' },
+    select: {
+      content: true,
+      role: true,
+      timestamp: true,
+      stage: true,
+    },
+  });
+
+  if (messages.length === 0) return undefined;
+
+  return {
+    stage,
+    messages: messages.map((message) => ({
+      role: mapStageHistoryRole(message.role),
+      content: message.content,
+      stage: message.stage,
+      timestamp: message.timestamp.toISOString(),
+    })),
+  };
+}
+
+function mapStageHistoryRole(role: string): StageHistoryMessage['role'] {
+  switch (role) {
+    case 'USER':
+      return 'user';
+    case 'AI':
+      return 'assistant';
+    case 'EMPATHY_STATEMENT':
+      return 'empathy_statement';
+    case 'SHARED_CONTEXT':
+      return 'shared_context';
+    default:
+      return 'system';
+  }
+}
+
+async function buildPriorStageSummaries(
+  sessionId: string,
+  userId: string,
+  currentStage: number,
+  depth: RetrievalDepth
+): Promise<ContextBundle['priorStageSummaries'] | undefined> {
+  if (depth === 'none' || currentStage <= 0) return undefined;
+
+  const [messages, progressRows] = await Promise.all([
+    prisma.message.findMany({
+      where: {
+        sessionId,
+        stage: { lt: currentStage },
+        OR: [
+          { senderId: userId },
+          { senderId: null, forUserId: userId },
+          { forUserId: userId, role: { in: ['EMPATHY_STATEMENT', 'SHARED_CONTEXT'] } },
+        ],
+      },
+      orderBy: [{ stage: 'asc' }, { timestamp: 'asc' }],
+      select: {
+        content: true,
+        role: true,
+        timestamp: true,
+        stage: true,
+      },
+    }),
+    prisma.stageProgress.findMany({
+      where: {
+        sessionId,
+        userId,
+        stage: { lt: currentStage },
+      },
+      orderBy: { stage: 'asc' },
+      select: {
+        stage: true,
+        status: true,
+        completedAt: true,
+      },
+    }),
+  ]);
+
+  if (messages.length === 0 && progressRows.length === 0) return undefined;
+
+  const byStage = new Map<number, PriorStageSummary>();
+  const ensureStage = (stage: number): PriorStageSummary => {
+    const existing = byStage.get(stage);
+    if (existing) return existing;
+    const summary: PriorStageSummary = {
+      stage,
+      userTurnCount: 0,
+      assistantTurnCount: 0,
+      highlights: [],
+    };
+    byStage.set(stage, summary);
+    return summary;
+  };
+
+  for (const progress of progressRows) {
+    const summary = ensureStage(progress.stage);
+    summary.lifecycleStatus = progress.status;
+    if (progress.completedAt) {
+      summary.completedAt = progress.completedAt.toISOString();
+    }
+  }
+
+  for (const message of messages) {
+    const summary = ensureStage(message.stage);
+    if (message.role === 'USER') {
+      summary.userTurnCount += 1;
+    } else if (message.role === 'AI') {
+      summary.assistantTurnCount += 1;
+    }
+
+    summary.highlights.push({
+      role: mapStageHistoryRole(message.role),
+      content: message.content,
+      stage: message.stage,
+      timestamp: message.timestamp.toISOString(),
+    });
+  }
+
+  const stages = [...byStage.values()]
+    .sort((a, b) => a.stage - b.stage)
+    .map((summary) => ({
+      ...summary,
+      highlights: summary.highlights.slice(-4),
+    }));
+
+  return stages.length > 0 ? { stages } : undefined;
+}
+
+async function buildConsentedShareState(
+  sessionId: string,
+  userId: string,
+  depth: RetrievalDepth
+): Promise<ContextBundle['consentedShareState'] | undefined> {
+  if (depth === 'none') return undefined;
+
+  const [empathyAttempts, shareOffers] = await Promise.all([
+    prisma.empathyAttempt.findMany({
+      where: { sessionId },
+      orderBy: { sharedAt: 'asc' },
+      select: {
+        sourceUserId: true,
+        content: true,
+        status: true,
+        sharedAt: true,
+        deliveredAt: true,
+        revealedAt: true,
+        validations: {
+          where: { validated: true },
+          select: { validatedAt: true },
+          orderBy: { validatedAt: 'asc' },
+          take: 1,
+        },
+      },
+    }),
+    prisma.reconcilerShareOffer.findMany({
+      where: {
+        result: { sessionId },
+        sharedContent: { not: null },
+        sharedAt: { not: null },
+      },
+      orderBy: { sharedAt: 'asc' },
+      select: {
+        userId: true,
+        status: true,
+        deliveryStatus: true,
+        sharedContent: true,
+        sharedAt: true,
+        deliveredAt: true,
+      },
+    }),
+  ]);
+
+  const items: ConsentedShareStateItem[] = [];
+
+  for (const attempt of empathyAttempts) {
+    const isOwnAttempt = attempt.sourceUserId === userId;
+    const isVisiblePartnerAttempt =
+      attempt.revealedAt !== null ||
+      attempt.status === EmpathyStatus.REVEALED ||
+      attempt.status === EmpathyStatus.VALIDATED;
+
+    items.push({
+      kind: 'empathy_attempt',
+      direction: isOwnAttempt ? 'user_to_partner' : 'partner_to_user',
+      lifecycleStatus: attempt.status,
+      ...(isOwnAttempt || isVisiblePartnerAttempt ? { content: attempt.content } : {}),
+      sharedAt: attempt.sharedAt.toISOString(),
+      ...(attempt.deliveredAt ? { deliveredAt: attempt.deliveredAt.toISOString() } : {}),
+      ...(attempt.revealedAt ? { revealedAt: attempt.revealedAt.toISOString() } : {}),
+      ...(attempt.validations[0]?.validatedAt ? { validatedAt: attempt.validations[0].validatedAt.toISOString() } : {}),
+    });
+  }
+
+  for (const offer of shareOffers) {
+    const isOwnShare = offer.userId === userId;
+    const isDeliveredToUser =
+      offer.deliveredAt !== null ||
+      offer.deliveryStatus === SharedContentDeliveryStatus.DELIVERED ||
+      offer.deliveryStatus === SharedContentDeliveryStatus.SEEN;
+
+    items.push({
+      kind: 'additional_context',
+      direction: isOwnShare ? 'user_to_partner' : 'partner_to_user',
+      lifecycleStatus: `${offer.status}/${offer.deliveryStatus}`,
+      ...(isOwnShare || isDeliveredToUser ? { content: offer.sharedContent ?? undefined } : {}),
+      ...(offer.sharedAt ? { sharedAt: offer.sharedAt.toISOString() } : {}),
+      ...(offer.deliveredAt ? { deliveredAt: offer.deliveredAt.toISOString() } : {}),
+    });
+  }
+
+  if (items.length === 0) return undefined;
+
+  items.sort((a, b) => {
+    const aTime = a.revealedAt ?? a.deliveredAt ?? a.sharedAt ?? '';
+    const bTime = b.revealedAt ?? b.deliveredAt ?? b.sharedAt ?? '';
+    return aTime.localeCompare(bTime);
+  });
+
+  return { items };
 }
 
 /**

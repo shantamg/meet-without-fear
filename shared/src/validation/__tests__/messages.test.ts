@@ -59,9 +59,16 @@ describe('getMessagesQuerySchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects limit over 100', () => {
+  it('accepts full session transcript limit', () => {
     const result = getMessagesQuerySchema.safeParse({
-      limit: 200,
+      limit: 500,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects limit over 500', () => {
+    const result = getMessagesQuerySchema.safeParse({
+      limit: 501,
     });
     expect(result.success).toBe(false);
   });

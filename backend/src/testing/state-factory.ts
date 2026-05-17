@@ -2159,8 +2159,8 @@ export class StateFactory {
         ? [
             { proposalId: sharedCheckin.id, userId: userAId, decision: Stage4SelectionDecision.WILLING },
             { proposalId: sharedCheckin.id, userId: userBId, decision: Stage4SelectionDecision.WILLING },
-            { proposalId: sharedPause.id, userId: userAId, decision: Stage4SelectionDecision.NEEDS_DISCUSSION },
-            { proposalId: sharedPause.id, userId: userBId, decision: Stage4SelectionDecision.NEEDS_DISCUSSION },
+            { proposalId: sharedPause.id, userId: userAId, decision: Stage4SelectionDecision.NOT_WILLING },
+            { proposalId: sharedPause.id, userId: userBId, decision: Stage4SelectionDecision.NOT_WILLING },
             { proposalId: individualCommitment.id, userId: userAId, decision: Stage4SelectionDecision.WILLING },
           ]
         : targetStage === TargetStage.STAGE4_REDESIGN_NO_OVERLAP_SELECTIONS

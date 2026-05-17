@@ -12,8 +12,16 @@ export function TypingIndicator() {
   const dot1 = useRef(new Animated.Value(0.3)).current;
   const dot2 = useRef(new Animated.Value(0.3)).current;
   const dot3 = useRef(new Animated.Value(0.3)).current;
+  const entrance = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    Animated.timing(entrance, {
+      toValue: 1,
+      duration: 220,
+      delay: 120,
+      useNativeDriver: true,
+    }).start();
+
     const animateDot = (dot: Animated.Value, delay: number) => {
       return Animated.loop(
         Animated.sequence([
@@ -45,14 +53,22 @@ export function TypingIndicator() {
       animation2.stop();
       animation3.stop();
     };
-  }, [dot1, dot2, dot3]);
+  }, [dot1, dot2, dot3, entrance]);
+
+  const translateY = entrance.interpolate({
+    inputRange: [0, 1],
+    outputRange: [12, 0],
+  });
 
   return (
-    <View testID="typing-indicator" style={styles.container}>
+    <Animated.View
+      testID="typing-indicator"
+      style={[styles.container, { opacity: entrance, transform: [{ translateY }] }]}
+    >
       <Animated.View style={[styles.dot, { opacity: dot1 }]} />
       <Animated.View style={[styles.dot, { opacity: dot2 }]} />
       <Animated.View style={[styles.dot, { opacity: dot3 }]} />
-    </View>
+    </Animated.View>
   );
 }
 

@@ -338,11 +338,10 @@ function ChatSection({ styles, palette }: { styles: ReturnType<typeof makeStyles
         <SessionChatHeader
           partnerName="Sam"
           partnerOnline
-          stageName="Walking in Their Shoes"
+          conversationTopic="Feeling stuck about household responsibilities"
           leftActionIcon="menu"
           onBackPress={() => {}}
           onPress={() => {}}
-          hasNewActivity
         />
         <View style={styles.chatPreview}>
           <ChatIndicator type="stage-chapter" metadata={{ stageName: 'Your Story' }} />
@@ -416,16 +415,25 @@ function CtaSection({
       <View style={styles.ctaStack}>
         <GuidedActionPanel
           tone="review"
+          eyebrow="Empathy draft"
+          title="Ready to review"
+          compact
+          pressable
+          primaryAction={{ label: 'Review what you’ll share', onPress: () => {} }}
+        />
+        <GuidedActionPanel
+          tone="review"
           eyebrow="Revision"
-          title="Revisit what you’ll share"
-          subtitle="Sam shared more context. Check whether your understanding should change."
-          primaryAction={{ label: 'Review', onPress: () => {} }}
+          title="Review the update"
+          compact
+          pressable
+          primaryAction={{ label: 'Review revision', onPress: () => {} }}
         />
         <GuidedActionPanel
           tone="topic"
           eyebrow="Topic frame"
           title="Household chores and feeling unseen"
-          subtitle="This stays above the input until you confirm it."
+          compact
           primaryAction={{ label: 'Use this topic', onPress: () => {} }}
         />
         <ShareTopicPanel
@@ -434,7 +442,7 @@ function CtaSection({
           partnerName="Sam"
           onPress={onOpenShareDrawer}
         />
-        <FeelHeardConfirmation onConfirm={() => {}} onContinue={() => {}} />
+        <FeelHeardConfirmation onConfirm={() => {}} />
         <CompactAgreementBar onSign={() => {}} buttonLabel="Ready" />
         <GuidedActionPanel
           tone="needs"

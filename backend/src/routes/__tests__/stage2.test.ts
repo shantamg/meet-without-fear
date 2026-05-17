@@ -483,6 +483,11 @@ describe('Stage 2 API', () => {
         feedbackShared: false,
       });
       (prisma.empathyValidation.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.message.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.message.create as jest.Mock).mockResolvedValue({
+        id: 'wait-message-1',
+        timestamp: new Date(),
+      });
       (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
         gatesSatisfied: { empathyValidated: true },
       });
@@ -505,6 +510,18 @@ describe('Stage 2 API', () => {
 
       expect(prisma.empathyValidation.upsert).toHaveBeenCalled();
       expect(prisma.stageProgress.update).toHaveBeenCalled();
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            sessionId: 'session-123',
+            senderId: null,
+            forUserId: 'user-1',
+            role: 'AI',
+            content: expect.stringContaining('You confirmed this feels right'),
+            stage: 2,
+          }),
+        })
+      );
       expect(notifyPartner).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -539,6 +556,38 @@ describe('Stage 2 API', () => {
           error: expect.objectContaining({ code: 'NOT_FOUND' }),
         })
       );
+    });
+
+    it('does not validate partner empathy before it is revealed', async () => {
+      const req = mockRequest({
+        body: { validated: true },
+      });
+      const res = mockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        stage: 2,
+        status: 'IN_PROGRESS',
+      });
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
+        id: 'attempt-1',
+        sourceUserId: 'partner-1',
+        status: 'AWAITING_SHARING',
+      });
+
+      await validateEmpathy(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: 'VALIDATION_ERROR',
+            message: 'Partner empathy is not ready for validation yet',
+          }),
+        })
+      );
+      expect(prisma.empathyValidation.upsert).not.toHaveBeenCalled();
     });
 
     it('requires feedback when empathy is not validated', async () => {
@@ -599,6 +648,11 @@ describe('Stage 2 API', () => {
         timestamp: new Date(),
       });
       (prisma.empathyValidation.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.user.findUnique as jest.Mock).mockImplementation(({ where }: any) => {
+        if (where.id === 'user-1') return Promise.resolve({ firstName: null, name: 'Validator' });
+        if (where.id === 'partner-1') return Promise.resolve({ firstName: null, name: 'Guesser' });
+        return Promise.resolve(null);
+      });
 
       await validateEmpathy(req, res);
 
@@ -625,6 +679,19 @@ describe('Stage 2 API', () => {
           }),
         })
       );
+      // AI framing message created before the feedback card
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            sessionId: 'session-123',
+            senderId: null,
+            forUserId: 'partner-1',
+            role: 'AI',
+            stage: 2,
+          }),
+        })
+      );
+      // VALIDATION_FEEDBACK card created with +100ms offset
       expect(prisma.message.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -637,6 +704,7 @@ describe('Stage 2 API', () => {
           }),
         })
       );
+      expect(prisma.message.create).toHaveBeenCalledTimes(2);
       expect(notifyPartner).toHaveBeenCalledWith(
         'session-123',
         'partner-1',

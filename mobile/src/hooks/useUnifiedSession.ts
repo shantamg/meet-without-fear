@@ -55,6 +55,8 @@ import {
 } from './useStages';
 import { shouldFetchShareOffer } from '../utils/shareOfferEligibility';
 
+const SESSION_TRANSCRIPT_MESSAGE_LIMIT = 500;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -266,11 +268,12 @@ export function useUnifiedSession(
   const {
     data: messagesData,
     isLoading: loadingMessages,
+    isFetching: fetchingMessages,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteMessages(
-    { sessionId: sessionId!, limit: 25 },
+    { sessionId: sessionId!, limit: SESSION_TRANSCRIPT_MESSAGE_LIMIT },
     { enabled: !!sessionId && !accessDenied && stateResolved }
   );
 
@@ -355,7 +358,7 @@ export function useUnifiedSession(
   const { mutate: skipRefinement } = useSkipRefinement();
   const { mutate: confirmNeeds, isPending: isConfirmingNeeds } = useConfirmNeeds();
   const { mutate: consentShareNeeds } = useConsentShareNeeds();
-  const { mutate: validateNeedsMutation } = useValidateNeeds();
+  const { mutate: validateNeedsMutation, isPending: isValidatingNeeds } = useValidateNeeds();
   const { mutate: proposeStrategy, isPending: isProposing } = useProposeStrategy();
   const { mutate: requestSuggestions, isPending: isGenerating } =
     useRequestStrategySuggestions();
@@ -556,7 +559,9 @@ export function useUnifiedSession(
   const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
   const gateOffered = !!gates?.feelHeardCheckOffered;
   const gateConfirmed = !!gates?.feelHeardConfirmed;
+  const isWitnessStage = myProgress?.stage === Stage.WITNESS;
   const showFeelHeardConfirmation = (
+    isWitnessStage &&
     (gateOffered || streamTriggeredFeelHeard) &&
     !gateConfirmed &&
     !hasDismissedFeelHeard &&
@@ -1197,6 +1202,7 @@ export function useUnifiedSession(
   return {
     // Loading state
     isLoading: loadingSession || loadingProgress || loadingMessages,
+    isFetchingMessages: fetchingMessages && !isFetchingNextPage,
     loadError: accessDenied ? null : stateError,
     refetchSession: refetchState,
     accessDenied,
@@ -1292,6 +1298,7 @@ export function useUnifiedSession(
     isRespondingToShareOffer,
     isProposing,
     isConfirmingNeeds,
+    isValidatingNeeds,
 
     // Actions
     sendMessage: handleSendMessage,

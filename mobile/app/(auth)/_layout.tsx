@@ -3,8 +3,6 @@ import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 import { useAppAppearance } from '@/src/theme';
 import { useUserSessionUpdates } from '@/src/hooks/useRealtime';
 import { isE2EMode } from '@/src/providers/E2EAuthProvider';
-import { useOTAUpdate } from '@/src/hooks/useOTAUpdate';
-import { UpdateBanner } from '@/src/components/UpdateBanner';
 import { useNotifications } from '@/src/hooks/useNotifications';
 import { BiometricLockProvider } from '@/src/contexts/BiometricLockContext';
 import { BiometricLockOverlay } from '@/src/components/BiometricLockOverlay';
@@ -24,9 +22,6 @@ export default function AuthLayout() {
   // Skip in E2E mode to avoid token/capability cache issues with the user notification channel
   useUserSessionUpdates({ enabled: !isE2EMode() });
   useNotifications();
-
-  // OTA update banner
-  const { showUpdateBanner, applyUpdate, dismissUpdate } = useOTAUpdate();
 
   // Wait for Clerk to initialize
   if (!isLoaded) {
@@ -111,9 +106,6 @@ export default function AuthLayout() {
           }}
         />
       </Stack>
-      {showUpdateBanner && (
-        <UpdateBanner onApply={applyUpdate} onDismiss={dismissUpdate} />
-      )}
       <BiometricLockOverlay />
     </BiometricLockProvider>
   );

@@ -3,7 +3,7 @@ title: "Stage 2 API: Perspective Stretch"
 sidebar_position: 7
 description: Endpoints for building and exchanging empathy attempts.
 slug: /backend/api/stage-2
-updated: 2026-05-11
+updated: 2026-05-12
 status: living
 ---
 # Stage 2 API: Perspective Stretch
@@ -253,15 +253,21 @@ interface ValidateEmpathyResponse {
 }
 ```
 
+**Precondition**: Returns `409 VALIDATION_ERROR` if the partner's empathy attempt is not in `REVEALED` or `VALIDATED` status. Clients should confirm `empathy/status` before calling this endpoint.
+
 Validation: feedback max 1000 chars; one validation per recipient per attempt (idempotent overwrite allowed).
+
+**Side effect (validated=true, partner pending)**: When `validated: true` but the partner has not yet validated the caller's attempt, the API inserts a single AI chat message for the caller: *"You confirmed this feels right. We'll hold here while your partner reviews what you shared. Once they respond, we'll move you into the next step."* The message is deduplicated — only created if it does not already exist.
 
 For the "Not quite" path, mobile first collects rough notes with the `What feels off?`
 step, then the Feedback Coach refines those notes into a final message. The final send
 uses this validation endpoint with `validated: false` and the coach-approved `feedback`.
-The backend stores the validation, creates a targeted partner chat message with role
-`VALIDATION_FEEDBACK`, updates the partner's empathy attempt to `REFINING`, and emits
-`empathy.status_updated` for that partner with `status: 'REFINING'`,
-`feedbackShared: true`, and `validationFeedback`.
+The backend stores the validation, generates an AI framing message (via Sonnet) that
+introduces the feedback to the guesser, then creates two messages with guaranteed
+ordering (100ms apart): the AI framing message (role `AI`) followed by the feedback
+card (role `VALIDATION_FEEDBACK`). It updates the partner's empathy attempt to
+`REFINING` and emits `empathy.status_updated` for that partner with
+`status: 'REFINING'`, `feedbackShared: true`, and `validationFeedback`.
 
 ### Gate keys set by Stage 2 endpoints
 - `empathyDraftReady`: set when `readyToShare: true` on draft save
@@ -300,7 +306,7 @@ curl -X POST /api/v1/sessions/sess_abc123/empathy/validate \
 ### Revision Loop
 
 If feedback is shared:
-1. Partner receives a targeted `VALIDATION_FEEDBACK` message and their attempt status becomes `REFINING`
+1. Partner receives an AI framing message followed by a `VALIDATION_FEEDBACK` card, and their attempt status becomes `REFINING`
 2. Partner can revise and resubmit their empathy attempt
 3. User receives the revised attempt and can validate again
 4. Partner can also accept or decline the remaining difference via `/empathy/skip-refinement`

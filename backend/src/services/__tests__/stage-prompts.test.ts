@@ -1262,6 +1262,35 @@ describe('Stage Prompts Service', () => {
       const blocks = buildStagePrompt(1, createContext());
       expect(blocks.dynamicBlock).not.toContain('CONVERSATION TOPIC');
     });
+
+    it('uses confirmed topicFrame from the context bundle when explicit topicFrame is undefined', () => {
+      const blocks = buildStagePrompt(1, createContext({
+        contextBundle: {
+          ...mockContextBundle,
+          topicFrame: {
+            text: 'Trust around late-night texting',
+            confirmedAt: '2026-05-12T00:00:00.000Z',
+          },
+        },
+      }));
+
+      expect(blocks.dynamicBlock).toContain('CONVERSATION TOPIC: "Trust around late-night texting"');
+    });
+
+    it('does not use context bundle topicFrame when explicit topicFrame is null', () => {
+      const blocks = buildStagePrompt(1, createContext({
+        topicFrame: null,
+        contextBundle: {
+          ...mockContextBundle,
+          topicFrame: {
+            text: 'Trust around late-night texting',
+            confirmedAt: '2026-05-12T00:00:00.000Z',
+          },
+        },
+      }));
+
+      expect(blocks.dynamicBlock).not.toContain('CONVERSATION TOPIC');
+    });
   });
 
   describe('buildStagePrompt — Stage 1 witness cadence', () => {

@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import {
   useMessages,
+  useInfiniteMessages,
   useSendMessage,
   useEmotionalHistory,
   useRecordEmotion,
@@ -158,6 +159,52 @@ describe('useMessages', () => {
 
       expect(result.current.fetchStatus).toBe('idle');
       expect(mockGet).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('useInfiniteMessages hook', () => {
+    it('loads the newest page first, then requests the immediately older page before the oldest visible message', async () => {
+      mockGet
+        .mockResolvedValueOnce({
+          messages: [
+            { ...mockMessage, id: 'msg-older-visible', timestamp: '2024-01-01T00:00:00.000Z' },
+            { ...mockAiMessage, id: 'msg-newest-visible', timestamp: '2024-01-01T00:00:01.000Z' },
+          ],
+          hasMore: true,
+        })
+        .mockResolvedValueOnce({
+          messages: [
+            { ...mockMessage, id: 'msg-older-page', timestamp: '2023-12-31T23:59:58.000Z' },
+            { ...mockAiMessage, id: 'msg-newer-in-older-page', timestamp: '2023-12-31T23:59:59.000Z' },
+          ],
+          hasMore: false,
+        });
+
+      const { result } = renderHook(
+        () => useInfiniteMessages({ sessionId: 'session-123', limit: 2 }),
+        { wrapper: createWrapper() }
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.fetchNextPage();
+      });
+
+      await waitFor(() => {
+        expect(result.current.isFetchingNextPage).toBe(false);
+      });
+
+      expect(mockGet).toHaveBeenNthCalledWith(
+        1,
+        '/sessions/session-123/messages?limit=2'
+      );
+      expect(mockGet).toHaveBeenNthCalledWith(
+        2,
+        '/sessions/session-123/messages?limit=2&before=2024-01-01T00%3A00%3A00.000Z'
+      );
     });
   });
 

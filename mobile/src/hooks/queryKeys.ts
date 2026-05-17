@@ -53,7 +53,7 @@ export const stageKeys = {
 
   // Pending actions (for activity menu)
   // Written by: notification.pending_action Ably event (invalidate)
-  // Read by: usePendingActions, ActivityMenuModal (received items + badge count)
+  // Read by: usePendingActions
   pendingActions: (sessionId: string) =>
     [...stageKeys.all, 'pending-actions', sessionId] as const,
 
@@ -65,6 +65,8 @@ export const stageKeys = {
   // Stage 4: Strategies
   stage4: (sessionId: string) =>
     [...stageKeys.all, 'stage4', sessionId] as const,
+  stage4SubChat: (sessionId: string, subChatId: string) =>
+    [...stageKeys.all, 'stage4', sessionId, 'subchat', subChatId] as const,
   strategies: (sessionId: string) =>
     [...stageKeys.all, 'strategies', sessionId] as const,
   strategiesReveal: (sessionId: string) =>

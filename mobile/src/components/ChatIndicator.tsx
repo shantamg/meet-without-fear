@@ -5,9 +5,14 @@
  * Used for things like "Invitation Sent" markers.
  */
 
-import { View, Text, TouchableOpacity } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, Animated, Easing } from 'react-native';
 import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
+
+// ============================================================================
+// Helpers
+// ============================================================================
 
 // ============================================================================
 // Semantic Color System
@@ -65,16 +70,52 @@ interface ChatIndicatorProps {
     partnerName?: string;
     /** Stage name for stage-chapter indicators */
     stageName?: string;
+    /** Stage accent color for stage-chapter bar background */
+    stageColor?: string;
   };
+  /** Slide stage chapter markers in when they first appear live. */
+  animateEntrance?: boolean;
+  onEntranceComplete?: () => void;
 }
+
+const STAGE_CHAPTER_ENTRANCE_DURATION_MS = 260;
+const STAGE_CHAPTER_ENTRANCE_OFFSET = 36;
 
 // ============================================================================
 // Component
 // ============================================================================
 
-export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: ChatIndicatorProps) {
+export function ChatIndicator({
+  type,
+  timestamp,
+  testID,
+  onPress,
+  metadata,
+  animateEntrance = false,
+  onEntranceComplete,
+}: ChatIndicatorProps) {
   const styles = useStyles();
   const { palette } = useAppAppearance();
+  const entranceAnim = useRef(new Animated.Value(animateEntrance ? 0 : 1)).current;
+
+  useEffect(() => {
+    if (!animateEntrance) {
+      entranceAnim.setValue(1);
+      return;
+    }
+
+    entranceAnim.setValue(0);
+    Animated.timing(entranceAnim, {
+      toValue: 1,
+      duration: STAGE_CHAPTER_ENTRANCE_DURATION_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        onEntranceComplete?.();
+      }
+    });
+  }, [animateEntrance, entranceAnim, onEntranceComplete]);
 
   const semanticColors = {
     informational: { text: palette.accentText, line: palette.borderStrong },
@@ -139,7 +180,7 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
   };
 
   // Whether this indicator links to another page (shows arrow)
-  const hasArrow = type === 'context-shared' 
+  const hasArrow = type === 'context-shared'
     || type === 'empathy-shared'
     || type === 'needs-identified'
     || type === 'common-ground-found'
@@ -235,31 +276,32 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
     }
   };
 
-  // Special rendering for stage-chapter indicators
+  // Special rendering for stage-chapter indicators — full-width sticky section header
   if (type === 'stage-chapter') {
-    const stageChapterStyle = {
-      fontSize: 15,
-      textTransform: 'none' as const,
-      letterSpacing: 0,
-      fontWeight: '400' as const,
-      color: semanticColors.informational.text,
-      fontFamily: designFonts.serif,
-    };
-
-    const chapterContent = (
-      <View style={styles.lineContainer}>
-        <Text style={[styles.text, stageChapterStyle]}>{'\u2014\u2014\u2014'}</Text>
-        <View style={styles.textContainer}>
-          <Text style={[styles.text, stageChapterStyle]}>{getIndicatorText()}</Text>
-        </View>
-        <Text style={[styles.text, stageChapterStyle]}>{'\u2014\u2014\u2014'}</Text>
-      </View>
-    );
+    const stageColor = metadata?.stageColor || semanticColors.informational.text;
 
     return (
-      <View style={styles.container} testID={testID || 'chat-indicator-stage-chapter'}>
-        {chapterContent}
-      </View>
+      <Animated.View
+        style={[
+          styles.stageChapterBar,
+          {
+            borderTopColor: stageColor,
+            borderBottomColor: stageColor,
+            opacity: entranceAnim,
+            transform: [{
+              translateX: entranceAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-STAGE_CHAPTER_ENTRANCE_OFFSET, 0],
+              }),
+            }],
+          },
+        ]}
+        testID={testID || 'chat-indicator-stage-chapter'}
+      >
+        <Text style={[styles.stageChapterText, { color: stageColor }]}>
+          {getIndicatorText()}
+        </Text>
+      </Animated.View>
     );
   }
 
@@ -337,6 +379,21 @@ const useStyles = () => {
     arrow: {
       fontSize: 16,
       fontWeight: '600',
+    },
+    // Stage chapter bar — full-width sticky section header at stage transitions
+    stageChapterBar: {
+      backgroundColor: palette.bg,
+      borderTopWidth: 0.5,
+      borderBottomWidth: 0.5,
+      paddingVertical: 6,
+      paddingHorizontal: 18,
+    },
+    stageChapterText: {
+      fontSize: 13,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+      textAlign: 'center',
     },
     // Invitation sent: yellow/amber tint - separate line and text styles
     invitationSentLine: {

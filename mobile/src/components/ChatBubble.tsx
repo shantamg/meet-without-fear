@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { View, Text, Animated } from 'react-native';
+import { View, Text, Animated, Easing } from 'react-native';
 import { MessageRole, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
@@ -36,6 +36,10 @@ interface ChatBubbleProps {
   onAnimationStart?: () => void;
   /** Callback when animation completes */
   onAnimationComplete?: () => void;
+  /** Callback as typewriter/fade progress changes layout */
+  onAnimationProgress?: () => void;
+  /** Stable identity for animation state when a temporary message id is reconciled. */
+  animationIdentity?: string;
   /** Whether speech is currently playing for this message */
   isSpeaking?: boolean;
   /** Callback when speaker button is pressed */
@@ -63,6 +67,8 @@ export function ChatBubble({
   enableTypewriter = true,
   onAnimationStart,
   onAnimationComplete,
+  onAnimationProgress,
+  animationIdentity,
   isSpeaking = false,
   onSpeakerPress,
   hideSpeaker = false,
@@ -79,11 +85,17 @@ export function ChatBubble({
   const isShareSuggestion = (message.role as string) === 'SHARE_SUGGESTION';
   const isAI = !isUser && !isSystem && !isEmpathyStatement && !isSharedContext && !isShareSuggestion;
   const isIntervention = message.isIntervention ?? false;
+  const shouldAnimateUserEntrance =
+    isUser &&
+    enableTypewriter &&
+    (message.status === 'sending' || message.id.startsWith('optimistic-user-'));
 
   // Track if this specific message instance has completed animation
   const hasAnimatedRef = useRef(false);
   const hasStartedRef = useRef(false);
-  const messageIdRef = useRef(message.id);
+  const animationIdentityRef = useRef(animationIdentity ?? message.id);
+  const userEntrancePlayedRef = useRef(false);
+  const userEntranceAnim = useRef(new Animated.Value(shouldAnimateUserEntrance ? 0 : 1)).current;
 
   // Determine if this message type uses fade-in animation (non-AI, non-USER animated messages)
   const willAnimate = !isUser && !isAI && enableTypewriter && !message.skipTypewriter;
@@ -92,19 +104,25 @@ export function ChatBubble({
   // Always start at 1 (visible) — the fade-in effect sets to 0 and animates when triggered
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
-  // Reset animation state if message ID changes
-  if (messageIdRef.current !== message.id) {
-    messageIdRef.current = message.id;
+  // Reset animation state if the animation identity changes. The display id
+  // can change when a streaming placeholder is reconciled to its persisted id.
+  const currentAnimationIdentity = animationIdentity ?? message.id;
+  if (animationIdentityRef.current !== currentAnimationIdentity) {
+    animationIdentityRef.current = currentAnimationIdentity;
     hasAnimatedRef.current = false;
     hasStartedRef.current = false;
+    userEntrancePlayedRef.current = false;
     fadeAnim.setValue(1);
+    userEntranceAnim.setValue(shouldAnimateUserEntrance ? 0 : 1);
   }
 
   // Store callbacks in refs to avoid re-triggering animation
   const onStartRef = useRef(onAnimationStart);
   const onCompleteRef = useRef(onAnimationComplete);
+  const onProgressRef = useRef(onAnimationProgress);
   onStartRef.current = onAnimationStart;
   onCompleteRef.current = onAnimationComplete;
+  onProgressRef.current = onAnimationProgress;
 
   // Determine if we should use typewriter effect (AI messages only)
   const shouldUseTypewriter = isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
@@ -147,6 +165,20 @@ export function ChatBubble({
     }
   }, [shouldUseFadeIn, isNextToAnimate, fadeAnim]);
 
+  useEffect(() => {
+    if (!shouldAnimateUserEntrance || userEntrancePlayedRef.current) {
+      return;
+    }
+
+    userEntrancePlayedRef.current = true;
+    Animated.timing(userEntranceAnim, {
+      toValue: 1,
+      duration: 360,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [shouldAnimateUserEntrance, userEntranceAnim]);
+
   // Call onStart when typewriter begins - use effect to avoid setState during render
   // Only starts when this message is next in the animation queue (onAnimationStart is provided)
   useEffect(() => {
@@ -167,37 +199,20 @@ export function ChatBubble({
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const getStatusText = (status: MessageDeliveryStatus): string => {
-    switch (status) {
-      case 'sending':
-        return 'Sending...';
-      case 'streaming':
-        return 'Responding...';
-      case 'sent':
-        return 'Sent';
-      case 'delivered':
-        return 'Delivered';
-      case 'read':
-        return 'Read';
-      case 'error':
-        return 'Failed to send';
-    }
-  };
-
   const getSharedContentStatusText = (status: SharedContentDeliveryStatus | undefined): string => {
     switch (status) {
       case 'sending':
         return 'Sending...';
       case 'pending':
-        return 'Pending review (not delivered yet)';
+        return 'Submitted for review';
       case 'delivered':
         return 'Delivered';
       case 'seen':
         return '✓ Seen';
       case 'superseded':
-        return 'Not Delivered (Updated Below)';
+        return 'Updated version below';
       default:
-        return 'Pending review (not delivered yet)';
+        return 'Submitted for review';
     }
   };
 
@@ -218,7 +233,11 @@ export function ChatBubble({
     if (isUser) return styles.userContainer;
     if (isSystem) return styles.systemContainer;
     if (isEmpathyStatement) return styles.empathyStatementContainer;
-    if (isSharedContext) return styles.sharedContextContainer;
+    if (isSharedContext) {
+      return message.sharedContentDirection === 'sent'
+        ? styles.sharedContextSentContainer
+        : styles.sharedContextContainer;
+    }
     if (isShareSuggestion) return styles.shareSuggestionContainer;
     return styles.aiContainer;
   };
@@ -342,7 +361,9 @@ export function ChatBubble({
           style={getTextStyle()}
           wordDelay={40}
           fadeDuration={120}
+          completeWhenCaughtUp={message.status !== 'streaming'}
           onComplete={handleComplete}
+          onProgress={() => onProgressRef.current?.()}
         />
       );
     }
@@ -351,9 +372,17 @@ export function ChatBubble({
     return <Text style={getTextStyle()}>{message.content}</Text>;
   };
 
+  const userEntranceTranslateY = userEntranceAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [36, 0],
+  });
+  const containerAnimationStyle = shouldAnimateUserEntrance
+    ? { opacity: userEntranceAnim, transform: [{ translateY: userEntranceTranslateY }] }
+    : null;
+
   return (
-    <View
-      style={[styles.container, getContainerStyle()]}
+    <Animated.View
+      style={[styles.container, getContainerStyle(), containerAnimationStyle]}
       testID={`chat-bubble-${message.id}`}
     >
       <View style={[styles.bubble, isAI && styles.aiBubbleContainer, getBubbleStyle()]}>
@@ -373,20 +402,8 @@ export function ChatBubble({
             {formatTime(message.timestamp)}
           </Text>
         )}
-        {isUser && message.status && (
-          <Text
-            style={[
-              styles.statusText,
-              message.status === 'sending' && styles.statusSending,
-              message.status === 'read' && styles.statusRead,
-              message.status === 'error' && styles.statusError,
-            ]}
-          >
-            {getStatusText(message.status)}
-          </Text>
-        )}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -518,6 +535,10 @@ const useStyles = () => {
       alignItems: 'flex-start',
       marginVertical: t.spacing.md,
     },
+    sharedContextSentContainer: {
+      alignItems: 'flex-end',
+      marginVertical: t.spacing.md,
+    },
     sharedContextBubble: {
       backgroundColor: palette.bgElev,
       borderWidth: 1,
@@ -594,20 +615,6 @@ const useStyles = () => {
     },
     systemTime: {
       textAlign: 'center',
-    },
-    statusText: {
-      fontSize: t.typography.fontSize.xs,
-      color: palette.textFaint,
-      fontFamily: designFonts.sans,
-    },
-    statusSending: {
-      fontStyle: 'italic',
-    },
-    statusRead: {
-      color: palette.accent,
-    },
-    statusError: {
-      color: palette.danger,
     },
   }));
 };

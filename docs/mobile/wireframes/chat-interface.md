@@ -2,7 +2,7 @@
 title: Chat Interface
 sidebar_position: 3
 description: The primary conversation interface where users interact with the AI.
-updated: 2026-05-10
+updated: 2026-05-15
 status: living
 ---
 # Chat Interface
@@ -18,6 +18,7 @@ flowchart TB
             StageTitle[Stage 1: The Witness]
             StageDesc[Share your perspective]
             ProgressDots[Progress indicators]
+            RightAction[Right action slot - optional]
         end
 
         subgraph Messages[Message Area - Scrollable]
@@ -36,6 +37,8 @@ flowchart TB
         end
     end
 ```
+
+**Chat header right action**: `SessionChatHeader` accepts an optional `rightAction: { icon, onPress, accessibilityLabel }` prop. Currently used to surface a share icon when the partner's status is "pending invitation" — tapping it opens the invitation-share modal so the user can resend or copy their invite link without leaving the chat screen.
 
 ## Message Bubbles
 
@@ -77,6 +80,14 @@ Characteristics:
 - User-colored background
 - Timestamp
 - Sent/read status
+
+### Shared Context Card
+
+When a user shares their Stage 2 context (empathy attempt) with their partner, it appears inline in the chat timeline as a distinct card (`isSharedContext` bubble type):
+
+- **Receiver-side**: left-aligned — partner sees it on the left like an AI message
+- **Sender-side**: right-aligned — the sharing user sees their own card on the right (`message.sharedContentDirection === 'sent'` triggers `sharedContextSentContainer`)
+- After sharing, the shared context card appears inline in the timeline — no drawer or modal auto-opens. (The `ActivityDrawer` / `ActivityMenuModal` were removed in #602; sharing history is no longer surfaced via a separate drawer.)
 
 ## Stage-Specific Variations
 
@@ -187,21 +198,42 @@ flowchart TB
     subgraph RepairChat[Strategic Repair View]
         Header4[Stage 4: Moving Forward]
 
+        subgraph Chat4[Main Chat - Surface 1]
+            AI41[AI facilitates guided proposal work]
+            User41[User responds / brainstorms needs]
+        end
+
         subgraph ProposalArea[Proposals]
-            YourProp[Your proposal: Daily check-in]
-            TheirProp[Their proposal: Weekly date]
-            PropStatus[Awaiting response]
+            YourProp[Your proposal linked to open need]
+            PropResponse[Willing / Not willing]
         end
 
-        subgraph AgreedArea[Agreements]
-            Agreed1[Agreed: 10-min daily conversation]
+        subgraph SubChatDrawer[Sub-Chat Drawer - Surfaces 2-4]
+            SC1[Needs brainstorm subchat]
+            SC2[Proposal refinement subchat]
+            SC3[No-overlap subchat]
         end
 
-        subgraph Chat4[Negotiation]
-            AI41[AI facilitates discussion]
+        subgraph TendingArea[Tending Check-In - Surface 7]
+            Tending[How are you tending to yourself?]
         end
     end
 ```
+
+**Sub-chat drawer pattern**: Surfaces 2–4 open as a bottom drawer (guided sub-chat) layered over the main chat. Each sub-chat has its own AI persona and is dismissed when the user completes the guided flow, returning them to the main chat (Surface 1) with any generated content (needs list, refined proposal, etc.) carried forward.
+
+**Proposal responses use two options only**: "Willing" / "Not willing" — there is no "Discuss" / `NEEDS_DISCUSSION` option in the UI.
+
+### Resolved session history view
+
+When a session is in `RESOLVED` status, users can scroll back through the full chat history (`viewingResolvedHistory = true`). While in this mode a `GuidedActionPanel` (tone `review`) appears above the input:
+
+- **Eyebrow**: "Resolved"
+- **Title**: "A Path Forward"
+- **Subtitle**: "Return to the summary of what you and your partner agreed."
+- **Primary action**: "View summary" — tapping sets `viewingResolvedHistory` back to `false` and returns the user to the Stage 4 summary view.
+
+This panel is rendered by `renderAboveInput` and wired via the condition `session?.status === SessionStatus.RESOLVED && viewingResolvedHistory`.
 
 ## Session entry flow
 
@@ -222,6 +254,15 @@ When the app returns from background after ≥5 seconds, `BiometricLockOverlay` 
 ### Notification Permission (`NotificationPermissionDrawer`)
 
 After a session turn completes, `useNotifications.ts` evaluates `shouldAskForSessionNotifications()`. When conditions are met the app shows a full-screen `NotificationPermissionDrawer` with the copy: *"Know when it is your turn again"* and a preview of the notification ("Your partner is ready"). Accepting calls `requestSessionNotifications()` which triggers the OS permission dialog and registers the Expo push token.
+
+### Native App Update Prompt (`UpdateBanner`)
+
+`useVersionCheck` polls `GET /api/version/check` on app foreground. When the backend signals an update is available, `UpdateBanner` is rendered as a full-screen modal overlay on top of the app:
+
+- **Required update** — user cannot dismiss; prompted to update now with a download link.
+- **Optional update** — user can dismiss ("Maybe later") or tap "Update now."
+
+The hook checks once per app session and respects a per-device snooze so optional prompts don't repeat within the same session. Version info (latest build number, minimum required build, download URLs) is configured via `APP_*` environment variables on the backend.
 
 ## Empty States
 
@@ -298,16 +339,32 @@ The chat input hosts an inline emotion slider (`barometerValue` / `handleBaromet
 | Tone | Used for |
 |---|---|
 | `topic` | Stage 0 — topic-frame confirmation above the input |
-| `review` | Stage 2 — empathy draft review / revisit |
+| `review` | Stage 2 — empathy draft review / revisit; resolved sessions — back-to-summary CTA while viewing chat history |
 | `share` | Stage 2 — share suggestion |
 | `success` | Stage 1 — feel-heard confirmation |
 | `needs` | Stage 3 — needs reveal / validate |
 
 Each panel shows an eyebrow label, title, optional subtitle, and one or two action buttons. The input field remains visible while any `GuidedActionPanel` is displayed — it is not hidden by the panel (this is intentional: users can continue the conversation even while an action is pending).
 
+**Compact mode**: `GuidedActionPanel` accepts a `compact` prop (boolean) and a `pressable` prop that render the panel as a condensed single-line row instead of the full card layout. Used when the action needs to stay unobtrusive inline — e.g. `ShareTopicPanel` renders with `compact={true} pressable={true}` to show a tappable row rather than a full bottom card.
+
 ## Typewriter + inline Stage 2 cards
 
 The chat list tracks `isTypewriterAnimating` (set while a new AI message is being typed in) so it can delay the appearance of inline cards until the text has finished. In Stage 2 (`PERSPECTIVE_STRETCH`), the list renders **validation cards** directly in the timeline (`validationCards`) with "Accurate / Partially / Off" buttons wired to `handleValidationAccurate` / `handleValidationNotQuite` instead of routing users to a separate screen. The "Not quite yet" path opens `AccuracyFeedbackDrawer` for rough notes and then `GuidedDraftChatModal` as the Feedback Coach before the final feedback is submitted.
+
+## Stage color bars and sticky header
+
+Each stage transition is visually marked in the chat timeline by a full-width colored stage bar (`ChatIndicator` with `type: 'stage-chapter'`). These bars carry `metadata.stageColor` and use a fixed emotional-arc palette defined in `shared/src/enums.ts` (`STAGE_COLORS`):
+
+| Stage | Color |
+|---|---|
+| `ONBOARDING` | Blue (`#8B9DC3`) |
+| `WITNESS` | Tan/amber (`#D4A574`) |
+| `PERSPECTIVE_STRETCH` | Green (`#8FAF8F`) |
+| `NEED_MAPPING` | Purple (`#9B8EC4`) |
+| `STRATEGIC_REPAIR` | Coral (`#C4886E`) |
+
+When a stage bar scrolls past the top of the viewport, `ChatInterface` uses `stickyHeaderIndices` to pin it as a sticky overlay at the top of the list. The sticky header shows the stage name and is hidden when the inline bar is still visible (no duplication). This gives users persistent context about which stage they're in while scrolling through long conversations.
 
 ## Stage label map
 

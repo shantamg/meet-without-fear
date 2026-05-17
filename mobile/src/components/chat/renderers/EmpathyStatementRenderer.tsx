@@ -67,13 +67,13 @@ export function EmpathyStatementRenderer({
       case 'sending':
         return 'Sending...';
       case 'pending':
-        return 'Pending review (not delivered yet)';
+        return 'Submitted for review';
       case 'delivered':
         return 'Delivered';
       case 'seen':
         return '\u2713 Seen';
       case 'superseded':
-        return 'Not Delivered (Updated Below)';
+        return 'Updated version below';
     }
   };
 

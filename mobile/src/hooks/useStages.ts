@@ -13,7 +13,7 @@ import {
   UseMutationOptions,
   InfiniteData,
 } from '@tanstack/react-query';
-import { get, post, ApiClientError } from '../lib/api';
+import { get, post, del, ApiClientError } from '../lib/api';
 import { useAuth } from './useAuth';
 import {
   // Response types
@@ -50,6 +50,7 @@ import {
   RevealOverlapResponse,
   MarkReadyResponse,
   GetStage4StateResponse,
+  Stage4SelectionDecision,
   SubmitStage4SelectionRequest,
   SubmitStage4SelectionsRequest,
   SubmitStage4SelectionsResponse,
@@ -58,6 +59,8 @@ import {
   GetTendingEntriesResponse,
   SubmitTendingResponseRequest,
   SubmitTendingResponseResponse,
+  SubmitTendingCheckinRequest,
+  SubmitTendingCheckinResponse,
   CreateTendingReentryRequest,
   CreateTendingReentryResponse,
   AgreementDTO,
@@ -1121,7 +1124,10 @@ export function useValidateEmpathy(
       ValidateEmpathyResponse,
       ApiClientError,
       ValidateEmpathyRequest,
-      { previousPartnerEmpathy: GetPartnerEmpathyResponse | undefined }
+      {
+        previousPartnerEmpathy: GetPartnerEmpathyResponse | undefined;
+        previousEmpathyStatus: EmpathyExchangeStatusResponse | undefined;
+      }
     >,
     'mutationFn'
   >
@@ -1142,6 +1148,9 @@ export function useValidateEmpathy(
       const previousPartnerEmpathy = queryClient.getQueryData<GetPartnerEmpathyResponse>(
         stageKeys.partnerEmpathy(sessionId)
       );
+      const previousEmpathyStatus = queryClient.getQueryData<EmpathyExchangeStatusResponse>(
+        stageKeys.empathyStatus(sessionId)
+      );
 
       // Write optimistic result: set validated and validatedAt immediately
       queryClient.setQueryData<GetPartnerEmpathyResponse>(
@@ -1154,7 +1163,19 @@ export function useValidateEmpathy(
         } : old
       );
 
-      return { previousPartnerEmpathy };
+      if (!validated) {
+        queryClient.setQueryData<EmpathyExchangeStatusResponse>(
+          stageKeys.empathyStatus(sessionId),
+          (old) => old ? {
+            ...old,
+            partnerAttempt: null,
+            partnerHasSubmittedEmpathy: true,
+            partnerEmpathyHeldStatus: 'REFINING',
+          } : old
+        );
+      }
+
+      return { previousPartnerEmpathy, previousEmpathyStatus };
     },
     onSuccess: (data, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
@@ -1163,6 +1184,8 @@ export function useValidateEmpathy(
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+      queryClient.refetchQueries({ queryKey: messageKeys.list(sessionId) });
       // When both users validated, the server triggers stage transition async.
       // Delayed refetch ensures we pick up the new stage after the transition commits.
       if (data.canAdvance && data.partnerValidated) {
@@ -1178,6 +1201,12 @@ export function useValidateEmpathy(
         queryClient.setQueryData(
           stageKeys.partnerEmpathy(sessionId),
           context.previousPartnerEmpathy
+        );
+      }
+      if (context?.previousEmpathyStatus) {
+        queryClient.setQueryData(
+          stageKeys.empathyStatus(sessionId),
+          context.previousEmpathyStatus
         );
       }
     },
@@ -1498,7 +1527,8 @@ export function useConfirmNeeds(
     UseMutationOptions<
       ConfirmNeedsResponse,
       ApiClientError,
-      { sessionId: string; needIds: string[]; adjustments?: NeedAdjustment[] }
+      { sessionId: string; needIds: string[]; adjustments?: NeedAdjustment[] },
+      { previousNeeds: GetNeedsResponse | undefined }
     >,
     'mutationFn'
   >
@@ -1511,6 +1541,30 @@ export function useConfirmNeeds(
         needIds,
         adjustments,
       });
+    },
+    onMutate: async ({ sessionId, needIds }) => {
+      await queryClient.cancelQueries({ queryKey: stageKeys.needs(sessionId) });
+      const previousNeeds = queryClient.getQueryData<GetNeedsResponse>(
+        stageKeys.needs(sessionId),
+      );
+      queryClient.setQueryData<GetNeedsResponse>(
+        stageKeys.needs(sessionId),
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            needs: old.needs.map((n) =>
+              needIds.includes(n.id) ? { ...n, confirmed: true } : n,
+            ),
+          };
+        },
+      );
+      return { previousNeeds };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previousNeeds) {
+        queryClient.setQueryData(stageKeys.needs(sessionId), context.previousNeeds);
+      }
     },
     onSuccess: (_, { sessionId }) => {
       patchStage3Gates(queryClient, sessionId, {
@@ -2005,18 +2059,49 @@ export function useSubmitStage4ProposalSelection(
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useMutation<
+    SubmitStage4SelectionsResponse,
+    ApiClientError,
+    { sessionId: string; proposalId: string } & SubmitStage4SelectionRequest,
+    { previous: GetStage4StateResponse | undefined }
+  >({
+    ...options,
     mutationFn: async ({ sessionId, proposalId, ...request }) => {
       return post<SubmitStage4SelectionsResponse, SubmitStage4SelectionRequest>(
         `/sessions/${sessionId}/stage4/proposals/${proposalId}/selection`,
         request
       );
     },
+    onMutate: async ({ sessionId, proposalId, decision }) => {
+      const key = stageKeys.stage4(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<GetStage4StateResponse>(key);
+      if (previous) {
+        const patchProposal = <T extends { id: string; myDecision?: Stage4SelectionDecision }>(p: T): T =>
+          p.id === proposalId ? { ...p, myDecision: decision } : p;
+        queryClient.setQueryData<GetStage4StateResponse>(key, {
+          ...previous,
+          // Changing a stance after sharing pulls the share back so the
+          // partner never sees a stale value. Match the backend behavior.
+          mySelectionStatus: 'NOT_STARTED',
+          inventory: {
+            ...previous.inventory,
+            sharedProposals: previous.inventory.sharedProposals.map(patchProposal),
+            individualCommitments: previous.inventory.individualCommitments.map(patchProposal),
+          },
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(stageKeys.stage4(sessionId), context.previous);
+      }
+    },
     onSuccess: (data, { sessionId }) => {
       queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
       refreshStage4Caches(queryClient, sessionId);
     },
-    ...options,
   });
 }
 
@@ -2047,6 +2132,182 @@ export function useSubmitStage4Selections(
       refreshStage4Caches(queryClient, sessionId);
     },
     ...options,
+  });
+}
+
+/**
+ * Share the current user's Stage 4 selections with their partner.
+ * Requires every active proposal to have a stance.
+ */
+export function useShareStage4Selections() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { state: GetStage4StateResponse },
+    ApiClientError,
+    { sessionId: string },
+    { previous: GetStage4StateResponse | undefined }
+  >({
+    mutationFn: async ({ sessionId }) =>
+      post<{ state: GetStage4StateResponse }, Record<string, never>>(
+        `/sessions/${sessionId}/stage4/share-selections`,
+        {} as Record<string, never>
+      ),
+    onMutate: async ({ sessionId }) => {
+      const key = stageKeys.stage4(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<GetStage4StateResponse>(key);
+      if (previous) {
+        queryClient.setQueryData<GetStage4StateResponse>(key, {
+          ...previous,
+          mySelectionStatus: 'SUBMITTED',
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(stageKeys.stage4(sessionId), context.previous);
+      }
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      refreshStage4Caches(queryClient, sessionId);
+    },
+  });
+}
+
+/**
+ * Withdraw the current user's shared Stage 4 selections so they can revise.
+ */
+export function useUnshareStage4Selections() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { state: GetStage4StateResponse },
+    ApiClientError,
+    { sessionId: string },
+    { previous: GetStage4StateResponse | undefined }
+  >({
+    mutationFn: async ({ sessionId }) =>
+      post<{ state: GetStage4StateResponse }, Record<string, never>>(
+        `/sessions/${sessionId}/stage4/unshare-selections`,
+        {} as Record<string, never>
+      ),
+    onMutate: async ({ sessionId }) => {
+      const key = stageKeys.stage4(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<GetStage4StateResponse>(key);
+      if (previous) {
+        queryClient.setQueryData<GetStage4StateResponse>(key, {
+          ...previous,
+          mySelectionStatus: 'NOT_STARTED',
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(stageKeys.stage4(sessionId), context.previous);
+      }
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      refreshStage4Caches(queryClient, sessionId);
+    },
+  });
+}
+
+/**
+ * Mark a Stage 4 need as "leave for now" — explicit declination to address it.
+ */
+export function useDeclineStage4Need() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { state: GetStage4StateResponse },
+    ApiClientError,
+    { sessionId: string; needId: string },
+    { previous: GetStage4StateResponse | undefined }
+  >({
+    mutationFn: async ({ sessionId, needId }) =>
+      post<{ state: GetStage4StateResponse }, Record<string, never>>(
+        `/sessions/${sessionId}/stage4/needs/${needId}/decline`,
+        {} as Record<string, never>
+      ),
+    onMutate: async ({ sessionId, needId }) => {
+      const key = stageKeys.stage4(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<GetStage4StateResponse>(key);
+      if (previous) {
+        const mark = (rows: typeof previous.coverageAudit.open) =>
+          rows.map((row) =>
+            row.id === needId ? { ...row, userDeclinedToAddress: true } : row
+          );
+        queryClient.setQueryData<GetStage4StateResponse>(key, {
+          ...previous,
+          coverageAudit: {
+            ...previous.coverageAudit,
+            open: mark(previous.coverageAudit.open),
+            partial: mark(previous.coverageAudit.partial),
+          },
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(stageKeys.stage4(sessionId), context.previous);
+      }
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      refreshStage4Caches(queryClient, sessionId);
+    },
+  });
+}
+
+/**
+ * Remove a "leave for now" declination — user changed their mind.
+ */
+export function useUndeclineStage4Need() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { state: GetStage4StateResponse },
+    ApiClientError,
+    { sessionId: string; needId: string },
+    { previous: GetStage4StateResponse | undefined }
+  >({
+    mutationFn: async ({ sessionId, needId }) =>
+      del<{ state: GetStage4StateResponse }>(
+        `/sessions/${sessionId}/stage4/needs/${needId}/decline`
+      ),
+    onMutate: async ({ sessionId, needId }) => {
+      const key = stageKeys.stage4(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<GetStage4StateResponse>(key);
+      if (previous) {
+        const unmark = (rows: typeof previous.coverageAudit.open) =>
+          rows.map((row) =>
+            row.id === needId ? { ...row, userDeclinedToAddress: false } : row
+          );
+        queryClient.setQueryData<GetStage4StateResponse>(key, {
+          ...previous,
+          coverageAudit: {
+            ...previous.coverageAudit,
+            open: unmark(previous.coverageAudit.open),
+            partial: unmark(previous.coverageAudit.partial),
+          },
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(stageKeys.stage4(sessionId), context.previous);
+      }
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      refreshStage4Caches(queryClient, sessionId);
+    },
   });
 }
 
@@ -2142,6 +2403,74 @@ export function useSubmitTendingResponse(
       );
       queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
       queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Stage 4 Phase 5 — submit the three-orientation Tending check-in covering all
+ * open entries on a session.
+ */
+export function useSubmitTendingCheckin(
+  options?: Omit<
+    UseMutationOptions<
+      SubmitTendingCheckinResponse,
+      ApiClientError,
+      { sessionId: string } & SubmitTendingCheckinRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ sessionId, ...request }) => {
+      return post<SubmitTendingCheckinResponse, SubmitTendingCheckinRequest>(
+        `/sessions/${sessionId}/tending/checkin`,
+        request
+      );
+    },
+    onSuccess: (_data, { sessionId }) => {
+      queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
+      queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Toggle an INDIVIDUAL Tending entry's opt-in share with the partner.
+ */
+export function useSetTendingEntryShare(
+  options?: Omit<
+    UseMutationOptions<
+      SubmitTendingResponseResponse,
+      ApiClientError,
+      { sessionId: string; entryId: string; optedInShared: boolean }
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ sessionId, entryId, optedInShared }) => {
+      const suffix = optedInShared ? 'share' : 'unshare';
+      return post<SubmitTendingResponseResponse, Record<string, never>>(
+        `/sessions/${sessionId}/tending/${entryId}/${suffix}`,
+        {}
+      );
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData<GetTendingEntriesResponse>(
+        stageKeys.tending(sessionId),
+        (old) => {
+          const existing = old?.entries ?? [];
+          const next = existing.map((entry) =>
+            entry.id === data.entry.id ? data.entry : entry
+          );
+          return { entries: next };
+        }
+      );
     },
     ...options,
   });
@@ -2392,5 +2721,109 @@ export function useGateStatus(
     enabled: !!sessionId && stage !== undefined,
     staleTime: 15_000, // Gates can change frequently during a stage
     ...options,
+  });
+}
+
+// ============================================================================
+// Stage 4 Sub-chat (Phase 3)
+// ============================================================================
+
+import type {
+  OpenStage4SubChatRequest,
+  OpenStage4SubChatResponse,
+  SendStage4SubChatMessageRequest,
+  SendStage4SubChatMessageResponse,
+  ResolveStage4SubChatRequest,
+  ResolveStage4SubChatResponse,
+  Stage4SubChatDTO,
+} from '@meet-without-fear/shared';
+
+/** Open (or get the active) sub-chat for a Stage 4 anchor. */
+export function useOpenStage4SubChat() {
+  return useMutation<
+    OpenStage4SubChatResponse,
+    ApiClientError,
+    { sessionId: string } & OpenStage4SubChatRequest
+  >({
+    mutationFn: async ({ sessionId, anchorKind, anchorId }) =>
+      post<OpenStage4SubChatResponse, OpenStage4SubChatRequest>(
+        `/sessions/${sessionId}/stage4/subchat`,
+        { anchorKind, anchorId: anchorId ?? null },
+      ),
+  });
+}
+
+/** Send a message in a sub-chat; the response contains the appended user + AI messages. */
+export function useSendStage4SubChatMessage() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    SendStage4SubChatMessageResponse,
+    ApiClientError,
+    { sessionId: string; subChatId: string } & SendStage4SubChatMessageRequest,
+    { previous: Stage4SubChatDTO | undefined }
+  >({
+    mutationFn: async ({ sessionId, subChatId, content }) =>
+      post<SendStage4SubChatMessageResponse, SendStage4SubChatMessageRequest>(
+        `/sessions/${sessionId}/stage4/subchat/${subChatId}/messages`,
+        { content },
+      ),
+    onMutate: async ({ sessionId, subChatId, content }) => {
+      const key = stageKeys.stage4SubChat(sessionId, subChatId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<Stage4SubChatDTO>(key);
+      if (previous) {
+        queryClient.setQueryData<Stage4SubChatDTO>(key, {
+          ...previous,
+          messages: [
+            ...previous.messages,
+            {
+              id: `optimistic-${Date.now()}`,
+              role: 'USER' as any,
+              content,
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { sessionId, subChatId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(
+          stageKeys.stage4SubChat(sessionId, subChatId),
+          context.previous,
+        );
+      }
+    },
+    onSuccess: (data, { sessionId, subChatId }) => {
+      queryClient.setQueryData(
+        stageKeys.stage4SubChat(sessionId, subChatId),
+        data.subChat,
+      );
+    },
+  });
+}
+
+/** Resolve a sub-chat with a structured payload (creates / updates proposals). */
+export function useResolveStage4SubChat() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    ResolveStage4SubChatResponse,
+    ApiClientError,
+    { sessionId: string; subChatId: string } & ResolveStage4SubChatRequest
+  >({
+    mutationFn: async ({ sessionId, subChatId, acceptedProposals, updatedProposals }) =>
+      post<ResolveStage4SubChatResponse, ResolveStage4SubChatRequest>(
+        `/sessions/${sessionId}/stage4/subchat/${subChatId}/resolve`,
+        { acceptedProposals, updatedProposals },
+      ),
+    onSuccess: (data, { sessionId, subChatId }) => {
+      queryClient.setQueryData(
+        stageKeys.stage4SubChat(sessionId, subChatId),
+        data.subChat,
+      );
+      // Inventory may have changed — refresh Stage 4 state.
+      refreshStage4Caches(queryClient, sessionId);
+    },
   });
 }

@@ -33,7 +33,11 @@ import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
 import { getStage4State as buildStage4State, Stage4StateNotFoundError } from '../services/stage4-state';
-import { scheduleSharedAgreementTendingEntries } from '../services/tending.service';
+import { stage4HandoffBridgeMessage } from '../services/stage4-prompts';
+import {
+  scheduleIndividualCommitmentTendingEntries,
+  scheduleSharedAgreementTendingEntries,
+} from '../services/tending.service';
 import { z } from 'zod';
 
 // ============================================================================
@@ -136,6 +140,14 @@ const closeStage4RequestSchema = z.object({
   kind: z.nativeEnum(Stage4ClosureKind).optional(),
   reason: z.nativeEnum(Stage4ClosureReason).optional(),
   summary: z.string().max(2000).optional(),
+  checkInDate: z
+    .string({ required_error: 'checkInDate is required' })
+    .min(1, 'checkInDate is required')
+    .refine((value) => !Number.isNaN(new Date(value).getTime()), {
+      message: 'checkInDate must be a valid ISO date string',
+    }),
+  // Optional, deprecated. Kept for backward compatibility — Phase 4 removes it.
+  // TODO(phase-4): remove followUpDatesByProposalId; checkInDate is the single source.
   followUpDatesByProposalId: z.record(z.string()).optional(),
 });
 
@@ -228,6 +240,32 @@ async function markStage4SelectionSubmitted(
   });
 }
 
+async function clearStage4SelectionSubmitted(
+  sessionId: string,
+  userId: string,
+  existingGates: Prisma.JsonValue | null | undefined
+): Promise<void> {
+  const next = {
+    ...((existingGates as Record<string, unknown> | null) || {}),
+  };
+  delete next.selectionSubmitted;
+  delete next.selectionSubmittedAt;
+
+  await prisma.stageProgress.update({
+    where: {
+      sessionId_userId_stage: { sessionId, userId, stage: 4 },
+    },
+    data: { gatesSatisfied: next as Prisma.InputJsonValue },
+  });
+}
+
+function hasSubmittedSelectionGate(
+  existingGates: Prisma.JsonValue | null | undefined
+): boolean {
+  const gates = existingGates as Record<string, unknown> | null | undefined;
+  return Boolean(gates && gates.selectionSubmitted === true);
+}
+
 function userIsSessionMember(session: Stage4MutableSession, userId: string): boolean {
   return session.relationship.members.some((member) => member.userId === userId);
 }
@@ -261,10 +299,10 @@ function requiresSharedSelection(proposal: Stage4ProposalForClosure): boolean {
   return proposal.kind === Stage4ProposalKind.SHARED_PROPOSAL && proposal.status === Stage4ProposalStatus.ACTIVE;
 }
 
-function getWillingIndividualCommitmentIds(
+function getWillingIndividualCommitments(
   proposals: Stage4ProposalForClosure[],
   selections: Stage4SelectionForClosure[]
-): string[] {
+): Stage4ProposalForClosure[] {
   return proposals
     .filter((proposal) => proposal.kind === Stage4ProposalKind.INDIVIDUAL_COMMITMENT)
     .filter((proposal) =>
@@ -274,9 +312,9 @@ function getWillingIndividualCommitmentIds(
           selection.decision === Stage4SelectionDecision.WILLING &&
           (!proposal.createdByUserId || proposal.createdByUserId === selection.userId)
       )
-    )
-    .map((proposal) => proposal.id);
+    );
 }
+
 
 function buildClosureSummary(
   kind: Stage4ClosureKind,
@@ -469,28 +507,355 @@ async function submitStage4SelectionsInternal(
     )
   );
 
-  await markStage4SelectionSubmitted(sessionId, userId, mutable.progress?.gatesSatisfied);
-
-  const partnerId = await getPartnerUserId(sessionId, userId);
-  const partnerSubmitted = partnerId
-    ? (await prisma.stage4ProposalSelection.count({ where: { sessionId, userId: partnerId } })) > 0
-    : false;
-
-  if (partnerId) {
-    await notifyPartner(sessionId, partnerId, 'session.strategies_updated', {
-      stage: 4,
-      submittedBy: userId,
-      change: 'stage4_selection_submitted',
-    });
+  // Per-tap selections are kept private until the user explicitly shares.
+  // If the user has already shared, persist the change but clear the gate so
+  // the partner doesn't see partially-revised stances mid-stream.
+  if (hasSubmittedSelectionGate(mutable.progress?.gatesSatisfied)) {
+    await clearStage4SelectionSubmitted(sessionId, userId, mutable.progress?.gatesSatisfied);
+    const partnerId = await getPartnerUserId(sessionId, userId);
+    if (partnerId) {
+      await notifyPartner(sessionId, partnerId, 'session.strategies_updated', {
+        stage: 4,
+        submittedBy: userId,
+        change: 'stage4_selection_revised',
+      });
+    }
   }
 
   const state = await buildStage4State(sessionId, userId);
+  const partnerId = await getPartnerUserId(sessionId, userId);
+  const partnerSubmitted = state.partnerSelectionStatus === 'SUBMITTED';
+
   successResponse(res, {
-    submitted: true,
+    submitted: state.mySelectionStatus === 'SUBMITTED',
     submittedAt: submittedAt.toISOString(),
     partnerSubmitted,
     state,
   });
+  void partnerId;
+}
+
+/**
+ * Mark the current user's Stage 4 selections as shared with their partner.
+ * Requires a selection on every active proposal.
+ * POST /sessions/:id/stage4/share-selections
+ */
+export async function shareStage4Selections(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const mutable = await getMutableStage4Session(sessionId, user.id);
+    if (!mutable) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (mutable.session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+    if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+
+    // Stances are required only on shared proposals — individual commitments
+    // are one-sided so a stance from the non-owner isn't expected.
+    const [activeSharedProposals, mySelections] = await Promise.all([
+      prisma.strategyProposal.findMany({
+        where: {
+          sessionId,
+          status: Stage4ProposalStatus.ACTIVE,
+          kind: Stage4ProposalKind.SHARED_PROPOSAL,
+        },
+        select: { id: true },
+      }),
+      prisma.stage4ProposalSelection.findMany({
+        where: { sessionId, userId: user.id },
+        select: { proposalId: true },
+      }),
+    ]);
+
+    if (activeSharedProposals.length === 0) {
+      errorResponse(res, 'VALIDATION_ERROR', 'No shared proposals to share stances on yet', 400);
+      return;
+    }
+
+    const selectedIds = new Set(mySelections.map((s) => s.proposalId));
+    const missing = activeSharedProposals.filter((p) => !selectedIds.has(p.id));
+    if (missing.length > 0) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Take a stance on every shared proposal before sharing',
+        400
+      );
+      return;
+    }
+
+    // Gate: every open/partial need must be addressed by a willing-active
+    // proposal or explicitly declined ("leave for now") by this user.
+    const [openOrPartialNeeds, willingSelections, declinations] = await Promise.all([
+      prisma.stage4NeedCoverage.findMany({
+        where: {
+          sessionId,
+          coverageStatus: { in: ['OPEN', 'PARTIAL'] },
+        },
+        select: {
+          id: true,
+          needId: true,
+          coverageStatus: true,
+          coveringProposalIds: true,
+        },
+      }),
+      prisma.stage4ProposalSelection.findMany({
+        where: {
+          sessionId,
+          userId: user.id,
+          decision: Stage4SelectionDecision.WILLING,
+        },
+        select: { proposalId: true },
+      }),
+      prisma.stage4NeedDeclination.findMany({
+        where: { sessionId, userId: user.id },
+        select: { needId: true },
+      }),
+    ]);
+
+    const willingProposalIds = new Set(willingSelections.map((s) => s.proposalId));
+    const activeProposalIds = new Set(
+      (
+        await prisma.strategyProposal.findMany({
+          where: { sessionId, status: Stage4ProposalStatus.ACTIVE },
+          select: { id: true },
+        })
+      ).map((p) => p.id)
+    );
+    const declinedNeedIds = new Set(declinations.map((d) => d.needId));
+
+    const ungated = openOrPartialNeeds.filter((row) => {
+      const needIdentifier = row.needId ?? row.id;
+      if (declinedNeedIds.has(needIdentifier)) return false;
+      const hasWillingCover = row.coveringProposalIds.some(
+        (pid) => activeProposalIds.has(pid) && willingProposalIds.has(pid)
+      );
+      return !hasWillingCover;
+    });
+
+    if (ungated.length > 0) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Address or set aside every open need before sharing',
+        400
+      );
+      return;
+    }
+
+    await markStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied);
+
+    const partnerId = await getPartnerUserId(sessionId, user.id);
+    if (partnerId) {
+      await notifyPartner(sessionId, partnerId, 'session.strategies_updated', {
+        stage: 4,
+        submittedBy: user.id,
+        change: 'stage4_selection_submitted',
+      });
+    }
+
+    // Stage 4 Phase 6 (Surface 5) — quiet handoff bridge. When this user shares
+    // for the first time AND the partner hasn't shared yet, append a single
+    // templated AI message to their chat so the moment doesn't go silent.
+    try {
+      const partnerProgress = partnerId
+        ? await prisma.stageProgress.findFirst({
+            where: { sessionId, userId: partnerId, stage: 4 },
+            select: { gatesSatisfied: true },
+          })
+        : null;
+      const partnerHasShared = hasSubmittedSelectionGate(partnerProgress?.gatesSatisfied);
+      if (!partnerHasShared) {
+        const sessionWithMembers = await prisma.session.findUnique({
+          where: { id: sessionId },
+          include: {
+            relationship: {
+              include: {
+                members: {
+                  include: { user: { select: { firstName: true, name: true } } },
+                },
+              },
+            },
+          },
+        });
+        const members = sessionWithMembers?.relationship.members ?? [];
+        const myMember = members.find((m) => m.userId === user.id);
+        const partnerMember = members.find((m) => m.userId !== user.id);
+        const partnerName =
+          myMember?.nickname ||
+          partnerMember?.user.firstName ||
+          partnerMember?.user.name ||
+          undefined;
+        const bridgeContent = stage4HandoffBridgeMessage(partnerName);
+        const alreadyBridged = Boolean(
+          await prisma.message.findFirst({
+            where: { sessionId, forUserId: user.id, role: 'AI', content: bridgeContent },
+            select: { id: true },
+          })
+        );
+        if (!alreadyBridged) {
+          await prisma.message.create({
+            data: {
+              sessionId,
+              senderId: null,
+              forUserId: user.id,
+              role: 'AI',
+              content: bridgeContent,
+              stage: 4,
+            },
+          });
+        }
+      }
+    } catch (bridgeError) {
+      logger.warn('[shareStage4Selections] Failed to persist handoff bridge message', { bridgeError });
+    }
+
+    const state = await buildStage4State(sessionId, user.id);
+    successResponse(res, { state });
+  } catch (error) {
+    logger.error('[shareStage4Selections] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to share Stage 4 selections', 500);
+  }
+}
+
+/**
+ * Mark a need as "leave for now" — explicitly declines to address it.
+ * POST /sessions/:id/stage4/needs/:needId/decline
+ */
+export async function declineStage4Need(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId, needId } = req.params;
+    const mutable = await getMutableStage4Session(sessionId, user.id);
+    if (!mutable) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (mutable.session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+    if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+
+    await prisma.stage4NeedDeclination.upsert({
+      where: { sessionId_userId_needId: { sessionId, userId: user.id, needId } },
+      update: {},
+      create: { sessionId, userId: user.id, needId },
+    });
+
+    const state = await buildStage4State(sessionId, user.id);
+    successResponse(res, { state });
+  } catch (error) {
+    logger.error('[declineStage4Need] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to decline need', 500);
+  }
+}
+
+/**
+ * Remove a "leave for now" declination — user changed their mind.
+ * DELETE /sessions/:id/stage4/needs/:needId/decline
+ */
+export async function undeclineStage4Need(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId, needId } = req.params;
+    const mutable = await getMutableStage4Session(sessionId, user.id);
+    if (!mutable) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (mutable.session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+    if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+
+    await prisma.stage4NeedDeclination.deleteMany({
+      where: { sessionId, userId: user.id, needId },
+    });
+
+    const state = await buildStage4State(sessionId, user.id);
+    successResponse(res, { state });
+  } catch (error) {
+    logger.error('[undeclineStage4Need] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to undecline need', 500);
+  }
+}
+
+/**
+ * Withdraw the current user's shared Stage 4 selections so they can revise.
+ * Partner immediately stops seeing them as shared.
+ * POST /sessions/:id/stage4/unshare-selections
+ */
+export async function unshareStage4Selections(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const mutable = await getMutableStage4Session(sessionId, user.id);
+    if (!mutable) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (mutable.session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+    if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+
+    await clearStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied);
+
+    const partnerId = await getPartnerUserId(sessionId, user.id);
+    if (partnerId) {
+      await notifyPartner(sessionId, partnerId, 'session.strategies_updated', {
+        stage: 4,
+        submittedBy: user.id,
+        change: 'stage4_selection_revised',
+      });
+    }
+
+    const state = await buildStage4State(sessionId, user.id);
+    successResponse(res, { state });
+  } catch (error) {
+    logger.error('[unshareStage4Selections] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to revise Stage 4 selections', 500);
+  }
 }
 
 /**
@@ -581,7 +946,8 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
       .filter(requiresSharedSelection)
       .filter((proposal) => bothPartnersWilling(proposal.id, mutable.session, selectionsByProposal))
       .slice(0, MAX_AGREEMENTS);
-    const individualProposalIds = getWillingIndividualCommitmentIds(proposals, selections);
+    const willingIndividualCommitments = getWillingIndividualCommitments(proposals, selections);
+    const individualProposalIds = willingIndividualCommitments.map((p) => p.id);
     const openNeedIds = coverageRows
       .filter((row) => row.coverageStatus === 'OPEN' || row.coverageStatus === 'PARTIAL')
       .map((row) => row.needId ?? row.id);
@@ -638,10 +1004,12 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
         followUpDate: Date | null;
       }> = [];
 
+      const checkInAt = new Date(parseResult.data.checkInDate);
+
       if (closureKind === Stage4ClosureKind.SHARED_AGREEMENT) {
         for (const proposal of mutuallyWillingSharedProposals) {
-          const followUpDate = parseResult.data.followUpDatesByProposalId?.[proposal.id];
-          const parsedFollowUpDate = followUpDate ? new Date(followUpDate) : null;
+          const legacyFollowUp = parseResult.data.followUpDatesByProposalId?.[proposal.id];
+          const parsedFollowUpDate = legacyFollowUp ? new Date(legacyFollowUp) : checkInAt;
           const agreement = await tx.agreement.create({
             data: {
               sharedVesselId: sharedVessel.id,
@@ -685,6 +1053,23 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
         await scheduleSharedAgreementTendingEntries(tx, sessionId, agreementsForTending, now);
       }
 
+      const individualCommitmentsForTending = willingIndividualCommitments
+        .filter((p) => !!p.createdByUserId)
+        .map((p) => ({
+          proposalId: p.id,
+          ownerUserId: p.createdByUserId as string,
+          description: p.description,
+        }));
+      if (individualCommitmentsForTending.length > 0) {
+        await scheduleIndividualCommitmentTendingEntries(
+          tx,
+          sessionId,
+          individualCommitmentsForTending,
+          checkInAt,
+          now
+        );
+      }
+
       await tx.stage4Closure.create({
         data: {
           sessionId,
@@ -694,6 +1079,7 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
           sharedAgreementIds: createdAgreementIds,
           individualProposalIds,
           openNeedIds,
+          checkInAt,
           closedByUserId: user.id,
           closedAt: now,
         },

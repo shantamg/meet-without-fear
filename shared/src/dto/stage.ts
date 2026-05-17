@@ -107,6 +107,7 @@ export enum StageBlockedReason {
 
 /** Milestone timestamps that persist across stage transitions */
 export interface SessionMilestonesDTO {
+  witnessStartedAt: string | null;
   feelHeardConfirmedAt: string | null;
 }
 

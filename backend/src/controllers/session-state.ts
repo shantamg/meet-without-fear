@@ -24,6 +24,8 @@ import { DEFAULT_PRIVACY_PREFERENCES, ErrorCode, PrivacyPreferencesDTO } from '@
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
 
+const INITIAL_SESSION_MESSAGE_LIMIT = 500;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -191,7 +193,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
         },
       }),
 
-      // 2. Messages (initial page - 25 most recent for this user)
+      // 2. Messages (initial page - full practical transcript for this user)
       // Uses data isolation: messages with forUserId only show to that specific user
       prisma.message.findMany({
         where: {
@@ -206,7 +208,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
           ],
         },
         orderBy: { timestamp: 'desc' },
-        take: 26, // Take 26 to check if there are more
+        take: INITIAL_SESSION_MESSAGE_LIMIT + 1, // Take one extra to check if there are more
       }),
 
       // 3. User's vessel for this session (for lastSeenChatItemId)
@@ -287,6 +289,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
       feelHeardConfirmedAt?: string;
     } | null;
     const milestones = {
+      witnessStartedAt: myStage1Record?.startedAt?.toISOString() ?? null,
       feelHeardConfirmedAt: stage1Gates?.feelHeardConfirmedAt ?? null,
     };
 
@@ -346,8 +349,8 @@ export async function getSessionState(req: Request, res: Response): Promise<void
     ) : null;
 
     // Build messages response (reverse to chronological order)
-    const hasMoreMessages = messages.length > 25;
-    const messageSlice = hasMoreMessages ? messages.slice(0, 25) : messages;
+    const hasMoreMessages = messages.length > INITIAL_SESSION_MESSAGE_LIMIT;
+    const messageSlice = hasMoreMessages ? messages.slice(0, INITIAL_SESSION_MESSAGE_LIMIT) : messages;
     const messagesResponse = {
       messages: messageSlice.reverse().map(m => ({
         id: m.id,

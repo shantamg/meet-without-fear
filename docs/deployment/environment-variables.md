@@ -3,6 +3,9 @@ title: Environment Variables
 sidebar_position: 3
 description: All required environment variables for Meet Without Fear services.
 slug: /deployment/environment-variables
+created: 2026-03-11
+updated: 2026-05-15
+status: living
 ---
 # Environment Variables
 
@@ -35,6 +38,11 @@ All required environment variables for Meet Without Fear services.
 | `RATE_LIMIT_MAX` | Max requests per window | `100` |
 | `EXPO_ACCESS_TOKEN` | Expo push notification token | (optional) |
 | `OPENAI_API_KEY` | OpenAI key for TTS (`/api/tts` → `tts-1` / `tts-1-hd`). Without it, TTS returns 500 and meditation/gratitude/chat read-aloud features are broken. | (none) |
+| `APP_LATEST_BUILD_NUMBER_IOS` / `APP_LATEST_BUILD_NUMBER_ANDROID` | Latest native mobile build number for optional update prompts. Falls back to `APP_LATEST_BUILD_NUMBER`. | `40` |
+| `APP_MIN_BUILD_NUMBER_IOS` / `APP_MIN_BUILD_NUMBER_ANDROID` | Minimum supported native mobile build number for required update prompts. Falls back to `APP_MIN_BUILD_NUMBER`. | (none) |
+| `APP_DOWNLOAD_URL_IOS` / `APP_DOWNLOAD_URL_ANDROID` | Platform-specific update link opened by the native app. Falls back to `APP_DOWNLOAD_URL`, then `https://meetwithoutfear.com/download`. | `https://meetwithoutfear.com/download` |
+| `APP_LATEST_VERSION` | Human-readable app version returned by `/api/version/check`. | `0.0.1` |
+| `APP_UPDATE_MESSAGE` | Optional override for the update modal body. | Auto-generated |
 
 ## JWT Configuration
 

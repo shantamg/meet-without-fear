@@ -5,21 +5,24 @@ import {
   listTendingEntries,
   openDueTendingEntries,
   publishPartnerInvolvingReentryChoice,
+  scheduleIndividualCommitmentTendingEntries,
   scheduleSharedAgreementTendingEntries,
+  setIndividualEntryShare,
+  submitTendingCheckin,
   submitTendingResponse,
+  TendingForbiddenError,
+  TendingInvalidStateError,
 } from '../tending.service';
 import {
+  ContinueChoice,
+  PartialClosureResolution,
+  TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
 } from '@meet-without-fear/shared';
 
 jest.mock('../../lib/prisma');
 jest.mock('../realtime');
-jest.mock('../conversation-summarizer', () => ({
-  getSessionSummary: jest.fn().mockResolvedValue({
-    summary: { text: 'They agreed to test a calmer planning rhythm.' },
-  }),
-}));
 
 describe('tending.service', () => {
   const sessionId = 'session-1';
@@ -90,7 +93,7 @@ describe('tending.service', () => {
             userId,
             status: 'WORKED',
             reflection: 'Better than last week',
-            continueChoice: 'CONTINUE',
+            continueChoice: ContinueChoice.EXTEND,
             submittedAt: new Date('2026-05-13T10:02:00.000Z'),
           },
           {
@@ -156,7 +159,7 @@ describe('tending.service', () => {
             userId,
             status: 'WORKED',
             reflection: 'Better',
-            continueChoice: 'CONTINUE',
+            continueChoice: ContinueChoice.EXTEND,
             submittedAt: new Date('2026-05-13T10:02:00.000Z'),
           },
         ],
@@ -169,7 +172,7 @@ describe('tending.service', () => {
       userId,
       status: 'WORKED',
       reflection: 'Better',
-      continueChoice: 'CONTINUE',
+      continueChoice: ContinueChoice.EXTEND,
     });
 
     expect(prisma.tendingResponse.upsert).toHaveBeenCalledWith(
@@ -332,5 +335,286 @@ describe('tending.service', () => {
       'notification.pending_action',
       expect.objectContaining({ kind: 'tending_checkin_opened' })
     );
+  });
+
+  it('schedules individual commitment check-ins with INDIVIDUAL scope and owner', async () => {
+    (prisma.tendingEntry.create as jest.Mock).mockResolvedValueOnce({ id: 'tending-ind-1' });
+
+    const ids = await scheduleIndividualCommitmentTendingEntries(
+      prisma as any,
+      sessionId,
+      [
+        { proposalId: 'prop-1', ownerUserId: userId, description: 'Daily quiet 5 minutes' },
+      ],
+      new Date('2026-05-13T10:00:00.000Z'),
+      new Date('2026-05-06T10:00:00.000Z')
+    );
+
+    expect(ids).toEqual(['tending-ind-1']);
+    expect(prisma.tendingEntry.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        sessionId,
+        type: TendingEntryType.SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN,
+        scope: TendingEntryScope.INDIVIDUAL,
+        ownerUserId: userId,
+        optedInShared: false,
+        status: TendingEntryStatus.SCHEDULED,
+        scheduledFor: new Date('2026-05-13T10:00:00.000Z'),
+      }),
+    });
+  });
+
+  it('hides another user\'s unshared INDIVIDUAL entry from the partner', async () => {
+    (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+      id: sessionId,
+      relationship: { members: [{ userId }, { userId: partnerId }] },
+    });
+    (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([]);
+
+    await listTendingEntries(sessionId, partnerId);
+
+    expect(prisma.tendingEntry.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          sessionId,
+          OR: [
+            { scope: TendingEntryScope.SHARED },
+            { scope: TendingEntryScope.INDIVIDUAL, ownerUserId: partnerId },
+            { scope: TendingEntryScope.INDIVIDUAL, optedInShared: true },
+          ],
+        }),
+      })
+    );
+  });
+
+  it('owner can flip optedInShared via setIndividualEntryShare; non-owner is forbidden', async () => {
+    const entryRow = {
+      id: 'tending-ind-1',
+      sessionId,
+      agreementId: null,
+      type: TendingEntryType.SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN,
+      scope: TendingEntryScope.INDIVIDUAL,
+      ownerUserId: userId,
+      optedInShared: false,
+      status: TendingEntryStatus.SCHEDULED,
+      scheduledFor: new Date('2026-05-13T10:00:00.000Z'),
+      openedAt: null,
+      completedAt: null,
+      summary: 'Mine',
+      createdAt: new Date('2026-05-06T10:00:00.000Z'),
+      updatedAt: new Date('2026-05-06T10:00:00.000Z'),
+      responses: [],
+      session: { relationship: { members: [{ userId }, { userId: partnerId }] } },
+    };
+    (prisma.tendingEntry.findFirst as jest.Mock)
+      .mockResolvedValueOnce(entryRow)
+      .mockResolvedValueOnce({ ...entryRow, optedInShared: true });
+
+    const dto = await setIndividualEntryShare({
+      entryId: 'tending-ind-1',
+      userId,
+      optedInShared: true,
+    });
+
+    expect(prisma.tendingEntry.update).toHaveBeenCalledWith({
+      where: { id: 'tending-ind-1' },
+      data: { optedInShared: true },
+    });
+    expect(dto.optedInShared).toBe(true);
+
+    (prisma.tendingEntry.findFirst as jest.Mock).mockResolvedValueOnce(entryRow);
+    await expect(
+      setIndividualEntryShare({
+        entryId: 'tending-ind-1',
+        userId: partnerId,
+        optedInShared: true,
+      })
+    ).rejects.toBeInstanceOf(TendingForbiddenError);
+  });
+
+  describe('submitTendingCheckin (Stage 4 Phase 5)', () => {
+    const baseOrientations = (
+      choice: ContinueChoice,
+      partialClosure?: Record<string, PartialClosureResolution>
+    ) => ({
+      whatWorked: { reflection: 'small wins' },
+      whereMoreSupport: { reflection: 'still hard' },
+      whatComesNext: { continueChoice: choice, partialClosure },
+    });
+
+    const openSharedEntry = (id: string) => ({
+      id,
+      sessionId,
+      agreementId: `agreement-${id}`,
+      type: TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
+      scope: TendingEntryScope.SHARED,
+      ownerUserId: null,
+      optedInShared: false,
+      status: TendingEntryStatus.OPEN,
+      scheduledFor: new Date('2026-05-13T10:00:00.000Z'),
+      openedAt: new Date('2026-05-13T10:00:00.000Z'),
+      completedAt: null,
+      summary: 'Check in',
+      createdAt: new Date('2026-05-06T10:00:00.000Z'),
+      updatedAt: new Date('2026-05-13T10:00:00.000Z'),
+      responses: [],
+    });
+
+    const stubSession = () => {
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+        id: sessionId,
+        status: 'ACTIVE',
+        relationshipId: 'rel-1',
+        type: 'CONFLICT_RESOLUTION',
+        relationship: { members: [{ userId }, { userId: partnerId }] },
+      });
+    };
+
+    beforeEach(() => {
+      (prisma.tendingResponse.upsert as jest.Mock).mockImplementation((args: any) =>
+        Promise.resolve({ id: `resp-${args.where.tendingEntryId_userId.tendingEntryId}` })
+      );
+    });
+
+    it('rejects when there are no open entries', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([]);
+      await expect(
+        submitTendingCheckin({
+          sessionId,
+          userId,
+          orientations: baseOrientations(ContinueChoice.EXTEND),
+        })
+      ).rejects.toBeInstanceOf(TendingInvalidStateError);
+    });
+
+    it('EXTEND reschedules every open entry and keeps the session active', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+      const result = await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.EXTEND),
+      });
+      expect(result.continueChoice).toBe(ContinueChoice.EXTEND);
+      expect(result.nextScheduledFor).toBeInstanceOf(Date);
+      expect(prisma.tendingEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 't1' },
+          data: expect.objectContaining({ status: TendingEntryStatus.SCHEDULED }),
+        })
+      );
+      // Session should not be transitioned out of ACTIVE.
+      expect(prisma.session.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'RESOLVED' }) })
+      );
+    });
+
+    it('FULL_CLOSURE marks every open entry COMPLETED and resolves the session', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+      await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.FULL_CLOSURE),
+      });
+      expect(prisma.tendingEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 't1' },
+          data: expect.objectContaining({ status: TendingEntryStatus.COMPLETED }),
+        })
+      );
+      expect(prisma.session.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: sessionId },
+          data: expect.objectContaining({ status: 'RESOLVED' }),
+        })
+      );
+    });
+
+    it('ANOTHER_ROUND clears stage 4 state and selectionSubmitted gates', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { id: 'sp-1', gatesSatisfied: { selectionSubmitted: true } },
+      ]);
+      await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.ANOTHER_ROUND),
+      });
+      expect(prisma.stage4Closure.deleteMany).toHaveBeenCalledWith({ where: { sessionId } });
+      expect(prisma.stage4ProposalSelection.deleteMany).toHaveBeenCalledWith({ where: { sessionId } });
+      expect(prisma.stageProgress.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'sp-1' },
+          data: expect.objectContaining({ gatesSatisfied: expect.not.objectContaining({ selectionSubmitted: true }) }),
+        })
+      );
+    });
+
+    it('NEW_PROCESS creates a fresh session linked back to the current one and resolves it', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+      (prisma.session.create as jest.Mock).mockResolvedValue({ id: 'session-2' });
+      const result = await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.NEW_PROCESS),
+      });
+      expect(result.newSessionId).toBe('session-2');
+      expect(prisma.session.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            relationshipId: 'rel-1',
+            previousSessionId: sessionId,
+            status: 'CREATED',
+          }),
+        })
+      );
+      expect(prisma.session.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: sessionId },
+          data: expect.objectContaining({ status: 'RESOLVED' }),
+        })
+      );
+    });
+
+    it('PARTIAL_CLOSURE closes RESOLVED entries and reschedules CONTINUING entries', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([
+        openSharedEntry('t1'),
+        openSharedEntry('t2'),
+      ]);
+      const result = await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.PARTIAL_CLOSURE, {
+          t1: PartialClosureResolution.RESOLVED,
+          t2: PartialClosureResolution.CONTINUING,
+        }),
+      });
+      expect(result.continueChoice).toBe(ContinueChoice.PARTIAL_CLOSURE);
+      expect(prisma.tendingResponsePartialClosure.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            tendingEntryId: 't1',
+            resolution: PartialClosureResolution.RESOLVED,
+          }),
+        })
+      );
+      expect(prisma.tendingEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 't1' },
+          data: expect.objectContaining({ status: TendingEntryStatus.COMPLETED }),
+        })
+      );
+      expect(prisma.tendingEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 't2' },
+          data: expect.objectContaining({ status: TendingEntryStatus.SCHEDULED }),
+        })
+      );
+    });
   });
 });

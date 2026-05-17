@@ -64,6 +64,7 @@ type Stage4ClosureRow = {
   individualProposalIds: string[];
   openNeedIds: string[];
   closedAt: Date;
+  checkInAt: Date | null;
 };
 
 type Stage4ProgressRow = {
@@ -125,15 +126,20 @@ function getSourceLabel(
 function buildCoverageAudit(
   coverageRows: Stage4NeedCoverageRow[],
   userId: string,
-  partnerUserId: string | null
+  partnerUserId: string | null,
+  declinedNeedIds: Set<string>
 ): Stage4CoverageAuditDTO {
-  const rows = coverageRows.map((row): CoverageRowDTO => ({
-    id: row.needId ?? row.id,
-    label: row.needLabel,
-    source: getSourceLabel(row.sourceUserId, userId, partnerUserId),
-    coveringProposalIds: row.coveringProposalIds,
-    note: row.note,
-  }));
+  const rows = coverageRows.map((row): CoverageRowDTO => {
+    const rowNeedId = row.needId ?? row.id;
+    return {
+      id: rowNeedId,
+      label: row.needLabel,
+      source: getSourceLabel(row.sourceUserId, userId, partnerUserId),
+      coveringProposalIds: row.coveringProposalIds,
+      note: row.note,
+      userDeclinedToAddress: declinedNeedIds.has(rowNeedId),
+    };
+  });
 
   const byStatus = (status: string) =>
     rows.filter((_, index) => coverageRows[index].coverageStatus === status);
@@ -172,7 +178,8 @@ function buildProposalCard(
   partnerUserId: string | null,
   selections: Stage4SelectionRow[],
   coverageRows: Stage4NeedCoverageRow[],
-  revealPartnerSelections: boolean
+  revealPartnerSelections: boolean,
+  needLinks: Array<{ needId: string; needText: string }> = []
 ): ProposalCardDTO {
   const mySelection = selections.find(
     (selection) => selection.proposalId === proposal.id && selection.userId === userId
@@ -205,12 +212,22 @@ function buildProposalCard(
           ? 'You'
           : 'Partner'
         : undefined,
-    needsAddressed: linkedCoverage.length > 0
-      ? linkedCoverage
-      : proposal.needsAddressed.map((label) => ({
-          label,
-          coverage: 'COVERED',
-        })),
+    needsAddressed:
+      needLinks.length > 0
+        ? needLinks.map((link) => {
+            const coverage = linkedCoverage.find((row) => row.id === link.needId);
+            return {
+              id: link.needId,
+              label: link.needText,
+              coverage: coverage?.coverage ?? 'COVERED',
+            };
+          })
+        : linkedCoverage.length > 0
+          ? linkedCoverage
+          : proposal.needsAddressed.map((label) => ({
+              label,
+              coverage: 'COVERED',
+            })),
     duration: proposal.duration,
     measureOfSuccess: proposal.measureOfSuccess,
     status: proposal.status,
@@ -219,24 +236,6 @@ function buildProposalCard(
   };
 }
 
-function requiresSharedSelection(proposal: Stage4ProposalRow): boolean {
-  return proposal.kind === Stage4ProposalKind.SHARED_PROPOSAL && proposal.status === Stage4ProposalStatus.ACTIVE;
-}
-
-function hasSelectionForEveryActiveSharedProposal(
-  userId: string | null,
-  proposals: Stage4ProposalRow[],
-  selections: Stage4SelectionRow[]
-): boolean {
-  if (!userId) return false;
-
-  const sharedProposalIds = proposals.filter(requiresSharedSelection).map((proposal) => proposal.id);
-  if (sharedProposalIds.length === 0) return false;
-
-  return sharedProposalIds.every((proposalId) =>
-    selections.some((selection) => selection.proposalId === proposalId && selection.userId === userId)
-  );
-}
 
 function hasSubmittedSelectionGate(progressRows: Stage4ProgressRow[], userId: string | null): boolean {
   if (!userId) return false;
@@ -374,6 +373,8 @@ export async function getStage4State(
     agreements,
     tendingEntries,
     progressRows,
+    declinations,
+    proposalNeedLinks,
   ] = await Promise.all([
     prisma.strategyProposal.findMany({
       where: { sessionId },
@@ -402,24 +403,47 @@ export async function getStage4State(
       where: { sessionId, stage: 4 },
       select: { userId: true, gatesSatisfied: true },
     }) as Promise<Stage4ProgressRow[]>,
+    prisma.stage4NeedDeclination.findMany({
+      where: { sessionId, userId },
+      select: { needId: true },
+    }) as Promise<{ needId: string }[]>,
+    prisma.strategyProposalNeed.findMany({
+      where: { proposal: { sessionId } },
+      select: {
+        proposalId: true,
+        needId: true,
+        need: { select: { need: true } },
+      },
+    }) as Promise<Array<{ proposalId: string; needId: string; need: { need: string } | null }>>,
   ]);
 
   const mySelections = selections.filter((selection) => selection.userId === userId);
   const partnerSelections = selections.filter((selection) => selection.userId === partnerUserId);
   const activeProposals = proposals.filter((proposal) => proposal.status === Stage4ProposalStatus.ACTIVE);
-  const myActiveSharedSelectionComplete = hasSelectionForEveryActiveSharedProposal(userId, activeProposals, selections);
-  const partnerActiveSharedSelectionComplete = hasSelectionForEveryActiveSharedProposal(
-    partnerUserId,
-    activeProposals,
-    selections
-  );
-  const mySelectionSubmitted =
-    hasSubmittedSelectionGate(progressRows ?? [], userId) || myActiveSharedSelectionComplete;
-  const partnerSelectionSubmitted =
-    hasSubmittedSelectionGate(progressRows ?? [], partnerUserId) || partnerActiveSharedSelectionComplete;
+  // "Submitted" must be an explicit act now (POST /stage4/share-selections),
+  // not an implicit consequence of having decided on every proposal. Otherwise
+  // partners would see each others' stances mid-deliberation.
+  const mySelectionSubmitted = hasSubmittedSelectionGate(progressRows ?? [], userId);
+  const partnerSelectionSubmitted = hasSubmittedSelectionGate(progressRows ?? [], partnerUserId);
   const revealPartnerSelections = mySelectionSubmitted && partnerSelectionSubmitted;
+  const linksByProposal = new Map<string, Array<{ needId: string; needText: string }>>();
+  for (const link of proposalNeedLinks) {
+    const text = link.need?.need;
+    if (!text) continue;
+    const arr = linksByProposal.get(link.proposalId) ?? [];
+    arr.push({ needId: link.needId, needText: text });
+    linksByProposal.set(link.proposalId, arr);
+  }
   const proposalCards = activeProposals.map((proposal) =>
-    buildProposalCard(proposal, userId, partnerUserId, selections, coverageRows, revealPartnerSelections)
+    buildProposalCard(
+      proposal,
+      userId,
+      partnerUserId,
+      selections,
+      coverageRows,
+      revealPartnerSelections,
+      linksByProposal.get(proposal.id) ?? []
+    )
   );
   const unaddressedNeeds = buildUnaddressedNeeds(coverageRows, userId, partnerUserId);
   const agreementsDTO = agreements.map((agreement) => buildAgreementDTO(agreement, userIsA));
@@ -452,7 +476,12 @@ export async function getStage4State(
       removedProposalCount: proposals.filter((proposal) => proposal.status === Stage4ProposalStatus.REMOVED).length,
       updatedAt: iso(latestInventoryUpdate) ?? new Date(0).toISOString(),
     },
-    coverageAudit: buildCoverageAudit(coverageRows, userId, partnerUserId),
+    coverageAudit: buildCoverageAudit(
+      coverageRows,
+      userId,
+      partnerUserId,
+      new Set(declinations.map((d) => d.needId))
+    ),
     mySelections: mySelections.map((selection): Stage4SelectionDTO => ({
       proposalId: selection.proposalId,
       decision: selection.decision,
@@ -469,6 +498,7 @@ export async function getStage4State(
           updatedAt: selection.updatedAt.toISOString(),
         }))
       : [],
+    mySelectionStatus: mySelectionSubmitted ? 'SUBMITTED' : 'NOT_STARTED',
     partnerSelectionStatus: partnerSelectionSubmitted ? 'SUBMITTED' : 'NOT_STARTED',
     outcome: closure
       ? {
@@ -481,6 +511,7 @@ export async function getStage4State(
           individualCommitments: proposalCards.filter((proposal) => closedIndividualIds.has(proposal.id)),
           openNeeds: unaddressedNeeds.filter((need) => need.id && openNeedIds.has(need.id)),
           closedAt: closure.closedAt.toISOString(),
+          checkInAt: closure.checkInAt ? closure.checkInAt.toISOString() : null,
         }
       : null,
     tendingPreview: buildTendingPreview(closure, tendingEntries),

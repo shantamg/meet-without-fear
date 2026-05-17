@@ -88,6 +88,7 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
 
   // Stage 2: Empathy
   hasEmpathyContent: boolean; // liveProposedEmpathyStatement || empathyDraftData?.draft?.content
+  hasLiveProposedEmpathyStatement: boolean;
   empathyAlreadyConsented: boolean;
   hasSharedEmpathyLocal: boolean; // Local latch to prevent flash
 
@@ -282,9 +283,13 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
   const currentStage = myStage ?? Stage.ONBOARDING;
 
   // When the partner has just shared context, the next user action should be
-  // reflection in chat. Do not offer review/resubmit until they have taken
-  // that first turn, even if an old attempt or draft is already reviewable.
-  if (isRefiningEmpathy && inputs.messageCountSinceSharedContext === 0) {
+  // reflection in chat. Do not offer review/resubmit until either they have
+  // taken that first turn or the AI has produced a fresh revised draft.
+  if (
+    isRefiningEmpathy &&
+    inputs.messageCountSinceSharedContext === 0 &&
+    !inputs.hasLiveProposedEmpathyStatement
+  ) {
     return false;
   }
 
@@ -341,6 +346,7 @@ function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
     sessionStatus,
     empathyAlreadyConsented,
     empathyDraft,
+    isRefiningEmpathy,
   } = inputs;
 
   if (sessionStatus === SessionStatus.RESOLVED) return false;
@@ -357,6 +363,12 @@ function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
   // so the suggestion does not interrupt perspective-taking.
   const ownEmpathySubmitted = empathyAlreadyConsented || empathyDraft?.alreadyConsented === true;
 
+  // Optional context sharing must not block the required Stage 2 refinement
+  // review/resubmit path after the partner shares new context.
+  if (isRefiningEmpathy) {
+    return false;
+  }
+
   return hasShareSuggestion && ownEmpathySubmitted && !hasRespondedToShareOfferLocal;
 }
 
@@ -371,6 +383,7 @@ function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
     needsAvailable,
     allNeedsConfirmed,
     needsShared,
+    hasConfirmedNeedsLocal,
     sessionStatus,
   } = inputs;
 
@@ -383,8 +396,8 @@ function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
     return false;
   }
 
-  // Already shared - reveal/waiting state owns the next step.
-  if (needsShared || allNeedsConfirmed) {
+  // Already shared or confirmed - reveal/waiting state owns the next step.
+  if (needsShared || allNeedsConfirmed || hasConfirmedNeedsLocal) {
     return false;
   }
 
@@ -407,7 +420,7 @@ function computeShowNeedsSharePanel(inputs: ChatUIStateInputs): boolean {
 
   const currentStage = myStage ?? Stage.ONBOARDING;
   if (currentStage !== Stage.NEED_MAPPING) return false;
-  if (!needsAvailable || !allNeedsConfirmed) return false;
+  if (!needsAvailable || (!allNeedsConfirmed && !hasConfirmedNeedsLocal)) return false;
   if (needsShared || needsRevealReady) return false;
   return true;
 }
@@ -780,6 +793,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     feelHeardConfirmedAt: undefined,
     isConfirmingFeelHeard: false,
     hasEmpathyContent: false,
+    hasLiveProposedEmpathyStatement: false,
     empathyAlreadyConsented: false,
     hasSharedEmpathyLocal: false,
     isRefiningEmpathy: false,

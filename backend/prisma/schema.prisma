@@ -52,6 +52,7 @@ model User {
   removedStage4Proposals   StrategyProposal[]            @relation("Stage4ProposalRemovedBy")
   strategyRankings         StrategyRanking[]
   stage4ProposalSelections Stage4ProposalSelection[]
+  stage4SubChats           Stage4SubChat[]
   tendingResponses         TendingResponse[]
   exerciseCompletions      EmotionalExerciseCompletion[]
   invitationsSent          Invitation[]                  @relation("InvitedBy")
@@ -139,7 +140,9 @@ model Session {
   strategyRankings          StrategyRanking[]
   stage4ProposalSelections  Stage4ProposalSelection[]
   stage4NeedCoverages       Stage4NeedCoverage[]
+  stage4NeedDeclinations    Stage4NeedDeclination[]
   stage4Closure             Stage4Closure?
+  stage4SubChats            Stage4SubChat[]
   tendingEntries            TendingEntry[]
   consentRecords            ConsentRecord[]
   exerciseCompletions       EmotionalExerciseCompletion[]
@@ -153,9 +156,15 @@ model Session {
   // Linked Inner Thoughts sessions for private reflection during partner session
   linkedInnerThoughts InnerWorkSession[] @relation("LinkedInnerThoughts")
 
+  // Stage 4 Phase 5: Tending check-in NEW_PROCESS path links forward to a fresh session
+  previousSession   Session?  @relation("SessionLineage", fields: [previousSessionId], references: [id], onDelete: SetNull)
+  previousSessionId String?
+  nextSessions      Session[] @relation("SessionLineage")
+
   @@index([relationshipId])
   @@index([status])
   @@index([type])
+  @@index([previousSessionId])
 }
 
 enum SessionType {
@@ -209,13 +218,13 @@ model InnerWorkSession {
 
   // Link to partner session for context-aware Inner Thoughts
   // When set, AI has access to partner session context and can reference it
-  linkedPartnerSession   Session? @relation("LinkedInnerThoughts", fields: [linkedPartnerSessionId], references: [id], onDelete: SetNull)
+  linkedPartnerSession   Session?          @relation("LinkedInnerThoughts", fields: [linkedPartnerSessionId], references: [id], onDelete: SetNull)
   linkedPartnerSessionId String?
   linkedAtMessage        InnerWorkMessage? @relation("InnerWorkBranchPoint", fields: [linkedAtMessageId], references: [id], onDelete: SetNull)
   linkedAtMessageId      String?
   linkedAtStage          Int? // Stage when Inner Thoughts was opened (1, 2, 3, 4)
   linkedTrigger          String? // Why it was opened: "empathy_wait", "voluntary", "witness_wait"
-  contextSummarySnapshot String? @db.Text // Point-in-time context passed when a partner session was started
+  contextSummarySnapshot String?           @db.Text // Point-in-time context passed when a partner session was started
 
   @@index([userId, updatedAt])
   @@index([status])
@@ -246,12 +255,12 @@ enum TakeawayLinkType {
 }
 
 model InnerWorkMessage {
-  id        String           @id @default(cuid())
-  session   InnerWorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId String
-  role      MessageRole
-  content   String           @db.Text
-  timestamp DateTime         @default(now())
+  id                String             @id @default(cuid())
+  session           InnerWorkSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId         String
+  role              MessageRole
+  content           String             @db.Text
+  timestamp         DateTime           @default(now())
   branchForSessions InnerWorkSession[] @relation("InnerWorkBranchPoint")
 
   // NOTE: Message-level embedding removed per fact-ledger architecture
@@ -438,6 +447,8 @@ model IdentifiedNeed {
 
   // Link to shared version if consented
   consentedContent ConsentedContent?
+
+  proposalLinks StrategyProposalNeed[]
 
   @@index([vesselId])
 }
@@ -946,6 +957,7 @@ model StrategyProposal {
   agreements Agreement[]
   selections Stage4ProposalSelection[]
   revisions  Stage4ProposalRevision[]
+  needLinks  StrategyProposalNeed[]
 
   @@index([sessionId])
   @@index([sessionId, status])
@@ -973,7 +985,6 @@ enum Stage4ProposalStatus {
 enum Stage4SelectionDecision {
   WILLING
   NOT_WILLING
-  NEEDS_DISCUSSION
 }
 
 enum Stage4ClosureKind {
@@ -990,6 +1001,7 @@ enum Stage4ClosureReason {
 
 enum TendingEntryType {
   SCHEDULED_SHARED_AGREEMENT_CHECKIN
+  SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN
   USER_INITIATED_REENTRY
 }
 
@@ -1000,6 +1012,23 @@ enum TendingEntryStatus {
   COMPLETED
   EXPIRED
   CANCELLED
+}
+
+enum TendingEntryScope {
+  SHARED
+  INDIVIDUAL
+}
+
+model StrategyProposalNeed {
+  proposalId String
+  needId     String
+  createdAt  DateTime @default(now())
+
+  proposal StrategyProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  need     IdentifiedNeed   @relation(fields: [needId], references: [id], onDelete: Cascade)
+
+  @@id([proposalId, needId])
+  @@index([needId])
 }
 
 model Stage4ProposalSelection {
@@ -1052,6 +1081,18 @@ model Stage4NeedCoverage {
   @@index([sessionId])
 }
 
+model Stage4NeedDeclination {
+  id         String   @id @default(cuid())
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String
+  userId     String
+  needId     String
+  declinedAt DateTime @default(now())
+
+  @@unique([sessionId, userId, needId])
+  @@index([sessionId])
+}
+
 model Stage4Closure {
   id                    String              @id @default(cuid())
   session               Session             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -1062,31 +1103,77 @@ model Stage4Closure {
   sharedAgreementIds    String[]
   individualProposalIds String[]
   openNeedIds           String[]
+  checkInAt             DateTime?
   closedByUserId        String?
   closedAt              DateTime            @default(now())
   createdAt             DateTime            @default(now())
 }
 
-model TendingEntry {
-  id           String             @id @default(cuid())
-  session      Session            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId    String
-  agreement    Agreement?         @relation(fields: [agreementId], references: [id], onDelete: Cascade)
-  agreementId  String?
-  type         TendingEntryType
-  status       TendingEntryStatus @default(SCHEDULED)
-  scheduledFor DateTime?
-  openedAt     DateTime?
-  completedAt  DateTime?
-  summary      String?            @db.Text
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+enum Stage4SubChatAnchor {
+  NEEDS_BRAINSTORM
+  PROPOSAL_REFINEMENT
+  NO_OVERLAP
+}
 
-  responses TendingResponse[]
+enum Stage4SubChatStatus {
+  ACTIVE
+  RESOLVED
+}
+
+model Stage4SubChat {
+  id         String              @id @default(cuid())
+  session    Session             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  anchorKind Stage4SubChatAnchor
+  anchorId   String?
+  status     Stage4SubChatStatus @default(ACTIVE)
+  createdAt  DateTime            @default(now())
+  resolvedAt DateTime?
+
+  messages Stage4SubChatMessage[]
+
+  @@index([sessionId, userId, status])
+  @@index([sessionId, anchorKind, anchorId, status])
+}
+
+model Stage4SubChatMessage {
+  id        String        @id @default(cuid())
+  subChat   Stage4SubChat @relation(fields: [subChatId], references: [id], onDelete: Cascade)
+  subChatId String
+  role      MessageRole
+  content   String        @db.Text
+  createdAt DateTime      @default(now())
+
+  @@index([subChatId, createdAt])
+}
+
+model TendingEntry {
+  id             String             @id @default(cuid())
+  session        Session            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId      String
+  agreement      Agreement?         @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  agreementId    String?
+  type           TendingEntryType
+  scope          TendingEntryScope  @default(SHARED)
+  ownerUserId    String?
+  optedInShared  Boolean            @default(false)
+  status         TendingEntryStatus @default(SCHEDULED)
+  scheduledFor   DateTime?
+  openedAt       DateTime?
+  completedAt    DateTime?
+  summary        String?            @db.Text
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  responses        TendingResponse[]
+  partialClosures  TendingResponsePartialClosure[]
 
   @@index([sessionId, status])
   @@index([agreementId])
   @@index([scheduledFor])
+  @@index([sessionId, scope, ownerUserId])
 }
 
 model TendingResponse {
@@ -1097,10 +1184,44 @@ model TendingResponse {
   userId         String
   status         String
   reflection     String?      @db.Text
-  continueChoice String?
+  continueChoice ContinueChoice?
   submittedAt    DateTime     @default(now())
 
+  // Stage 4 Phase 5: when continueChoice = PARTIAL_CLOSURE, per-entry resolutions
+  // are recorded against the originating response (one row per TendingEntry resolved).
+  partialClosures TendingResponsePartialClosure[]
+
   @@unique([tendingEntryId, userId])
+}
+
+// Stage 4 Phase 5: ContinueChoice — five forward paths at the end of a Tending check-in.
+enum ContinueChoice {
+  ANOTHER_ROUND     // Reset Stage 4 to inventory building; new experiments
+  EXTEND            // Keep current entries open with a new scheduledFor
+  NEW_PROCESS       // Create a fresh Session linked via previousSessionId; both users start at Stage 0
+  PARTIAL_CLOSURE   // Close some entries, continue others (per-TendingEntry granularity)
+  FULL_CLOSURE      // Mark all entries COMPLETED and move session to terminal state
+}
+
+enum PartialClosureResolution {
+  RESOLVED
+  CONTINUING
+}
+
+// Stage 4 Phase 5: Per-TendingEntry resolution recorded when a user picks PARTIAL_CLOSURE.
+// Scope decision: targets TendingEntry (not Agreement) so individual commitments can be
+// partially closed alongside shared agreements. See PR description for rationale.
+model TendingResponsePartialClosure {
+  id                String                    @id @default(cuid())
+  tendingResponse   TendingResponse           @relation(fields: [tendingResponseId], references: [id], onDelete: Cascade)
+  tendingResponseId String
+  tendingEntry      TendingEntry              @relation(fields: [tendingEntryId], references: [id], onDelete: Cascade)
+  tendingEntryId    String
+  resolution        PartialClosureResolution
+  createdAt         DateTime                  @default(now())
+
+  @@unique([tendingResponseId, tendingEntryId])
+  @@index([tendingEntryId])
 }
 
 model StrategyRanking {

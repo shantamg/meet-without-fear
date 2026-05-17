@@ -10,7 +10,10 @@ import { designFonts, useAppAppearance } from '../theme';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
+  /** Disables sending. The text field can remain editable to avoid keyboard jumps. */
   disabled?: boolean;
+  /** Disables editing the text field itself. */
+  inputDisabled?: boolean;
   placeholder?: string;
   maxLength?: number;
   showCharacterCount?: boolean;
@@ -18,6 +21,12 @@ interface ChatInputProps {
   onVoicePress?: () => void;
   /** Content of a failed message to restore to the input field */
   failedMessage?: string | null;
+  /** Pre-fill the input with provided text and focus it (e.g. Stage 4 brainstorm seed). */
+  prefillText?: string | null;
+  /** Callback invoked once a prefill has been applied (so caller can clear). */
+  onPrefillConsumed?: () => void;
+  /** Whether the software keyboard is currently visible. */
+  keyboardVisible?: boolean;
 }
 
 // ============================================================================
@@ -34,13 +43,17 @@ const CHARACTER_WARNING_THRESHOLD = 0.8;
 export function ChatInput({
   onSend,
   disabled = false,
+  inputDisabled = false,
   placeholder = 'Type a message...',
   maxLength = DEFAULT_MAX_LENGTH,
   showCharacterCount = false,
   onVoicePress,
   failedMessage,
+  prefillText,
+  onPrefillConsumed,
+  keyboardVisible = false,
 }: ChatInputProps) {
-  const styles = useStyles();
+  const styles = useStyles(keyboardVisible);
   const { palette } = useAppAppearance();
   const [input, setInput] = useState('');
   const inputRef = useRef<TextInputType>(null);
@@ -54,6 +67,16 @@ export function ChatInput({
       setInput(failedMessage);
     }
   }, [failedMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pre-fill from external trigger (Stage 4 brainstorm stub).
+  useEffect(() => {
+    if (prefillText && prefillText.length > 0) {
+      justSentRef.current = false;
+      setInput(prefillText);
+      inputRef.current?.focus();
+      onPrefillConsumed?.();
+    }
+  }, [prefillText]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const canSend = input.trim().length > 0 && !disabled;
   const characterRatio = input.length / maxLength;
@@ -107,7 +130,7 @@ export function ChatInput({
           placeholderTextColor={palette.textFaint}
           multiline
           maxLength={maxLength}
-          editable={!disabled}
+          editable={!inputDisabled}
           testID="chat-input"
         />
         {showCharacterCount && (
@@ -144,15 +167,15 @@ export function ChatInput({
 // Styles
 // ============================================================================
 
-const useStyles = () => {
+const useStyles = (keyboardVisible: boolean) => {
   const { palette } = useAppAppearance();
   return createStyles((t) => ({
     container: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      paddingHorizontal: 14,
-      paddingTop: 12,
-      paddingBottom: 18,
+      paddingHorizontal: t.spacing.lg,
+      paddingTop: t.spacing.md,
+      paddingBottom: keyboardVisible ? t.spacing.sm : t.spacing.xl,
       borderTopWidth: 1,
       borderTopColor: palette.border,
       backgroundColor: palette.bg,
@@ -167,8 +190,8 @@ const useStyles = () => {
     },
     input: {
       paddingHorizontal: t.spacing.lg,
-      paddingTop: 12,
-      paddingBottom: 12,
+      paddingTop: t.spacing.md,
+      paddingBottom: t.spacing.md,
       fontSize: 14,
       maxHeight: 140,
       color: palette.text,

@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import { BookOpen, Menu } from 'lucide-react-native';
+import { Menu, Share2 } from 'lucide-react-native';
 import { ConnectionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
@@ -45,12 +45,15 @@ export interface SessionChatHeaderProps {
   onPress?: () => void;
   /** Optional callback when brief status is pressed (e.g., to show invitation options) */
   onBriefStatusPress?: () => void;
-  /** Whether there is new activity to indicate with a dot badge */
-  hasNewActivity?: boolean;
-  /** Callback when the activity menu icon is pressed */
-  onMenuPress?: () => void;
-  /** Current stage friendly name to display below partner name */
-  stageName?: string;
+  /** Optional right-side icon action. Takes precedence over briefStatus. */
+  rightAction?: {
+    icon: 'share';
+    accessibilityLabel: string;
+    onPress: () => void;
+    testID?: string;
+  };
+  /** Conversation topic to display below partner name */
+  conversationTopic?: string | null;
   /** Custom container style */
   style?: ViewStyle;
   /** Test ID for testing */
@@ -100,9 +103,8 @@ export function SessionChatHeader({
   leftActionIcon = 'back',
   onPress,
   onBriefStatusPress,
-  hasNewActivity = false,
-  onMenuPress,
-  stageName,
+  rightAction,
+  conversationTopic,
   style,
   testID = 'session-chat-header',
 }: SessionChatHeaderProps) {
@@ -125,12 +127,14 @@ export function SessionChatHeader({
 
   const displayName = partnerName || 'Meet Without Fear';
   const leftActionLabel = leftActionIcon === 'menu' ? 'Open session drawer' : 'Go back';
+  const headerTopic = conversationTopic?.trim();
+  const rightActionTestID = rightAction?.testID ?? `${testID}-right-action`;
 
   // Center content - always partner name + status (whether tabs or not)
   const centerContent = (
     <View style={styles.centerSection}>
       <View style={styles.nameRow}>
-        {!hideOnlineStatus && stageName && <StatusDot isOnline={isOnline} />}
+        {!hideOnlineStatus && headerTopic && <StatusDot isOnline={isOnline} />}
         <Text
           style={styles.partnerName}
           numberOfLines={1}
@@ -139,13 +143,14 @@ export function SessionChatHeader({
           {displayName}
         </Text>
       </View>
-      {stageName ? (
+      {headerTopic ? (
         <Text
-          style={styles.stageNameText}
+          style={styles.topicText}
           numberOfLines={1}
-          testID={`${testID}-stage-name`}
+          ellipsizeMode="tail"
+          testID={`${testID}-conversation-topic`}
         >
-          {stageName}
+          {headerTopic}
         </Text>
       ) : !hideOnlineStatus ? (
         <View style={styles.statusRow}>
@@ -204,22 +209,16 @@ export function SessionChatHeader({
 
       {/* Right section: Activity menu icon or brief status */}
       <View style={styles.rightSection}>
-        {onMenuPress ? (
+        {rightAction ? (
           <TouchableOpacity
-            style={styles.menuButton}
-            onPress={onMenuPress}
+            style={styles.iconButton}
+            onPress={rightAction.onPress}
             accessibilityRole="button"
-            accessibilityLabel={hasNewActivity ? "Open exchange history, new activity" : "Open exchange history"}
-            testID={`${testID}-menu-button`}
+            accessibilityLabel={rightAction.accessibilityLabel}
+            testID={rightActionTestID}
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
           >
-            <BookOpen color={palette.textMuted} size={20} />
-            {hasNewActivity && (
-              <View
-                style={styles.activityDot}
-                testID={`${testID}-activity-dot`}
-                accessibilityLabel="New activity available"
-              />
-            )}
+            {rightAction.icon === 'share' && <Share2 color={palette.textMuted} size={22} />}
           </TouchableOpacity>
         ) : briefStatus ? (
           onBriefStatusPress ? (
@@ -306,23 +305,12 @@ const useStyles = () => {
     rightSpacer: {
       width: 32,
     },
-    // Activity menu button
-    menuButton: {
+    iconButton: {
       width: 36,
       height: 36,
       borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
-      position: 'relative',
-    },
-    activityDot: {
-      position: 'absolute' as const,
-      top: 4,
-      right: 2,
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: palette.accent,
     },
     partnerName: {
       fontSize: 20,
@@ -352,12 +340,13 @@ const useStyles = () => {
     onlineTextActive: {
       color: palette.success,
     },
-    stageNameText: {
+    topicText: {
       fontSize: 10.5,
       color: palette.textMuted,
       textAlign: 'center' as const,
       marginTop: 1,
       fontFamily: designFonts.sans,
+      maxWidth: '100%' as const,
     },
     briefStatus: {
       fontSize: t.typography.fontSize.sm,

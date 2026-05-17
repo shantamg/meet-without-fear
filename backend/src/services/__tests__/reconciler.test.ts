@@ -126,6 +126,7 @@ import {
   hasContextAlreadyBeenShared,
   getFallbackContinuation,
   generatePostShareContinuation,
+  generateValidationFeedbackReflection,
   generateShareSuggestionForDirection,
   checkAndRevealBothIfReady,
   loadRecentSubjectStage2Turns,
@@ -554,7 +555,48 @@ describe('Reconciler Service', () => {
   });
 
   // ==========================================================================
-  // 6. generateShareSuggestionForDirection
+  // 6. generateValidationFeedbackReflection
+  // ==========================================================================
+
+  describe('generateValidationFeedbackReflection', () => {
+    it('returns trimmed AI response on success', async () => {
+      const { getSonnetResponse } = require('../../lib/bedrock');
+      (getSonnetResponse as jest.Mock).mockResolvedValueOnce('  Jordan shared some thoughts about what felt off.  ');
+
+      const result = await generateValidationFeedbackReflection('session-1', 'Alex', 'Jordan');
+
+      expect(result).toBe('Jordan shared some thoughts about what felt off.');
+      expect(getSonnetResponse).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'session-1',
+          operation: 'reconciler-validation-feedback-reflection',
+        })
+      );
+    });
+
+    it('returns fallback when getSonnetResponse returns null', async () => {
+      const { getSonnetResponse } = require('../../lib/bedrock');
+      (getSonnetResponse as jest.Mock).mockResolvedValueOnce(null);
+
+      const result = await generateValidationFeedbackReflection('session-1', 'Alex', 'Jordan');
+
+      expect(result).toContain('Jordan');
+      expect(result).toContain('shared some thoughts');
+    });
+
+    it('returns fallback when getSonnetResponse throws', async () => {
+      const { getSonnetResponse } = require('../../lib/bedrock');
+      (getSonnetResponse as jest.Mock).mockRejectedValueOnce(new Error('Bedrock error'));
+
+      const result = await generateValidationFeedbackReflection('session-1', 'Alex', 'Jordan');
+
+      expect(result).toContain('Jordan');
+      expect(result).toContain('shared some thoughts');
+    });
+  });
+
+  // ==========================================================================
+  // 7. generateShareSuggestionForDirection
   // ==========================================================================
 
   describe('generateShareSuggestionForDirection', () => {

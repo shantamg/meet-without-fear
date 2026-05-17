@@ -103,6 +103,7 @@ export interface UseInfiniteMessagesOptions {
 export interface UseInfiniteMessagesResult {
   data: InfiniteData<GetMessagesResponse> | undefined;
   isLoading: boolean;
+  isFetching: boolean;
   isError: boolean;
   error: Error | null;
   fetchNextPage: () => void;
@@ -129,11 +130,12 @@ export function useInfiniteMessages(
       if (stage !== undefined) queryParams.set('stage', stage.toString());
       queryParams.set('limit', limit.toString());
 
-      // First page: get newest messages (default order is 'desc')
-      // Subsequent pages: get older messages using 'before' cursor with 'asc' order
+      // First page: get newest messages (default order is 'desc').
+      // Subsequent pages also use descending order with the `before` cursor so
+      // the backend returns the immediately previous chunk, then reverses that
+      // chunk into chronological display order.
       if (pageParam) {
         queryParams.set('before', pageParam as string);
-        queryParams.set('order', 'asc');
       }
 
       const url = `/sessions/${sessionId}/messages?${queryParams.toString()}`;
@@ -154,6 +156,7 @@ export function useInfiniteMessages(
   return {
     data: result.data,
     isLoading: result.isLoading,
+    isFetching: result.isFetching,
     isError: result.isError,
     error: result.error,
     fetchNextPage: result.fetchNextPage,

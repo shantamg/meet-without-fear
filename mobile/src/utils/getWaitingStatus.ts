@@ -22,11 +22,13 @@ export type WaitingStatusState =
   | 'empathy-pending' // Stage 2: Waiting for partner to share empathy
   | 'partner-considering-perspective' // Stage 2: Partner felt heard, now building empathy for you (good alignment)
   | 'partner-validating-empathy' // Stage 2: User validated partner empathy, waiting for partner to validate theirs
+  | 'partner-revising-empathy' // Stage 2: User sent validation feedback, waiting for partner to revise
   | 'needs-pending' // Stage 3: Waiting for partner to confirm needs
   | 'needs-waiting-for-partner' // Stage 3: User shared needs, waiting for partner to share
   | 'needs-validation-pending' // Stage 3: Waiting for partner to confirm needs validation
   | 'partner-validating-needs' // Stage 3: User validated revealed needs, waiting for partner
   | 'ranking-pending' // Stage 4: Waiting for partner to submit ranking
+  | 'stage4-selections-pending' // Stage 4 (redesigned): User shared willingness stances, waiting for partner
   | 'strategy-readiness-pending' // Stage 4: User is ready to rank, waiting for partner readiness
   | 'partner-signed' // Partner has signed compact (transient)
   | 'partner-completed-witness' // Partner completed witness stage (transient)
@@ -62,9 +64,11 @@ export interface WaitingStatusInputs {
     hasNewSharedContext?: boolean;
     myAttemptStatus?: string; // 'REVEALED', 'NEEDS_WORK', etc.
     myAttemptRevisionCount?: number; // Number of times empathy was revised
+    partnerAttemptStatus?: string; // Partner's held status, even when not revealable
   } | undefined;
   myValidation?: {
     validated?: boolean;
+    awaitingRevision?: boolean;
   } | undefined;
   partnerValidated?: boolean;
 
@@ -112,6 +116,13 @@ export interface WaitingStatusInputs {
     agreedByMe: boolean;
     agreedByPartner: boolean;
   }>;
+
+  // Stage 4 (redesigned): per-proposal willingness share status
+  stage4Selections?: {
+    mySelectionSubmitted: boolean;
+    partnerSelectionSubmitted: boolean;
+    hasOutcome: boolean;
+  };
   sessionStatus?: string; // SessionStatus enum value
 }
 
@@ -211,12 +222,27 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
     return 'awaiting-subject-decision';
   }
 
-  // Good alignment: User's empathy is READY (or REVEALED), partner is working on their empathy for us.
+  // User already sent feedback that the partner's empathy attempt needs work.
+  // The reviewed attempt is now held as REFINING, so the next useful action
+  // belongs to the partner rather than the freeform chat input.
+  if (
+    myStage === Stage.PERSPECTIVE_STRETCH &&
+    (inputs.myValidation?.awaitingRevision === true ||
+      empathyStatus?.partnerAttemptStatus === 'REFINING') &&
+    inputs.myValidation?.validated === false
+  ) {
+    return 'partner-revising-empathy';
+  }
+
+  // Good alignment: User's empathy is READY, REVEALED, or VALIDATED; partner is working on their empathy for us.
   // READY means the asymmetric reconciler has analyzed the guesser's empathy and approved it,
   // but the partner hasn't shared their own empathy yet.
   // REVEALED means both are ready and empathy has been revealed (brief transient state).
+  // VALIDATED means the partner confirmed the user's understanding, but their own attempt isn't revealed yet.
   if (
-    (empathyStatus?.myAttemptStatus === 'READY' || empathyStatus?.myAttemptStatus === 'REVEALED') &&
+    (empathyStatus?.myAttemptStatus === 'READY' ||
+      empathyStatus?.myAttemptStatus === 'REVEALED' ||
+      empathyStatus?.myAttemptStatus === 'VALIDATED') &&
     !hasPartnerEmpathy &&
     !empathyStatus?.analyzing
   ) {
@@ -308,6 +334,17 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
 
   if (strategyPhase === StrategyPhase.REVEALING && overlappingStrategies.count === 0) {
     return 'ranking-pending';
+  }
+
+  // Stage 4 redesign: I shared my willingness stances, partner hasn't yet.
+  if (
+    myStage === Stage.STRATEGIC_REPAIR &&
+    inputs.stage4Selections &&
+    inputs.stage4Selections.mySelectionSubmitted &&
+    !inputs.stage4Selections.partnerSelectionSubmitted &&
+    !inputs.stage4Selections.hasOutcome
+  ) {
+    return 'stage4-selections-pending';
   }
 
   // --- Priority 7: Stage 4 (Agreement Confirmation) ---

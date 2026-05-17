@@ -61,6 +61,16 @@ export const STAGE_FRIENDLY_NAMES: Record<Stage, string> = {
   [Stage.INFORMED_EMPATHY]: 'Deeper Understanding',
 };
 
+/** Stage accent colors for visual stage indicators in the chat timeline. */
+export const STAGE_COLORS: Record<Stage, string> = {
+  [Stage.ONBOARDING]: '#8B9DC3',
+  [Stage.WITNESS]: '#D4A574',
+  [Stage.PERSPECTIVE_STRETCH]: '#7BC47F',
+  [Stage.NEED_MAPPING]: '#C084C0',
+  [Stage.STRATEGIC_REPAIR]: '#E8A87C',
+  [Stage.INFORMED_EMPATHY]: '#7BC47F',
+};
+
 // ============================================================================
 // User & Content
 // ============================================================================
@@ -145,7 +155,6 @@ export enum Stage4ProposalStatus {
 export enum Stage4SelectionDecision {
   WILLING = 'WILLING',
   NOT_WILLING = 'NOT_WILLING',
-  NEEDS_DISCUSSION = 'NEEDS_DISCUSSION',
 }
 
 export enum Stage4ClosureKind {
@@ -160,9 +169,26 @@ export enum Stage4ClosureReason {
   USER_STOPPED = 'USER_STOPPED',
 }
 
+export enum Stage4SubChatAnchor {
+  NEEDS_BRAINSTORM = 'NEEDS_BRAINSTORM',
+  PROPOSAL_REFINEMENT = 'PROPOSAL_REFINEMENT',
+  NO_OVERLAP = 'NO_OVERLAP',
+}
+
+export enum Stage4SubChatStatus {
+  ACTIVE = 'ACTIVE',
+  RESOLVED = 'RESOLVED',
+}
+
 export enum TendingEntryType {
   SCHEDULED_SHARED_AGREEMENT_CHECKIN = 'SCHEDULED_SHARED_AGREEMENT_CHECKIN',
+  SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN = 'SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN',
   USER_INITIATED_REENTRY = 'USER_INITIATED_REENTRY',
+}
+
+export enum TendingEntryScope {
+  SHARED = 'SHARED',
+  INDIVIDUAL = 'INDIVIDUAL',
 }
 
 export enum TendingEntryStatus {

@@ -7,7 +7,9 @@ from mwf_gold_loop import (
     Actor,
     ActorStatus,
     actor_satisfies_stop_boundary,
+    build_actor_prompt,
     check_stage4_score_critical_content,
+    check_db_stage_state_matches_stop_gate,
     check_transcript_shared_context_blocks_labeled,
     check_transcript_side_stage_metadata,
     choose_next_actor,
@@ -35,6 +37,20 @@ class GoldLoopActorHandoffTest(unittest.TestCase):
         )
 
         self.assertFalse(actor_satisfies_stop_boundary(actor, 4))
+
+    def test_stage2_partner_wait_does_not_satisfy_stop_boundary(self) -> None:
+        actor = self.actor(
+            "eve",
+            ActorStatus(
+                side="eve",
+                session_id="session-1",
+                stage=2,
+                state="needs_partner",
+                blocked_on="adam",
+            ),
+        )
+
+        self.assertFalse(actor_satisfies_stop_boundary(actor, 2))
 
     def test_stage_limit_with_blocked_on_is_not_terminal(self) -> None:
         actor = self.actor(
@@ -95,6 +111,185 @@ class GoldLoopActorHandoffTest(unittest.TestCase):
         )
 
         self.assertIs(next_actor, catherine)
+
+    def test_stage2_one_sided_partner_wait_resumes_blocked_partner(self) -> None:
+        adam = self.actor(
+            "adam",
+            ActorStatus(
+                side="adam",
+                session_id="session-1",
+                stage=2,
+                state="stage_limit_reached",
+            ),
+        )
+        adam.turns = 1
+        eve = self.actor(
+            "eve",
+            ActorStatus(
+                side="eve",
+                session_id="session-1",
+                stage=2,
+                state="needs_partner",
+                blocked_on="adam",
+            ),
+        )
+        eve.turns = 1
+
+        next_actor = choose_next_actor(
+            {"adam": adam, "eve": eve},
+            last_side="eve",
+            stop_after_stage=2,
+        )
+
+        self.assertIs(next_actor, adam)
+
+    def test_stage2_reciprocal_partner_wait_resumes_last_blocked_partner(self) -> None:
+        adam = self.actor(
+            "adam",
+            ActorStatus(
+                side="adam",
+                session_id="session-1",
+                stage=2,
+                state="needs_partner",
+                blocked_on="eve",
+            ),
+        )
+        adam.turns = 1
+        eve = self.actor(
+            "eve",
+            ActorStatus(
+                side="eve",
+                session_id="session-1",
+                stage=2,
+                state="needs_partner",
+                blocked_on="adam",
+            ),
+        )
+        eve.turns = 1
+
+        next_actor = choose_next_actor(
+            {"adam": adam, "eve": eve},
+            last_side="eve",
+            stop_after_stage=2,
+        )
+
+        self.assertIs(next_actor, adam)
+
+    def test_actor_prompt_requires_stage2_post_empathy_share_review(self) -> None:
+        adam = self.actor("adam")
+        eve = self.actor("eve")
+
+        prompt = build_actor_prompt(adam, eve, "session-1", 2, Path("/tmp/run"), "adam-eve")
+
+        self.assertIn('Share this with Eve? Review', prompt)
+        self.assertIn("Do not stop merely because an empathy attempt was submitted", prompt)
+
+    def test_actor_prompt_requires_clicking_gate_ctas_not_typed_chat(self) -> None:
+        adam = self.actor("adam")
+        eve = self.actor("eve")
+
+        prompt = build_actor_prompt(adam, eve, "session-1", 2, Path("/tmp/run"), "adam-eve")
+
+        self.assertIn("click the CTA", prompt)
+        self.assertIn("Do not type a chat message to satisfy a product gate", prompt)
+        self.assertNotIn("typed confirmation", prompt)
+        self.assertNotIn('such as "I feel heard" / "Ready"', prompt)
+
+    def test_db_stage_state_fails_when_messages_never_reach_claimed_stage(self) -> None:
+        run_data = {
+            "db_stage_state": {
+                "users": [
+                    {"id": "u-adam", "name": "Adam"},
+                    {"id": "u-eve", "name": "Eve"},
+                ],
+                "stageProgress": [
+                    {"userId": "u-adam", "stage": 0, "status": "COMPLETED", "gates": {"compactSigned": True}},
+                    {"userId": "u-eve", "stage": 0, "status": "COMPLETED", "gates": {"compactSigned": True}},
+                ],
+                "empathyAttempts": [],
+                "messageStages": [
+                    {"role": "USER", "stage": 0, "senderId": "u-adam", "contentPrefix": "Stage 2-looking chat text"},
+                    {"role": "AI", "stage": 0, "forUserId": "u-adam", "contentPrefix": "Next step: Walking in Their Shoes"},
+                ],
+            }
+        }
+
+        result = check_db_stage_state_matches_stop_gate(run_data, "adam-eve", 2)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertEqual(result["severity"], "hard")
+        self.assertTrue(any("missing StageProgress stage 1" in item for item in result["evidence"]))
+        self.assertTrue(any("highest Message.stage is 0" in item for item in result["evidence"]))
+
+    def test_db_stage_state_requires_real_stage2_lifecycle_not_actor_status_only(self) -> None:
+        run_data = {
+            "status_history": [
+                {"side": "adam", "status": {"stage": 2, "state": "stage_limit_reached"}},
+                {"side": "eve", "status": {"stage": 2, "state": "needs_partner", "blocked_on": "adam"}},
+            ],
+            "db_stage_state": {
+                "users": [
+                    {"id": "u-adam", "name": "Adam"},
+                    {"id": "u-eve", "name": "Eve"},
+                ],
+                "stageProgress": [
+                    {"userId": "u-adam", "stage": 0, "status": "COMPLETED", "gates": {"compactSigned": True}},
+                    {"userId": "u-adam", "stage": 1, "status": "COMPLETED", "gates": {"feelHeardConfirmed": True}},
+                    {"userId": "u-adam", "stage": 2, "status": "IN_PROGRESS", "gates": {}},
+                    {"userId": "u-eve", "stage": 0, "status": "COMPLETED", "gates": {"compactSigned": True}},
+                    {"userId": "u-eve", "stage": 1, "status": "COMPLETED", "gates": {"feelHeardConfirmed": True}},
+                    {"userId": "u-eve", "stage": 2, "status": "IN_PROGRESS", "gates": {}},
+                ],
+                "empathyAttempts": [
+                    {"sourceUserId": "u-adam", "status": "HELD"},
+                    {"sourceUserId": "u-eve", "status": "AWAITING_SHARING"},
+                ],
+                "messageStages": [
+                    {"role": "USER", "stage": 2, "senderId": "u-adam", "contentPrefix": "I can see Eve's side."},
+                    {"role": "USER", "stage": 2, "senderId": "u-eve", "contentPrefix": "I can see Adam's side."},
+                ],
+            },
+        }
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            actor_result = run_invariant_checks(Path(tmp), run_data, "adam-eve", 2)
+            db_result = next(check for check in actor_result["checks"] if check["id"] == "db_stage_state_matches_stop_gate")
+
+        self.assertEqual(db_result["status"], "fail")
+        self.assertTrue(any("Stage 2 DB status 'IN_PROGRESS'" in item for item in db_result["evidence"]))
+        self.assertTrue(any("EmpathyAttempt status 'HELD'" in item for item in db_result["evidence"]))
+
+    def test_db_stage_state_accepts_stage2_gate_pending_with_ready_attempts(self) -> None:
+        run_data = {
+            "db_stage_state": {
+                "users": [
+                    {"id": "u-adam", "name": "Adam"},
+                    {"id": "u-eve", "name": "Eve"},
+                ],
+                "stageProgress": [
+                    {"userId": "u-adam", "stage": 0, "status": "COMPLETED", "gates": {"compactSigned": True}},
+                    {"userId": "u-adam", "stage": 1, "status": "COMPLETED", "gates": {"feelHeardConfirmed": True}},
+                    {"userId": "u-adam", "stage": 2, "status": "GATE_PENDING", "gates": {}},
+                    {"userId": "u-eve", "stage": 0, "status": "COMPLETED", "gates": {"compactSigned": True}},
+                    {"userId": "u-eve", "stage": 1, "status": "COMPLETED", "gates": {"feelHeardConfirmed": True}},
+                    {"userId": "u-eve", "stage": 2, "status": "GATE_PENDING", "gates": {}},
+                ],
+                "empathyAttempts": [
+                    {"sourceUserId": "u-adam", "status": "READY"},
+                    {"sourceUserId": "u-eve", "status": "READY"},
+                ],
+                "messageStages": [
+                    {"role": "USER", "stage": 2, "senderId": "u-adam", "contentPrefix": "I can see Eve's side."},
+                    {"role": "USER", "stage": 2, "senderId": "u-eve", "contentPrefix": "I can see Adam's side."},
+                ],
+            }
+        }
+
+        result = check_db_stage_state_matches_stop_gate(run_data, "adam-eve", 2)
+
+        self.assertEqual(result["status"], "pass")
 
     def test_later_partner_block_can_reopen_actor_that_reached_stage_limit(self) -> None:
         adam = self.actor(
@@ -307,6 +502,21 @@ class GoldLoopActorHandoffTest(unittest.TestCase):
             run_data = {
                 "start": {"mode": "target_stage", "target_stage": "NEED_MAPPING_COMPLETE"},
                 "transcripts": [str(adam_path), str(eve_path)],
+                "db_stage_state": {
+                    "users": [
+                        {"id": "u-adam", "name": "Adam"},
+                        {"id": "u-eve", "name": "Eve"},
+                    ],
+                    "stageProgress": [
+                        {"userId": "u-adam", "stage": 4, "status": "COMPLETED", "gates": {}},
+                        {"userId": "u-eve", "stage": 4, "status": "COMPLETED", "gates": {}},
+                    ],
+                    "empathyAttempts": [],
+                    "messageStages": [
+                        {"role": "USER", "stage": 4, "senderId": "u-adam", "contentPrefix": "Stage 4"},
+                        {"role": "USER", "stage": 4, "senderId": "u-eve", "contentPrefix": "Stage 4"},
+                    ],
+                },
                 "status_history": [
                     {"side": "adam", "status": {"side": "adam", "stage": 4, "state": "completed"}},
                     {"side": "eve", "status": {"side": "eve", "stage": 4, "state": "completed"}},

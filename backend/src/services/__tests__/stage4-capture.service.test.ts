@@ -376,4 +376,37 @@ describe('stage4-capture.service', () => {
 
     expect(result.closureSignal).toBeUndefined();
   });
+
+  it('links a newly captured proposal to matching IdentifiedNeed rows', async () => {
+    (prisma.strategyProposal.create as jest.Mock).mockResolvedValueOnce({
+      id: 'new-prop-1',
+    });
+    (prisma.identifiedNeed.findMany as jest.Mock).mockResolvedValueOnce([
+      { id: 'need-autonomy', need: 'autonomy over my own schedule' },
+      { id: 'need-conn', need: 'connection with my partner' },
+    ]);
+
+    await captureStage4Turn(
+      captureInput({
+        userMessage:
+          'I will keep two unscheduled weekends per month to protect my autonomy.',
+        structuredProposals: [
+          {
+            action: 'ADD',
+            classification: 'PROPOSAL',
+            description: 'keep two unscheduled weekends per month',
+            kind: Stage4ProposalKind.INDIVIDUAL_COMMITMENT,
+            needsAddressed: ['autonomy'],
+          },
+        ],
+      })
+    );
+
+    expect(prisma.strategyProposalNeed.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { proposalId_needId: { proposalId: 'new-prop-1', needId: 'need-autonomy' } },
+        create: { proposalId: 'new-prop-1', needId: 'need-autonomy' },
+      })
+    );
+  });
 });

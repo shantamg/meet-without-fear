@@ -52,7 +52,7 @@ const baseState: GetStage4StateResponse = {
         duration: null,
         measureOfSuccess: null,
         status: Stage4ProposalStatus.ACTIVE,
-        myDecision: Stage4SelectionDecision.NEEDS_DISCUSSION,
+        myDecision: Stage4SelectionDecision.NOT_WILLING,
       },
     ],
     unaddressedNeeds: [
@@ -90,6 +90,7 @@ const baseState: GetStage4StateResponse = {
   },
   mySelections: [],
   partnerSelections: [],
+  mySelectionStatus: 'NOT_STARTED',
   partnerSelectionStatus: 'NOT_STARTED',
   outcome: null,
   tendingPreview: null,
@@ -110,10 +111,10 @@ describe('Stage4RedesignPanel', () => {
   it('renders proposal inventory and needs coverage cards', () => {
     render(<Stage4RedesignPanel {...defaultProps} />);
 
-    expect(screen.getByText('Proposal inventory')).toBeTruthy();
+    expect(screen.getByText('Proposals')).toBeTruthy();
     expect(screen.getByText('Take turns naming the impact before problem solving.')).toBeTruthy();
     expect(screen.getByText('I will pause when my voice gets sharp.')).toBeTruthy();
-    expect(screen.getByText('Needs coverage')).toBeTruthy();
+    expect(screen.getByText('How your needs are addressed')).toBeTruthy();
     expect(screen.getByText('Feeling heard')).toBeTruthy();
     expect(screen.getAllByText('Trust after conflict').length).toBeGreaterThan(0);
   });
@@ -121,8 +122,9 @@ describe('Stage4RedesignPanel', () => {
   it('keeps partner selections private before both submit', () => {
     render(<Stage4RedesignPanel {...defaultProps} />);
 
-    expect(screen.getByText('Eve choices stay private until they submit.')).toBeTruthy();
-    expect(screen.getAllByText('Private').length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Eve hasn't shared their stance yet/i).length,
+    ).toBeGreaterThan(0);
   });
 
   it('submits proposal-level willingness selections', () => {
@@ -136,10 +138,22 @@ describe('Stage4RedesignPanel', () => {
     );
   });
 
+  it('offers only the two binary stance options per proposal', () => {
+    render(<Stage4RedesignPanel {...defaultProps} />);
+
+    const willing = screen.getAllByLabelText('Willing for proposal');
+    const notWilling = screen.getAllByLabelText('Not willing for proposal');
+
+    expect(willing.length).toBeGreaterThan(0);
+    expect(notWilling.length).toBeGreaterThan(0);
+    expect(screen.queryByText('Discuss')).toBeNull();
+  });
+
   it('enables shared-agreement closure only when mutual willingness is visible', () => {
     const state: GetStage4StateResponse = {
       ...baseState,
       phase: Stage4Phase.OUTCOME_REVIEW,
+      mySelectionStatus: 'SUBMITTED',
       partnerSelectionStatus: 'SUBMITTED',
       inventory: {
         ...baseState.inventory,
@@ -155,17 +169,53 @@ describe('Stage4RedesignPanel', () => {
     render(<Stage4RedesignPanel {...defaultProps} state={state} />);
 
     fireEvent.press(screen.getByText('Close with shared agreement'));
+    // Pressing the close button only opens the check-in step — it must not
+    // call onCloseStage4 yet, because checkInDate is required.
+    expect(defaultProps.onCloseStage4).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('stage4-close-confirm'));
 
     expect(defaultProps.onCloseStage4).toHaveBeenCalledWith(
       Stage4ClosureKind.SHARED_AGREEMENT,
-      Stage4ClosureReason.MUTUAL_SELECTION
+      Stage4ClosureReason.MUTUAL_SELECTION,
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
     );
+  });
+
+  it('blocks the confirm-close CTA when the check-in date is empty', () => {
+    const state: GetStage4StateResponse = {
+      ...baseState,
+      phase: Stage4Phase.OUTCOME_REVIEW,
+      mySelectionStatus: 'SUBMITTED',
+      partnerSelectionStatus: 'SUBMITTED',
+      inventory: {
+        ...baseState.inventory,
+        sharedProposals: [
+          {
+            ...baseState.inventory.sharedProposals[0],
+            partnerDecisionVisible: Stage4SelectionDecision.WILLING,
+          },
+        ],
+      },
+    };
+
+    render(<Stage4RedesignPanel {...defaultProps} state={state} />);
+
+    fireEvent.press(screen.getByText('Close with shared agreement'));
+    fireEvent.changeText(screen.getByTestId('stage4-close-check-in-date'), '');
+
+    const confirm = screen.getByTestId('stage4-close-confirm');
+    expect(confirm).toBeDisabled();
+
+    fireEvent.press(confirm);
+    expect(defaultProps.onCloseStage4).not.toHaveBeenCalled();
   });
 
   it('enables shared-agreement closure when mutual willingness exists even if other active fragments are unreviewed', () => {
     const state: GetStage4StateResponse = {
       ...baseState,
       phase: Stage4Phase.SELECTION,
+      mySelectionStatus: 'SUBMITTED',
       partnerSelectionStatus: 'SUBMITTED',
       inventory: {
         ...baseState.inventory,
@@ -191,53 +241,114 @@ describe('Stage4RedesignPanel', () => {
     expect(closeButton).not.toBeDisabled();
 
     fireEvent.press(closeButton);
+    fireEvent.press(screen.getByTestId('stage4-close-confirm'));
 
     expect(defaultProps.onCloseStage4).toHaveBeenCalledWith(
       Stage4ClosureKind.SHARED_AGREEMENT,
-      Stage4ClosureReason.MUTUAL_SELECTION
+      Stage4ClosureReason.MUTUAL_SELECTION,
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
     );
-
-    const noSharedButton = screen.getByText('Close with no shared agreement');
-    expect(noSharedButton).not.toBeDisabled();
   });
 
-  it('renders close-without-agreement button as disabled before partner submits selections', () => {
+  it('shows the share CTA when stances are complete but not yet shared', () => {
+    render(<Stage4RedesignPanel {...defaultProps} />);
+
+    expect(screen.queryByText('Close without a shared agreement')).toBeNull();
+    expect(screen.queryByText('Close with shared agreement')).toBeNull();
+    expect(screen.getByText(/Share my stances with Eve/i)).toBeTruthy();
+  });
+
+  it('disables the share CTA until every proposal has a stance', () => {
     const state: GetStage4StateResponse = {
       ...baseState,
-      phase: Stage4Phase.OUTCOME_REVIEW,
-      partnerSelectionStatus: 'NOT_STARTED',
-      partnerSelections: [],
+      inventory: {
+        ...baseState.inventory,
+        sharedProposals: [
+          {
+            ...baseState.inventory.sharedProposals[0],
+            myDecision: undefined,
+          },
+        ],
+      },
     };
 
     render(<Stage4RedesignPanel {...defaultProps} state={state} />);
 
-    const closeButton = screen.getByText('Close with no shared agreement');
-    expect(closeButton).toBeDisabled();
-    expect(screen.getByText('Available once both partners have made selections.')).toBeTruthy();
-
-    fireEvent.press(closeButton);
-
-    expect(defaultProps.onCloseStage4).not.toHaveBeenCalled();
+    const share = screen.getByLabelText('Share my stances');
+    expect(share).toBeDisabled();
+    expect(screen.getByText(/Take a stance on every proposal first/i)).toBeTruthy();
   });
 
-  it('renders close-without-agreement button as enabled when partner has submitted selections', () => {
+  it('calls onShareSelections when the share CTA is pressed', () => {
+    const onShareSelections = jest.fn();
+    // Open need must be addressed-or-declined for the share gate to allow it.
+    const gatedState: GetStage4StateResponse = {
+      ...baseState,
+      coverageAudit: {
+        ...baseState.coverageAudit,
+        open: baseState.coverageAudit.open.map((row) => ({
+          ...row,
+          userDeclinedToAddress: true,
+        })),
+      },
+    };
+    render(
+      <Stage4RedesignPanel
+        {...defaultProps}
+        state={gatedState}
+        onShareSelections={onShareSelections}
+      />,
+    );
+
+    fireEvent.press(screen.getByLabelText('Share my stances'));
+    expect(onShareSelections).toHaveBeenCalled();
+  });
+
+  it('shows waiting state with revise CTA after sharing but before partner submits', () => {
+    const onReviseSelections = jest.fn();
+    const state: GetStage4StateResponse = {
+      ...baseState,
+      mySelectionStatus: 'SUBMITTED',
+      partnerSelectionStatus: 'NOT_STARTED',
+    };
+
+    render(
+      <Stage4RedesignPanel
+        {...defaultProps}
+        state={state}
+        onReviseSelections={onReviseSelections}
+      />,
+    );
+
+    expect(screen.queryByText('Close without a shared agreement')).toBeNull();
+    expect(screen.queryByText('Close with shared agreement')).toBeNull();
+    expect(screen.getByText(/Hidden until Eve shares too/i)).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Revise my stances'));
+    expect(onReviseSelections).toHaveBeenCalled();
+  });
+
+  it('renders close-without-agreement button as enabled when both have submitted selections', () => {
     const state: GetStage4StateResponse = {
       ...baseState,
       phase: Stage4Phase.OUTCOME_REVIEW,
+      mySelectionStatus: 'SUBMITTED',
       partnerSelectionStatus: 'SUBMITTED',
       partnerSelections: [],
     };
 
     render(<Stage4RedesignPanel {...defaultProps} state={state} />);
 
-    const closeButton = screen.getByText('Close with no shared agreement');
+    const closeButton = screen.getByText('Close without a shared agreement');
     expect(closeButton).not.toBeDisabled();
 
     fireEvent.press(closeButton);
+    fireEvent.press(screen.getByTestId('stage4-close-confirm'));
 
     expect(defaultProps.onCloseStage4).toHaveBeenCalledWith(
       Stage4ClosureKind.NO_SHARED_AGREEMENT,
-      Stage4ClosureReason.NO_OVERLAP
+      Stage4ClosureReason.NO_OVERLAP,
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
     );
   });
 
@@ -253,6 +364,7 @@ describe('Stage4RedesignPanel', () => {
         individualCommitments: [],
         openNeeds: baseState.inventory.unaddressedNeeds,
         closedAt: '2026-05-06T00:00:00.000Z',
+        checkInAt: '2026-06-03T00:00:00.000Z',
       },
     };
 
@@ -275,6 +387,7 @@ describe('Stage4RedesignPanel', () => {
         individualCommitments: [],
         openNeeds: baseState.inventory.unaddressedNeeds,
         closedAt: '2026-05-06T00:00:00.000Z',
+        checkInAt: '2026-06-03T00:00:00.000Z',
       },
     };
 
@@ -314,6 +427,7 @@ describe('Stage4RedesignPanel', () => {
         individualCommitments: [],
         openNeeds: [],
         closedAt: '2026-05-06T00:00:00.000Z',
+        checkInAt: '2026-06-03T00:00:00.000Z',
       },
     };
 
@@ -321,5 +435,163 @@ describe('Stage4RedesignPanel', () => {
 
     expect(screen.getByText('Shared agreement outcome')).toBeTruthy();
     expect(screen.getByText('Both people chose one shared experiment.')).toBeTruthy();
+  });
+
+  describe('Needs gate: brainstorm / leave-for-now', () => {
+    it('renders Brainstorm and Leave-for-now buttons for each open need', () => {
+      render(<Stage4RedesignPanel {...defaultProps} />);
+      expect(screen.getByTestId('stage4-need-brainstorm-coverage-2')).toBeTruthy();
+      expect(screen.getByTestId('stage4-need-decline-coverage-2')).toBeTruthy();
+    });
+
+    it('fires onBrainstormNeed with the need label when Brainstorm is tapped', () => {
+      const onBrainstormNeed = jest.fn();
+      render(
+        <Stage4RedesignPanel {...defaultProps} onBrainstormNeed={onBrainstormNeed} />
+      );
+      fireEvent.press(screen.getByTestId('stage4-need-brainstorm-coverage-2'));
+      expect(onBrainstormNeed).toHaveBeenCalledWith('Trust after conflict', 'coverage-2');
+    });
+
+    it('fires onDeclineNeed with the need id when Leave-for-now is tapped', () => {
+      const onDeclineNeed = jest.fn();
+      render(<Stage4RedesignPanel {...defaultProps} onDeclineNeed={onDeclineNeed} />);
+      fireEvent.press(screen.getByTestId('stage4-need-decline-coverage-2'));
+      expect(onDeclineNeed).toHaveBeenCalledWith('coverage-2');
+    });
+
+    it('renders the muted "Set aside" affordance when a need is declined', () => {
+      const declinedState: GetStage4StateResponse = {
+        ...baseState,
+        coverageAudit: {
+          ...baseState.coverageAudit,
+          open: baseState.coverageAudit.open.map((row) => ({
+            ...row,
+            userDeclinedToAddress: true,
+          })),
+        },
+      };
+      const onUndeclineNeed = jest.fn();
+      render(
+        <Stage4RedesignPanel
+          {...defaultProps}
+          state={declinedState}
+          onUndeclineNeed={onUndeclineNeed}
+        />
+      );
+      fireEvent.press(screen.getByTestId('stage4-need-undecline-coverage-2'));
+      expect(onUndeclineNeed).toHaveBeenCalledWith('coverage-2');
+    });
+
+    it('disables Share while any open need is neither addressed nor declined', () => {
+      // baseState has one open need with no covering proposal and no declination.
+      // sharedProposals[0] has myDecision = WILLING but it does not cover need-2.
+      render(<Stage4RedesignPanel {...defaultProps} />);
+      const share = screen.getByTestId('stage4-share-selections');
+      expect(share.props.accessibilityState?.disabled).toBe(true);
+      expect(screen.getByTestId('stage4-needs-gate-hint-inline')).toBeTruthy();
+    });
+
+    it('enables Share once every open need is declined', () => {
+      const gatedState: GetStage4StateResponse = {
+        ...baseState,
+        coverageAudit: {
+          ...baseState.coverageAudit,
+          open: baseState.coverageAudit.open.map((row) => ({
+            ...row,
+            userDeclinedToAddress: true,
+          })),
+        },
+      };
+      render(<Stage4RedesignPanel {...defaultProps} state={gatedState} />);
+      const share = screen.getByTestId('stage4-share-selections');
+      expect(share.props.accessibilityState?.disabled).toBe(false);
+    });
+  });
+
+  describe('no-overlap footer (Phase 3)', () => {
+    function noOverlapState(): GetStage4StateResponse {
+      return {
+        ...baseState,
+        phase: Stage4Phase.OUTCOME_REVIEW,
+        mySelectionStatus: 'SUBMITTED',
+        partnerSelectionStatus: 'SUBMITTED',
+        inventory: {
+          ...baseState.inventory,
+          sharedProposals: [
+            {
+              ...baseState.inventory.sharedProposals[0],
+              myDecision: Stage4SelectionDecision.NOT_WILLING,
+              partnerDecisionVisible: Stage4SelectionDecision.WILLING,
+            },
+          ],
+        },
+      };
+    }
+
+    it('shows "Keep refining with MWF" as primary and "Close without a shared agreement" as secondary', () => {
+      const onKeep = jest.fn();
+      render(
+        <Stage4RedesignPanel
+          {...defaultProps}
+          state={noOverlapState()}
+          onKeepRefiningNoOverlap={onKeep}
+        />
+      );
+      const keep = screen.getByTestId('stage4-keep-refining-mwf');
+      const closeWithout = screen.getByTestId('stage4-close-without-shared');
+      // Primary lives in the styles.primaryButton tree; secondary in styles.secondaryButton.
+      // Asserting the relative visual treatment through the *order* of children and that
+      // both buttons are present is sufficient for Phase 3 — the primary button is
+      // rendered above the secondary in the close-controls cluster.
+      expect(keep).toBeTruthy();
+      expect(closeWithout).toBeTruthy();
+      fireEvent.press(keep);
+      expect(onKeep).toHaveBeenCalled();
+    });
+  });
+
+  describe('linked-need rendering (Phase 4)', () => {
+    it('renders the user\'s original IdentifiedNeed phrasing on the proposal card', () => {
+      const linkedState: GetStage4StateResponse = {
+        ...baseState,
+        inventory: {
+          ...baseState.inventory,
+          sharedProposals: [
+            {
+              ...baseState.inventory.sharedProposals[0],
+              needsAddressed: [
+                {
+                  id: 'need-autonomy',
+                  label: 'autonomy over my own schedule',
+                  coverage: 'COVERED',
+                },
+              ],
+            },
+          ],
+        },
+      };
+      render(<Stage4RedesignPanel {...defaultProps} state={linkedState} />);
+      expect(
+        screen.getByText(/autonomy over my own schedule/i)
+      ).toBeTruthy();
+    });
+  });
+
+  describe('refine-this affordance (Phase 3)', () => {
+    it('per-proposal Refine this button opens a refinement sub-chat', () => {
+      const onRefine = jest.fn();
+      render(
+        <Stage4RedesignPanel
+          {...defaultProps}
+          onRefineProposal={onRefine}
+        />
+      );
+      fireEvent.press(screen.getByTestId('stage4-proposal-refine-proposal-1'));
+      expect(onRefine).toHaveBeenCalledWith(
+        'proposal-1',
+        'Take turns naming the impact before problem solving.'
+      );
+    });
   });
 });

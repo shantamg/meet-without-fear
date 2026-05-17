@@ -402,7 +402,7 @@ async function seedGenericMoment(moment: MomentPayload): Promise<SeedResult> {
             proposalId: created.id,
             sessionId: session.id,
             userId: selectedUser.id,
-            decision: choice === 'NOT_WILLING' ? 'NOT_WILLING' : choice === 'NEEDS_DISCUSSION' ? 'NEEDS_DISCUSSION' : 'WILLING',
+            decision: choice === 'NOT_WILLING' ? 'NOT_WILLING' : 'WILLING',
           },
         });
       }

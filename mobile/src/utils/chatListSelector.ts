@@ -83,6 +83,8 @@ export interface SessionIndicatorData {
 
   /** Milestones data from cache */
   milestones?: {
+    /** When current user started Stage 1 / Witness */
+    witnessStartedAt?: string | null;
     /** When user confirmed they feel heard (Stage 1 completion) */
     feelHeardConfirmedAt?: string | null;
     /** When needs were identified (Stage 3) */

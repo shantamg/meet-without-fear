@@ -21,7 +21,7 @@ The reconciler runs **asymmetrically**. Two entry points:
 
 ## NEEDS_WORK Status (Legacy/Deprecated)
 
-The `NEEDS_WORK` status exists in the Prisma schema but is **legacy and unreachable** from the reconciler. Reconciler gap paths use `AWAITING_SHARING` and `REFINING`. Post-reveal accuracy feedback also uses `REFINING`: when `validated: false` is submitted with feedback, the partner's `EmpathyAttempt` moves from `REVEALED` to `REFINING` and the feedback is delivered as a targeted `VALIDATION_FEEDBACK` message.
+The `NEEDS_WORK` status exists in the Prisma schema but is **legacy and unreachable** from the reconciler. Reconciler gap paths use `AWAITING_SHARING` and `REFINING`. Post-reveal accuracy feedback also uses `REFINING`: when `validated: false` is submitted with feedback, the partner's `EmpathyAttempt` moves from `REVEALED` to `REFINING` and the feedback is delivered as two targeted messages: an AI framing message (role `AI`) followed by the feedback card (role `VALIDATION_FEEDBACK`).
 
 ## Ably Event Payloads
 

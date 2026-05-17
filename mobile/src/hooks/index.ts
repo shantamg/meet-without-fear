@@ -9,6 +9,7 @@
 // ============================================================================
 
 export { useAuth, useAuthProvider, AuthContext, useUpdateMood, authKeys } from './useAuth';
+export { useVersionCheck } from './useVersionCheck';
 export type { User, AuthContextValue } from './useAuth';
 
 // ============================================================================
@@ -138,15 +139,22 @@ export {
   useStage4State,
   useSubmitStage4ProposalSelection,
   useSubmitStage4Selections,
+  useShareStage4Selections,
+  useUnshareStage4Selections,
   useCloseStage4,
   useTendingEntries,
   useSubmitTendingResponse,
+  useSubmitTendingCheckin,
   useCreateTendingReentry,
   // Agreements
   useAgreements,
   useCreateAgreement,
   useConfirmAgreement,
   useResolveSession,
+  // Stage 4 Sub-chat (Phase 3)
+  useOpenStage4SubChat,
+  useSendStage4SubChatMessage,
+  useResolveStage4SubChat,
 } from './useStages';
 
 // ============================================================================

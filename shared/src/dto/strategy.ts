@@ -7,11 +7,15 @@
 import {
   AgreementStatus,
   AgreementType,
+  MessageRole,
   Stage4ClosureKind,
   Stage4ClosureReason,
   Stage4ProposalKind,
   Stage4ProposalStatus,
   Stage4SelectionDecision,
+  Stage4SubChatAnchor,
+  Stage4SubChatStatus,
+  TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
 } from '../enums';
@@ -227,6 +231,7 @@ export interface CoverageRowDTO {
   source: 'YOU' | 'PARTNER' | 'BOTH' | 'UNKNOWN';
   coveringProposalIds: string[];
   note: string | null;
+  userDeclinedToAddress?: boolean;
 }
 
 export interface Stage4CoverageAuditDTO {
@@ -252,6 +257,7 @@ export interface Stage4OutcomeDTO {
   individualCommitments: ProposalCardDTO[];
   openNeeds: UnaddressedNeedDTO[];
   closedAt: string;
+  checkInAt: string | null;
 }
 
 export interface TendingPreviewDTO {
@@ -275,6 +281,9 @@ export interface TendingEntryDTO {
   sessionId: string;
   agreementId: string | null;
   type: TendingEntryType;
+  scope: TendingEntryScope;
+  ownerUserId: string | null;
+  optedInShared: boolean;
   status: TendingEntryStatus;
   scheduledFor: string | null;
   openedAt: string | null;
@@ -310,6 +319,47 @@ export interface SubmitTendingResponseResponse {
   entry: TendingEntryDTO;
 }
 
+// Stage 4 Phase 5: the five forward paths surfaced at a Tending check-in.
+export enum ContinueChoice {
+  ANOTHER_ROUND = 'ANOTHER_ROUND',
+  EXTEND = 'EXTEND',
+  NEW_PROCESS = 'NEW_PROCESS',
+  PARTIAL_CLOSURE = 'PARTIAL_CLOSURE',
+  FULL_CLOSURE = 'FULL_CLOSURE',
+}
+
+export enum PartialClosureResolution {
+  RESOLVED = 'RESOLVED',
+  CONTINUING = 'CONTINUING',
+}
+
+export interface TendingCheckinOrientationReflection {
+  reflection: string;
+  perEntryNotes?: Record<string, string>;
+}
+
+export interface TendingCheckinWhatComesNext {
+  continueChoice: ContinueChoice;
+  partialClosure?: Record<string, PartialClosureResolution>;
+}
+
+export interface TendingCheckinOrientations {
+  whatWorked: TendingCheckinOrientationReflection;
+  whereMoreSupport: TendingCheckinOrientationReflection;
+  whatComesNext: TendingCheckinWhatComesNext;
+}
+
+export interface SubmitTendingCheckinRequest {
+  orientations: TendingCheckinOrientations;
+}
+
+export interface SubmitTendingCheckinResponse {
+  entries: TendingEntryDTO[];
+  newSessionId?: string;
+  continueChoice: ContinueChoice;
+  nextScheduledFor?: string | null;
+}
+
 export interface CreateTendingReentryRequest {
   intent?: string;
 }
@@ -324,6 +374,7 @@ export interface GetStage4StateResponse {
   coverageAudit: Stage4CoverageAuditDTO;
   mySelections: Stage4SelectionDTO[];
   partnerSelections: Stage4SelectionDTO[];
+  mySelectionStatus: 'NOT_STARTED' | 'SUBMITTED';
   partnerSelectionStatus: 'NOT_STARTED' | 'SUBMITTED';
   outcome: Stage4OutcomeDTO | null;
   tendingPreview: TendingPreviewDTO | null;
@@ -353,6 +404,9 @@ export interface CloseStage4Request {
   kind?: Stage4ClosureKind;
   reason?: Stage4ClosureReason;
   summary?: string;
+  /** ISO date string. Used as the followUpDate for any generated Agreement rows. */
+  checkInDate: string;
+  /** @deprecated Phase 4 removes this — checkInDate is the single source. */
   followUpDatesByProposalId?: Record<string, string>;
 }
 
@@ -361,4 +415,78 @@ export interface CloseStage4Response {
   closedAt: string;
   outcome: Stage4OutcomeDTO;
   state: GetStage4StateResponse;
+}
+
+// ============================================================================
+// Stage 4 Sub-chat (Phase 3)
+// ============================================================================
+
+export interface Stage4SubChatMessageDTO {
+  id: string;
+  role: MessageRole;
+  content: string;
+  createdAt: string;
+  /**
+   * Structured candidate proposal extracted from the AI's message (when it
+   * has one to offer). The UI surfaces a "Use this version" affordance on
+   * this message. The candidate's `description` is the proposal text;
+   * `proposalId` (when present on a PROPOSAL_REFINEMENT sub-chat) tells the
+   * client to update that proposal in place rather than create a new one.
+   */
+  candidate?: Stage4ProposalDraft | null;
+}
+
+export interface Stage4SubChatDTO {
+  id: string;
+  sessionId: string;
+  userId: string;
+  anchorKind: Stage4SubChatAnchor;
+  anchorId: string | null;
+  status: Stage4SubChatStatus;
+  createdAt: string;
+  resolvedAt: string | null;
+  messages: Stage4SubChatMessageDTO[];
+}
+
+export interface OpenStage4SubChatRequest {
+  anchorKind: Stage4SubChatAnchor;
+  anchorId?: string | null;
+}
+
+export interface OpenStage4SubChatResponse {
+  subChat: Stage4SubChatDTO;
+}
+
+export interface SendStage4SubChatMessageRequest {
+  content: string;
+}
+
+export interface SendStage4SubChatMessageResponse {
+  subChat: Stage4SubChatDTO;
+}
+
+export interface Stage4ProposalDraft {
+  /** When set, refers to an existing StrategyProposal (refinement case). */
+  proposalId?: string;
+  description: string;
+  needsAddressed?: string[];
+  duration?: string | null;
+  measureOfSuccess?: string | null;
+}
+
+export interface ResolveStage4SubChatRequest {
+  /** Proposals to create new (NEEDS_BRAINSTORM, NO_OVERLAP). */
+  acceptedProposals?: Stage4ProposalDraft[];
+  /** Existing proposals to update in place (PROPOSAL_REFINEMENT, NO_OVERLAP). */
+  updatedProposals?: Stage4ProposalDraft[];
+}
+
+export interface ResolveStage4SubChatResponse {
+  subChat: Stage4SubChatDTO;
+  createdProposalIds: string[];
+  updatedProposalIds: string[];
+}
+
+export interface GetStage4SubChatResponse {
+  subChat: Stage4SubChatDTO;
 }

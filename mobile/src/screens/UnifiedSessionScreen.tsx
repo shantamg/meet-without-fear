@@ -7,19 +7,18 @@
  */
 
 import { ReactNode, useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState, Keyboard, Platform, Share, LayoutChangeEvent } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, ScrollView, AppState, Keyboard, Platform, Share, LayoutChangeEvent } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import {
   Stage,
+  STAGE_COLORS,
   MessageRole,
-  StrategyPhase,
   SessionStatus,
   MemorySuggestion,
   ConfirmAgreementResponse,
-  MAX_AGREEMENTS,
   EmpathyStatus,
   Stage4ClosureKind,
   Stage4ClosureReason,
@@ -39,13 +38,12 @@ import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
 import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
 import { ShareTopicPanel } from '../components/ShareTopicPanel';
 // NeedsSection removed - needs review/reveal now lives inside NeedsDrawer
-import { StrategyPool } from '../components/StrategyPool';
-import { StrategyRanking } from '../components/StrategyRanking';
-import { OverlapReveal } from '../components/OverlapReveal';
+// StrategyPool/StrategyRanking/OverlapReveal removed - replaced by Stage4RedesignPanel
 import { WaitingRoom } from '../components/WaitingRoom';
 import { AgreementCard } from '../components/AgreementCard';
 import { SessionCompletionScreen } from '../components/SessionCompletionScreen';
-import { Stage4RedesignPanel } from '../components/Stage4RedesignPanel';
+import { Stage4RedesignPanel, Stage4RedesignFooter } from '../components/Stage4RedesignPanel';
+import { Stage4SubChatDrawer } from '../components/Stage4SubChatDrawer';
 import { TendingPanel } from '../components/TendingPanel';
 // CuriosityCompactOverlay removed - now using inline approach
 import { CompactChatItem } from '../components/CompactChatItem';
@@ -53,8 +51,6 @@ import { CompactAgreementBar } from '../components/CompactAgreementBar';
 import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
-import { ActivityDrawer } from '../components/ActivityDrawer';
-import type { ActivityDrawerFocusTarget } from '../components/ActivityDrawer';
 import { PartnerInfoDrawer } from '../components/PartnerInfoDrawer';
 import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
@@ -73,15 +69,22 @@ import { useRealtime, useUserSessionUpdates } from '../hooks/useRealtime';
 import { stageKeys, messageKeys, sessionKeys, notificationKeys } from '../hooks/queryKeys';
 import { useAIMessageHandler } from '../hooks/useMessages';
 import { useSharingStatus } from '../hooks/useSharingStatus';
-import { usePendingActions } from '../hooks/usePendingActions';
 import {
   useCloseStage4,
+  useShareStage4Selections,
+  useUnshareStage4Selections,
+  useDeclineStage4Need,
+  useUndeclineStage4Need,
   useCreateTendingReentry,
+  useSetTendingEntryShare,
   useNeedsComparison,
   useStage4State,
   useSubmitStage4ProposalSelection,
   useSubmitTendingResponse,
   useTendingEntries,
+  useOpenStage4SubChat,
+  useSendStage4SubChatMessage,
+  useResolveStage4SubChat,
 } from '../hooks/useStages';
 import { deriveEmpathyValidatedIndicator, deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
@@ -110,6 +113,7 @@ import {
   trackShareDraftSent,
 } from '../services/analytics';
 import { shouldShowSessionEntryMoodCheck } from '../utils/sessionEntryMoodCheck';
+import { hasNewerDistinctEmpathyStatement, isSameEmpathyAttemptMessage } from '../utils/empathyMessageMatching';
 
 // ============================================================================
 // Types
@@ -122,6 +126,9 @@ interface UnifiedSessionScreenProps {
   onNavigateBack?: () => void;
   onStageComplete?: (stage: Stage) => void;
 }
+
+const NEEDS_REVIEW_PANEL_EXPANDED_MAX_HEIGHT = 420;
+const NEEDS_REVIEW_PANEL_ENTER_OFFSET = 20;
 
 /**
  * Get brief status text for the header based on session status
@@ -206,11 +213,24 @@ const SUPPRESSED_CHAPTER_STAGES = new Set([Stage.ONBOARDING, Stage.INFORMED_EMPA
  * Derive chapter marker indicators from message stage transitions.
  * Inserts a chapter indicator at the first message of each new stage.
  */
-function deriveChapterMarkers(
+export function deriveChapterMarkers(
   messages: ChatMessage[],
+  anchors?: Partial<Record<Stage, string | null | undefined>>,
 ): ChatIndicatorItem[] {
   const markers: ChatIndicatorItem[] = [];
   const seenStages = new Set<number>();
+  const markerTimestampForStage = (stage: Stage, fallbackTimestamp: string): string | undefined => {
+    const anchorTimestamp = anchors?.[stage];
+
+    switch (stage) {
+      case Stage.WITNESS:
+        return anchorTimestamp || fallbackTimestamp;
+      case Stage.PERSPECTIVE_STRETCH:
+        return anchorTimestamp || undefined;
+      default:
+        return anchorTimestamp || fallbackTimestamp;
+    }
+  };
 
   for (const msg of messages) {
     const stage = msg.stage as number | undefined;
@@ -220,12 +240,15 @@ function deriveChapterMarkers(
 
       const friendlyName = STAGE_FRIENDLY_NAMES[stage];
       if (friendlyName) {
+        const markerTimestamp = markerTimestampForStage(stage as Stage, msg.timestamp);
+        if (!markerTimestamp) continue;
+
         markers.push({
           type: 'indicator',
           indicatorType: 'stage-chapter',
           id: `stage-chapter-${stage}`,
-          timestamp: msg.timestamp,
-          metadata: { stageName: friendlyName },
+          timestamp: markerTimestamp,
+          metadata: { stageName: friendlyName, stageColor: STAGE_COLORS[stage as Stage] },
         });
       }
     }
@@ -528,13 +551,14 @@ export function UnifiedSessionScreen({
   const { mutate: updateMood } = useUpdateMood();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const { showError } = useToast();
+  const { showError, showWarning } = useToast();
 
   // Real-time presence tracking
 
   const {
     // Loading
     isLoading,
+    isFetchingMessages,
     loadError,
     refetchSession,
     accessDenied,
@@ -590,18 +614,13 @@ export function UnifiedSessionScreen({
     needsRevealValidationItems,
     needsRevealValidationData,
     needsRevealValidatedByBoth,
-    strategyData,
-    strategyPhase,
-    strategies,
-    revealData,
-    overlappingStrategies,
     agreements,
-    isGenerating,
     isSavingEmpathyDraft,
     isSharingEmpathy,
     isResubmittingEmpathy,
     isRespondingToShareOffer,
     isConfirmingNeeds,
+    isValidatingNeeds,
 
     // Memory suggestion
     memorySuggestion,
@@ -634,11 +653,7 @@ export function UnifiedSessionScreen({
     handleConsentToShareNeeds,
     handleValidateNeedsReveal,
     handleNeedsNotValidYet,
-    handleRequestMoreStrategies,
-    handleMarkReadyToRank,
-    handleSubmitRankings,
     handleConfirmAgreement,
-    handleCreateAgreementFromOverlap,
     handleResolveSession,
     handleRespondToShareOffer,
 
@@ -657,11 +672,7 @@ export function UnifiedSessionScreen({
   } = useUnifiedSession(sessionId);
   const sessionQueriesEnabled = !accessDenied && !loadError;
 
-  // Server-side pending actions for badge count (replaces client-side computation)
-  // Gate behind a clean session load to prevent polling when session state fails (#428, #522)
-  const pendingActionsQuery = usePendingActions(sessionId, { enabled: sessionQueriesEnabled });
-
-  // Sharing status for the header button. Keep these duplicate header queries
+  // Sharing status for empathy validation data. Keep these queries
   // behind the same stage/access gates as useUnifiedSession so the badge does
   // not reintroduce the Stage 2 share-offer request storm this PR removes.
   const sharingStatus = useSharingStatus(sessionId, {
@@ -1113,6 +1124,20 @@ export function UnifiedSessionScreen({
       if (eventName === 'session.strategies_updated') {
         console.log('[UnifiedSessionScreen] Strategies updated');
         refreshStage4RealtimeState();
+
+        // Partner pulled their stances back to revise → surface it so the
+        // partner doesn't wonder why their view "lost" data.
+        // Skip when the current user is the one who pulled their own stances back.
+        const payload = data as { change?: string; submittedBy?: string };
+        if (
+          payload.change === 'stage4_selection_revised' &&
+          payload.submittedBy !== user?.id
+        ) {
+          showWarning(
+            `${partnerName || 'Your other'} pulled their stances back`,
+            'You\'ll see them again when they re-share.',
+          );
+        }
       }
 
       if (eventName === 'partner.ranking_submitted') {
@@ -1281,11 +1306,6 @@ export function UnifiedSessionScreen({
     handleConfirmInvitationMessage();
   }, [handleConfirmInvitationMessage]);
 
-  // -------------------------------------------------------------------------
-  // Activity Menu Modal
-  // -------------------------------------------------------------------------
-  const [showActivityMenu, setShowActivityMenu] = useState(false);
-  const [activityFocusTarget, setActivityFocusTarget] = useState<ActivityDrawerFocusTarget | null>(null);
   const [showPartnerInfo, setShowPartnerInfo] = useState(false);
   const topicFrame = invitation && 'topicFrame' in invitation
     ? (invitation.topicFrame as string | null)
@@ -1346,12 +1366,25 @@ export function UnifiedSessionScreen({
   // Invitation panel dismissal (allows the user to defer sharing).
   // -------------------------------------------------------------------------
   const [invitationPanelDismissed, setInvitationPanelDismissed] = useState(false);
+  const [showInvitationReadyModal, setShowInvitationReadyModal] = useState(false);
 
-  // Tooltip shown after "Later" — points at the book icon to teach the user
-  // they can share later from the activity drawer. Session-local only.
+  // Tooltip shown after "Later" — points at the header share icon to teach the
+  // user they can share later. Session-local only.
   const [showShareLaterTooltip, setShowShareLaterTooltip] = useState(false);
   const [shareLaterTooltipShownThisSession, setShareLaterTooltipShownThisSession] =
     useState(false);
+
+  const handleDismissInvitationReadyModal = useCallback(() => {
+    setShowInvitationReadyModal(false);
+    setInvitationPanelDismissed(true);
+    if (!invitationConfirmed) {
+      confirmInvitationAndAwaitFollowUp();
+    }
+    if (!shareLaterTooltipShownThisSession) {
+      setShowShareLaterTooltip(true);
+      setShareLaterTooltipShownThisSession(true);
+    }
+  }, [confirmInvitationAndAwaitFollowUp, invitationConfirmed, shareLaterTooltipShownThisSession]);
 
   // Refinement Modal
   const [refinementOfferId, setRefinementOfferId] = useState<string | null>(null);
@@ -1375,6 +1408,7 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   const [showNeedsDrawer, setShowNeedsDrawer] = useState(false);
   const [needsDrawerMode, setNeedsDrawerMode] = useState<NeedsDrawerMode>('needs');
+  const [showStage4Drawer, setShowStage4Drawer] = useState(false);
   const myNeedsSharedForComparison =
     (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true;
   const { data: needsComparisonData } = useNeedsComparison(
@@ -1456,6 +1490,10 @@ export function UnifiedSessionScreen({
       showError('Could not save that Stage 4 choice. Please try again.');
     },
   });
+  const shareStage4Selections = useShareStage4Selections();
+  const unshareStage4Selections = useUnshareStage4Selections();
+  const declineStage4Need = useDeclineStage4Need();
+  const undeclineStage4Need = useUndeclineStage4Need();
   const closeStage4 = useCloseStage4({
     onSuccess: (response) => {
       if (response.outcome.kind === Stage4ClosureKind.SHARED_AGREEMENT) {
@@ -1481,6 +1519,11 @@ export function UnifiedSessionScreen({
       showError('Could not save that Tending review. Please try again.');
     },
   });
+  const setTendingEntryShare = useSetTendingEntryShare({
+    onError: () => {
+      showError('Could not update sharing on that Tending entry. Please try again.');
+    },
+  });
   const handleStage4Selection = useCallback(
     (proposalId: string, decision: Stage4SelectionDecision) => {
       submitStage4Selection.mutate({
@@ -1491,12 +1534,188 @@ export function UnifiedSessionScreen({
     },
     [sessionId, submitStage4Selection]
   );
+  const handleShareStage4Selections = useCallback(() => {
+    shareStage4Selections.mutate(
+      { sessionId },
+      {
+        onError: (err) => {
+          const detail = err?.message || 'Please try again.';
+          showError('Could not share your stances', detail);
+        },
+      }
+    );
+  }, [shareStage4Selections, sessionId, showError]);
+  // Phase 3: brainstorm/no-overlap/refinement happen in a Stage 4 sub-chat
+  // (Stage4SubChatDrawer) so they don't pollute the main transcript.
+  const [stage4BrainstormPrefill, setStage4BrainstormPrefill] = useState<string | null>(null);
+  const [stage4SubChat, setStage4SubChat] = useState<
+    import('@meet-without-fear/shared').Stage4SubChatDTO | null
+  >(null);
+  const [stage4SubChatAnchorLabel, setStage4SubChatAnchorLabel] = useState<string | null>(null);
+  const [stage4SubChatInitialProposalText, setStage4SubChatInitialProposalText] = useState<
+    string | null
+  >(null);
+  const openStage4SubChat = useOpenStage4SubChat();
+  const sendStage4SubChatMessage = useSendStage4SubChatMessage();
+  const resolveStage4SubChatMutation = useResolveStage4SubChat();
+  const handleBrainstormStage4Need = useCallback(
+    (needLabel: string, needId: string) => {
+      void stage4BrainstormPrefill;
+      setStage4SubChatAnchorLabel(needLabel);
+      setStage4SubChatInitialProposalText(null);
+      openStage4SubChat.mutate(
+        {
+          sessionId,
+          anchorKind: (
+            require('@meet-without-fear/shared') as typeof import('@meet-without-fear/shared')
+          ).Stage4SubChatAnchor.NEEDS_BRAINSTORM,
+          anchorId: needId,
+        },
+        {
+          onSuccess: ({ subChat }) => setStage4SubChat(subChat),
+          onError: () =>
+            showError('Could not open the brainstorm. Please try again.'),
+        }
+      );
+    },
+    [openStage4SubChat, sessionId, showError, stage4BrainstormPrefill]
+  );
+  const handleRefineStage4Proposal = useCallback(
+    (proposalId: string, description: string) => {
+      setStage4SubChatAnchorLabel(description);
+      setStage4SubChatInitialProposalText(description);
+      openStage4SubChat.mutate(
+        {
+          sessionId,
+          anchorKind: (
+            require('@meet-without-fear/shared') as typeof import('@meet-without-fear/shared')
+          ).Stage4SubChatAnchor.PROPOSAL_REFINEMENT,
+          anchorId: proposalId,
+        },
+        {
+          onSuccess: ({ subChat }) => setStage4SubChat(subChat),
+          onError: () =>
+            showError('Could not open the refinement chat. Please try again.'),
+        }
+      );
+    },
+    [openStage4SubChat, sessionId, showError]
+  );
+  const handleKeepRefiningNoOverlap = useCallback(() => {
+    setStage4SubChatAnchorLabel(null);
+    setStage4SubChatInitialProposalText(null);
+    openStage4SubChat.mutate(
+      {
+        sessionId,
+        anchorKind: (
+          require('@meet-without-fear/shared') as typeof import('@meet-without-fear/shared')
+        ).Stage4SubChatAnchor.NO_OVERLAP,
+      },
+      {
+        onSuccess: ({ subChat }) => setStage4SubChat(subChat),
+        onError: () =>
+          showError('Could not open the refinement chat. Please try again.'),
+      }
+    );
+  }, [openStage4SubChat, sessionId, showError]);
+  const handleSendStage4SubChatMessage = useCallback(
+    (content: string) => {
+      if (!stage4SubChat) return;
+      // Optimistically append the user's message so it appears immediately,
+      // before the server roundtrip. The server response replaces this with
+      // the canonical thread (which includes the persisted user message + AI
+      // reply). Mirrors useRefinementChat's pattern.
+      const optimisticUserMessage = {
+        id: `stage4-subchat-user-optimistic-${Date.now()}`,
+        role: (require('@meet-without-fear/shared') as typeof import('@meet-without-fear/shared'))
+          .MessageRole.USER,
+        content,
+        createdAt: new Date().toISOString(),
+        candidate: null,
+      };
+      const optimisticSubChat = {
+        ...stage4SubChat,
+        messages: [...stage4SubChat.messages, optimisticUserMessage],
+      };
+      setStage4SubChat(optimisticSubChat);
+      sendStage4SubChatMessage.mutate(
+        { sessionId, subChatId: stage4SubChat.id, content },
+        {
+          onSuccess: ({ subChat }) => setStage4SubChat(subChat),
+          onError: () => {
+            // Roll back the optimistic append.
+            setStage4SubChat(stage4SubChat);
+            showError('Could not send the message. Try again.');
+          },
+        }
+      );
+    },
+    [sendStage4SubChatMessage, sessionId, showError, stage4SubChat]
+  );
+  const handleResolveStage4SubChat = useCallback(
+    (payload: {
+      acceptedProposals: import('@meet-without-fear/shared').Stage4ProposalDraft[];
+      updatedProposals: import('@meet-without-fear/shared').Stage4ProposalDraft[];
+    }) => {
+      if (!stage4SubChat) return;
+      resolveStage4SubChatMutation.mutate(
+        {
+          sessionId,
+          subChatId: stage4SubChat.id,
+          acceptedProposals: payload.acceptedProposals,
+          updatedProposals: payload.updatedProposals,
+        },
+        {
+          onSuccess: () => setStage4SubChat(null),
+          onError: () => showError('Could not save. Try again.'),
+        }
+      );
+    },
+    [resolveStage4SubChatMutation, sessionId, showError, stage4SubChat]
+  );
+  const handleDeclineStage4Need = useCallback(
+    (needId: string) => {
+      declineStage4Need.mutate(
+        { sessionId, needId },
+        {
+          onError: () => {
+            showError('Could not set that aside. Please try again.');
+          },
+        }
+      );
+    },
+    [declineStage4Need, sessionId, showError]
+  );
+  const handleUndeclineStage4Need = useCallback(
+    (needId: string) => {
+      undeclineStage4Need.mutate(
+        { sessionId, needId },
+        {
+          onError: () => {
+            showError('Could not bring that back. Please try again.');
+          },
+        }
+      );
+    },
+    [undeclineStage4Need, sessionId, showError]
+  );
+  const handleReviseStage4Selections = useCallback(() => {
+    unshareStage4Selections.mutate(
+      { sessionId },
+      {
+        onError: () => {
+          showError('Could not unshare your stances. Please try again.');
+        },
+      }
+    );
+  }, [unshareStage4Selections, sessionId, showError]);
   const handleCloseRedesignedStage4 = useCallback(
-    (kind: Stage4ClosureKind, reason: Stage4ClosureReason) => {
+    (kind: Stage4ClosureKind, reason: Stage4ClosureReason, checkInDate: string) => {
       closeStage4.mutate({
         sessionId,
         kind,
         reason,
+        checkInDate,
       });
     },
     [closeStage4, sessionId]
@@ -1569,6 +1788,13 @@ export function UnifiedSessionScreen({
   const isEmpathyValidated =
     isLocalEmpathyValidationActive && localEmpathyValidationAction?.action === 'accepted';
   const isEmpathyShared = completedActions.has('shared-empathy');
+  const effectiveMyValidation = isEmpathyValidated
+    ? {
+        ...sharingStatus.myValidation,
+        validated: true,
+        awaitingRevision: false,
+      }
+    : sharingStatus.myValidation;
 
   useEffect(() => {
     if (showFeedbackCoachChat && !feedbackCoachInitializedRef.current) {
@@ -1648,6 +1874,21 @@ export function UnifiedSessionScreen({
       setMoodCheckLoading(false);
     });
   }, [sessionId]);
+  const [hasReleasedInitialSessionRender, setHasReleasedInitialSessionRender] = useState(false);
+  const [hasCompletedInitialChatRender, setHasCompletedInitialChatRender] = useState(false);
+  const isInitialSessionRenderReady = !isLoading && !isFetchingMessages && !moodCheckLoading;
+
+  useEffect(() => {
+    setHasReleasedInitialSessionRender(false);
+    setHasCompletedInitialChatRender(false);
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (isInitialSessionRenderReady) {
+      setHasReleasedInitialSessionRender(true);
+    }
+  }, [isInitialSessionRenderReady]);
+
   // When viewing a resolved session, allow toggling to chat history
   const [viewingResolvedHistory, setViewingResolvedHistory] = useState(false);
 
@@ -1733,7 +1974,8 @@ export function UnifiedSessionScreen({
         status: empathyStatusData.myAttempt.status,
         content: empathyStatusData.myAttempt.content,
       } : undefined,
-      myValidation: sharingStatus.myValidation,
+      partnerEmpathyHeldStatus: empathyStatusData.partnerEmpathyHeldStatus,
+      myValidation: effectiveMyValidation,
       partnerValidated: sharingStatus.partnerValidated,
       messageCountSinceSharedContext: empathyStatusData.messageCountSinceSharedContext,
     } : undefined,
@@ -1760,20 +2002,23 @@ export function UnifiedSessionScreen({
     needsRevealValidatedByMe: (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsValidated === true,
     needsRevealValidatedByBoth: needsRevealValidatedByBoth,
     hasValidatedNeedsRevealLocal: completedActions.has('validated-needs'),
-    strategyPhase,
-    strategyReadiness: {
-      myReadyToRank: strategyData?.myReadyToRank === true ||
-        (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.readyToRank === true,
-      partnerReadyToRank: strategyData?.partnerReadyToRank === true ||
-        ((partnerProgress as { gatesSatisfied?: Record<string, unknown> } | undefined)?.gatesSatisfied)?.readyToRank === true,
-      canMarkReadyToRank: strategyData?.canMarkReadyToRank === true,
-      canRank: strategyData?.canRank === true,
-    },
-    overlappingStrategiesCount: overlappingStrategies?.length ?? 0,
+    // Legacy Stage 4 inputs: the strategy-pool-preview / overlap-preview cards
+    // are no longer emitted in renderInlineCard, but the hook still types them
+    // as required. Pass benign defaults until the hook's prop shape is cleaned
+    // up to drop them.
+    strategyPhase: 'COLLECTING',
+    overlappingStrategiesCount: 0,
     agreements: agreements?.map(a => ({
       agreedByMe: a.agreedByMe,
       agreedByPartner: a.agreedByPartner,
     })),
+    stage4Selections: stage4State
+      ? {
+          mySelectionSubmitted: stage4State.mySelectionStatus === 'SUBMITTED',
+          partnerSelectionSubmitted: stage4State.partnerSelectionStatus === 'SUBMITTED',
+          hasOutcome: !!stage4State.outcome,
+        }
+      : undefined,
   });
 
   // -------------------------------------------------------------------------
@@ -1978,6 +2223,9 @@ export function UnifiedSessionScreen({
 
   // Build indicators array using centralized deriveIndicators function
   // This moves indicator logic to the utils layer, making it testable and reusable
+  const invitationMessageConfirmedAt = invitation?.messageConfirmedAt;
+  const invitationAcceptedAt = invitation?.acceptedAt;
+
   const indicators = useMemo((): ChatIndicatorItem[] => {
     // Prepare session data for the selector
     const sessionData: SessionIndicatorData = {
@@ -1985,11 +2233,12 @@ export function UnifiedSessionScreen({
       sessionStatus: session?.status,
       currentUserId: user?.id,
       partnerName: partnerName || 'Partner',
-      invitation: invitation ? {
-        messageConfirmedAt: invitation.messageConfirmedAt,
-        acceptedAt: invitation.acceptedAt,
+      invitation: invitationMessageConfirmedAt || invitationAcceptedAt ? {
+        messageConfirmedAt: invitationMessageConfirmedAt,
+        acceptedAt: invitationAcceptedAt,
       } : undefined,
       milestones: {
+        witnessStartedAt: milestones?.witnessStartedAt ?? null,
         // Use ref as backup to prevent flickering during mutation
         feelHeardConfirmedAt: milestones?.feelHeardConfirmedAt ??
           (hasEverConfirmedFeelHeard.current || isConfirmingFeelHeard ? new Date().toISOString() : null),
@@ -2057,11 +2306,17 @@ export function UnifiedSessionScreen({
     }
 
     // --- Stage chapter markers ---
-    const chapterIndicators = deriveChapterMarkers(messages);
+    // Chapter bars usually appear at the milestone that opens the chapter.
+    // Witness is the exception: invitees first see the topic intro card, so
+    // its chapter marker is anchored to the canonical Witness stage start.
+    const chapterIndicators = deriveChapterMarkers(messages, {
+      [Stage.WITNESS]: milestones?.witnessStartedAt,
+      [Stage.PERSPECTIVE_STRETCH]: milestones?.feelHeardConfirmedAt,
+    });
     allIndicators.push(...chapterIndicators);
 
     return allIndicators;
-  }, [isInviter, session?.status, invitation?.messageConfirmedAt, invitation?.acceptedAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
+  }, [isInviter, session?.status, invitationMessageConfirmedAt, invitationAcceptedAt, milestones?.witnessStartedAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
 
 
 
@@ -2077,10 +2332,7 @@ export function UnifiedSessionScreen({
 
     if (myAttempt?.content && myAttempt.sharedAt) {
       const hasMyAttemptMessage = baseMessages.some(
-        (message) =>
-          message.role === MessageRole.EMPATHY_STATEMENT &&
-          message.senderId === user?.id &&
-          message.timestamp === myAttempt.sharedAt,
+        (message) => isSameEmpathyAttemptMessage(message, user?.id, myAttempt),
       );
 
       if (!hasMyAttemptMessage) {
@@ -2099,26 +2351,34 @@ export function UnifiedSessionScreen({
     }
 
     if (partnerAttempt?.content && (partnerAttempt.revealedAt || partnerAttempt.sharedAt)) {
-      const partnerTimestamp = partnerAttempt.revealedAt || partnerAttempt.sharedAt;
-      const hasPartnerAttemptMessage = baseMessages.some(
-        (message) =>
-          message.role === MessageRole.EMPATHY_STATEMENT &&
-          message.senderId === partnerAttempt.sourceUserId &&
-          message.timestamp === partnerTimestamp,
-      );
+      // When the partner's empathy has been revealed and we're in Stage 2,
+      // the validation card handles this content — skip the "Delivered" bubble.
+      const validationCardWillShow =
+        !!partnerAttempt.revealedAt && myProgress?.stage === Stage.PERSPECTIVE_STRETCH;
 
-      if (!hasPartnerAttemptMessage) {
-        baseMessages.push({
-          id: `partner-empathy-${partnerAttempt.id}`,
-          sessionId,
-          senderId: partnerAttempt.sourceUserId,
-          role: MessageRole.EMPATHY_STATEMENT,
-          content: partnerAttempt.content,
-          stage: Stage.PERSPECTIVE_STRETCH,
-          timestamp: partnerTimestamp,
-          sharedContentDeliveryStatus: 'delivered',
-          sharedContentDirection: 'received',
-        });
+      if (!validationCardWillShow) {
+        const partnerTimestamp = partnerAttempt.revealedAt || partnerAttempt.sharedAt;
+        const hasPartnerAttemptMessage = baseMessages.some(
+          (message) =>
+            isSameEmpathyAttemptMessage(message, partnerAttempt.sourceUserId, {
+              content: partnerAttempt.content,
+              sharedAt: partnerTimestamp,
+            }),
+        );
+
+        if (!hasPartnerAttemptMessage) {
+          baseMessages.push({
+            id: `partner-empathy-${partnerAttempt.id}`,
+            sessionId,
+            senderId: partnerAttempt.sourceUserId,
+            role: MessageRole.EMPATHY_STATEMENT,
+            content: partnerAttempt.content,
+            stage: Stage.PERSPECTIVE_STRETCH,
+            timestamp: partnerTimestamp,
+            sharedContentDeliveryStatus: 'delivered',
+            sharedContentDirection: 'received',
+          });
+        }
       }
     }
 
@@ -2192,7 +2452,8 @@ export function UnifiedSessionScreen({
         if (
           message.senderId === user?.id &&
           myEmpathyStatements.length > 1 &&
-          message.id !== latestEmpathyId
+          message.id !== latestEmpathyId &&
+          hasNewerDistinctEmpathyStatement(message, myEmpathyStatements)
         ) {
           return {
             ...message,
@@ -2235,6 +2496,7 @@ export function UnifiedSessionScreen({
     empathyStatusData?.myAttempt,
     empathyStatusData?.mySharedContext,
     empathyStatusData?.partnerAttempt,
+    myProgress?.stage,
     sessionId,
     user?.id,
   ]);
@@ -2301,10 +2563,12 @@ export function UnifiedSessionScreen({
   }, [markLocalEmpathyValidation, handleValidatePartnerEmpathy]);
 
   const handleValidationNotQuite = useCallback(() => {
+    Keyboard.dismiss();
     setShowAccuracyFeedbackDrawer(true);
   }, []);
 
   const openFeedbackCoachWithRoughFeedback = useCallback((roughFeedback: string) => {
+    Keyboard.dismiss();
     setFeedbackCoachRoughFeedback(roughFeedback);
     feedbackCoachInitializedRef.current = false;
     setShowFeedbackCoachChat(true);
@@ -2313,90 +2577,8 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // Render Inline Card
   // -------------------------------------------------------------------------
-  const renderStrategyPreviewCard = useCallback((
-    card: InlineChatCard,
-    placement: 'inline' | 'bottom' = 'inline',
-  ) => {
-    const stratCount = card.props.strategyCount as number;
-    if (stratCount === 0) return null;
-
-    const canMarkReadyToRank = card.props.canMarkReadyToRank === true;
-    const canRank = card.props.canRank === true;
-    const showPoolActions = stratCount > 0 && canRank;
-    const canReviewIdeas = stratCount > 0;
-    const countLabel = canRank
-      ? `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} ready to review`
-      : `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} saved from your side`;
-
-    if (placement === 'bottom') {
-      return (
-        <View style={styles.strategyPreviewCompactCard} key={card.id} testID="strategy-preview-bottom-card">
-          <TouchableOpacity
-            style={styles.strategyPreviewCompactBody}
-            onPress={() => {
-              if (canReviewIdeas) {
-                openOverlay('strategy-pool');
-              }
-            }}
-            activeOpacity={canReviewIdeas ? 0.8 : 1}
-            disabled={!canReviewIdeas}
-          >
-            <View style={styles.strategyPreviewCompactText}>
-              <Text style={styles.needsSummaryCompactTitle}>Ideas So Far</Text>
-              <Text style={styles.needsSummaryCount}>{countLabel}</Text>
-            </View>
-            {canReviewIdeas && (
-              <Text style={styles.needsSummaryActionCompact}>Review</Text>
-            )}
-          </TouchableOpacity>
-          {showPoolActions && (
-            <View style={styles.strategyPreviewCompactActions}>
-              <TouchableOpacity
-                style={styles.strategyPreviewCompactPrimary}
-                onPress={() => openOverlay('strategy-ranking')}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.strategyPreviewCompactPrimaryText}>Ready to Rank</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.inlineCard} key={card.id}>
-        <Text style={styles.cardTitle}>Ideas So Far</Text>
-        <Text style={styles.cardSubtitle}>{countLabel}</Text>
-        <View style={styles.strategyPreviewButtons}>
-          {showPoolActions && (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => openOverlay('strategy-pool')}
-            >
-              <Text style={styles.secondaryButtonText}>View All</Text>
-            </TouchableOpacity>
-          )}
-          {canMarkReadyToRank && (
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => openOverlay('strategy-pool')}
-            >
-              <Text style={styles.primaryButtonText}>Review Ideas</Text>
-            </TouchableOpacity>
-          )}
-          {showPoolActions && (
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => openOverlay('strategy-ranking')}
-            >
-              <Text style={styles.primaryButtonText}>Ready to Rank</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    );
-  }, [handleMarkReadyToRank, openOverlay, styles]);
+  // Legacy renderStrategyPreviewCard removed - Stage4RedesignPanel is the
+  // canonical Stage 4 surface and renders its own inline cards.
 
   const renderInlineCard = useCallback(
     (card: InlineChatCard) => {
@@ -2419,27 +2601,9 @@ export function UnifiedSessionScreen({
         // These are now shown in the NeedsDrawer bottom sheet, opened via
         // the above-input buttons (needs-review, needs-reveal-validation).
 
-        case 'strategy-pool-preview': {
-          return renderStrategyPreviewCard(card);
-        }
-
-        case 'overlap-preview':
-          return (
-            <View style={styles.inlineCard} key={card.id}>
-              <Text style={styles.cardTitle}>Possible Shared Step</Text>
-              <Text style={styles.overlapDescription}>
-                {(card.props.topOverlap as { description: string })?.description}
-              </Text>
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={() => openOverlay('overlap-reveal')}
-              >
-                <Text style={styles.primaryButtonText}>
-                  See All {card.props.overlappingCount as number} Matches
-                </Text>
-              </TouchableOpacity>
-            </View>
-          );
+        // 'strategy-pool-preview' and 'overlap-preview' cases removed -
+        // those entry points opened the legacy StrategyPool/OverlapReveal
+        // overlays. Stage4RedesignPanel renders its own coverage/overlap UI.
 
         case 'agreement-preview': {
           const totalAgreements = card.props.totalAgreements as number;
@@ -2513,24 +2677,16 @@ export function UnifiedSessionScreen({
       handleValidatePartnerEmpathy,
       handleConfirmAllNeeds,
       handleConsentToShareNeeds,
-      handleMarkReadyToRank,
       handleRespondToShareOffer,
       sendMessage,
       onStageComplete,
       onNavigateBack,
-      renderStrategyPreviewCard,
     ]
   );
 
-  const strategyPreviewCard = useMemo(
-    () => inlineCards.find((card) => card.type === 'strategy-pool-preview'),
-    [inlineCards]
-  );
-
-  const transcriptInlineCards = useMemo(
-    () => inlineCards.filter((card) => card.type !== 'strategy-pool-preview'),
-    [inlineCards]
-  );
+  // 'strategy-pool-preview' is no longer emitted by useChatUIState now that the
+  // legacy StrategyPool path is gone. Pass inlineCards through directly.
+  const transcriptInlineCards = inlineCards;
 
   // -------------------------------------------------------------------------
   // Invitation URL for sharing (must be before early returns)
@@ -2543,9 +2699,25 @@ export function UnifiedSessionScreen({
   }, [invitation?.id]);
 
   const partnerAccepted = !!invitation?.acceptedAt;
+  const canSharePendingInvitation = isInviter &&
+    session?.status === SessionStatus.INVITED &&
+    !!invitationUrl &&
+    !!topicFrame &&
+    !partnerAccepted;
+  const pendingInvitationShareAction = canSharePendingInvitation
+    ? {
+        icon: 'share' as const,
+        accessibilityLabel: 'Share invitation',
+        onPress: () => {
+          Keyboard.dismiss();
+          setShowShareLaterTooltip(false);
+          setShowInvitationReadyModal(true);
+        },
+        testID: 'session-chat-header-share-invitation',
+      }
+    : undefined;
 
-  // Shared share-invitation handler used by both the InvitationReadyModal and
-  // the ActivityDrawer's "Share invitation" button.
+  // Shared share-invitation handler used by the InvitationReadyModal.
   const handleShareInvitation = useCallback(async (): Promise<boolean> => {
     if (!invitationUrl) return false;
     try {
@@ -2672,6 +2844,7 @@ export function UnifiedSessionScreen({
           }))}
           status={needsStatus}
           onReview={() => {
+            Keyboard.dismiss();
             setNeedsDrawerMode(getNeedsDrawerModeForNeedsStatus(needsStatus));
             setShowNeedsDrawer(true);
           }}
@@ -2680,40 +2853,8 @@ export function UnifiedSessionScreen({
     }];
   }, [currentStage, needsData?.synthesizedAt, needs, myProgress?.gatesSatisfied, allNeedsConfirmed, aboveInputPanel]);
 
-  const stage4RedesignCards = useMemo((): ChatCustomCardItem[] => {
-    if (!hasRedesignedStage4 || !stage4State) return [];
-
-    const latestTimestamp = displayMessages[0]?.timestamp;
-    const timestamp = latestTimestamp
-      ? new Date(new Date(latestTimestamp).getTime() + 1).toISOString()
-      : session?.createdAt || new Date(0).toISOString();
-
-    return [{
-      type: 'custom-card',
-      id: `stage4-redesign-${stage4State.phase}`,
-      timestamp,
-      render: () => (
-        <Stage4RedesignPanel
-          state={stage4State}
-          partnerName={partnerName}
-          isSelecting={submitStage4Selection.isPending}
-          isClosing={closeStage4.isPending}
-          onSelectProposal={handleStage4Selection}
-          onCloseStage4={handleCloseRedesignedStage4}
-        />
-      ),
-    }];
-  }, [
-    hasRedesignedStage4,
-    stage4State,
-    displayMessages,
-    session?.createdAt,
-    partnerName,
-    submitStage4Selection.isPending,
-    closeStage4.isPending,
-    handleStage4Selection,
-    handleCloseRedesignedStage4,
-  ]);
+  // Stage4RedesignPanel is now mounted inside a slide-up Modal (Stage 4 drawer)
+  // rather than as an inline chat card. The CTA above the chat input opens it.
 
   const sourceInnerThoughts = session?.sourceInnerThoughts ?? null;
   const sourceInnerThoughtsCards = useMemo((): ChatCustomCardItem[] => {
@@ -2767,8 +2908,8 @@ export function UnifiedSessionScreen({
   ]);
 
   const chatCustomCards = useMemo(
-    () => [...sourceInnerThoughtsCards, ...inviteeOpeningCards, ...needsReviewCards, ...stage4RedesignCards],
-    [sourceInnerThoughtsCards, inviteeOpeningCards, needsReviewCards, stage4RedesignCards]
+    () => [...sourceInnerThoughtsCards, ...inviteeOpeningCards, ...needsReviewCards],
+    [sourceInnerThoughtsCards, inviteeOpeningCards, needsReviewCards]
   );
 
   // -------------------------------------------------------------------------
@@ -2851,66 +2992,8 @@ export function UnifiedSessionScreen({
           />
         );
 
-      case 'strategy-pool':
-        if (strategies.length === 0) return null;
-        return (
-          <View style={styles.overlayContainer}>
-            <StrategyPool
-              strategies={strategies.map((s) => ({
-                id: s.id,
-                description: s.description,
-                duration: s.duration || undefined,
-              }))}
-              onRequestMore={handleRequestMoreStrategies}
-              onReady={() => {
-                handleMarkReadyToRank();
-                closeOverlay();
-              }}
-              readyLabel={strategyData?.canRank === true ? 'These look good - rank my choices' : 'Done adding ideas'}
-              onClose={closeOverlay}
-              isGenerating={isGenerating}
-            />
-          </View>
-        );
-
-      case 'strategy-ranking':
-        if (strategyData?.canRank !== true) return null;
-        return (
-          <View style={styles.overlayContainer}>
-            <StrategyRanking
-              strategies={strategies.map((s) => ({
-                id: s.id,
-                description: s.description,
-                duration: s.duration || undefined,
-              }))}
-              onSubmit={(rankedIds) => {
-                handleSubmitRankings(rankedIds);
-                closeOverlay();
-              }}
-            />
-          </View>
-        );
-
-      case 'overlap-reveal':
-        return (
-          <View style={styles.overlayContainer}>
-            <OverlapReveal
-              overlapping={overlappingStrategies.map((s) => ({
-                id: s.id,
-                description: s.description,
-                duration: s.duration || undefined,
-              }))}
-              uniqueToMe={[]}
-              uniqueToPartner={[]}
-              onCreateAgreement={handleCreateAgreementFromOverlap}
-              disableCreate={agreements.length >= MAX_AGREEMENTS}
-              existingAgreementStrategyIds={agreements.map((a) => a.strategyId).filter((id): id is string => typeof id === 'string')}
-            />
-            <TouchableOpacity style={styles.closeOverlay} onPress={closeOverlay}>
-              <Text style={styles.closeOverlayText}>Continue</Text>
-            </TouchableOpacity>
-          </View>
-        );
+      // 'strategy-pool', 'strategy-ranking', 'overlap-reveal' overlays removed
+      // (Stage4RedesignPanel is the canonical Stage 4 surface now).
 
       case 'agreement-confirmation': {
         const unconfirmedAgreements = agreements.filter(a => !a.agreedByMe);
@@ -2923,7 +3006,7 @@ export function UnifiedSessionScreen({
           if (!allConfirmedByPartner) {
             // Show brief waiting message then auto-close
             return (
-              <View style={styles.overlayContainer}>
+              <View style={[styles.overlayContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
                 <Text style={styles.waitingMessageText}>
                   {"You've confirmed your part. The agreement is now waiting for " +
                    (partnerName || 'your partner') +
@@ -2938,7 +3021,7 @@ export function UnifiedSessionScreen({
         if (!currentAgreement) return null;
 
         return (
-          <View style={styles.overlayContainer}>
+          <View style={[styles.overlayContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
             {agreements.length > 1 && (
               <Text style={styles.agreementCounter}>
                 {confirmedCount + 1} of {agreements.length}
@@ -2981,19 +3064,12 @@ export function UnifiedSessionScreen({
   }, [
     activeOverlay,
     barometerValue,
-    strategies,
-    overlappingStrategies,
     agreements,
     sessionId,
-    isGenerating,
     styles,
     partnerName,
     handleBarometerChange,
-    handleRequestMoreStrategies,
-    handleMarkReadyToRank,
-    handleSubmitRankings,
     handleConfirmAgreement,
-    handleCreateAgreementFromOverlap,
     handleResolveSession,
     handleSignCompact,
     closeOverlay,
@@ -3007,6 +3083,22 @@ export function UnifiedSessionScreen({
   // Render guided input panel (now positioned below the chat input by ChatInterface)
   // -------------------------------------------------------------------------
   const renderAboveInput = useCallback((): React.ReactNode | undefined => {
+    if (session?.status === SessionStatus.RESOLVED && viewingResolvedHistory) {
+      return (
+        <GuidedActionPanel
+          tone="review"
+          eyebrow="Resolved"
+          title="A Path Forward"
+          subtitle="Return to the summary of what you and your partner agreed."
+          primaryAction={{
+            label: 'View summary',
+            onPress: () => setViewingResolvedHistory(false),
+            testID: 'back-to-path-forward-button',
+          }}
+          testID="back-to-path-forward-panel"
+        />
+      );
+    }
     switch (aboveInputPanel) {
       case 'compact-agreement-bar':
         return (
@@ -3031,7 +3123,7 @@ export function UnifiedSessionScreen({
             tone="topic"
             eyebrow="Topic frame"
             title={topicFrame}
-            subtitle="This stays above the input at the end of Stage 0. To change it, tell me below."
+            compact
             primaryAction={{
               label: 'Use this topic',
               onPress: handleConfirmTopicFrame,
@@ -3065,13 +3157,12 @@ export function UnifiedSessionScreen({
               <GuidedActionPanel
                 tone="review"
                 eyebrow={isRefiningEmpathy ? 'Revision' : 'Empathy draft'}
-                title={isRefiningEmpathy ? 'Revisit what you’ll share' : 'Review what you’ll share'}
-                subtitle={isRefiningEmpathy
-                  ? `${partnerName} shared more context. Check whether your understanding should change.`
-                  : `Open your draft before sending it to ${partnerName}.`}
+                title={isRefiningEmpathy ? 'Review the update' : 'Ready to review'}
+                compact
+                pressable
                 primaryAction={{
-                  label: 'Review',
-                  onPress: () => setShowEmpathyDrawer(true),
+                  label: isRefiningEmpathy ? 'Review revision' : 'Review what you’ll share',
+                  onPress: () => { Keyboard.dismiss(); setShowEmpathyDrawer(true); },
                   testID: 'empathy-review-button',
                 }}
                 testID="empathy-review-panel"
@@ -3091,6 +3182,7 @@ export function UnifiedSessionScreen({
                 action={shareOfferData.suggestion.action}
                 partnerName={partnerName}
                 onPress={() => {
+                  Keyboard.dismiss();
                   setShowShareTopicDrawer(true);
                 }}
               />
@@ -3120,7 +3212,7 @@ export function UnifiedSessionScreen({
               primaryAction={{
                 label: 'Review',
                 onPress: () => {
-                  setShowActivityMenu(false);
+                  Keyboard.dismiss();
                   setNeedsDrawerMode('reveal');
                   setShowNeedsDrawer(true);
                 },
@@ -3138,15 +3230,89 @@ export function UnifiedSessionScreen({
             partnerName={partnerName || 'your partner'}
             animationValue={waitingBannerAnim}
             onExercisePress={() => openOverlay('support-options')}
+            onActionPress={
+              waitingStatus === 'stage4-selections-pending'
+                ? () => { Keyboard.dismiss(); setShowStage4Drawer(true); }
+                : undefined
+            }
             testID="waiting-banner"
           />
         );
 
       default:
+        // Fallback: when no other panel is queued and we're in the redesigned
+        // Stage 4, surface the proposal-review entry point above the input so
+        // the user always has a way to open the Stage 4 drawer.
+        if (hasRedesignedStage4 && stage4State) {
+          const allProposals = [
+            ...stage4State.inventory.sharedProposals,
+            ...stage4State.inventory.individualCommitments,
+          ];
+          const proposalCount = allProposals.length;
+          if (proposalCount === 0) return undefined;
+
+          const who = partnerName || 'them';
+          const mineSubmitted = stage4State.mySelectionStatus === 'SUBMITTED';
+          const partnerSubmitted = stage4State.partnerSelectionStatus === 'SUBMITTED';
+          const allStanced = allProposals.every((p) => Boolean(p.myDecision));
+          const hasMutualWilling = stage4State.inventory.sharedProposals.some(
+            (p) =>
+              p.myDecision === Stage4SelectionDecision.WILLING &&
+              p.partnerDecisionVisible === Stage4SelectionDecision.WILLING,
+          );
+
+          let title: string;
+          let subtitle: string;
+          let label: string;
+          if (stage4State.outcome) {
+            // Outcome already exists; chat surface doesn't need a CTA here.
+            return undefined;
+          } else if (!mineSubmitted && !allStanced) {
+            title =
+              proposalCount === 1 ? '1 proposal on the table' : `${proposalCount} proposals on the table`;
+            subtitle = 'Take a stance on each one when you’re ready.';
+            label = 'Review';
+          } else if (!mineSubmitted && allStanced) {
+            title = 'Ready to share your stances';
+            subtitle = `Open this to share them with ${who}.`;
+            label = 'Review & share';
+          } else if (mineSubmitted && !partnerSubmitted) {
+            title = `Waiting for ${who}`;
+            subtitle = `You'll know as soon as ${who} shares.`;
+            label = 'Review';
+          } else if (mineSubmitted && partnerSubmitted && hasMutualWilling) {
+            title = `You and ${who} agree on at least one proposal`;
+            subtitle = 'Open this to close with a shared agreement.';
+            label = 'Review & close';
+          } else {
+            title = `${who} has shared too`;
+            subtitle = 'No mutual “willing” yet — open this to see your options.';
+            label = 'Review';
+          }
+
+          return (
+            <GuidedActionPanel
+              tone="review"
+              title={title}
+              compact
+              pressable
+              primaryAction={{
+                label,
+                onPress: () => { Keyboard.dismiss(); setShowStage4Drawer(true); },
+                testID: 'stage4-review-button',
+              }}
+              testID="stage4-review-panel"
+            />
+          );
+        }
         return undefined;
     }
   }, [
     aboveInputPanel,
+    hasRedesignedStage4,
+    stage4State,
+    session?.status,
+    viewingResolvedHistory,
     sessionId,
     invitation?.isInviter,
     isInviter,
@@ -3204,12 +3370,12 @@ export function UnifiedSessionScreen({
             opacity: needsReviewAnim,
             maxHeight: needsReviewAnim.interpolate({
               inputRange: [0, 1],
-              outputRange: [0, 420],
+              outputRange: [0, NEEDS_REVIEW_PANEL_EXPANDED_MAX_HEIGHT],
             }),
             transform: [{
               translateY: needsReviewAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [20, 0],
+                outputRange: [NEEDS_REVIEW_PANEL_ENTER_OFFSET, 0],
               }),
             }],
             overflow: 'hidden',
@@ -3226,21 +3392,13 @@ export function UnifiedSessionScreen({
               status={needsStatus}
               compact
               onReview={() => {
-                setShowActivityMenu(false);
+                Keyboard.dismiss();
                 setNeedsDrawerMode(getNeedsDrawerModeForNeedsStatus(needsStatus));
                 setShowNeedsDrawer(true);
               }}
             />
           </View>
         </Animated.View>
-      );
-    }
-
-    if (strategyPreviewCard) {
-      return (
-        <View style={styles.strategyPreviewBelowInputContainer}>
-          {renderStrategyPreviewCard(strategyPreviewCard, 'bottom')}
-        </View>
       );
     }
 
@@ -3252,14 +3410,12 @@ export function UnifiedSessionScreen({
     needs,
     myProgress?.gatesSatisfied,
     allNeedsConfirmed,
-    strategyPreviewCard,
-    renderStrategyPreviewCard,
   ]);
 
   // -------------------------------------------------------------------------
   // Loading State
   // -------------------------------------------------------------------------
-  if (isLoading) {
+  if (isLoading || !hasReleasedInitialSessionRender) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={styles.accentColor.color} />
@@ -3349,6 +3505,12 @@ export function UnifiedSessionScreen({
       isSubmittingResponse={submitTendingResponse.isPending}
       onCreateReentry={handleCreateTendingReentry}
       onSubmitResponse={handleSubmitTendingResponse}
+      currentUserId={user?.id}
+      isUpdatingShare={setTendingEntryShare.isPending}
+      onToggleShare={(entryId, optedInShared) => {
+        if (!sessionId) return;
+        setTendingEntryShare.mutate({ sessionId, entryId, optedInShared });
+      }}
     />
   ) : null;
 
@@ -3367,9 +3529,10 @@ export function UnifiedSessionScreen({
             partnerOnline={partnerOnline}
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+            rightAction={pendingInvitationShareAction}
             onBackPress={onNavigateBack}
             onPress={() => setShowPartnerInfo(true)}
-            stageName="Closed"
+            conversationTopic={topicFrame}
             testID="session-chat-header"
           />
           {partnerInfoDrawer}
@@ -3379,7 +3542,16 @@ export function UnifiedSessionScreen({
               partnerName={partnerName}
               isSelecting={submitStage4Selection.isPending}
               isClosing={closeStage4.isPending}
+              isSharing={shareStage4Selections.isPending}
+              isRevising={unshareStage4Selections.isPending}
               onSelectProposal={handleStage4Selection}
+              onShareSelections={handleShareStage4Selections}
+              onReviseSelections={handleReviseStage4Selections}
+              onBrainstormNeed={handleBrainstormStage4Need}
+              onRefineProposal={handleRefineStage4Proposal}
+              onKeepRefiningNoOverlap={handleKeepRefiningNoOverlap}
+              onDeclineNeed={handleDeclineStage4Need}
+              onUndeclineNeed={handleUndeclineStage4Need}
               onCloseStage4={handleCloseRedesignedStage4}
             />
             {tendingPanel}
@@ -3403,9 +3575,10 @@ export function UnifiedSessionScreen({
           partnerOnline={partnerOnline}
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+          rightAction={pendingInvitationShareAction}
           onBackPress={onNavigateBack}
           onPress={() => setShowPartnerInfo(true)}
-          stageName="Closed"
+          conversationTopic={topicFrame}
           testID="session-chat-header"
         />
         {partnerInfoDrawer}
@@ -3418,6 +3591,17 @@ export function UnifiedSessionScreen({
             measureOfSuccess: a.measureOfSuccess,
             followUpDate: a.followUpDate,
           }))}
+          individualCommitments={
+            stage4State?.outcome?.individualCommitments.map((c) => ({
+              id: c.id,
+              description: c.description,
+            })) ?? []
+          }
+          openNeeds={
+            stage4State?.outcome?.openNeeds
+              .filter((n): n is typeof n & { id: string } => Boolean(n.id))
+              .map((n) => ({ id: n.id, label: n.label })) ?? []
+          }
           tendingPanel={tendingPanel}
           onViewHistory={() => setViewingResolvedHistory(true)}
           onReturnToSessions={() => onNavigateBack?.()}
@@ -3442,9 +3626,10 @@ export function UnifiedSessionScreen({
             partnerOnline={partnerOnline}
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+            rightAction={pendingInvitationShareAction}
             onBackPress={onNavigateBack}
             onPress={() => setShowPartnerInfo(true)}
-            stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
+            conversationTopic={topicFrame}
             testID="session-chat-header"
           />
           {partnerInfoDrawer}
@@ -3479,9 +3664,10 @@ export function UnifiedSessionScreen({
             partnerOnline={partnerOnline}
             connectionStatus={connectionStatus}
             briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+            rightAction={pendingInvitationShareAction}
             onBackPress={onNavigateBack}
             onPress={() => setShowPartnerInfo(true)}
-            stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
+            conversationTopic={topicFrame}
             testID="session-chat-header"
           />
           {partnerInfoDrawer}
@@ -3494,137 +3680,47 @@ export function UnifiedSessionScreen({
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Strategy Ranking Phase - Full Screen Overlay
-  // -------------------------------------------------------------------------
-  if (
-    currentStage === Stage.STRATEGIC_REPAIR &&
-    !hasRedesignedStage4 &&
-    strategyPhase === StrategyPhase.RANKING &&
-    strategyData?.canRank === true
-  ) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <SessionChatHeader
-          partnerName={partnerName}
-          partnerOnline={partnerOnline}
-          connectionStatus={connectionStatus}
-          briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-          onBackPress={onNavigateBack}
-          onPress={() => setShowPartnerInfo(true)}
-          stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
-          testID="session-chat-header"
-        />
-        {partnerInfoDrawer}
-        <StrategyRanking
-          strategies={strategies.map((s) => ({
-            id: s.id,
-            description: s.description,
-            duration: s.duration || undefined,
-          }))}
-          onSubmit={handleSubmitRankings}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Strategy Revealing Phase - Full Screen Overlay
-  // -------------------------------------------------------------------------
-  if (
-    currentStage === Stage.STRATEGIC_REPAIR &&
-    !hasRedesignedStage4 &&
-    strategyPhase === StrategyPhase.REVEALING
-  ) {
-    const waitingForRankingReveal = !revealData ||
-      (revealData as { waitingForPartner?: boolean; overlap?: unknown[] | null }).waitingForPartner === true ||
-      (revealData as { overlap?: unknown[] | null }).overlap === null;
-
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <SessionChatHeader
-          partnerName={partnerName}
-          partnerOnline={partnerOnline}
-          connectionStatus={connectionStatus}
-          briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-          onBackPress={onNavigateBack}
-          onPress={() => setShowPartnerInfo(true)}
-          stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
-          testID="session-chat-header"
-        />
-        {partnerInfoDrawer}
-        {waitingForRankingReveal ? (
-          <WaitingRoom
-            message="Waiting for your partner to submit their ranking"
-            partnerName={partnerName || undefined}
-          />
-        ) : overlappingStrategies.length > 0 ? (
-          <OverlapReveal
-            overlapping={overlappingStrategies.map((s) => ({
-              id: s.id,
-              description: s.description,
-              duration: s.duration || undefined,
-            }))}
-            uniqueToMe={[]}
-            uniqueToPartner={[]}
-            onCreateAgreement={handleCreateAgreementFromOverlap}
-            existingAgreementStrategyIds={agreements.map((a) => a.strategyId).filter((id): id is string => typeof id === 'string')}
-          />
-        ) : (
-          <WaitingRoom
-            message="Your rankings didn't overlap. Return to chat to discuss next steps."
-            partnerName={partnerName || undefined}
-          />
-        )}
-      </SafeAreaView>
-    );
-  }
+  // Legacy "Strategy Ranking Phase" and "Strategy Revealing Phase" full-screen
+  // overlays removed. Stage4RedesignPanel is the canonical Stage 4 surface and
+  // is rendered above when hasRedesignedStage4 is true.
 
   // -------------------------------------------------------------------------
   // Main Chat Interface
   // -------------------------------------------------------------------------
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <SessionChatHeader
-        partnerName={partnerName}
-        partnerOnline={partnerOnline}
-        connectionStatus={connectionStatus}
-        briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-        hideOnlineStatus={isInvitationPhase}
-        onBackPress={onNavigateBack}
-        onBriefStatusPress={
-          session?.status === SessionStatus.INVITED && invitation?.isInviter
-            ? () => {
-                setShowShareLaterTooltip(false);
-                setActivityFocusTarget(null);
-                setShowActivityMenu(true);
-              }
-            : undefined
-        }
-        hasNewActivity={!isInOnboardingUnsigned ? (pendingActionsQuery.data?.actions?.length ?? 0) > 0 : false}
-        onMenuPress={
-          !isInOnboardingUnsigned
-            ? () => {
-                setShowShareLaterTooltip(false);
-                setActivityFocusTarget(null);
-                setShowActivityMenu(true);
-              }
-            : undefined
-        }
-        onPress={() => setShowPartnerInfo(true)}
-        stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
-        testID="session-chat-header"
-      />
-      {partnerInfoDrawer}
-      {/* Chat content - Share is now a separate route */}
-      {(
-      <View style={styles.content}>
-        <ChatInterface
+      <View
+        style={[
+          styles.initialSessionSurface,
+          !hasCompletedInitialChatRender && styles.initialSessionSurfaceHidden,
+        ]}
+        pointerEvents={hasCompletedInitialChatRender ? 'auto' : 'none'}
+      >
+        <SessionChatHeader
+          partnerName={partnerName}
+          partnerOnline={partnerOnline}
+          connectionStatus={connectionStatus}
+          briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+          rightAction={pendingInvitationShareAction}
+          hideOnlineStatus={isInvitationPhase}
+          onBackPress={onNavigateBack}
+          onPress={() => setShowPartnerInfo(true)}
+          conversationTopic={topicFrame}
+          testID="session-chat-header"
+        />
+        {partnerInfoDrawer}
+        {/* Chat content - Share is now a separate route */}
+        {(
+        <View style={styles.content}>
+          <ChatInterface
           sessionId={sessionId}
           messages={displayMessages}
           indicators={indicators}
           onSendMessage={sendMessageWithTracking}
+          onInitialRenderReady={() => setHasCompletedInitialChatRender(true)}
           failedMessage={failedMessageContent}
+          prefillText={stage4BrainstormPrefill}
+          onPrefillConsumed={() => setStage4BrainstormPrefill(null)}
           // Cache-First: Ghost dots are derived from last message role in ChatInterface
           // isSending is still needed for brief moment during API call before optimistic message appears
           // isFetchingInitialMessage shows dots while fetching first AI message
@@ -3642,7 +3738,10 @@ export function UnifiedSessionScreen({
           }
           // isInputDisabled prevents sending while API call is in progress
           isInputDisabled={isSending}
-          showEmotionSlider={!isInOnboardingUnsigned}
+          showEmotionSlider={
+            !isInOnboardingUnsigned &&
+            waitingStatus !== 'stage4-selections-pending'
+          }
           partnerName={partnerName}
           emotionValue={barometerValue}
           onEmotionChange={handleBarometerChange}
@@ -3670,15 +3769,6 @@ export function UnifiedSessionScreen({
           // arriving while viewing don't trigger a separator
           lastSeenChatItemId={lastSeenChatItemIdForSeparator}
           lastViewedAt={lastViewedAtForAnimation}
-          // Open activity menu and focus the corresponding "Context shared" / "Empathy shared" item.
-          onContextSharedPress={(timestamp, isFromMe, indicatorType) => {
-            setActivityFocusTarget({
-              type: indicatorType === 'empathy-shared' ? 'empathy' : 'context',
-              direction: isFromMe === false ? 'received' : 'sent',
-              timestamp,
-            });
-            setShowActivityMenu(true);
-          }}
           customCards={chatCustomCards}
           // Show compact as custom empty state during onboarding when not signed.
           customEmptyState={
@@ -3686,9 +3776,15 @@ export function UnifiedSessionScreen({
               ? compactEmptyStateElement
               : undefined
           }
-          renderAboveInput={aboveInputPanel ? renderAboveInput : undefined}
+          renderAboveInput={
+            aboveInputPanel ||
+            (hasRedesignedStage4 && !!stage4State) ||
+            (session?.status === SessionStatus.RESOLVED && viewingResolvedHistory)
+              ? renderAboveInput
+              : undefined
+          }
           renderBelowInput={
-            aboveInputPanel === 'needs-review' || aboveInputPanel === 'needs-share' || strategyPreviewCard
+            aboveInputPanel === 'needs-review' || aboveInputPanel === 'needs-share'
               ? renderBelowInput
               : undefined
           }
@@ -3713,14 +3809,22 @@ export function UnifiedSessionScreen({
           validationCards={validationCards}
           onValidateAccurate={handleValidationAccurate}
           onValidateNotQuite={handleValidationNotQuite}
-        />
+          />
 
-        {/* Waiting banner removed - now handled by the guided input panel renderer */}
+          {/* Waiting banner removed - now handled by the guided input panel renderer */}
 
-        {/* Note: Compact is now rendered via renderCustomEmptyState in ChatInterface */}
+          {/* Note: Compact is now rendered via renderCustomEmptyState in ChatInterface */}
 
-        {/* Inline cards and memory suggestion now rendered via renderBelowChat prop in ChatInterface */}
+          {/* Inline cards and memory suggestion now rendered via renderBelowChat prop in ChatInterface */}
+        </View>
+        )}
       </View>
+
+      {!hasCompletedInitialChatRender && (
+        <View style={styles.loadingOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={styles.accentColor.color} />
+          <Text style={styles.loadingText}>Loading session...</Text>
+        </View>
       )}
 
       {/* Overlays */}
@@ -3887,7 +3991,7 @@ export function UnifiedSessionScreen({
             markCompleted('responded-to-share-offer');
             trackShareTopicAccepted(sessionId, shareOfferData.suggestion!.action as 'OFFER_SHARING' | 'OFFER_OPTIONAL');
             // Open refinement modal so user can chat about and refine the draft
-            // before sharing (same flow as ActivityDrawer's "Refine" button)
+            // before sharing
             if (shareOfferData?.suggestion) {
               setRefinementInitialSuggestion(shareOfferData.suggestion.suggestedContent || '');
               setRefinementOfferId(shareOfferData.suggestion.offerId);
@@ -3929,6 +4033,7 @@ export function UnifiedSessionScreen({
             });
           } else {
             handleConfirmAllNeeds(() => {
+              markCompleted('confirmed-needs');
               setShowNeedsDrawer(false);
             });
           }
@@ -3936,46 +4041,122 @@ export function UnifiedSessionScreen({
         confirmNeedsLabel={allNeedsConfirmed ? 'Share my needs' : 'Confirm my needs'}
         confirmingNeedsLabel={allNeedsConfirmed ? 'Sharing...' : 'Confirming...'}
         isConfirming={isConfirmingNeeds}
+        isValidating={isValidatingNeeds}
         partnerNeeds={(needsComparisonData?.partnerNeeds ?? []).map((n) => ({
           id: n.id,
           category: String(n.category) || n.need,
           need: n.need,
           confirmed: n.confirmed,
         }))}
-        onValidateNeeds={() => {
-          markCompleted('validated-needs');
-          handleValidateNeedsReveal(() => onStageComplete?.(Stage.NEED_MAPPING));
-        }}
-        onNeedsNotValidYet={() => {
-          handleNeedsNotValidYet(() => {
-            setShowNeedsDrawer(false);
-          });
-        }}
+        onValidateNeeds={
+          completedActions.has('validated-needs') ||
+          (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsValidated === true
+            ? undefined
+            : () => {
+                markCompleted('validated-needs');
+                handleValidateNeedsReveal(() => onStageComplete?.(Stage.NEED_MAPPING));
+              }
+        }
+        onNeedsNotValidYet={
+          completedActions.has('validated-needs') ||
+          (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsValidated === true
+            ? undefined
+            : () => {
+                handleNeedsNotValidYet(() => {
+                  setShowNeedsDrawer(false);
+                });
+              }
+        }
         partnerName={partnerName}
         testID="needs-drawer"
       />
 
+      {/* Stage 4 redesign drawer — bottom-sheet wrapper around Stage4RedesignPanel. */}
+      <Modal
+        visible={showStage4Drawer && hasRedesignedStage4 && !!stage4State}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowStage4Drawer(false)}
+      >
+        <SafeAreaView style={styles.stage4DrawerSafeArea} edges={['top', 'bottom']}>
+          <View style={styles.stage4DrawerDragHandleArea}>
+            <View style={styles.stage4DrawerDragHandle} />
+          </View>
+          <View style={styles.stage4DrawerHeader}>
+            <Text style={styles.stage4DrawerTitle}>What comes next</Text>
+          </View>
+          <ScrollView contentContainerStyle={styles.stage4DrawerScroll}>
+            {stage4State && (
+              <Stage4RedesignPanel
+                state={stage4State}
+                partnerName={partnerName}
+                isSelecting={submitStage4Selection.isPending}
+                isClosing={closeStage4.isPending}
+                isSharing={shareStage4Selections.isPending}
+                isRevising={unshareStage4Selections.isPending}
+                hideFooter
+                onSelectProposal={handleStage4Selection}
+                onShareSelections={handleShareStage4Selections}
+                onReviseSelections={handleReviseStage4Selections}
+                onBrainstormNeed={handleBrainstormStage4Need}
+                onRefineProposal={handleRefineStage4Proposal}
+                onKeepRefiningNoOverlap={handleKeepRefiningNoOverlap}
+                onDeclineNeed={handleDeclineStage4Need}
+                onUndeclineNeed={handleUndeclineStage4Need}
+                onCloseStage4={(kind, reason, checkInDate) => {
+                  handleCloseRedesignedStage4(kind, reason, checkInDate);
+                  setShowStage4Drawer(false);
+                }}
+              />
+            )}
+          </ScrollView>
+          {stage4State && (
+            <Stage4RedesignFooter
+              state={stage4State}
+              partnerName={partnerName}
+              isClosing={closeStage4.isPending}
+              isSharing={shareStage4Selections.isPending}
+              isRevising={unshareStage4Selections.isPending}
+              onShareSelections={handleShareStage4Selections}
+              onReviseSelections={handleReviseStage4Selections}
+              onKeepRefiningNoOverlap={handleKeepRefiningNoOverlap}
+              onCloseStage4={(kind, reason, checkInDate) => {
+                handleCloseRedesignedStage4(kind, reason, checkInDate);
+                setShowStage4Drawer(false);
+              }}
+            />
+          )}
+          {/* Nested inside the Stage 4 Modal so the sub-chat presents on top
+              of "What comes next" — closing the sub-chat returns you here,
+              not all the way out to the partner chat. */}
+          <Stage4SubChatDrawer
+            visible={Boolean(stage4SubChat)}
+            subChat={stage4SubChat}
+            anchorLabel={stage4SubChatAnchorLabel}
+            initialProposalText={stage4SubChatInitialProposalText}
+            isSending={sendStage4SubChatMessage.isPending}
+            isResolving={resolveStage4SubChatMutation.isPending}
+            onSendMessage={handleSendStage4SubChatMessage}
+            onResolve={handleResolveStage4SubChat}
+            onClose={() => setStage4SubChat(null)}
+          />
+        </SafeAreaView>
+      </Modal>
+
       {/* Invitation Ready Modal — replaces the inline 'invitation' panel.
           Opens automatically when the topic is confirmed and the user has not
           yet shared or dismissed; "Later" then surfaces an onboarding tooltip
-          pointing at the book icon. */}
+          pointing at the header share icon. */}
       <Modal
         visible={
-          (shouldShowInvitationPanel || auditFixture === 'invitation-ready') &&
+          (shouldShowInvitationPanel || showInvitationReadyModal || auditFixture === 'invitation-ready') &&
           !!topicFrame &&
           !!invitationUrl &&
           !partnerAccepted
         }
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          setInvitationPanelDismissed(true);
-          confirmInvitationAndAwaitFollowUp();
-          if (!shareLaterTooltipShownThisSession) {
-            setShowShareLaterTooltip(true);
-            setShareLaterTooltipShownThisSession(true);
-          }
-        }}
+        onRequestClose={handleDismissInvitationReadyModal}
       >
         <View style={styles.invitationModalBackdrop}>
           <View
@@ -3984,14 +4165,7 @@ export function UnifiedSessionScreen({
           >
             <TouchableOpacity
               style={styles.invitationModalCloseButton}
-              onPress={() => {
-                setInvitationPanelDismissed(true);
-                confirmInvitationAndAwaitFollowUp();
-                if (!shareLaterTooltipShownThisSession) {
-                  setShowShareLaterTooltip(true);
-                  setShareLaterTooltipShownThisSession(true);
-                }
-              }}
+              onPress={handleDismissInvitationReadyModal}
               accessibilityRole="button"
               accessibilityLabel="Close"
               testID="invitation-modal-close-button"
@@ -4011,8 +4185,11 @@ export function UnifiedSessionScreen({
                 onPress={async () => {
                   const didShare = await handleShareInvitation();
                   if (didShare) {
+                    setShowInvitationReadyModal(false);
                     setInvitationPanelDismissed(true);
-                    confirmInvitationAndAwaitFollowUp();
+                    if (!invitationConfirmed) {
+                      confirmInvitationAndAwaitFollowUp();
+                    }
                   }
                 }}
                 accessibilityRole="button"
@@ -4059,45 +4236,6 @@ export function UnifiedSessionScreen({
         </View>
       )}
 
-      {/* Activity Drawer - bottom sheet with timeline items */}
-      <ActivityDrawer
-        visible={showActivityMenu}
-        sessionId={sessionId}
-        partnerName={partnerName}
-        sessionStatus={session?.status}
-        focusTarget={activityFocusTarget}
-        onClose={() => {
-          setShowActivityMenu(false);
-          setActivityFocusTarget(null);
-        }}
-        onOpenRefinement={(offerId, suggestion) => {
-          setShowActivityMenu(false);
-          setRefinementInitialSuggestion(suggestion);
-          setRefinementOfferId(offerId);
-        }}
-        onShareAsIs={(_offerId) => {
-          setShowActivityMenu(false);
-          trackShareDraftSent(sessionId, (shareOfferData?.suggestion?.action ?? 'OFFER_OPTIONAL') as 'OFFER_SHARING' | 'OFFER_OPTIONAL', false);
-          handleRespondToShareOffer('accept');
-        }}
-        onOpenEmpathyDetail={(_attemptId, _content) => {
-          setShowActivityMenu(false);
-          setShowEmpathyDrawer(true);
-        }}
-        topicFrame={topicFrameConfirmed ? (topicFrame || undefined) : undefined}
-        invitationTimestamp={isInviter ? (invitation?.messageConfirmedAt || undefined) : undefined}
-        partnerAccepted={partnerAccepted}
-        onShareInvitation={
-          isInviter && invitationUrl && !partnerAccepted
-            ? () => {
-                handleShareInvitation();
-              }
-            : undefined
-        }
-        partnerEmpathyValidated={isEmpathyValidated || (partnerEmpathyData?.validated ?? false)}
-        testID="activity-drawer"
-      />
-
       {/* Refinement Modal - AI-guided chat for refining share offer content */}
       {refinementOfferId && (
         <RefinementModalScreen
@@ -4110,10 +4248,7 @@ export function UnifiedSessionScreen({
           onShareComplete={() => {
             setRefinementOfferId(null);
             trackShareDraftSent(sessionId, (shareOfferData?.suggestion?.action ?? 'OFFER_OPTIONAL') as 'OFFER_SHARING' | 'OFFER_OPTIONAL', true);
-            // Open activity drawer to show updated share status
-            setActivityFocusTarget(null);
-            setShowActivityMenu(true);
-            // Refresh activity menu data
+            // Shared context appears inline in chat. Refresh share data.
             queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
             queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
             queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
@@ -4144,6 +4279,23 @@ const useStyles = () => {
     },
     content: {
       flex: 1,
+    },
+    initialSessionSurface: {
+      flex: 1,
+    },
+    initialSessionSurfaceHidden: {
+      opacity: 0,
+    },
+    loadingOverlay: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: palette.bg,
+      padding: 20,
     },
     centerContainer: {
       flex: 1,
@@ -4369,7 +4521,7 @@ const useStyles = () => {
       top: 49,
       right: 12,
       maxWidth: 240,
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgElev,
       borderRadius: t.radius.md,
       paddingHorizontal: t.spacing.md,
       paddingVertical: t.spacing.sm,
@@ -4379,7 +4531,7 @@ const useStyles = () => {
       shadowOffset: { width: 0, height: 4 },
       elevation: 8,
       borderWidth: 1,
-      borderColor: t.colors.border,
+      borderColor: palette.borderStrong,
     },
     shareLaterTooltipTail: {
       position: 'absolute' as const,
@@ -4392,11 +4544,11 @@ const useStyles = () => {
       borderBottomWidth: 8,
       borderLeftColor: 'transparent' as const,
       borderRightColor: 'transparent' as const,
-      borderBottomColor: t.colors.bgSecondary,
+      borderBottomColor: palette.bgElev,
     },
     shareLaterTooltipText: {
       fontSize: t.typography.fontSize.sm,
-      color: t.colors.textPrimary,
+      color: palette.text,
       lineHeight: 20,
       marginBottom: t.spacing.sm,
     },
@@ -4405,7 +4557,7 @@ const useStyles = () => {
       paddingHorizontal: t.spacing.md,
       paddingVertical: t.spacing.xs,
       borderRadius: t.radius.sm,
-      backgroundColor: t.colors.accent,
+      backgroundColor: palette.accent,
     },
     shareLaterTooltipButtonText: {
       color: t.colors.textOnAccent,
@@ -4829,7 +4981,56 @@ const useStyles = () => {
       right: 0,
       bottom: 0,
       backgroundColor: palette.bg,
+      // Stretch child to full width (not 'center' — that collapses it to intrinsic width).
+      alignItems: 'stretch',
+      // Sit above sibling chrome like ChatInterface's bottom EmotionSlider, which is
+      // a normal-flow sibling and would otherwise bleed through on iOS at higher elevations.
+      zIndex: 100,
+      elevation: 100,
+    },
+    stage4DrawerSafeArea: {
+      flex: 1,
+      backgroundColor: palette.bgPane,
+    },
+    stage4DrawerDragHandleArea: {
+      paddingTop: 12,
+      paddingBottom: 8,
       alignItems: 'center',
+    },
+    stage4DrawerDragHandle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: palette.borderStrong,
+    },
+    stage4DrawerHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 16,
+    },
+    stage4DrawerTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: palette.text,
+    },
+    stage4DrawerCloseButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: palette.bgElev,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stage4DrawerCloseText: {
+      color: palette.textMuted,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    stage4DrawerScroll: {
+      paddingBottom: 8,
     },
     closeOverlay: {
       position: 'absolute',

@@ -140,4 +140,74 @@ describe('TendingPanel', () => {
 
     expect(defaultProps.onCreateReentry).toHaveBeenCalledWith('I want to revisit the open need.');
   });
+
+  describe('parseSummaryLines rendering', () => {
+    it('renders a standard Label: value line', () => {
+      render(
+        <TendingPanel
+          {...defaultProps}
+          entries={[{ ...openEntry, summary: 'Open needs: Trust and communication' }]}
+          agreements={[]}
+        />
+      );
+      expect(screen.getByText('Open needs')).toBeTruthy();
+      expect(screen.getByText('Trust and communication')).toBeTruthy();
+    });
+
+    it('renders Stage 4 closed as ... line with Closure label', () => {
+      render(
+        <TendingPanel
+          {...defaultProps}
+          entries={[{ ...openEntry, summary: 'Stage 4 closed as RESOLVED: Found common ground' }]}
+          agreements={[]}
+        />
+      );
+      expect(screen.getByText('Closure')).toBeTruthy();
+      expect(screen.getByText('Found common ground')).toBeTruthy();
+    });
+
+    it('renders a semicolon-delimited line as bullet items', () => {
+      render(
+        <TendingPanel
+          {...defaultProps}
+          entries={[{ ...openEntry, summary: 'Shared agreements: A; B; C' }]}
+          agreements={[]}
+        />
+      );
+      expect(screen.getByText('Shared agreements')).toBeTruthy();
+      expect(screen.getByText('\u2022 A')).toBeTruthy();
+      expect(screen.getByText('\u2022 B')).toBeTruthy();
+      expect(screen.getByText('\u2022 C')).toBeTruthy();
+    });
+
+    it('renders nothing for null summary', () => {
+      render(
+        <TendingPanel
+          {...defaultProps}
+          entries={[{ ...openEntry, summary: null }]}
+          agreements={[]}
+        />
+      );
+      expect(screen.queryByText('Open needs')).toBeNull();
+      expect(screen.queryByText('Closure')).toBeNull();
+    });
+
+    it('filters out the Passive Tending re-entry context. header line', () => {
+      render(
+        <TendingPanel
+          {...defaultProps}
+          entries={[
+            {
+              ...openEntry,
+              summary: 'Passive Tending re-entry context.\nOpen needs: Trust',
+            },
+          ]}
+          agreements={[]}
+        />
+      );
+      expect(screen.queryByText('Passive Tending re-entry context.')).toBeNull();
+      expect(screen.getByText('Open needs')).toBeTruthy();
+      expect(screen.getByText('Trust')).toBeTruthy();
+    });
+  });
 });
