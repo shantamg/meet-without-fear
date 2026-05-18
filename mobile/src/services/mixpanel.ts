@@ -112,6 +112,7 @@ export const track = (eventName: string, properties?: Record<string, unknown>): 
  */
 export const identify = (userId: string): void => {
   assertInit();
+  if (analyticsOptedOut) return;
 
   if (identifiedUserId === userId) {
     return;
@@ -140,6 +141,7 @@ const isValidDistinctId = (value: unknown): value is string =>
 
 export const alias = async (aliasId: string): Promise<boolean> => {
   assertInit();
+  if (analyticsOptedOut) return false;
   if (!isValidDistinctId(aliasId)) {
     console.warn('[Mixpanel] alias() skipped: aliasId is not a valid string');
     return false;
@@ -173,6 +175,7 @@ export const alias = async (aliasId: string): Promise<boolean> => {
  */
 export const setUserProperties = (properties: Record<string, unknown>): void => {
   assertInit();
+  if (analyticsOptedOut) return;
 
   try {
     const people = mixpanelClient?.getPeople();
@@ -192,6 +195,7 @@ export const setUserProperties = (properties: Record<string, unknown>): void => 
  */
 export const setUserPropertiesOnce = (properties: Record<string, unknown>): void => {
   assertInit();
+  if (analyticsOptedOut) return;
   try {
     const people = mixpanelClient?.getPeople();
     if (people) {
