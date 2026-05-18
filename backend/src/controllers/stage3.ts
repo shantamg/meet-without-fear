@@ -806,7 +806,7 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
       }
 
       const transitionContent =
-        'You have both checked the needs lists and marked them valid. Now move to strategies that can honor what each of you needs.';
+        'You\'ve both confirmed the needs. Strategy proposals are on their way — you\'ll each get to review them and decide which ones feel right.';
 
       const transitionMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
       for (const uid of [user.id, partnerId]) {
@@ -824,10 +824,11 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
       }
 
       for (const transitionMessage of transitionMessages) {
-        await publishSessionEvent(sessionId, 'partner.stage_completed', {
+        const eventData = {
           forUserId: transitionMessage.forUserId,
           previousStage: 3,
           currentStage: 4,
+          stage: 3,
           userId: user.id,
           triggeredByUserId: user.id,
           message: {
@@ -836,7 +837,14 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
             timestamp: transitionMessage.timestamp,
             forUserId: transitionMessage.forUserId,
           },
-        });
+        };
+
+        if (transitionMessage.forUserId === partnerId) {
+          // Use notifyPartner so the partner gets a push notification if offline
+          await notifyPartner(sessionId, partnerId, 'partner.stage_completed', eventData);
+        } else {
+          await publishSessionEvent(sessionId, 'partner.stage_completed', eventData);
+        }
       }
     }
 
