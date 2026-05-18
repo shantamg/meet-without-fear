@@ -4,7 +4,7 @@
  * Allows users to manage their privacy preferences.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   View,
   Text,
@@ -29,10 +29,10 @@ export default function PrivacySettingsScreen() {
       Alert.alert('Error', 'Could not update privacy settings. Please try again.');
     },
   });
-  const [shareAnonymousAnalytics, setShareAnonymousAnalytics] = useState(true);
   const privacyPreferences = privacyPreferencesData?.preferences;
   const showActivityStatus = privacyPreferences?.showActivityStatus ?? true;
   const allowSessionInvites = privacyPreferences?.allowSessionInvites ?? true;
+  const shareAnonymousAnalytics = !(privacyPreferences?.analyticsOptOut ?? false);
   const privacyControlsDisabled = isLoadingPrivacyPreferences || updatePrivacyPreferences.isPending;
 
   const handlePrivacyPolicyPress = () => {
@@ -135,9 +135,12 @@ export default function PrivacySettingsScreen() {
             </View>
             <Switch
               value={shareAnonymousAnalytics}
-              onValueChange={setShareAnonymousAnalytics}
+              onValueChange={(enabled) => {
+                updatePrivacyPreferences.mutate({ analyticsOptOut: !enabled });
+              }}
               trackColor={{ false: palette.chipBg, true: palette.accent }}
               thumbColor={palette.bgElev}
+              disabled={privacyControlsDisabled}
             />
           </View>
         </View>

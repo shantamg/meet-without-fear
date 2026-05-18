@@ -51,6 +51,7 @@ const createNoOpClient = (): IMixpanel => {
 let mixpanelClient: IMixpanel;
 let didInit = false;
 let identifiedUserId: string | null = null;
+let analyticsOptedOut = false;
 
 /**
  * Initialize the Mixpanel client.
@@ -93,6 +94,7 @@ const assertInit = (): void => {
 
 export const track = (eventName: string, properties?: Record<string, unknown>): void => {
   assertInit();
+  if (analyticsOptedOut) return;
   if (__DEV__ && properties) {
     if ('session_id' in properties && !properties.session_id) {
       console.warn(`[Mixpanel DEV] "${eventName}" tracked with falsy session_id`);
@@ -218,6 +220,13 @@ export const registerSuperProperties = (properties: Record<string, unknown>): vo
 export const reset = (): void => {
   mixpanelClient?.reset();
   identifiedUserId = null;
+};
+
+/**
+ * Set analytics opt-out state. When opted out, track() calls are silently dropped.
+ */
+export const setAnalyticsOptOut = (optedOut: boolean): void => {
+  analyticsOptedOut = optedOut;
 };
 
 /**
