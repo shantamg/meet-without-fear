@@ -6,6 +6,7 @@ import routes from './routes';
 import { requestContextMiddleware } from './middleware/request-context';
 import { errorHandler, notFoundHandler } from './middleware/errors';
 import { scannerFilter } from './middleware/scanner-filter';
+import { globalRateLimit } from './middleware/rate-limit';
 import { logger } from './lib/logger';
 
 const app = express();
@@ -87,6 +88,9 @@ app.use((req, res, next) => {
 app.get('/health', (_, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Global rate limit — 100 req/min per user safety net (before route-specific limits)
+app.use('/api', globalRateLimit);
 
 // API routes - support both /api and /api/v1 for compatibility
 app.use('/api/v1', routes);

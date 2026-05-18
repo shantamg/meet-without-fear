@@ -31,6 +31,24 @@ const ASSEMBLYAI_WS_BASE = 'wss://streaming.assemblyai.com/v3/ws';
 // At 16kHz, 16-bit mono PCM: 50ms = 1600 bytes
 const MIN_CHUNK_SIZE = 1600;
 
+// WebSocket connection rate limit: 5 upgrades per 60s per user
+const WS_RATE_WINDOW_MS = 60_000;
+const WS_RATE_MAX = 5;
+const wsConnectionTimestamps = new Map<string, number[]>();
+
+function isWsRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const timestamps = wsConnectionTimestamps.get(userId) || [];
+  const recent = timestamps.filter((t) => now - t < WS_RATE_WINDOW_MS);
+  if (recent.length >= WS_RATE_MAX) {
+    wsConnectionTimestamps.set(userId, recent);
+    return true;
+  }
+  recent.push(now);
+  wsConnectionTimestamps.set(userId, recent);
+  return false;
+}
+
 /**
  * Attach a /realtime WebSocket endpoint to an existing HTTP server.
  * Call this from server.ts after creating the HTTP server.
@@ -55,15 +73,25 @@ export function attachRealtimeWebSocket(server: Server): void {
       return;
     }
 
+    let userId: string;
     try {
       const { verifyToken } = await import('@clerk/express');
       const session = await verifyToken(token, {
         secretKey: CLERK_SECRET_KEY!,
       });
-      logger.info('[Realtime] Authenticated WebSocket upgrade for user:', session.sub);
+      userId = session.sub;
+      logger.info('[Realtime] Authenticated WebSocket upgrade for user:', userId);
     } catch (error) {
       logger.warn('[Realtime] WebSocket upgrade rejected: invalid token', error);
       (socket as Socket).write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      (socket as Socket).destroy();
+      return;
+    }
+
+    // Rate limit: max 5 WebSocket connections per minute per user
+    if (isWsRateLimited(userId)) {
+      logger.warn('[Realtime] WebSocket upgrade rejected: rate limited for user:', userId);
+      (socket as Socket).write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
       (socket as Socket).destroy();
       return;
     }
