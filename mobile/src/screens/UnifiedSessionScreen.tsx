@@ -3804,7 +3804,9 @@ export function UnifiedSessionScreen({
             </>
           ) : undefined}
           hideInput={
-            redesignedStage4AllowsInput ? false : derivedShouldHideInput
+            redesignedStage4AllowsInput
+              ? (redesignedStage4ProposalCount > 0 && !stage4State?.outcome)
+              : derivedShouldHideInput
           }
           validationCards={validationCards}
           onValidateAccurate={handleValidationAccurate}
