@@ -943,13 +943,13 @@ async function loadNotableFacts(
 
   // Debug logging to track notable facts loading
   if (!vessel) {
-    logger.info(`[Context Assembler] loadNotableFacts: No UserVessel found for session=${sessionId}, user=${userId}`);
+    logger.debug(`[Context Assembler] loadNotableFacts: No UserVessel found for session=${sessionId}, user=${userId}`);
     return undefined;
   }
 
   const rawFacts = vessel.notableFacts;
   if (!rawFacts) {
-    logger.info(`[Context Assembler] loadNotableFacts: UserVessel exists but no facts for session=${sessionId}, user=${userId}`);
+    logger.debug(`[Context Assembler] loadNotableFacts: UserVessel exists but no facts for session=${sessionId}, user=${userId}`);
     return undefined;
   }
 
@@ -973,7 +973,7 @@ async function loadNotableFacts(
     return undefined;
   }
 
-  logger.info(`[Context Assembler] loadNotableFacts: Loaded ${categorizedFacts.length} facts for session=${sessionId}, user=${userId}:`, categorizedFacts.slice(0, 3));
+  logger.info(`[Context Assembler] loadNotableFacts: Loaded ${categorizedFacts.length} facts for session=${sessionId}, user=${userId}`);
   return categorizedFacts;
 }
 
