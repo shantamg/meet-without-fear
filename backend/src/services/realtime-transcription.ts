@@ -11,6 +11,12 @@
  *     → Forward binary PCM to AssemblyAI
  *     → Relay PartialTranscript / FinalTranscript back to mobile
  *
+ * Auth:
+ *   Client connects without a token in the URL. The first WebSocket message
+ *   must be { type: "auth", token: "<clerk-jwt>" }. The server verifies the
+ *   JWT and only then establishes the AssemblyAI proxy. This keeps the JWT
+ *   out of URLs, server logs, and proxy logs.
+ *
  * Key behaviors:
  *   - Buffers small audio chunks to meet AssemblyAI's 50–1000ms requirement
  *   - Tracks transcripts per turn to deduplicate
@@ -30,6 +36,7 @@ const ASSEMBLYAI_WS_BASE = 'wss://streaming.assemblyai.com/v3/ws';
 
 // At 16kHz, 16-bit mono PCM: 50ms = 1600 bytes
 const MIN_CHUNK_SIZE = 1600;
+const AUTH_TIMEOUT_MS = 5000;
 
 /**
  * Attach a /realtime WebSocket endpoint to an existing HTTP server.
@@ -38,7 +45,7 @@ const MIN_CHUNK_SIZE = 1600;
 export function attachRealtimeWebSocket(server: Server): void {
   const wss = new WebSocket.Server({ noServer: true });
 
-  server.on('upgrade', async (request: IncomingMessage, socket, head: Buffer) => {
+  server.on('upgrade', (request: IncomingMessage, socket, head: Buffer) => {
     const url = new URL(request.url || '', `http://${request.headers.host}`);
 
     if (url.pathname !== '/realtime') {
@@ -46,36 +53,51 @@ export function attachRealtimeWebSocket(server: Server): void {
       return;
     }
 
-    // Verify Clerk JWT before accepting the WebSocket upgrade
-    const token = url.searchParams.get('token');
-    if (!token) {
-      logger.warn('[Realtime] WebSocket upgrade rejected: no token provided');
-      (socket as Socket).write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-      (socket as Socket).destroy();
-      return;
-    }
-
-    try {
-      const { verifyToken } = await import('@clerk/express');
-      const session = await verifyToken(token, {
-        secretKey: CLERK_SECRET_KEY!,
-      });
-      logger.info('[Realtime] Authenticated WebSocket upgrade for user:', session.sub);
-    } catch (error) {
-      logger.warn('[Realtime] WebSocket upgrade rejected: invalid token', error);
-      (socket as Socket).write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-      (socket as Socket).destroy();
-      return;
-    }
-
+    // Accept upgrade without auth — JWT is verified via first WebSocket message
+    // (prevents token from leaking into server/proxy URL logs)
     wss.handleUpgrade(request, socket as Socket, head, (ws: WebSocket) => {
       wss.emit('connection', ws, request);
     });
   });
 
-  wss.on('connection', async (clientWs: WebSocket, request: import('http').IncomingMessage) => {
-    logger.info('[Realtime] Client connected');
+  wss.on('connection', (clientWs: WebSocket, request: IncomingMessage) => {
+    logger.info('[Realtime] Client connected, awaiting auth');
 
+    const authTimeout = setTimeout(() => {
+      logger.warn('[Realtime] Auth timeout — no auth message within 5s');
+      clientWs.close(1008, 'Auth timeout');
+    }, AUTH_TIMEOUT_MS);
+
+    const onFirstMessage = async (data: WebSocket.Data) => {
+      clientWs.off('message', onFirstMessage);
+      clearTimeout(authTimeout);
+
+      try {
+        const message = JSON.parse(data.toString());
+        if (message.type !== 'auth' || typeof message.token !== 'string') {
+          logger.warn('[Realtime] First message was not a valid auth message');
+          clientWs.close(1008, 'Expected auth message');
+          return;
+        }
+
+        const { verifyToken } = await import('@clerk/express');
+        const session = await verifyToken(message.token, {
+          secretKey: CLERK_SECRET_KEY!,
+        });
+        logger.info('[Realtime] Authenticated WebSocket for user:', session.sub);
+
+        startTranscriptionProxy(clientWs, request);
+      } catch (error) {
+        logger.warn('[Realtime] WebSocket auth failed:', error);
+        clientWs.close(1008, 'Policy Violation');
+      }
+    };
+
+    clientWs.on('message', onFirstMessage);
+    clientWs.on('close', () => clearTimeout(authTimeout));
+  });
+
+  async function startTranscriptionProxy(clientWs: WebSocket, request: IncomingMessage): Promise<void> {
     if (!ASSEMBLYAI_API_KEY) {
       clientWs.send(JSON.stringify({ type: 'error', data: 'Voice transcription not configured' }));
       clientWs.close(1008, 'No API key');
@@ -250,5 +272,5 @@ export function attachRealtimeWebSocket(server: Server): void {
         data: 'Failed to initialize transcription: ' + (error instanceof Error ? error.message : 'Unknown error'),
       }));
     }
-  });
+  }
 }

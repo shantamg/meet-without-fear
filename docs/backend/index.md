@@ -3,7 +3,7 @@ title: Backend Documentation
 sidebar_position: 1
 description: Backend-specific documentation for the Express + Prisma API server.
 created: 2026-03-11
-updated: 2026-04-20
+updated: 2026-05-18
 status: living
 ---
 # Backend Documentation
@@ -60,7 +60,7 @@ These rules are constitutional and must never be compromised:
 - **AI Models**: AWS Bedrock (Haiku for mechanics, Sonnet for facilitation)
 - **Auth**: Clerk (JWT validation, account deletion handoff)
 - **Email**: Resend (transactional; not outbound invitation delivery)
-- **Voice**: AssemblyAI Universal Streaming (real-time transcription via `realtime-transcription.ts`; WebSocket upgrade requires Clerk JWT via `?token=` param)
+- **Voice**: AssemblyAI Universal Streaming (real-time transcription via `realtime-transcription.ts`; WebSocket upgrade is unauthenticated — auth uses a first-message pattern: the client sends `{ type: "auth", token: "<clerk-jwt>" }` as the first WebSocket message; connections that omit or fail auth are closed with code 1008 after a 5-second timeout)
 - **Infrastructure**: Render.com (Web Service + Managed Postgres)
 
 ## Dual-Layer Data Strategy
