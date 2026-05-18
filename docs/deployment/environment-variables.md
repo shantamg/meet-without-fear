@@ -26,6 +26,7 @@ All required environment variables for Meet Without Fear services.
 | `AWS_ACCESS_KEY_ID` | AWS credentials for Bedrock | `AKIA...` |
 | `AWS_SECRET_ACCESS_KEY` | AWS credentials for Bedrock | (secret) |
 | `AWS_REGION` | AWS region for Bedrock | `us-west-2` |
+| `FIELD_ENCRYPTION_KEY` | 32-byte base64 key for AES-256-GCM field encryption. Server refuses to start without it in production. Generate with `openssl rand -base64 32` | (secret) |
 
 ### Optional
 
@@ -119,6 +120,7 @@ Set via Render dashboard or `render.yaml`:
 - `JWT_REFRESH_SECRET`: Generate with `generateValue: true`
 - `ABLY_API_KEY`: Set manually (secret)
 - `AWS_*`: Set manually (secrets)
+- `FIELD_ENCRYPTION_KEY`: Generate with `openssl rand -base64 32` (secret)
 
 ## Secrets Management
 
