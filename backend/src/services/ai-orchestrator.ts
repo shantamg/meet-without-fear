@@ -405,7 +405,7 @@ export async function orchestrateResponse(
   });
 
   // Debug: Log formatted context length and snippet
-  logger.info(`[AI Orchestrator] Formatted context: ${formattedContextBundle.length} chars, starts with: "${formattedContextBundle.slice(0, 100).replace(/\n/g, '\\n')}..."`);
+  logger.info(`[AI Orchestrator] Formatted context: ${formattedContextBundle.length} chars`);
 
   // Merge retrieved context with context bundle
   let fullContext = formattedContextBundle;

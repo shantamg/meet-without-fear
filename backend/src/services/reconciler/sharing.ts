@@ -544,7 +544,7 @@ Respond in JSON:
   }
   response.suggestedContent = cleanVisibleAIText(response.suggestedContent);
   response.reason = cleanVisibleAIText(response.reason);
-  logger.info('Share suggestion generated', { preview: response.suggestedContent.substring(0, 50), reason: response.reason });
+  logger.info('Share suggestion generated', { contentLength: response.suggestedContent.length, reasonLength: response.reason.length });
 
   // Use provided DB record or fall back to retry loop
   const dbResult = dbReconcilerResult || await findReconcilerResultWithRetry(sessionId, guesser.id, subject.id);
@@ -655,7 +655,7 @@ Respond in JSON:
     return null;
   }
 
-  logger.debug('Refined suggestion generated', { preview: response.refinedContent.substring(0, 50) });
+  logger.debug('Refined suggestion generated', { contentLength: response.refinedContent.length });
   return response.refinedContent;
 }
 
@@ -898,7 +898,7 @@ export async function respondToShareSuggestion(
     throw new Error('Share suggestion content is empty - cannot share');
   }
 
-  logger.info('User responded to share offer', { userId, action: response.action, preview: sharedContent.substring(0, 50) });
+  logger.info('User responded to share offer', { userId, action: response.action, contentLength: sharedContent.length });
 
   const subjectName = shareOffer.result.subjectName;
   const guesserName = shareOffer.result.guesserName;
@@ -1328,7 +1328,7 @@ Respond in JSON:
   const suggestedContent = cleanVisibleAIText(suggestionResult.suggestedContent);
   const suggestedReason = cleanVisibleAIText(suggestionResult.reason);
 
-  logger.debug('Generated feelings-focused suggestion', { preview: suggestedContent.substring(0, 50) });
+  logger.debug('Generated feelings-focused suggestion', { contentLength: suggestedContent.length });
 
   // Create or update share offer record with the crafted suggestion
   await prisma.reconcilerShareOffer.upsert({
