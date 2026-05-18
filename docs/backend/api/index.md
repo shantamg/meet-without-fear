@@ -4,7 +4,7 @@ sidebar_position: 1
 description: REST API endpoints for the Meet Without Fear backend. All endpoints use JSON request/response bodies.
 slug: /backend/api
 created: 2026-03-11
-updated: 2026-05-15
+updated: 2026-05-18
 status: living
 ---
 # API Specification
@@ -240,6 +240,7 @@ The routes below are live; consult the source directly until dedicated pages exi
 | `CONSENT_REQUIRED` | 403 | Content requires consent to access |
 | `PARTNER_NOT_READY` | 400 | Partner hasn't completed required action |
 | `SESSION_NOT_ACTIVE` | 400 | Session is paused, resolved, or abandoned |
+| `RATE_LIMITED` | 429 | Too many requests from same IP (public endpoints) |
 
 ## Real-time Updates
 
