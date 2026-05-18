@@ -11,6 +11,7 @@
 import { Router } from 'express';
 import { requireAuth, requireSessionAccess } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errors';
+import { streamingRateLimit } from '../middleware/rate-limit';
 import {
   sendMessage,
   sendMessageStream,
@@ -26,6 +27,7 @@ router.post(
   '/sessions/:id/messages',
   requireAuth,
   requireSessionAccess,
+  streamingRateLimit,
   asyncHandler(sendMessage)
 );
 
@@ -34,6 +36,7 @@ router.post(
   '/sessions/:id/messages/stream',
   requireAuth,
   requireSessionAccess,
+  streamingRateLimit,
   asyncHandler(sendMessageStream)
 );
 
@@ -58,6 +61,7 @@ router.post(
   '/sessions/:id/messages/initial',
   requireAuth,
   requireSessionAccess,
+  streamingRateLimit,
   asyncHandler(getInitialMessage)
 );
 
