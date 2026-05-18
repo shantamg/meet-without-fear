@@ -4,7 +4,7 @@ sidebar_position: 1
 description: REST API endpoints for the Meet Without Fear backend. All endpoints use JSON request/response bodies.
 slug: /backend/api
 created: 2026-03-11
-updated: 2026-05-15
+updated: 2026-05-18
 status: living
 ---
 # API Specification
@@ -208,6 +208,8 @@ Identity provisioning lives in Clerk; the backend only exposes profile and token
 | `PUT`    | `/auth/me/memory-preferences` | Replace memory preferences |
 | `GET`    | `/auth/me/notification-preferences` | Read push notification prefs |
 | `PATCH`  | `/auth/me/notification-preferences` | Partial update of prefs |
+| `GET`    | `/auth/me/privacy-preferences` | Read privacy preferences (`showActivityStatus`, `allowSessionInvites`, `analyticsOptOut`) |
+| `PATCH`  | `/auth/me/privacy-preferences` | Partial update of privacy preferences |
 
 ### Additional feature areas (not yet broken out in this index)
 

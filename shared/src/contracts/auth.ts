@@ -188,6 +188,7 @@ export type UpdateNotificationPreferencesResponseInput = z.infer<typeof updateNo
 export const privacyPreferencesDTOSchema = z.object({
   showActivityStatus: z.boolean(),
   allowSessionInvites: z.boolean(),
+  analyticsOptOut: z.boolean(),
 });
 
 export type PrivacyPreferencesDTOInput = z.infer<typeof privacyPreferencesDTOSchema>;
@@ -195,6 +196,7 @@ export type PrivacyPreferencesDTOInput = z.infer<typeof privacyPreferencesDTOSch
 export const updatePrivacyPreferencesRequestSchema = z.object({
   showActivityStatus: z.boolean().optional(),
   allowSessionInvites: z.boolean().optional(),
+  analyticsOptOut: z.boolean().optional(),
 });
 
 export type UpdatePrivacyPreferencesRequestInput = z.infer<typeof updatePrivacyPreferencesRequestSchema>;
