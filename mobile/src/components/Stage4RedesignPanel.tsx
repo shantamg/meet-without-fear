@@ -392,7 +392,7 @@ function NeedRows({
 
   if (rows.length === 0) return null;
 
-  const showActions = tone === 'open';
+  const showActions = tone === 'open' || tone === 'partial';
 
   return (
     <View style={styles.coverageGroup}>
@@ -668,7 +668,14 @@ export function Stage4RedesignPanel({
         {coverageHasRows ? (
           <>
             <NeedRows title="Covered" rows={state.coverageAudit.covered} tone="covered" />
-            <NeedRows title="Partly addressed" rows={state.coverageAudit.partial} tone="partial" />
+            <NeedRows
+              title="Partly addressed"
+              rows={state.coverageAudit.partial}
+              tone="partial"
+              onBrainstormNeed={onBrainstormNeed}
+              onDeclineNeed={onDeclineNeed}
+              onUndeclineNeed={onUndeclineNeed}
+            />
             <NeedRows
               title="Not yet addressed"
               rows={state.coverageAudit.open}
