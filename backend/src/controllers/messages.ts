@@ -2182,6 +2182,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         aiResponse: aiMessage.content,
         structuredProposals: metadata.stage4Proposals,
         compatibilityProposedStrategies: metadata.proposedStrategies,
+        topicFrame: session.topicFrame || undefined,
       });
       const stage4CaptureMetadata: NonNullable<SessionStateToolInput['stage4Capture']> = {
         appliedOperationCount: captureResult.appliedOperationCount,
