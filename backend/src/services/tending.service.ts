@@ -685,7 +685,12 @@ export async function submitTendingCheckin(args: {
 export async function openDueTendingEntries(now = new Date()): Promise<{ opened: number; entryIds: string[] }> {
   const dueEntries = await prisma.tendingEntry.findMany({
     where: {
-      type: TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
+      type: {
+        in: [
+          TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
+          TendingEntryType.SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN,
+        ],
+      },
       status: TendingEntryStatus.SCHEDULED,
       scheduledFor: { lte: now },
     },
