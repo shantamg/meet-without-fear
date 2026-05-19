@@ -327,8 +327,8 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     await handleMoodCheck(pageA);
     await handleMoodCheck(pageB);
 
-    await expect(pageA.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout: 10000 });
-    await expect(pageB.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout: 10000 });
+    await expect(pageA.getByTestId('needs-reveal-validate-button')).toBeVisible({ timeout: 10000 });
+    await expect(pageB.getByTestId('needs-reveal-validate-button')).toBeVisible({ timeout: 10000 });
     await expectNeedsComparisonFromApi(apiA, API_BASE_URL, sessionId, 'User A');
     await expectNeedsComparisonFromApi(apiB, API_BASE_URL, sessionId, 'User B');
 

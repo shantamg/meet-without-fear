@@ -541,18 +541,18 @@ export async function confirmSideBySideRevealAndValidation(
   partnerName: string,
   timeout = 30000
 ): Promise<void> {
-  await expect(page.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout });
-  await page.getByTestId('common-ground-confirm-button').click();
+  await expect(page.getByTestId('needs-reveal-validate-button')).toBeVisible({ timeout });
+  await page.getByTestId('needs-reveal-validate-button').click();
 
   const drawer = page.getByTestId('needs-drawer');
   await expect(drawer).toBeVisible({ timeout });
-  await expect(drawer.getByText('Review Needs Together')).toBeVisible({ timeout });
-  await expect(drawer.getByText(/Look at both lists together/i)).toBeVisible({ timeout });
+  await expect(drawer.getByText('Needs Side by Side')).toBeVisible({ timeout });
+  await expect(drawer.getByText(/Review both needs lists side by side/i)).toBeVisible({ timeout });
   await expect(drawer.getByText('You')).toBeVisible({ timeout });
   await expect(drawer.getByText(partnerName)).toBeVisible({ timeout });
   await expect(drawer.getByTestId('needs-drawer-side-by-side')).toBeVisible({ timeout });
 
-  await drawer.getByTestId('needs-drawer-confirm-cg').click();
+  await drawer.getByTestId('needs-drawer-validate-needs').click();
 }
 
 /**

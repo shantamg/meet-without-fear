@@ -143,19 +143,22 @@ test.describe('Stage 4 redesign: deterministic two-user coverage', () => {
     expect(closeData.data.closed).toBe(true);
     expect(closeData.data.outcome.kind).toBe('SHARED_AGREEMENT');
     expect(closeData.data.outcome.agreements).toHaveLength(1);
-    expect(closeData.data.state.tendingPreview.scheduledCount).toBe(1);
+    expect(closeData.data.state.tendingPreview.scheduledCount).toBe(2);
 
     const tendingData = await readJson<any>(
       await apiA.get(`/api/sessions/${seeded.sessionId}/tending`),
       'list scheduled Tending entries'
     );
-    expect(tendingData.data.entries).toHaveLength(1);
-    expect(tendingData.data.entries[0].type).toBe('SCHEDULED_SHARED_AGREEMENT_CHECKIN');
-    expect(tendingData.data.entries[0].status).toBe('SCHEDULED');
-    expect(tendingData.data.entries[0].agreementId).toBe(closeData.data.outcome.agreements[0].id);
+    expect(tendingData.data.entries).toHaveLength(2);
+    const sharedTending = tendingData.data.entries.find((entry: any) =>
+      entry.type === 'SCHEDULED_SHARED_AGREEMENT_CHECKIN'
+    );
+    expect(sharedTending).toBeTruthy();
+    expect(sharedTending.status).toBe('SCHEDULED');
+    expect(sharedTending.agreementId).toBe(closeData.data.outcome.agreements[0].id);
   });
 
-  test('no shared agreement closes without scheduled Tending and supports passive re-entry', async ({ request }) => {
+  test('no shared agreement preserves individual Tending and supports passive re-entry', async ({ request }) => {
     const seeded = await seedSession(request, 'STAGE4_REDESIGN_NO_OVERLAP_SELECTIONS');
     const apiA = apiFor(request, users.a.email, seeded.userAId);
 
@@ -169,14 +172,15 @@ test.describe('Stage 4 redesign: deterministic two-user coverage', () => {
 
     expect(closeData.data.outcome.kind).toBe('NO_SHARED_AGREEMENT');
     expect(closeData.data.outcome.agreements).toHaveLength(0);
-    expect(closeData.data.state.tendingPreview.scheduledCount).toBe(0);
+    expect(closeData.data.state.tendingPreview.scheduledCount).toBe(1);
     expect(closeData.data.state.tendingPreview.passiveReentryAvailable).toBe(true);
 
     const initialTending = await readJson<any>(
       await apiA.get(`/api/sessions/${seeded.sessionId}/tending`),
       'list Tending before passive re-entry'
     );
-    expect(initialTending.data.entries).toHaveLength(0);
+    expect(initialTending.data.entries).toHaveLength(1);
+    expect(initialTending.data.entries[0].type).toBe('SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN');
 
     const reentryData = await readJson<any>(
       await apiA.post(`/api/sessions/${seeded.sessionId}/tending/reentry`, {

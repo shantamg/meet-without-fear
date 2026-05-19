@@ -1457,11 +1457,11 @@ describe('Stage 4 API', () => {
       );
     });
 
-    it('rejects close requests that omit checkInDate with VALIDATION_ERROR', async () => {
+    it('rejects close requests with an empty checkInDate with VALIDATION_ERROR', async () => {
       const req = createMockRequest({
         user: mockUser,
         params: { id: mockSessionId },
-        body: {},
+        body: { checkInDate: '' },
       });
       const { res, statusMock, jsonMock } = createMockResponse();
 

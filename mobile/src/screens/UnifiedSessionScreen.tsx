@@ -406,7 +406,7 @@ export function NeedsIdentifiedChatCard({
       activeOpacity={0.8}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      testID="needs-identified-chat-card"
+      testID="needs-review-button"
     >
       {!compact ? (
         <View style={styles.needsSummaryHeader}>

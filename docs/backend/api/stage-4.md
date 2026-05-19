@@ -218,7 +218,7 @@ POST /api/v1/sessions/:id/stage4/close
 
 ```typescript
 interface CloseStage4Request {
-  checkInDate: string;               // REQUIRED. ISO 8601 date — single follow-up date for all tending entries
+  checkInDate?: string;              // ISO 8601 date; defaults to 10 days out when omitted
   kind?: Stage4ClosureKind;          // Overrides computed kind if provided
   reason?: Stage4ClosureReason;
   summary?: string;                  // max 2000 chars

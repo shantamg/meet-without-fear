@@ -64,6 +64,12 @@
   - Updated Stage 4 product/API/prompt docs for focused own-needs-first walkthrough, source labels, persisted walkthrough state, AI suggestions, quality review, and 10-day check-in.
   - Updated Stage 4 retrieval contract wording so AI suggestions use confirmed needs plus curated global library context, not user memory.
 
+- Verification fixes checkpoint completed:
+  - `POST /sessions/:id/stage4/close` now defaults omitted `checkInDate` to 10 days server-side.
+  - Restored the `needs-review-button` e2e test surface on the Stage 3 needs review card.
+  - Updated Stage 3 e2e helpers for the current needs reveal drawer labels and validation button.
+  - Updated Stage 4 redesign e2e expectations for individual-commitment tending entries.
+
 ## Files Changed In Stage 3 Backend Checkpoint
 
 - `shared/src/dto/need-edits.ts`
@@ -113,6 +119,16 @@
 - `docs/backend/prompts/stage-4-repair.md`
 - `docs/backend/state-machine/retrieval-contracts.md`
 
+## Files Changed In Verification Fixes Checkpoint
+
+- `backend/src/controllers/stage4.ts`
+- `backend/src/routes/__tests__/stage4.test.ts`
+- `docs/backend/api/stage-4.md`
+- `mobile/src/screens/UnifiedSessionScreen.tsx`
+- `e2e/helpers/test-utils.ts`
+- `e2e/tests/two-browser-stage-3.spec.ts`
+- `e2e/tests/two-browser-stage-4-redesign.spec.ts`
+
 ## Test Status
 
 - `npm --workspace backend run check` — passed.
@@ -128,10 +144,23 @@
 - `npm --workspace mobile run check` — passed after Stage 4 AI suggestion changes.
 - `npm --workspace backend run test -- stage4.test.ts` — passed after Stage 4 AI suggestion changes.
 - `npm --workspace backend run test -- needs-edit.service.test.ts stage3.test.ts` — passed after Stage 4 AI suggestion changes.
+- `npm run check` — passed across workspaces after docs checkpoint.
+- `npm run test` — mobile workspace failed before executing React Native tests because Jest could not resolve top-level `react-test-renderer`; backend passed 74 suites / 1374 tests, shared passed 12 suites / 216 tests.
+- `npm --workspace backend run check` — passed after verification fixes.
+- `npm --workspace mobile run check` — passed after verification fixes.
+- `npm --workspace e2e run check` — passed after e2e helper/spec updates.
+- `npm --workspace backend run test -- stage4.test.ts` — passed after default `checkInDate` update.
+- `npm --workspace e2e run e2e -- two-browser-stage-3.spec.ts two-browser-stage-4-redesign.spec.ts` — passed 5/5 after e2e updates.
+- `npm run check` — passed across workspaces after all verification fixes.
+- Local browser smoke:
+  - Seeded Stage 4 redesigned inventory via `/api/e2e/seed-session` and opened `localhost:8082`.
+  - Verified focused “Working toward agreements” one-need view, source groups, willingness controls, and 10-day/check-in-capable flow entry.
+  - Seeded Stage 3 needs review via `/api/e2e/seed-session` plus `/needs/capture` and opened `localhost:8082`.
+  - Verified `What Matters` review card and `Your Needs` drawer with Confirm/Add/Edit/Remove controls.
 - Watchman emitted recrawl warnings during Jest runs; tests still passed.
 
 ## Next Steps
 
-1. Commit the docs checkpoint.
+1. Commit the verification fixes checkpoint.
 2. Add or repair mobile tests once the `react-test-renderer` resolver issue is fixed.
-3. Run the required full verification suite and local seeded browser pass.
+3. Review final diff and mark the goal complete.

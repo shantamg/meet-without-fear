@@ -257,11 +257,12 @@ const closeStage4RequestSchema = z.object({
   reason: z.nativeEnum(Stage4ClosureReason).optional(),
   summary: z.string().max(2000).optional(),
   checkInDate: z
-    .string({ required_error: 'checkInDate is required' })
+    .string()
     .min(1, 'checkInDate is required')
     .refine((value) => !Number.isNaN(new Date(value).getTime()), {
       message: 'checkInDate must be a valid ISO date string',
-    }),
+    })
+    .optional(),
   // Optional, deprecated. Kept for backward compatibility — Phase 4 removes it.
   // TODO(phase-4): remove followUpDatesByProposalId; checkInDate is the single source.
   followUpDatesByProposalId: z.record(z.string()).optional(),
@@ -1251,7 +1252,9 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
         followUpDate: Date | null;
       }> = [];
 
-      const checkInAt = new Date(parseResult.data.checkInDate);
+      const checkInAt = parseResult.data.checkInDate
+        ? new Date(parseResult.data.checkInDate)
+        : new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000);
 
       if (closureKind === Stage4ClosureKind.SHARED_AGREEMENT) {
         for (const proposal of mutuallyWillingSharedProposals) {
