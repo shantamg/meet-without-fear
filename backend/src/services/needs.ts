@@ -32,11 +32,52 @@ export interface IdentifiedNeedRecord {
   aiConfidence: number;
   confirmed: boolean;
   createdAt: Date;
+  needsReframing?: boolean;
+  reframingWarning?: string;
 }
 
 export interface CaptureProposedNeedsResult {
   needs: IdentifiedNeedRecord[];
   capturedAt: Date;
+}
+
+export interface UniversalNeedValidationResult {
+  ok: boolean;
+  warning?: string;
+}
+
+const OTHER_PERSON_PATTERNS = [
+  /\bi need\s+(him|her|them|you|my partner)\s+to\b/i,
+  /\bi need\s+(him|her|them|you|my partner)\s+not\s+to\b/i,
+  /\bi need\s+(him|her|them|you|my partner)\s+to\s+stop\b/i,
+  /\bi need\s+.*\b(stop|quit|change|apologize|admit|listen|understand)\b/i,
+  /\bso (he|she|they|you) (will|would|can|could|won't|don't|doesn't)\b/i,
+];
+
+export function validateNeedIsUniversal(need: string): UniversalNeedValidationResult {
+  const text = cleanVisibleAIText(need).trim();
+  if (!text) return { ok: false, warning: 'Need text is empty.' };
+
+  if (OTHER_PERSON_PATTERNS.some((pattern) => pattern.test(text))) {
+    return {
+      ok: false,
+      warning:
+        'This may still be framed around what the other person should do. Reword it toward what matters to you.',
+    };
+  }
+
+  return { ok: true };
+}
+
+export function withNeedReframingWarning<T extends { need: string }>(
+  need: T
+): T & { needsReframing: boolean; reframingWarning?: string } {
+  const validation = validateNeedIsUniversal(need.need);
+  return {
+    ...need,
+    needsReframing: !validation.ok,
+    reframingWarning: validation.warning,
+  };
 }
 
 async function getOrCreateUserVessel(
@@ -122,10 +163,12 @@ export async function captureProposedNeedsForUser(
   });
 
   return {
-    needs: capturedNeeds.map((need) => ({
-      ...need,
-      category: need.category as unknown as NeedCategory,
-    })),
+    needs: capturedNeeds.map((need) =>
+      withNeedReframingWarning({
+        ...need,
+        category: need.category as unknown as NeedCategory,
+      })
+    ),
     capturedAt,
   };
 }

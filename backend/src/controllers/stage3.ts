@@ -19,7 +19,14 @@ import { confirmNeedsRequestSchema, ConsentContentType, NeedCategory } from '@me
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
-import { captureProposedNeedsForUser } from '../services/needs';
+import { captureProposedNeedsForUser, withNeedReframingWarning } from '../services/needs';
+import { interpretNeedEditRequest } from '../services/needs-edit-interpreter.service';
+import {
+  applyNeedEdits,
+  deleteNeed,
+  NeedEditForbiddenError,
+  NeedEditValidationError,
+} from '../services/needs-edit-applier.service';
 
 // ============================================================================
 // Helpers
@@ -96,6 +103,18 @@ async function hasPartnerValidatedNeeds(
 
 function isNeedCategory(value: unknown): value is NeedCategory {
   return typeof value === 'string' && Object.values(NeedCategory).includes(value as NeedCategory);
+}
+
+function needEditErrorResponse(res: Response, error: unknown): boolean {
+  if (error instanceof NeedEditValidationError) {
+    errorResponse(res, 'VALIDATION_ERROR', error.message, error.statusCode);
+    return true;
+  }
+  if (error instanceof NeedEditForbiddenError) {
+    errorResponse(res, 'FORBIDDEN', error.message, error.statusCode);
+    return true;
+  }
+  return false;
 }
 
 // ============================================================================
@@ -175,16 +194,21 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
     });
 
     successResponse(res, {
-      needs: needs.map((n) => ({
-        id: n.id,
-        category: n.category,
-        need: n.need,
-        description: n.need, // Alias for compatibility
-        evidence: n.evidence,
-        aiConfidence: n.aiConfidence,
-        confirmed: n.confirmed,
-        createdAt: n.createdAt.toISOString(),
-      })),
+      needs: needs.map((n) => {
+        const warning = withNeedReframingWarning({ need: n.need });
+        return {
+          id: n.id,
+          category: n.category,
+          need: n.need,
+          description: n.need, // Alias for compatibility
+          evidence: n.evidence,
+          aiConfidence: n.aiConfidence,
+          confirmed: n.confirmed,
+          createdAt: n.createdAt.toISOString(),
+          needsReframing: warning.needsReframing,
+          reframingWarning: warning.reframingWarning,
+        };
+      }),
       extracting: false,
       synthesizedAt: needs[0]?.createdAt.toISOString() ?? null,
     });
@@ -294,6 +318,8 @@ export async function captureNeeds(req: Request, res: Response): Promise<void> {
           evidence: n.evidence,
           confirmed: n.confirmed,
           aiConfidence: n.aiConfidence,
+          needsReframing: n.needsReframing,
+          reframingWarning: n.reframingWarning,
         })),
         capturedAt: capturedAt.toISOString(),
       },
@@ -375,6 +401,12 @@ export async function confirmNeeds(req: Request, res: Response): Promise<void> {
         `Cannot confirm needs: you are in stage ${currentStage}, but stage 3 is required`,
         400
       );
+      return;
+    }
+
+    const gates = (progress?.gatesSatisfied as Record<string, unknown> | null) ?? {};
+    if (gates.needsShared === true) {
+      errorResponse(res, 'FORBIDDEN', 'Needs have already been shared and can no longer be edited', 403);
       return;
     }
 
@@ -909,6 +941,8 @@ export async function addCustomNeed(req: Request, res: Response): Promise<void> 
       },
     });
 
+    const warning = withNeedReframingWarning({ need: customNeed.need });
+
     successResponse(res, {
       need: {
         id: customNeed.id,
@@ -918,11 +952,106 @@ export async function addCustomNeed(req: Request, res: Response): Promise<void> 
         evidence: customNeed.evidence,
         aiConfidence: customNeed.aiConfidence,
         confirmed: customNeed.confirmed,
+        needsReframing: warning.needsReframing,
+        reframingWarning: warning.reframingWarning,
       },
     }, 201);
   } catch (error) {
     logger.error('[addCustomNeed] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to add custom need', 500);
+  }
+}
+
+/**
+ * Interpret a natural-language edit request without mutating needs.
+ * POST /sessions/:id/needs/interpret-edit-request
+ */
+export async function interpretNeedEdit(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const { request, targetNeedId, conversationHistory } = req.body as {
+      request?: string;
+      targetNeedId?: string;
+      conversationHistory?: unknown;
+    };
+
+    if (!request || typeof request !== 'string') {
+      errorResponse(res, 'VALIDATION_ERROR', 'request is required', 400);
+      return;
+    }
+
+    const result = await interpretNeedEditRequest(sessionId, user.id, {
+      request,
+      targetNeedId,
+      conversationHistory: Array.isArray(conversationHistory) ? conversationHistory as any : undefined,
+    });
+    successResponse(res, result);
+  } catch (error) {
+    if (needEditErrorResponse(res, error)) return;
+    logger.error('[interpretNeedEdit] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to interpret need edit request', 500);
+  }
+}
+
+/**
+ * Apply a previously previewed need edit plan.
+ * POST /sessions/:id/needs/apply-edits
+ */
+export async function applyNeedEditPlan(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const { operations } = req.body as { operations?: unknown };
+
+    if (!Array.isArray(operations)) {
+      errorResponse(res, 'VALIDATION_ERROR', 'operations array is required', 400);
+      return;
+    }
+
+    const result = await applyNeedEdits(sessionId, user.id, operations as any);
+    successResponse(res, result);
+  } catch (error) {
+    if (needEditErrorResponse(res, error)) return;
+    logger.error('[applyNeedEditPlan] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to apply need edits', 500);
+  }
+}
+
+/**
+ * Remove a need before it has been shared.
+ * DELETE /sessions/:id/needs/:needId
+ */
+export async function removeNeed(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId, needId } = req.params;
+    if (!needId) {
+      errorResponse(res, 'VALIDATION_ERROR', 'needId is required', 400);
+      return;
+    }
+
+    await deleteNeed(sessionId, user.id, needId);
+    successResponse(res, { deleted: true, needId });
+  } catch (error) {
+    if (needEditErrorResponse(res, error)) return;
+    logger.error('[removeNeed] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to remove need', 500);
   }
 }
 

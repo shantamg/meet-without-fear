@@ -18,6 +18,8 @@ export interface IdentifiedNeedDTO {
   evidence: string[]; // Quotes/references supporting this
   confirmed: boolean;
   aiConfidence: number; // 0-1
+  needsReframing?: boolean;
+  reframingWarning?: string;
 }
 
 export interface GetNeedsResponse {
