@@ -45,7 +45,10 @@ flowchart TD
     More -->|Yes| Explore
     More -->|No| Summary[Needs summary ready]
 
-    Summary --> Consent[User consents to share confirmed needs]
+    Summary --> Review[User reviews AI-drafted needs drawer]
+    Review -->|Add/Edit/Remove| Preview[AI proposes draft diff]
+    Preview -->|Apply| Review
+    Review --> Consent[User taps Send my needs]
     Consent --> Wait{Partner ready?}
     Wait -->|Not yet| Waiting[Waiting for partner]
     Wait -->|Yes| NeedsShare[Mutual needs reveal]
@@ -88,6 +91,20 @@ Example exchange:
 - AI redirect: "I hear that. Let me bring it back to you -- when that happens, what feels important or missing for you?"
 - User: "I guess I just want to feel like we're a team."
 - AI: "Partnership. Like you need to feel like you're in this together. Does that land?"
+
+## Needs Review Drawer
+
+After the AI has helped draft needs language, the user reviews a focused "Your needs" drawer before anything is shared. Needs remain an AI-owned draft list until the user explicitly sends them.
+
+The drawer supports:
+- **Add need**: the user describes what is missing; the AI proposes a need card; the user previews and accepts before it is saved.
+- **Edit / Ask AI to reword**: the user gives instructions about what feels wrong; the backend interprets a structured edit plan; the UI shows before/after diffs; only "Apply" mutates the list.
+- **Remove**: the user can remove their own needs before sharing.
+- **Send my needs**: the separate consent moment that shares confirmed needs through the existing Stage 3 boundary.
+
+Needs that appear blame-shaped, strategy-shaped, or other-person-focused are preserved but flagged for review. The app invites the user to reword them toward universal self-referential needs instead of silently correcting them.
+
+Once `needsShared` is set, direct add/edit/remove is locked. Later corrections require an explicit follow-up correction path rather than mutating already-shared needs.
 
 ## Mutual Needs Reveal
 

@@ -3,7 +3,7 @@ title: "Stage 3 API: What Matters"
 sidebar_position: 10
 description: Endpoints for identifying needs, confirming them, and validating revealed needs with a partner.
 slug: /backend/api/stage-3
-updated: "2026-05-05"
+updated: "2026-05-19"
 ---
 # Stage 3 API: What Matters
 
@@ -47,6 +47,8 @@ interface IdentifiedNeedDTO {
   evidence: string[];        // Quotes/references supporting this
   confirmed: boolean;
   aiConfidence: number;      // 0-1
+  needsReframing?: boolean;  // true when wording appears strategy-shaped or other-person-focused
+  reframingWarning?: string; // review copy shown before sharing
 }
 
 enum NeedCategory {
@@ -101,7 +103,7 @@ enum NeedCategory {
 
 `GET /needs` is a direct read — it returns the stored `IdentifiedNeed` rows for the caller without triggering AI extraction. Needs are created only through explicit capture or user add/edit actions after Stage 3 conversation. `extracting` is retained only as a deprecated compatibility field and is always `false`; `synthesizedAt` is `null` when no needs exist.
 
-Validation: each need has evidence 1-5 items; `aiConfidence` 0-1. The response includes both `need` and `description` fields carrying the same string (`description` is a compatibility alias).
+Validation: each need has evidence 1-5 items; `aiConfidence` 0-1. The response includes both `need` and `description` fields carrying the same string (`description` is a compatibility alias). Needs that look like demands, strategies, or other-person-focused wording are preserved but returned with `needsReframing` so the client can invite review rather than silently rewriting them.
 
 ---
 
@@ -239,6 +241,95 @@ interface AddNeedResponse {
 ```
 
 Validation: need/description 1-200 chars; category required. User-added needs are created with `confirmed: true` (they represent an explicit user declaration, not an AI guess).
+
+---
+
+## Interpret Need Edit Request
+
+Preview an AI-owned need-list update from the user's natural-language instruction. This endpoint does not mutate stored needs.
+
+```
+POST /api/v1/sessions/:id/needs/interpret-edit-request
+```
+
+### Request Body
+
+```typescript
+interface InterpretNeedEditRequest {
+  request: string;
+  targetNeedId?: string;
+  conversationHistory?: Array<{
+    request: string;
+    plan?: NeedEditPlan;
+    clarification?: string;
+  }>;
+}
+```
+
+### Response
+
+```typescript
+interface InterpretNeedEditResponse {
+  clarificationNeeded?: boolean;
+  clarificationMessage?: string;
+  plan?: NeedEditPlan;
+}
+
+interface NeedEditPlan {
+  summary: string;
+  operations: NeedEditOperation[];
+  affectedNeeds: AffectedNeed[];
+}
+
+type NeedEditOperation =
+  | { type: 'updateNeedText'; needId: string; newText: string; newCategory?: NeedCategory }
+  | { type: 'addNeed'; text: string; category?: NeedCategory }
+  | { type: 'removeNeed'; needId: string };
+```
+
+Interpretation fetches only the caller's own unshared needs. Ambiguous instructions return a clarification. Valid instructions return a preview with before/after affected needs for the client diff UI.
+
+---
+
+## Apply Need Edits
+
+Apply a previously previewed edit plan transactionally.
+
+```
+POST /api/v1/sessions/:id/needs/apply-edits
+```
+
+### Request Body
+
+```typescript
+interface ApplyNeedEditsRequest {
+  operations: NeedEditOperation[];
+}
+```
+
+### Response
+
+```typescript
+interface ApplyNeedEditsResponse {
+  needs: IdentifiedNeedDTO[];
+  affectedNeeds: AffectedNeed[];
+  warnings: string[];
+}
+```
+
+The apply path revalidates ownership and the `needsShared` gate. If the caller has already shared needs, apply fails; already-shared needs require a later-stage correction path rather than silent mutation.
+
+---
+
+## Remove Need
+
+Remove one of the caller's unshared needs.
+
+```
+DELETE /api/v1/sessions/:id/needs/:needId
+```
+
+Returns the updated `IdentifiedNeedDTO[]`. The delete path is limited to the caller's own vessel and refuses mutation after `needsShared`.
 
 ---
 

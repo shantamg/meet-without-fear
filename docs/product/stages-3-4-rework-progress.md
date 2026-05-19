@@ -59,6 +59,11 @@
   - Added `POST /sessions/:id/stage4/proposals/suggest` while keeping the existing strategy suggestion handler available.
   - Wired mobile “Suggest options” / “Try one more option” CTAs to the persisted suggestion endpoint and invalidated redesigned Stage 4 state.
 
+- Living docs checkpoint completed:
+  - Updated Stage 3 product/API/prompt docs for AI-owned need editing, diff preview/apply, remove-before-share, and reframing warnings.
+  - Updated Stage 4 product/API/prompt docs for focused own-needs-first walkthrough, source labels, persisted walkthrough state, AI suggestions, quality review, and 10-day check-in.
+  - Updated Stage 4 retrieval contract wording so AI suggestions use confirmed needs plus curated global library context, not user memory.
+
 ## Files Changed In Stage 3 Backend Checkpoint
 
 - `shared/src/dto/need-edits.ts`
@@ -98,6 +103,16 @@
 - `mobile/src/components/Stage4RedesignPanel.tsx`
 - `mobile/src/screens/UnifiedSessionScreen.tsx`
 
+## Files Changed In Docs Checkpoint
+
+- `docs/product/stages/stage-3-what-matters.md`
+- `docs/product/stages/stage-4-strategic-repair.md`
+- `docs/backend/api/stage-3.md`
+- `docs/backend/api/stage-4.md`
+- `docs/backend/prompts/stage-3-needs.md`
+- `docs/backend/prompts/stage-4-repair.md`
+- `docs/backend/state-machine/retrieval-contracts.md`
+
 ## Test Status
 
 - `npm --workspace backend run check` — passed.
@@ -117,7 +132,6 @@
 
 ## Next Steps
 
-1. Commit the Stage 4 AI suggestions checkpoint.
-2. Tighten agreement close/summary behavior and docs.
-3. Add or repair mobile tests once the `react-test-renderer` resolver issue is fixed.
-4. Run the required full verification suite and local seeded browser pass.
+1. Commit the docs checkpoint.
+2. Add or repair mobile tests once the `react-test-renderer` resolver issue is fixed.
+3. Run the required full verification suite and local seeded browser pass.
