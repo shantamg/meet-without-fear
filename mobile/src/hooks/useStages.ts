@@ -37,6 +37,11 @@ import {
   ConfirmNeedsRequest,
   NeedAdjustment,
   ConfirmNeedsResponse,
+  InterpretNeedEditRequest,
+  InterpretNeedEditResponse,
+  ApplyNeedEditsRequest,
+  ApplyNeedEditsResponse,
+  DeleteNeedResponse,
   GetNeedsComparisonResponse,
   ValidateNeedsResponse,
   AddNeedRequest,
@@ -1582,6 +1587,93 @@ export function useAddNeed(
       queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
     },
     ...options,
+  });
+}
+
+export function useInterpretNeedEdit(
+  options?: Omit<
+    UseMutationOptions<
+      InterpretNeedEditResponse,
+      ApiClientError,
+      { sessionId: string } & InterpretNeedEditRequest
+    >,
+    'mutationFn'
+  >
+) {
+  return useMutation({
+    mutationFn: async ({ sessionId, request, targetNeedId, conversationHistory }) => {
+      return post<InterpretNeedEditResponse>(`/sessions/${sessionId}/needs/interpret-edit-request`, {
+        request,
+        targetNeedId,
+        conversationHistory,
+      });
+    },
+    ...options,
+  });
+}
+
+export function useApplyNeedEdits(
+  options?: Omit<
+    UseMutationOptions<
+      ApplyNeedEditsResponse,
+      ApiClientError,
+      { sessionId: string } & ApplyNeedEditsRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+  const userOnSuccess = options?.onSuccess;
+
+  return useMutation({
+    mutationFn: async ({ sessionId, operations }) => {
+      return post<ApplyNeedEditsResponse>(`/sessions/${sessionId}/needs/apply-edits`, {
+        operations,
+      });
+    },
+    ...options,
+    onSuccess: (data, variables, context) => {
+      queryClient.setQueryData<GetNeedsResponse>(stageKeys.needs(variables.sessionId), (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          needs: data.needs,
+          synthesizedAt: old.synthesizedAt ?? new Date().toISOString(),
+        };
+      });
+      userOnSuccess?.(data, variables, context, undefined as never);
+    },
+  });
+}
+
+export function useRemoveNeed(
+  options?: Omit<
+    UseMutationOptions<
+      DeleteNeedResponse,
+      ApiClientError,
+      { sessionId: string; needId: string }
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+  const userOnSuccess = options?.onSuccess;
+
+  return useMutation({
+    mutationFn: async ({ sessionId, needId }) => {
+      return del<DeleteNeedResponse>(`/sessions/${sessionId}/needs/${needId}`);
+    },
+    ...options,
+    onSuccess: (data, variables, context) => {
+      queryClient.setQueryData<GetNeedsResponse>(stageKeys.needs(variables.sessionId), (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          needs: old.needs.filter((need) => need.id !== data.needId),
+        };
+      });
+      userOnSuccess?.(data, variables, context, undefined as never);
+    },
   });
 }
 

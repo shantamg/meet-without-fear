@@ -15,6 +15,7 @@ import { useAppAppearance } from '@/theme';
 interface Need {
   category: string;
   description: string;
+  warning?: string;
 }
 
 interface NeedCardProps {
@@ -43,6 +44,9 @@ export function NeedCard({
         {need.category}
       </Text>
       <Text style={styles.description}>{need.description}</Text>
+      {need.warning && (
+        <Text style={styles.warning}>{need.warning}</Text>
+      )}
     </>
   );
 
@@ -91,6 +95,13 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     fontSize: 16,
     color: palette.text,
     lineHeight: 22,
+  },
+  warning: {
+    marginTop: 10,
+    color: palette.warning,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
   },
 });
 

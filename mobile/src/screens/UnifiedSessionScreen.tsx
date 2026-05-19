@@ -24,6 +24,7 @@ import {
   Stage4ClosureReason,
   Stage4Phase,
   Stage4SelectionDecision,
+  NeedEditOperation,
 } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem, ChatCustomCardItem } from '../components/ChatInterface';
@@ -85,6 +86,9 @@ import {
   useOpenStage4SubChat,
   useSendStage4SubChatMessage,
   useResolveStage4SubChat,
+  useInterpretNeedEdit,
+  useApplyNeedEdits,
+  useRemoveNeed,
 } from '../hooks/useStages';
 import { deriveEmpathyValidatedIndicator, deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
@@ -1467,6 +1471,50 @@ export function UnifiedSessionScreen({
       (currentStage === Stage.STRATEGIC_REPAIR || session?.status === SessionStatus.RESOLVED),
   });
   const stage4State = stage4Query.data;
+  const interpretNeedEdit = useInterpretNeedEdit({
+    onError: () => {
+      showError('Could not preview that need edit. Please try again.');
+    },
+  });
+  const applyNeedEdits = useApplyNeedEdits({
+    onError: () => {
+      showError('Could not apply that need edit. Please try again.');
+    },
+  });
+  const removeNeedMutation = useRemoveNeed({
+    onError: () => {
+      showError('Could not remove that need. Please try again.');
+    },
+  });
+  const handlePreviewNeedEdit = useCallback(
+    async (request: string, targetNeedId?: string) => {
+      const response = await interpretNeedEdit.mutateAsync({
+        sessionId,
+        request,
+        targetNeedId,
+      });
+      return response.plan ?? null;
+    },
+    [interpretNeedEdit, sessionId]
+  );
+  const handleApplyNeedEdits = useCallback(
+    async (operations: NeedEditOperation[]) => {
+      await applyNeedEdits.mutateAsync({
+        sessionId,
+        operations,
+      });
+    },
+    [applyNeedEdits, sessionId]
+  );
+  const handleRemoveNeed = useCallback(
+    async (needId: string) => {
+      await removeNeedMutation.mutateAsync({
+        sessionId,
+        needId,
+      });
+    },
+    [removeNeedMutation, sessionId]
+  );
   const hasRedesignedStage4 =
     !!stage4State &&
     (currentStage === Stage.STRATEGIC_REPAIR || session?.status === SessionStatus.RESOLVED);
@@ -4000,12 +4048,20 @@ export function UnifiedSessionScreen({
         visible={showNeedsDrawer}
         onClose={() => setShowNeedsDrawer(false)}
         mode={needsDrawerMode}
-        needs={(shouldUseRevealedNeeds ? (needsComparisonData?.myNeeds ?? []) : (needs ?? [])).map((n) => ({
-          id: n.id,
-          category: n.category || n.need,
-          need: n.need,
-          confirmed: n.confirmed,
-        }))}
+        needs={(shouldUseRevealedNeeds ? (needsComparisonData?.myNeeds ?? []) : (needs ?? [])).map((n) => {
+          const maybeWarned = n as typeof n & {
+            needsReframing?: boolean;
+            reframingWarning?: string;
+          };
+          return {
+            id: n.id,
+            category: n.category || n.need,
+            need: n.need,
+            confirmed: n.confirmed,
+            needsReframing: maybeWarned.needsReframing,
+            reframingWarning: maybeWarned.reframingWarning,
+          };
+        })}
         onAdjustNeeds={() => {
           setShowNeedsDrawer(false);
         }}
@@ -4021,6 +4077,9 @@ export function UnifiedSessionScreen({
             });
           }
         }}
+        onPreviewNeedEdit={needsDrawerMode === 'needs' ? handlePreviewNeedEdit : undefined}
+        onApplyNeedEdits={needsDrawerMode === 'needs' ? handleApplyNeedEdits : undefined}
+        onRemoveNeed={needsDrawerMode === 'needs' ? handleRemoveNeed : undefined}
         confirmNeedsLabel={allNeedsConfirmed ? 'Share my needs' : 'Confirm my needs'}
         confirmingNeedsLabel={allNeedsConfirmed ? 'Sharing...' : 'Confirming...'}
         isConfirming={isConfirmingNeeds}

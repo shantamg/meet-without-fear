@@ -14,6 +14,9 @@ import {
   TouchableOpacity,
   ScrollView,
   Pressable,
+  Modal,
+  TextInput,
+  Alert,
   Animated,
   PanResponder,
   StyleSheet,
@@ -24,6 +27,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { appWidthStyle, useAppAppearance } from '@/theme';
 import { NeedCard } from './NeedCard';
+import type { NeedEditOperation, NeedEditPlan } from '@meet-without-fear/shared';
 
 // ============================================================================
 // Types
@@ -36,6 +40,8 @@ interface NeedItem {
   category: string;
   need: string;
   confirmed: boolean;
+  needsReframing?: boolean;
+  reframingWarning?: string;
 }
 
 export interface NeedsDrawerProps {
@@ -46,6 +52,9 @@ export interface NeedsDrawerProps {
   needs?: NeedItem[];
   onAdjustNeeds?: () => void;
   onConfirmNeeds?: () => void;
+  onPreviewNeedEdit?: (request: string, targetNeedId?: string) => Promise<NeedEditPlan | null>;
+  onApplyNeedEdits?: (operations: NeedEditOperation[]) => Promise<void>;
+  onRemoveNeed?: (needId: string) => Promise<void>;
   confirmNeedsLabel?: string;
   confirmingNeedsLabel?: string;
   isConfirming?: boolean;
@@ -75,6 +84,9 @@ export function NeedsDrawer({
   needs = [],
   onAdjustNeeds,
   onConfirmNeeds,
+  onPreviewNeedEdit,
+  onApplyNeedEdits,
+  onRemoveNeed,
   confirmNeedsLabel = 'Confirm my needs',
   confirmingNeedsLabel = 'Sharing...',
   isConfirming = false,
@@ -109,6 +121,13 @@ export function NeedsDrawer({
   const [isMounted, setIsMounted] = useState(visible);
   const [contentHeight, setContentHeight] = useState(drawerHostHeight - position3Q);
   const [backdropTouchableHeight, setBackdropTouchableHeight] = useState(position3Q);
+  const [editMode, setEditMode] = useState<'add' | 'edit' | null>(null);
+  const [targetNeed, setTargetNeed] = useState<NeedItem | null>(null);
+  const [editRequest, setEditRequest] = useState('');
+  const [editPlan, setEditPlan] = useState<NeedEditPlan | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isPreviewingEdit, setIsPreviewingEdit] = useState(false);
+  const [isApplyingEdit, setIsApplyingEdit] = useState(false);
 
   const handleHostLayout = useCallback((event: LayoutChangeEvent) => {
     const measuredHeight = event.nativeEvent.layout.height;
@@ -252,18 +271,161 @@ export function NeedsDrawer({
   // -------------------------------------------------------------------------
   // Render helpers
   // -------------------------------------------------------------------------
+  const resetEditModal = useCallback(() => {
+    setEditMode(null);
+    setTargetNeed(null);
+    setEditRequest('');
+    setEditPlan(null);
+    setEditError(null);
+    setIsPreviewingEdit(false);
+    setIsApplyingEdit(false);
+  }, []);
+
+  const openNeedEdit = useCallback((modeToOpen: 'add' | 'edit', need?: NeedItem) => {
+    setEditMode(modeToOpen);
+    setTargetNeed(need ?? null);
+    setEditRequest('');
+    setEditPlan(null);
+    setEditError(null);
+  }, []);
+
+  const previewEdit = useCallback(async () => {
+    if (!onPreviewNeedEdit || !editRequest.trim()) return;
+    setIsPreviewingEdit(true);
+    setEditError(null);
+    try {
+      const plan = await onPreviewNeedEdit(editRequest.trim(), targetNeed?.id);
+      if (!plan) {
+        setEditError('I need a little more detail before I can propose a draft.');
+        return;
+      }
+      setEditPlan(plan);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'Could not preview that edit.');
+    } finally {
+      setIsPreviewingEdit(false);
+    }
+  }, [editRequest, onPreviewNeedEdit, targetNeed?.id]);
+
+  const applyEditPlan = useCallback(async () => {
+    if (!onApplyNeedEdits || !editPlan) return;
+    setIsApplyingEdit(true);
+    setEditError(null);
+    try {
+      await onApplyNeedEdits(editPlan.operations);
+      resetEditModal();
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'Could not apply that edit.');
+    } finally {
+      setIsApplyingEdit(false);
+    }
+  }, [editPlan, onApplyNeedEdits, resetEditModal]);
+
+  const removeNeed = useCallback(async (need: NeedItem) => {
+    if (!onRemoveNeed) return;
+    Alert.alert('Remove this need from your list?', need.need, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          setEditError(null);
+          try {
+            await onRemoveNeed(need.id);
+          } catch (error) {
+            setEditError(error instanceof Error ? error.message : 'Could not remove that need.');
+          }
+        },
+      },
+    ]);
+  }, [onRemoveNeed]);
+
+  const renderDiffText = (before: string, after: string) => {
+    const beforeWords = before.split(/\s+/).filter(Boolean);
+    const afterWords = after.split(/\s+/).filter(Boolean);
+    const beforeSet = new Set(beforeWords.map((word) => word.toLowerCase()));
+    const afterSet = new Set(afterWords.map((word) => word.toLowerCase()));
+    return (
+      <View style={styles.diffRows}>
+        <Text style={styles.diffLabel}>Before</Text>
+        <Text style={styles.diffText}>
+          {beforeWords.map((word, index) => (
+            <Text
+              key={`before-${word}-${index}`}
+              style={!afterSet.has(word.toLowerCase()) ? styles.removedWord : undefined}
+            >
+              {word}{index === beforeWords.length - 1 ? '' : ' '}
+            </Text>
+          ))}
+        </Text>
+        <Text style={styles.diffLabel}>After</Text>
+        <Text style={styles.diffText}>
+          {afterWords.map((word, index) => (
+            <Text
+              key={`after-${word}-${index}`}
+              style={!beforeSet.has(word.toLowerCase()) ? styles.addedWord : undefined}
+            >
+              {word}{index === afterWords.length - 1 ? '' : ' '}
+            </Text>
+          ))}
+        </Text>
+      </View>
+    );
+  };
+
   const renderNeedsMode = () => (
     <>
       <Text style={styles.sectionSubtitle}>
-        Review and confirm the needs you named in this conversation.
+        Make sure these are about what matters to you, not what the other person has to do.
       </Text>
 
       {needs.map((need) => (
-        <NeedCard
-          key={need.id}
-          need={{ category: need.category, description: need.need }}
-          testID={`${testID}-need-${need.id}`}
-        />
+        <View key={need.id}>
+          <NeedCard
+            need={{
+              category: need.category,
+              description: need.need,
+              warning: need.needsReframing ? (need.reframingWarning ?? 'Needs rewording') : undefined,
+            }}
+            testID={`${testID}-need-${need.id}`}
+          />
+          {(onPreviewNeedEdit || onRemoveNeed) && (
+            <View style={styles.needActionRow}>
+              {onPreviewNeedEdit && (
+                <>
+                  <TouchableOpacity
+                    style={styles.inlineActionButton}
+                    onPress={() => openNeedEdit('edit', need)}
+                    testID={`${testID}-edit-${need.id}`}
+                  >
+                    <Text style={styles.inlineActionText}>Edit</Text>
+                  </TouchableOpacity>
+                  {need.needsReframing && (
+                    <TouchableOpacity
+                      style={styles.inlineActionButton}
+                      onPress={() => {
+                        openNeedEdit('edit', need);
+                        setEditRequest('Please reword this so it is about what matters to me, not what the other person has to do.');
+                      }}
+                      testID={`${testID}-reword-${need.id}`}
+                    >
+                      <Text style={styles.inlineActionText}>Ask AI to reword</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+              {onRemoveNeed && (
+                <TouchableOpacity
+                  style={styles.inlineDangerButton}
+                  onPress={() => removeNeed(need)}
+                  testID={`${testID}-remove-${need.id}`}
+                >
+                  <Text style={styles.inlineDangerText}>Remove</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
       ))}
 
       {needs.length === 0 && (
@@ -300,19 +462,108 @@ export function NeedsDrawer({
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={() => {
-                closeDrawer();
-                onAdjustNeeds();
+                if (onPreviewNeedEdit) {
+                  openNeedEdit('add');
+                } else {
+                  closeDrawer();
+                  onAdjustNeeds();
+                }
               }}
               activeOpacity={0.7}
               testID={`${testID}-adjust`}
             >
-              <Text style={styles.secondaryButtonText}>Chat to refine</Text>
+              <Text style={styles.secondaryButtonText}>{onPreviewNeedEdit ? 'Add need' : 'Chat to refine'}</Text>
             </TouchableOpacity>
           )}
         </View>
       </View>
     );
   };
+
+  const renderEditModal = () => (
+    <Modal visible={editMode !== null} transparent animationType="fade" onRequestClose={resetEditModal}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.editModal}>
+          <Text style={styles.modalTitle}>
+            {editMode === 'add' ? 'Add a need' : 'Edit need'}
+          </Text>
+          {targetNeed && (
+            <View style={styles.contextCard}>
+              <Text style={styles.contextLabel}>Current draft</Text>
+              <Text style={styles.contextText}>{targetNeed.need}</Text>
+            </View>
+          )}
+          {!editPlan ? (
+            <>
+              <Text style={styles.inputLabel}>
+                {editMode === 'add' ? 'What is missing?' : 'What should change about this need?'}
+              </Text>
+              <TextInput
+                style={styles.editInput}
+                multiline
+                value={editRequest}
+                onChangeText={setEditRequest}
+                placeholder={editMode === 'add' ? 'Tell the AI what is missing.' : 'Tell the AI what feels off.'}
+                placeholderTextColor={palette.textFaint}
+                testID={`${testID}-edit-request`}
+              />
+              {editError && <Text style={styles.errorText}>{editError}</Text>}
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.secondaryButton} onPress={resetEditModal}>
+                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.primaryButton, (!editRequest.trim() || isPreviewingEdit) && styles.primaryButtonDisabled]}
+                  onPress={previewEdit}
+                  disabled={!editRequest.trim() || isPreviewingEdit}
+                  testID={`${testID}-preview-edit`}
+                >
+                  <Text style={styles.primaryButtonText}>{isPreviewingEdit ? 'Previewing...' : 'Preview'}</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.planSummary}>{editPlan.summary}</Text>
+              {editPlan.affectedNeeds.map((affected, index) => (
+                <View key={`${affected.operation}-${affected.needId ?? index}`} style={styles.previewCard}>
+                  {affected.before?.text && affected.after?.text
+                    ? renderDiffText(affected.before.text, affected.after.text)
+                    : (
+                      <Text style={styles.contextText}>
+                        {affected.operation === 'add'
+                          ? affected.after?.text
+                          : affected.before?.text}
+                      </Text>
+                    )}
+                  {affected.warning && <Text style={styles.warningText}>{affected.warning}</Text>}
+                </View>
+              ))}
+              {editError && <Text style={styles.errorText}>{editError}</Text>}
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.secondaryButton} onPress={() => setEditPlan(null)}>
+                  <Text style={styles.secondaryButtonText}>Modify</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.secondaryButton} onPress={resetEditModal}>
+                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.primaryButton, isApplyingEdit && styles.primaryButtonDisabled]}
+                  onPress={applyEditPlan}
+                  disabled={isApplyingEdit}
+                  testID={`${testID}-apply-edit`}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    {isApplyingEdit ? 'Applying...' : editMode === 'add' ? 'Add need' : 'Apply'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
 
   const renderSideBySideNeeds = () => {
     return (
@@ -468,6 +719,7 @@ export function NeedsDrawer({
           </ScrollView>
         </View>
       </Animated.View>
+      {renderEditModal()}
     </View>
   );
 }
@@ -550,6 +802,40 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     fontStyle: 'italic',
     marginHorizontal: 16,
   },
+  needActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: -4,
+    marginBottom: 12,
+  },
+  inlineActionButton: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: palette.bgElev,
+  },
+  inlineActionText: {
+    color: palette.text,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  inlineDangerButton: {
+    borderWidth: 1,
+    borderColor: palette.danger,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: palette.bgElev,
+  },
+  inlineDangerText: {
+    color: palette.danger,
+    fontSize: 13,
+    fontWeight: '600',
+  },
 
   // Action area
   fixedButtonArea: {
@@ -594,6 +880,115 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     color: palette.text,
     fontSize: 15,
     fontWeight: '600',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  editModal: {
+    backgroundColor: palette.bgPane,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: 16,
+    maxHeight: '86%',
+  },
+  modalTitle: {
+    color: palette.text,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  contextCard: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    backgroundColor: palette.bgElev,
+  },
+  contextLabel: {
+    color: palette.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  contextText: {
+    color: palette.text,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  inputLabel: {
+    color: palette.text,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  editInput: {
+    minHeight: 110,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: 8,
+    color: palette.text,
+    backgroundColor: palette.bg,
+    padding: 12,
+    textAlignVertical: 'top',
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 14,
+  },
+  planSummary: {
+    color: palette.text,
+    fontSize: 15,
+    lineHeight: 21,
+    marginBottom: 12,
+  },
+  previewCard: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+    backgroundColor: palette.bgElev,
+  },
+  diffRows: {
+    gap: 6,
+  },
+  diffLabel: {
+    color: palette.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  diffText: {
+    color: palette.text,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  removedWord: {
+    color: palette.danger,
+    textDecorationLine: 'line-through',
+  },
+  addedWord: {
+    color: palette.success,
+    fontWeight: '700',
+  },
+  warningText: {
+    color: palette.warning,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+  errorText: {
+    color: palette.danger,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 8,
   },
   fullWidthButton: {
     flex: undefined,
