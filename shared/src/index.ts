@@ -6,7 +6,6 @@
 
 // Enums (mirror Prisma enums for client use)
 export * from './enums';
-export * from './audit';
 
 // API response wrappers
 export * from './api';
