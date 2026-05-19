@@ -74,6 +74,13 @@ router.post(
   asyncHandler(updateStage4WalkthroughNeedStatus)
 );
 
+router.post(
+  '/sessions/:id/stage4/proposals/suggest',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(requestSuggestions)
+);
+
 // Share current user's Stage 4 selections with their partner
 router.post(
   '/sessions/:id/stage4/share-selections',

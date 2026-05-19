@@ -52,6 +52,13 @@
   - Quality review shows candidate willing agreements, warnings for vague/uncheckable items, and a 10-day default check-in date.
   - Unified session screen wires covered/skipped CTAs to the persisted walkthrough endpoint.
 
+- Stage 4 AI suggestions checkpoint completed:
+  - Replaced the stubbed Stage 4 suggestion controller with need-scoped generation using the confirmed need and curated global library items only.
+  - Added fallback micro-experiment drafts for mock/no-AWS environments so the flow remains usable in tests and local seeded runs.
+  - Suggestions persist as `StrategyProposal` rows with `source: AI_SUGGESTED`, `kind: SHARED_PROPOSAL`, and `StrategyProposalNeed` links when a target need is supplied.
+  - Added `POST /sessions/:id/stage4/proposals/suggest` while keeping the existing strategy suggestion handler available.
+  - Wired mobile “Suggest options” / “Try one more option” CTAs to the persisted suggestion endpoint and invalidated redesigned Stage 4 state.
+
 ## Files Changed In Stage 3 Backend Checkpoint
 
 - `shared/src/dto/need-edits.ts`
@@ -82,6 +89,15 @@
 - `mobile/src/components/Stage4RedesignPanel.tsx`
 - `mobile/src/screens/UnifiedSessionScreen.tsx`
 
+## Files Changed In Stage 4 AI Suggestions Checkpoint
+
+- `backend/src/controllers/stage4.ts`
+- `backend/src/routes/stage4.ts`
+- `backend/src/routes/__tests__/stage4.test.ts`
+- `mobile/src/hooks/useStages.ts`
+- `mobile/src/components/Stage4RedesignPanel.tsx`
+- `mobile/src/screens/UnifiedSessionScreen.tsx`
+
 ## Test Status
 
 - `npm --workspace backend run check` — passed.
@@ -93,11 +109,15 @@
 - `npm --workspace backend run test -- stage4.test.ts` — passed after Stage 4 walkthrough changes.
 - `npm --workspace backend run check` — passed after Stage 4 walkthrough changes.
 - `npm --workspace mobile run check` — passed after Stage 4 walkthrough changes.
+- `npm --workspace backend run check` — passed after Stage 4 AI suggestion changes.
+- `npm --workspace mobile run check` — passed after Stage 4 AI suggestion changes.
+- `npm --workspace backend run test -- stage4.test.ts` — passed after Stage 4 AI suggestion changes.
+- `npm --workspace backend run test -- needs-edit.service.test.ts stage3.test.ts` — passed after Stage 4 AI suggestion changes.
 - Watchman emitted recrawl warnings during Jest runs; tests still passed.
 
 ## Next Steps
 
-1. Commit the Stage 4 walkthrough checkpoint.
-2. Implement AI suggestion generation for empty Stage 4 needs and wire it into the focused flow.
-3. Tighten agreement close/summary behavior and docs.
-4. Add or repair mobile tests once the `react-test-renderer` resolver issue is fixed.
+1. Commit the Stage 4 AI suggestions checkpoint.
+2. Tighten agreement close/summary behavior and docs.
+3. Add or repair mobile tests once the `react-test-renderer` resolver issue is fixed.
+4. Run the required full verification suite and local seeded browser pass.

@@ -25,6 +25,7 @@ interface Stage4RedesignPanelProps {
   onSelectProposal: (proposalId: string, decision: Stage4SelectionDecision) => void;
   onShareSelections?: () => void;
   onReviseSelections?: () => void;
+  onSuggestOptions?: (needLabel: string, needId: string) => void;
   onBrainstormNeed?: (needLabel: string, needId: string) => void;
   onRefineProposal?: (proposalId: string, description: string) => void;
   onKeepRefiningNoOverlap?: () => void;
@@ -598,6 +599,7 @@ export function Stage4RedesignPanel({
   onSelectProposal,
   onShareSelections,
   onReviseSelections,
+  onSuggestOptions,
   onBrainstormNeed,
   onRefineProposal,
   onKeepRefiningNoOverlap,
@@ -725,7 +727,9 @@ export function Stage4RedesignPanel({
           <View style={styles.actions}>
             <TouchableOpacity
               style={styles.primaryButton}
-              onPress={() => onBrainstormNeed?.(currentNeed.label, currentNeed.id)}
+              onPress={() =>
+                (onSuggestOptions ?? onBrainstormNeed)?.(currentNeed.label, currentNeed.id)
+              }
               accessibilityRole="button"
               testID="stage4-current-need-brainstorm"
             >
@@ -748,7 +752,9 @@ export function Stage4RedesignPanel({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => onBrainstormNeed?.(currentNeed.label, currentNeed.id)}
+            onPress={() =>
+              (onSuggestOptions ?? onBrainstormNeed)?.(currentNeed.label, currentNeed.id)
+            }
             accessibilityRole="button"
             testID="stage4-current-need-more-options"
           >

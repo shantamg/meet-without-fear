@@ -13,6 +13,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../../lib/prisma';
 import { notifyPartner, publishSessionEvent } from '../../services/realtime';
+import { getModelCompletion } from '../../lib/bedrock';
 import {
   AgreementStatus,
   AgreementType,
@@ -33,6 +34,9 @@ jest.mock('../../lib/prisma');
 // Mock realtime
 jest.mock('../../services/realtime');
 
+jest.mock('../../lib/bedrock', () => ({
+  getModelCompletion: jest.fn(),
+}));
 
 // Import controllers after mocks
 import {
@@ -51,6 +55,7 @@ import {
   getOverlap,
   createAgreement,
   confirmAgreement,
+  requestSuggestions,
 } from '../../controllers/stage4';
 
 // Helper to create mock request
@@ -111,6 +116,7 @@ describe('Stage 4 API', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([]);
+    (getModelCompletion as jest.Mock).mockResolvedValue(null);
   });
 
   describe('GET /sessions/:id/stage4 (getStage4State)', () => {
@@ -2152,6 +2158,117 @@ describe('Stage 4 API', () => {
           error: expect.objectContaining({ code: 'VALIDATION_ERROR' }),
         })
       );
+    });
+  });
+
+  describe('POST /sessions/:id/stage4/proposals/suggest (requestSuggestions)', () => {
+    it('persists AI suggestions linked to the target need', async () => {
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: {
+          needId: 'need-1',
+          focusNeeds: ['predictability'],
+          count: 2,
+        },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        stage: 4,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      });
+      (prisma.identifiedNeed.findFirst as jest.Mock).mockResolvedValue({
+        id: 'need-1',
+        sessionId: mockSessionId,
+        need: 'predictability',
+      });
+      (prisma.globalLibraryItem.findMany as jest.Mock).mockResolvedValue([
+        {
+          title: 'Short planning check-in',
+          description: 'A small scheduled check-in to reduce surprise.',
+          category: 'planning',
+        },
+      ]);
+      (prisma.strategyProposal.create as jest.Mock)
+        .mockResolvedValueOnce({
+          id: 'ai-proposal-1',
+          description:
+            'Try one small check-in focused on "predictability" and each name one concrete thing that would help this week.',
+          needsAddressed: ['predictability'],
+          duration: '10 minutes, once this week',
+          measureOfSuccess: 'Both people can name one next step that feels doable.',
+        })
+        .mockResolvedValueOnce({
+          id: 'ai-proposal-2',
+          description:
+            'Choose one low-stakes experiment for "predictability" and agree to revisit it after a few days without treating it as permanent.',
+          needsAddressed: ['predictability'],
+          duration: '3 days',
+          measureOfSuccess: 'The experiment gives useful information without creating more pressure.',
+        });
+
+      await requestSuggestions(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(200);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            source: 'AI_GENERATED',
+            count: 2,
+            suggestions: expect.arrayContaining([
+              expect.objectContaining({ id: 'ai-proposal-1' }),
+              expect.objectContaining({ id: 'ai-proposal-2' }),
+            ]),
+          }),
+        })
+      );
+      expect(prisma.strategyProposal.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            sessionId: mockSessionId,
+            createdByUserId: null,
+            needsAddressed: ['predictability'],
+            source: 'AI_SUGGESTED',
+            kind: 'SHARED_PROPOSAL',
+            needLinks: {
+              create: {
+                needId: 'need-1',
+              },
+            },
+          }),
+        })
+      );
+    });
+
+    it('requires a target need or focus need label', async () => {
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: { count: 1 },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        stage: 4,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      });
+
+      await requestSuggestions(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(400);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+        })
+      );
+      expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
     });
   });
 

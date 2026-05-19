@@ -39,6 +39,8 @@ import {
   scheduleIndividualCommitmentTendingEntries,
   scheduleSharedAgreementTendingEntries,
 } from '../services/tending.service';
+import { getModelCompletion } from '../lib/bedrock';
+import { extractJsonFromResponse } from '../utils/json-extractor';
 import { z } from 'zod';
 
 // ============================================================================
@@ -108,6 +110,109 @@ function toStrategyDTO(strategy: StrategyProposalForVisibility) {
   };
 }
 
+type Stage4SuggestionDraft = {
+  description: string;
+  duration: string | null;
+  measureOfSuccess: string | null;
+};
+
+function normalizeSuggestionDrafts(value: unknown, count: number): Stage4SuggestionDraft[] {
+  const raw =
+    typeof value === 'object' && value !== null && Array.isArray((value as { suggestions?: unknown }).suggestions)
+      ? (value as { suggestions: unknown[] }).suggestions
+      : [];
+
+  return raw
+    .map((item): Stage4SuggestionDraft | null => {
+      if (typeof item !== 'object' || item === null) return null;
+      const draft = item as Record<string, unknown>;
+      const description = typeof draft.description === 'string' ? draft.description.trim() : '';
+      if (description.length < 10) return null;
+      return {
+        description,
+        duration: typeof draft.duration === 'string' && draft.duration.trim() ? draft.duration.trim() : null,
+        measureOfSuccess:
+          typeof draft.measureOfSuccess === 'string' && draft.measureOfSuccess.trim()
+            ? draft.measureOfSuccess.trim()
+            : null,
+      };
+    })
+    .filter((draft): draft is Stage4SuggestionDraft => draft !== null)
+    .slice(0, count);
+}
+
+function fallbackSuggestionDrafts(needLabel: string, count: number): Stage4SuggestionDraft[] {
+  const base = needLabel.trim() || 'this need';
+  const drafts: Stage4SuggestionDraft[] = [
+    {
+      description: `Try one small check-in focused on "${base}" and each name one concrete thing that would help this week.`,
+      duration: '10 minutes, once this week',
+      measureOfSuccess: 'Both people can name one next step that feels doable.',
+    },
+    {
+      description: `Choose one low-stakes experiment for "${base}" and agree to revisit it after a few days without treating it as permanent.`,
+      duration: '3 days',
+      measureOfSuccess: 'The experiment gives useful information without creating more pressure.',
+    },
+    {
+      description: `Set aside one moment to ask, "What would make ${base} easier right now?" and write down the smallest answer either person can offer.`,
+      duration: 'One conversation this week',
+      measureOfSuccess: 'There is one specific action or boundary to try next.',
+    },
+  ];
+  return drafts.slice(0, count);
+}
+
+async function generateStage4SuggestionDrafts(params: {
+  sessionId: string;
+  needLabel: string;
+  count: number;
+  globalLibraryItems: Array<{ title: string; description: string; category: string }>;
+}): Promise<Stage4SuggestionDraft[]> {
+  const libraryContext =
+    params.globalLibraryItems.length > 0
+      ? params.globalLibraryItems
+          .map((item) => `- ${item.title} (${item.category}): ${item.description}`)
+          .join('\n')
+      : '(none available)';
+
+  const response = await getModelCompletion('haiku', {
+    systemPrompt: [
+      'You generate Stage 4 micro-experiment suggestions for one confirmed need.',
+      'Use only the need label and the global micro-experiments library below. Do not use user memory or unrelated session history.',
+      'Return JSON only: {"suggestions":[{"description":"...","duration":"...","measureOfSuccess":"..."}]}.',
+      'Each suggestion must be concrete, small, reversible, observable, and phrased as something the partners could try.',
+    ].join('\n'),
+    messages: [
+      {
+        role: 'user',
+        content: [
+          `Need: ${params.needLabel}`,
+          `Count: ${params.count}`,
+          '',
+          'Global micro-experiments library:',
+          libraryContext,
+        ].join('\n'),
+      },
+    ],
+    maxTokens: 900,
+    operation: 'stage4-need-suggestions',
+    sessionId: params.sessionId,
+    turnId: `${params.sessionId}:stage4-suggest:${Date.now()}`,
+  });
+
+  if (!response) return fallbackSuggestionDrafts(params.needLabel, params.count);
+
+  try {
+    const parsed = extractJsonFromResponse(response);
+    const drafts = normalizeSuggestionDrafts(parsed, params.count);
+    return drafts.length > 0 ? drafts : fallbackSuggestionDrafts(params.needLabel, params.count);
+  } catch (error) {
+    logger.warn('[requestSuggestions] Failed to parse AI suggestion response; using fallback', error);
+    return fallbackSuggestionDrafts(params.needLabel, params.count);
+  }
+}
+
 // Create agreement request schema locally
 const createAgreementRequestSchema = z.object({
   strategyId: z.string().optional(),
@@ -139,6 +244,12 @@ const submitStage4SelectionsRequestSchema = z.object({
 
 const stage4NeedWalkthroughActionSchema = z.object({
   action: z.enum(['covered', 'skip']),
+});
+
+const requestSuggestionsRequestSchema = z.object({
+  count: z.number().int().min(1).max(3).optional().default(3),
+  focusNeeds: z.array(z.string()).optional(),
+  needId: z.string().min(1).optional(),
 });
 
 const closeStage4RequestSchema = z.object({
@@ -2131,10 +2242,12 @@ export async function requestSuggestions(req: Request, res: Response): Promise<v
     }
 
     const { id: sessionId } = req.params;
-    const { count = 3, focusNeeds } = req.body as {
-      count?: number;
-      focusNeeds?: string[];
-    };
+    const parseResult = requestSuggestionsRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid suggestion request', 400, parseResult.error.issues);
+      return;
+    }
+    const { count, focusNeeds, needId } = parseResult.data;
 
     // Check session exists and user has access
     const session = await prisma.session.findFirst({
@@ -2181,14 +2294,80 @@ export async function requestSuggestions(req: Request, res: Response): Promise<v
       return;
     }
 
-    // TODO: Call AI service to generate strategy suggestions based on common ground
-    // For now, return empty array - implement AI suggestion service separately
-    const suggestions: never[] = [];
+    const targetNeed = needId
+      ? await prisma.identifiedNeed.findFirst({
+          where: {
+            id: needId,
+            vessel: {
+              sessionId,
+            },
+          },
+        })
+      : null;
+
+    if (needId && !targetNeed) {
+      errorResponse(res, 'NOT_FOUND', 'Need not found', 404);
+      return;
+    }
+
+    const fallbackNeedLabel = focusNeeds?.find((need) => need.trim().length > 0)?.trim();
+    const needLabel = targetNeed?.need ?? fallbackNeedLabel;
+
+    if (!needLabel) {
+      errorResponse(res, 'VALIDATION_ERROR', 'A needId or focusNeeds value is required', 400);
+      return;
+    }
+
+    const globalLibraryItems = await prisma.globalLibraryItem.findMany({
+      where: {
+        source: 'CURATED',
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 8,
+      select: {
+        title: true,
+        description: true,
+        category: true,
+      },
+    });
+
+    const drafts = await generateStage4SuggestionDrafts({
+      sessionId,
+      needLabel,
+      count,
+      globalLibraryItems,
+    });
+
+    const created = await Promise.all(
+      drafts.map((draft) =>
+        prisma.strategyProposal.create({
+          data: {
+            sessionId,
+            createdByUserId: null,
+            description: draft.description,
+            needsAddressed: [needLabel],
+            duration: draft.duration,
+            measureOfSuccess: draft.measureOfSuccess,
+            source: 'AI_SUGGESTED',
+            kind: 'SHARED_PROPOSAL',
+            ...(targetNeed
+              ? {
+                  needLinks: {
+                    create: {
+                      needId: targetNeed.id,
+                    },
+                  },
+                }
+              : {}),
+          },
+        })
+      )
+    );
 
     successResponse(res, {
-      suggestions,
+      suggestions: created.map(toStrategyDTO),
       source: 'AI_GENERATED',
-      count: suggestions.length,
+      count: created.length,
     });
   } catch (error) {
     logger.error('[requestSuggestions] Error:', error);

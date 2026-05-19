@@ -89,6 +89,7 @@ import {
   useInterpretNeedEdit,
   useApplyNeedEdits,
   useRemoveNeed,
+  useRequestStrategySuggestions,
   useUpdateStage4WalkthroughNeed,
 } from '../hooks/useStages';
 import { deriveEmpathyValidatedIndicator, deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
@@ -1607,6 +1608,24 @@ export function UnifiedSessionScreen({
   const openStage4SubChat = useOpenStage4SubChat();
   const sendStage4SubChatMessage = useSendStage4SubChatMessage();
   const resolveStage4SubChatMutation = useResolveStage4SubChat();
+  const requestStage4Suggestions = useRequestStrategySuggestions();
+  const handleSuggestStage4Options = useCallback(
+    (needLabel: string, needId: string) => {
+      requestStage4Suggestions.mutate(
+        {
+          sessionId,
+          needId,
+          focusNeeds: [needLabel],
+          count: 2,
+        },
+        {
+          onError: () =>
+            showError('Could not suggest options. Please try again.'),
+        }
+      );
+    },
+    [requestStage4Suggestions, sessionId, showError]
+  );
   const handleBrainstormStage4Need = useCallback(
     (needLabel: string, needId: string) => {
       void stage4BrainstormPrefill;
@@ -3607,6 +3626,7 @@ export function UnifiedSessionScreen({
               onSelectProposal={handleStage4Selection}
               onShareSelections={handleShareStage4Selections}
               onReviseSelections={handleReviseStage4Selections}
+              onSuggestOptions={handleSuggestStage4Options}
               onBrainstormNeed={handleBrainstormStage4Need}
               onRefineProposal={handleRefineStage4Proposal}
               onKeepRefiningNoOverlap={handleKeepRefiningNoOverlap}
@@ -4159,6 +4179,7 @@ export function UnifiedSessionScreen({
                 onSelectProposal={handleStage4Selection}
                 onShareSelections={handleShareStage4Selections}
                 onReviseSelections={handleReviseStage4Selections}
+                onSuggestOptions={handleSuggestStage4Options}
                 onBrainstormNeed={handleBrainstormStage4Need}
                 onRefineProposal={handleRefineStage4Proposal}
                 onKeepRefiningNoOverlap={handleKeepRefiningNoOverlap}

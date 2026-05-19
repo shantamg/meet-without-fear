@@ -1837,7 +1837,7 @@ export function useRequestStrategySuggestions(
     UseMutationOptions<
       { suggestions: StrategyDTO[]; source: 'AI_GENERATED' },
       ApiClientError,
-      { sessionId: string; count?: number; focusNeeds?: string[] }
+      { sessionId: string; count?: number; focusNeeds?: string[]; needId?: string }
     >,
     'mutationFn'
   >
@@ -1845,14 +1845,15 @@ export function useRequestStrategySuggestions(
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ sessionId, count, focusNeeds }) => {
+    mutationFn: async ({ sessionId, count, focusNeeds, needId }) => {
       return post<{ suggestions: StrategyDTO[]; source: 'AI_GENERATED' }>(
-        `/sessions/${sessionId}/strategies/suggestions`,
-        { count, focusNeeds }
+        `/sessions/${sessionId}/stage4/proposals/suggest`,
+        { count, focusNeeds, needId }
       );
     },
     onSuccess: (_, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.stage4(sessionId) });
     },
     ...options,
   });
