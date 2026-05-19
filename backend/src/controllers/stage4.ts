@@ -28,6 +28,7 @@ import {
   Stage4ProposalKind,
   Stage4ProposalStatus,
   Stage4SelectionDecision,
+  GetStage4StateResponse,
 } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
@@ -134,6 +135,10 @@ const submitStage4SelectionsRequestSchema = z.object({
       })
     )
     .min(1, 'At least one selection is required'),
+});
+
+const stage4NeedWalkthroughActionSchema = z.object({
+  action: z.enum(['covered', 'skip']),
 });
 
 const closeStage4RequestSchema = z.object({
@@ -264,6 +269,87 @@ function hasSubmittedSelectionGate(
 ): boolean {
   const gates = existingGates as Record<string, unknown> | null | undefined;
   return Boolean(gates && gates.selectionSubmitted === true);
+}
+
+async function updateStage4WalkthroughNeed(
+  sessionId: string,
+  userId: string,
+  needId: string,
+  action: 'covered' | 'skip'
+): Promise<GetStage4StateResponse> {
+  const before = await buildStage4State(sessionId, userId);
+  const progress = await prisma.stageProgress.findUnique({
+    where: { sessionId_userId_stage: { sessionId, userId, stage: 4 } },
+    select: { gatesSatisfied: true },
+  });
+  const gates = (progress?.gatesSatisfied as Record<string, unknown> | null) ?? {};
+  const existing =
+    gates.stage4Walkthrough &&
+    typeof gates.stage4Walkthrough === 'object' &&
+    !Array.isArray(gates.stage4Walkthrough)
+      ? (gates.stage4Walkthrough as Record<string, unknown>)
+      : {};
+  const covered = new Set(
+    Array.isArray(existing.coveredNeedIds)
+      ? existing.coveredNeedIds.filter((id): id is string => typeof id === 'string')
+      : []
+  );
+  const skipped = new Set(
+    Array.isArray(existing.skippedNeedIds)
+      ? existing.skippedNeedIds.filter((id): id is string => typeof id === 'string')
+      : []
+  );
+
+  if (action === 'covered') {
+    covered.add(needId);
+    skipped.delete(needId);
+  } else {
+    skipped.add(needId);
+    covered.delete(needId);
+  }
+
+  const remainingOwn = before.walkthrough.ownNeeds.find(
+    (need) => !covered.has(need.id) && !skipped.has(need.id)
+  );
+  const remainingPartner = before.walkthrough.partnerNeeds.find(
+    (need) => !covered.has(need.id) && !skipped.has(need.id)
+  );
+  const phase =
+    before.walkthrough.phase === 'MY_NEEDS' && remainingOwn
+      ? 'MY_NEEDS'
+      : before.walkthrough.phase === 'MY_NEEDS' && remainingPartner
+        ? 'PARTNER_NEEDS'
+        : before.walkthrough.phase === 'PARTNER_NEEDS' && remainingPartner
+          ? 'PARTNER_NEEDS'
+          : remainingOwn
+            ? 'MY_NEEDS'
+            : remainingPartner
+              ? 'PARTNER_NEEDS'
+              : 'QUALITY_REVIEW';
+  const currentNeedId =
+    phase === 'MY_NEEDS'
+      ? remainingOwn?.id ?? null
+      : phase === 'PARTNER_NEEDS'
+        ? remainingPartner?.id ?? null
+        : null;
+
+  await prisma.stageProgress.update({
+    where: { sessionId_userId_stage: { sessionId, userId, stage: 4 } },
+    data: {
+      gatesSatisfied: {
+        ...gates,
+        stage4Walkthrough: {
+          phase,
+          currentNeedId,
+          coveredNeedIds: [...covered],
+          skippedNeedIds: [...skipped],
+          updatedAt: new Date().toISOString(),
+        },
+      } satisfies Prisma.InputJsonValue,
+    },
+  });
+
+  return buildStage4State(sessionId, userId);
 }
 
 function userIsSessionMember(session: Stage4MutableSession, userId: string): boolean {
@@ -419,6 +505,56 @@ export async function submitStage4Selections(req: Request, res: Response): Promi
   } catch (error) {
     logger.error('[submitStage4Selections] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to submit Stage 4 selections', 500);
+  }
+}
+
+/**
+ * Persist Stage 4 walkthrough progress for one need.
+ * POST /sessions/:id/stage4/walkthrough/needs/:needId
+ */
+export async function updateStage4WalkthroughNeedStatus(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId, needId } = req.params;
+    const parseResult = stage4NeedWalkthroughActionSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.issues);
+      return;
+    }
+
+    const mutable = await getMutableStage4Session(sessionId, user.id);
+    if (!mutable) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (mutable.session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+    if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+
+    const state = await updateStage4WalkthroughNeed(
+      sessionId,
+      user.id,
+      needId,
+      parseResult.data.action
+    );
+    successResponse(res, { state });
+  } catch (error) {
+    if (error instanceof Stage4StateNotFoundError) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    logger.error('[updateStage4WalkthroughNeedStatus] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to update Stage 4 walkthrough', 500);
   }
 }
 

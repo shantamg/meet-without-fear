@@ -89,6 +89,7 @@ import {
   useInterpretNeedEdit,
   useApplyNeedEdits,
   useRemoveNeed,
+  useUpdateStage4WalkthroughNeed,
 } from '../hooks/useStages';
 import { deriveEmpathyValidatedIndicator, deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
@@ -1541,6 +1542,7 @@ export function UnifiedSessionScreen({
   const unshareStage4Selections = useUnshareStage4Selections();
   const declineStage4Need = useDeclineStage4Need();
   const undeclineStage4Need = useUndeclineStage4Need();
+  const updateStage4WalkthroughNeed = useUpdateStage4WalkthroughNeed();
   const closeStage4 = useCloseStage4({
     onSuccess: (response) => {
       if (response.outcome.kind === Stage4ClosureKind.SHARED_AGREEMENT) {
@@ -1745,6 +1747,32 @@ export function UnifiedSessionScreen({
       );
     },
     [undeclineStage4Need, sessionId, showError]
+  );
+  const handleMarkStage4NeedCovered = useCallback(
+    (needId: string) => {
+      updateStage4WalkthroughNeed.mutate(
+        { sessionId, needId, action: 'covered' },
+        {
+          onError: () => {
+            showError('Could not move to the next need. Please try again.');
+          },
+        }
+      );
+    },
+    [sessionId, showError, updateStage4WalkthroughNeed]
+  );
+  const handleSkipStage4Need = useCallback(
+    (needId: string) => {
+      updateStage4WalkthroughNeed.mutate(
+        { sessionId, needId, action: 'skip' },
+        {
+          onError: () => {
+            showError('Could not leave that need for later. Please try again.');
+          },
+        }
+      );
+    },
+    [sessionId, showError, updateStage4WalkthroughNeed]
   );
   const handleReviseStage4Selections = useCallback(() => {
     unshareStage4Selections.mutate(
@@ -3584,6 +3612,8 @@ export function UnifiedSessionScreen({
               onKeepRefiningNoOverlap={handleKeepRefiningNoOverlap}
               onDeclineNeed={handleDeclineStage4Need}
               onUndeclineNeed={handleUndeclineStage4Need}
+              onMarkNeedCovered={handleMarkStage4NeedCovered}
+              onSkipNeed={handleSkipStage4Need}
               onCloseStage4={handleCloseRedesignedStage4}
             />
             {tendingPanel}
@@ -4134,6 +4164,8 @@ export function UnifiedSessionScreen({
                 onKeepRefiningNoOverlap={handleKeepRefiningNoOverlap}
                 onDeclineNeed={handleDeclineStage4Need}
                 onUndeclineNeed={handleUndeclineStage4Need}
+                onMarkNeedCovered={handleMarkStage4NeedCovered}
+                onSkipNeed={handleSkipStage4Need}
                 onCloseStage4={(kind, reason, checkInDate) => {
                   handleCloseRedesignedStage4(kind, reason, checkInDate);
                   setShowStage4Drawer(false);

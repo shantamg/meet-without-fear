@@ -2202,6 +2202,36 @@ export function useSubmitStage4Selections(
   });
 }
 
+export function useUpdateStage4WalkthroughNeed() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { state: GetStage4StateResponse },
+    ApiClientError,
+    { sessionId: string; needId: string; action: 'covered' | 'skip' },
+    { previous: GetStage4StateResponse | undefined }
+  >({
+    mutationFn: async ({ sessionId, needId, action }) =>
+      post<{ state: GetStage4StateResponse }, { action: 'covered' | 'skip' }>(
+        `/sessions/${sessionId}/stage4/walkthrough/needs/${needId}`,
+        { action }
+      ),
+    onMutate: async ({ sessionId }) => {
+      const key = stageKeys.stage4(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      return { previous: queryClient.getQueryData<GetStage4StateResponse>(key) };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(stageKeys.stage4(sessionId), context.previous);
+      }
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      refreshStage4Caches(queryClient, sessionId);
+    },
+  });
+}
+
 /**
  * Share the current user's Stage 4 selections with their partner.
  * Requires every active proposal to have a stance.

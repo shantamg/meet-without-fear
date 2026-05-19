@@ -25,6 +25,7 @@ import {
   getStage4State,
   submitStage4ProposalSelection,
   submitStage4Selections,
+  updateStage4WalkthroughNeedStatus,
   shareStage4Selections,
   unshareStage4Selections,
   declineStage4Need,
@@ -64,6 +65,13 @@ router.post(
   requireAuth,
   requireSessionAccess,
   asyncHandler(submitStage4Selections)
+);
+
+router.post(
+  '/sessions/:id/stage4/walkthrough/needs/:needId',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(updateStage4WalkthroughNeedStatus)
 );
 
 // Share current user's Stage 4 selections with their partner

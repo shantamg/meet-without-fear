@@ -190,6 +190,14 @@ export enum Stage4Phase {
 }
 
 export type Stage4CoverageStatus = 'COVERED' | 'PARTIAL' | 'OPEN';
+export type Stage4ProposalSourceLabel = 'YOU' | 'PARTNER' | 'AI' | 'UNKNOWN';
+export type Stage4WalkthroughPhase = 'MY_NEEDS' | 'PARTNER_NEEDS' | 'QUALITY_REVIEW' | 'SUMMARY';
+export type Stage4NeedWalkthroughStatus =
+  | 'not_started'
+  | 'in_progress'
+  | 'covered'
+  | 'skipped'
+  | 'needs_options';
 
 export interface ProposalNeedCoverageDTO {
   id?: string;
@@ -201,6 +209,7 @@ export interface ProposalCardDTO {
   id: string;
   kind: Stage4ProposalKind;
   description: string;
+  sourceLabel?: Stage4ProposalSourceLabel;
   ownerLabel?: 'You' | 'Partner';
   needsAddressed: ProposalNeedCoverageDTO[];
   duration: string | null;
@@ -208,6 +217,45 @@ export interface ProposalCardDTO {
   status: Stage4ProposalStatus;
   myDecision?: Stage4SelectionDecision;
   partnerDecisionVisible?: Stage4SelectionDecision;
+}
+
+export interface Stage4WalkthroughNeedDTO {
+  id: string;
+  label: string;
+  source: 'YOU' | 'PARTNER' | 'UNKNOWN';
+  status: Stage4NeedWalkthroughStatus;
+}
+
+export interface Stage4WalkthroughProposalGroupDTO {
+  key:
+    | 'you_suggested'
+    | 'partner_suggested'
+    | 'ai_suggested'
+    | 'partner_may_do'
+    | 'shared_options'
+    | 'your_prior_suggestions';
+  title: string;
+  readOnly?: boolean;
+  proposals: ProposalCardDTO[];
+}
+
+export interface Stage4QualityWarningDTO {
+  proposalId: string;
+  description: string;
+  warning: string;
+  suggestedRevision?: string;
+}
+
+export interface Stage4WalkthroughDTO {
+  phase: Stage4WalkthroughPhase;
+  currentNeed: Stage4WalkthroughNeedDTO | null;
+  currentIndex: number;
+  totalInPhase: number;
+  ownNeeds: Stage4WalkthroughNeedDTO[];
+  partnerNeeds: Stage4WalkthroughNeedDTO[];
+  proposalGroups: Stage4WalkthroughProposalGroupDTO[];
+  qualityWarnings: Stage4QualityWarningDTO[];
+  defaultCheckInDate: string;
 }
 
 export interface UnaddressedNeedDTO {
@@ -370,6 +418,7 @@ export interface CreateTendingReentryResponse {
 
 export interface GetStage4StateResponse {
   phase: Stage4Phase;
+  walkthrough: Stage4WalkthroughDTO;
   inventory: ProposalInventoryDTO;
   coverageAudit: Stage4CoverageAuditDTO;
   mySelections: Stage4SelectionDTO[];
@@ -378,6 +427,10 @@ export interface GetStage4StateResponse {
   partnerSelectionStatus: 'NOT_STARTED' | 'SUBMITTED';
   outcome: Stage4OutcomeDTO | null;
   tendingPreview: TendingPreviewDTO | null;
+}
+
+export interface UpdateStage4WalkthroughNeedResponse {
+  state: GetStage4StateResponse;
 }
 
 export interface SubmitStage4SelectionRequest {
