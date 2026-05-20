@@ -407,7 +407,7 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(true);
   });
 
-  it('hides input while partner empathy validation owns the next action', () => {
+  it('shows partner empathy validation panel while keeping chat available', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -419,7 +419,28 @@ describe('Input Hiding (shouldHideInput)', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.shouldHideInput).toBe(true);
+    expect(result.aboveInputPanel).toBe('partner-empathy-validation');
+    expect(result.panels.showPartnerEmpathyValidationPanel).toBe(true);
+    expect(result.shouldHideInput).toBe(false);
+  });
+
+  it('queues share suggestions behind partner empathy validation', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      hasPartnerEmpathy: true,
+      myValidation: { validated: false },
+      empathyStatus: { myAttemptStatus: 'REVEALED' },
+      empathyDraft: { alreadyConsented: true },
+      hasShareSuggestion: true,
+      shareOffer: { hasSuggestion: true, action: 'OFFER_OPTIONAL' },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.aboveInputPanel).toBe('partner-empathy-validation');
+    expect(result.panels.showShareSuggestionPanel).toBe(true);
+    expect(result.shouldHideInput).toBe(false);
   });
 
   it('shows a waiting banner and hides input after I validate partner empathy but partner has not validated mine', () => {

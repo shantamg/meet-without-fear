@@ -32,6 +32,7 @@ export type AboveInputPanel =
   | 'invitation' // Invitation share panel for inviters
   | 'invitee-topic-ack' // Invitee Stage 0 topic-acknowledgement Ready bar
   | 'empathy-statement' // Empathy statement review panel
+  | 'partner-empathy-validation' // Partner empathy review panel
   | 'feel-heard' // Feel heard confirmation panel
   | 'share-suggestion' // Share suggestion from reconciler (Subject side)
   | 'needs-review' // Needs review panel (Stage 3: confirm identified needs)
@@ -154,6 +155,7 @@ export interface ChatUIState {
     showInvitationPanel: boolean;
     showInviteeTopicAckPanel: boolean;
     showEmpathyPanel: boolean;
+    showPartnerEmpathyValidationPanel: boolean;
     showFeelHeardPanel: boolean;
     showShareSuggestionPanel: boolean;
     showNeedsReviewPanel: boolean;
@@ -364,6 +366,28 @@ function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
 }
 
 /**
+ * Determines if partner empathy needs the user's response.
+ *
+ * This owns the Stage 2 focus until the user either confirms the empathy or
+ * responds in chat with what feels missing. Other ready actions, such as
+ * optional context sharing, remain queued behind this panel.
+ */
+function computeShowPartnerEmpathyValidationPanel(inputs: ChatUIStateInputs): boolean {
+  const { myStage, hasPartnerEmpathy, myValidation, sessionStatus } = inputs;
+
+  if (sessionStatus === SessionStatus.RESOLVED) return false;
+
+  const currentStage = myStage ?? Stage.ONBOARDING;
+  if (currentStage !== Stage.PERSPECTIVE_STRETCH) return false;
+
+  return !!(
+    hasPartnerEmpathy &&
+    myValidation?.validated !== true &&
+    myValidation?.awaitingRevision !== true
+  );
+}
+
+/**
  * Determines if needs review panel should show.
  * Shows when needs are available but not yet confirmed, and user hasn't
  * already used the local latch (prevents flash during server refetch).
@@ -504,32 +528,37 @@ function computeAboveInputPanel(
     return 'feel-heard';
   }
 
-  // Priority 4: Share suggestion panel (Subject side in Stage 2)
+  // Priority 4: Partner empathy validation (Stage 2)
+  if (panels.showPartnerEmpathyValidationPanel) {
+    return 'partner-empathy-validation';
+  }
+
+  // Priority 5: Share suggestion panel (Subject side in Stage 2)
   if (panels.showShareSuggestionPanel) {
     return 'share-suggestion';
   }
 
-  // Priority 5: Empathy statement panel (Stage 2)
+  // Priority 6: Empathy statement panel (Stage 2)
   if (panels.showEmpathyPanel) {
     return 'empathy-statement';
   }
 
-  // Priority 6: Needs review panel (Stage 3)
+  // Priority 7: Needs review panel (Stage 3)
   if (panels.showNeedsReviewPanel) {
     return 'needs-review';
   }
 
-  // Priority 7: Needs share panel (Stage 3)
+  // Priority 8: Needs share panel (Stage 3)
   if (panels.showNeedsSharePanel) {
     return 'needs-share';
   }
 
-  // Priority 8: Needs reveal validation panel (Stage 3)
+  // Priority 9: Needs reveal validation panel (Stage 3)
   if (panels.showNeedsRevealValidationPanel) {
     return 'needs-reveal-validation';
   }
 
-  // Priority 9: Waiting banner
+  // Priority 10: Waiting banner
   if (panels.showWaitingBanner) {
     return 'waiting-banner';
   }
@@ -615,14 +644,6 @@ function computeShouldHideInput(
   const hasShareSuggestion = inputs.shareOffer?.hasSuggestion === true;
   if (
     currentStage === Stage.PERSPECTIVE_STRETCH &&
-    inputs.hasPartnerEmpathy &&
-    inputs.myValidation?.validated !== true
-  ) {
-    return true;
-  }
-
-  if (
-    currentStage === Stage.PERSPECTIVE_STRETCH &&
     inputs.empathyDraft === undefined &&
     inputs.empathyStatus === undefined &&
     aboveInputPanel !== 'empathy-statement' &&
@@ -690,6 +711,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   const showInvitationPanel = computeShowInvitationPanel(inputs);
   const showInviteeTopicAckPanel = !inputs.isInviter && inputs.inviteeTopicAckPending;
   const showEmpathyPanel = computeShowEmpathyPanel(inputs);
+  const showPartnerEmpathyValidationPanel = computeShowPartnerEmpathyValidationPanel(inputs);
   const showFeelHeardPanel = computeShowFeelHeardPanel(inputs);
   const showShareSuggestionPanel = computeShowShareSuggestionPanel(inputs);
   const showNeedsReviewPanel = computeShowNeedsReviewPanel(inputs);
@@ -703,6 +725,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
     showInvitationPanel,
     showInviteeTopicAckPanel,
     showEmpathyPanel,
+    showPartnerEmpathyValidationPanel,
     showFeelHeardPanel,
     showShareSuggestionPanel,
     showNeedsReviewPanel,
