@@ -2176,6 +2176,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         forUserId: user.id,
         userId: user.id,
         oldId: applied.oldNeed?.id,
+        oldNeed: applied.oldNeed,
         newId: applied.action === 'refine' ? applied.need?.id : undefined,
         need: applied.need,
       }).catch((err) =>

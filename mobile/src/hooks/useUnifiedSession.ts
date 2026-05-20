@@ -301,7 +301,9 @@ export function useUnifiedSession(
 
   // Derive needs state for gating the side-by-side reveal query.
   const needsForGating = needsData?.needs ?? [];
-  const allNeedsConfirmedForGating = needsForGating.length > 0 && needsForGating.every((n) => n.confirmed);
+  const liveNeedsForGating = needsForGating.filter((n) => !n.deletedAt && !n.supersededByNeedId);
+  const allNeedsConfirmedForGating =
+    liveNeedsForGating.length > 0 && liveNeedsForGating.every((n) => Boolean(n.lockedAt));
   const myNeedsSharedForGating =
     (progressData?.myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true;
 
@@ -390,9 +392,8 @@ export function useUnifiedSession(
       if (sessionId && metadata.proposedStrategies && metadata.proposedStrategies.length > 0) {
         queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
       }
-      // Invalidate needs cache when AI captures reviewable needs (Stage 3)
+      // Stage 3 need cards are updated by need.* Ably events with setQueryData.
       if (sessionId && metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
@@ -403,7 +404,6 @@ export function useUnifiedSession(
         queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
       }
       if (sessionId && metadata.needsCaptured) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
@@ -571,7 +571,8 @@ export function useUnifiedSession(
 
   // Needs confirmation state
   const needs = useMemo(() => needsData?.needs ?? [], [needsData?.needs]);
-  const allNeedsConfirmed = needs.length > 0 && needs.every((n) => n.confirmed);
+  const liveNeeds = needs.filter((n) => !n.deletedAt && !n.supersededByNeedId);
+  const allNeedsConfirmed = liveNeeds.length > 0 && liveNeeds.every((n) => Boolean(n.lockedAt));
   const needsRevealValidationItems = useMemo<LegacyNeedsRevealItem[]>(() => [], []);
   const needsRevealReady =
     (needsComparisonData?.myNeeds?.length ?? 0) > 0 &&

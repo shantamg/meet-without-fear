@@ -238,18 +238,18 @@ export async function applyNeedEdits(
   };
 }
 
-export async function deleteNeed(sessionId: string, userId: string, needId: string): Promise<void> {
+export async function deleteNeed(sessionId: string, userId: string, needId: string): Promise<IdentifiedNeedDTO> {
   await assertNeedsEditable(sessionId, userId);
   const vessel = await getOrCreateUserVessel(sessionId, userId);
   const need = await prisma.identifiedNeed.findFirst({
     where: { id: needId, vesselId: vessel.id },
-    select: { id: true },
-  });
+  }) as NeedRow | null;
   if (!need) throw new NeedEditValidationError('Need not found.');
-  await prisma.identifiedNeed.update({
+  const deleted = await prisma.identifiedNeed.update({
     where: { id: needId },
     data: { deletedAt: new Date() },
-  });
+  }) as NeedRow;
+  return toDTO(deleted);
 }
 
 export async function applyNeedAction(

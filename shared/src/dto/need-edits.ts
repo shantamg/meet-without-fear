@@ -64,4 +64,5 @@ export interface ApplyNeedEditsResponse {
 export interface DeleteNeedResponse {
   deleted: true;
   needId: string;
+  need?: IdentifiedNeedDTO;
 }

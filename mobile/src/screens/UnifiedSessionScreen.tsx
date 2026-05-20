@@ -24,6 +24,7 @@ import {
   Stage4ClosureReason,
   Stage4Phase,
   Stage4SelectionDecision,
+  IdentifiedNeedDTO,
 } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem, ChatCustomCardItem } from '../components/ChatInterface';
@@ -87,6 +88,7 @@ import {
   useOpenStage4SubChat,
   useSendStage4SubChatMessage,
   useResolveStage4SubChat,
+  patchNeedsCacheWithNeed,
   useRemoveNeed,
   useRequestStrategySuggestions,
   useUpdateStage4WalkthroughNeed,
@@ -1087,10 +1089,29 @@ export function UnifiedSessionScreen({
       // defined in shared/src/dto/realtime.ts SessionEventType
       const eventName = event as string;
 
+      if (
+        eventName === 'need.captured' ||
+        eventName === 'need.refined' ||
+        eventName === 'need.locked' ||
+        eventName === 'need.deleted'
+      ) {
+        const payload = data as { forUserId?: string; need?: IdentifiedNeedDTO; oldNeed?: IdentifiedNeedDTO };
+        if (payload.forUserId === user?.id && payload.oldNeed) {
+          patchNeedsCacheWithNeed(queryClient, sessionId, payload.oldNeed);
+        }
+        if (payload.forUserId === user?.id && payload.need) {
+          patchNeedsCacheWithNeed(queryClient, sessionId, payload.need);
+        }
+        if (payload.forUserId === user?.id) {
+          refetchPersistedMessages();
+        }
+      }
+
       if (eventName === 'session.needs_extracted') {
-        // My own needs have been extracted by the backend
+        // Legacy multi-need capture event has no need payload, so pull once.
         console.log('[UnifiedSessionScreen] Needs extracted, refreshing cache');
-        refreshStage3RealtimeState({ refetchMessages: true });
+        queryClient.refetchQueries({ queryKey: stageKeys.needs(sessionId) });
+        refetchPersistedMessages();
       }
 
       if (eventName === 'partner.needs_confirmed') {

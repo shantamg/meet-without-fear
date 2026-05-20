@@ -441,8 +441,6 @@ export function useStreamingMessage(
         queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       }
       if (stage === Stage.NEED_MAPPING) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
@@ -489,8 +487,6 @@ export function useStreamingMessage(
         queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       }
       if (stage === Stage.NEED_MAPPING) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
@@ -554,7 +550,6 @@ export function useStreamingMessage(
       }
 
       if (metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }

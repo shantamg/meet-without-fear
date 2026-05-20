@@ -12,6 +12,7 @@ import {
   UseQueryOptions,
   UseMutationOptions,
   InfiniteData,
+  QueryClient,
 } from '@tanstack/react-query';
 import { get, post, del, ApiClientError } from '../lib/api';
 import { useAuth } from './useAuth';
@@ -89,6 +90,7 @@ import {
   RefineValidationFeedbackRequest,
   RefineValidationFeedbackResponse,
   StrategyPhase,
+  IdentifiedNeedDTO,
 } from '@meet-without-fear/shared';
 
 // Import query keys from centralized file to avoid circular dependencies
@@ -148,6 +150,37 @@ function patchStage3Gates(
       };
     },
   );
+}
+
+export function patchNeedsCacheWithNeed(
+  queryClient: QueryClient,
+  sessionId: string,
+  need: IdentifiedNeedDTO,
+): void {
+  queryClient.setQueryData<GetNeedsResponse>(stageKeys.needs(sessionId), (old) => {
+    if (!old) {
+      return {
+        needs: [need],
+        synthesizedAt: need.createdAt ?? new Date().toISOString(),
+      };
+    }
+
+    const existingIndex = old.needs.findIndex((item) => item.id === need.id);
+    const needs =
+      existingIndex >= 0
+        ? old.needs.map((item) => (item.id === need.id ? need : item))
+        : [...old.needs, need];
+
+    return {
+      ...old,
+      needs: [...needs].sort((a, b) => {
+        const aTime = a.createdAt ? Date.parse(a.createdAt) : 0;
+        const bTime = b.createdAt ? Date.parse(b.createdAt) : 0;
+        return aTime - bTime;
+      }),
+      synthesizedAt: old.synthesizedAt ?? need.createdAt ?? new Date().toISOString(),
+    };
+  });
 }
 
 // ============================================================================
@@ -1488,7 +1521,7 @@ export function useNeeds(
       return get<GetNeedsResponse>(`/sessions/${sessionId}/needs`);
     },
     enabled: !!sessionId,
-    staleTime: 0, // Always treat as stale so Ably event invalidation triggers fresh fetch
+    staleTime: 30_000, // Ably need.* events keep this cache fresh with setQueryData.
     ...options,
   });
 }
@@ -1515,7 +1548,6 @@ export function useCaptureNeeds(
       });
     },
     onSuccess: (_, { sessionId }) => {
-      queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
@@ -1551,7 +1583,6 @@ export function useConfirmNeeds(
         needsConfirmed: true,
         needsConfirmedAt: new Date().toISOString(),
       });
-      queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
@@ -1583,8 +1614,8 @@ export function useAddNeed(
         description,
       });
     },
-    onSuccess: (_, { sessionId }) => {
-      queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+    onSuccess: (data, { sessionId }) => {
+      patchNeedsCacheWithNeed(queryClient, sessionId, data.need);
     },
     ...options,
   });
@@ -1667,10 +1698,13 @@ export function useRemoveNeed(
     onSuccess: (data, variables, context) => {
       queryClient.setQueryData<GetNeedsResponse>(stageKeys.needs(variables.sessionId), (old) => {
         if (!old) return old;
-        return {
-          ...old,
-          needs: old.needs.filter((need) => need.id !== data.needId),
-        };
+        if (data.need) {
+          return {
+            ...old,
+            needs: old.needs.map((need) => (need.id === data.needId ? data.need! : need)),
+          };
+        }
+        return old;
       });
       userOnSuccess?.(data, variables, context, undefined as never);
     },
@@ -1703,7 +1737,6 @@ export function useConsentShareNeeds(
         needsShared: true,
         sharedAt: data.sharedAt,
       });
-      queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });

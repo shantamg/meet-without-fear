@@ -19,7 +19,7 @@ import { confirmNeedsRequestSchema, ConsentContentType, NeedCategory } from '@me
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
-import { captureProposedNeedsForUser, withNeedReframingWarning } from '../services/needs';
+import { captureProposedNeedsForUser, toIdentifiedNeedDTO, withNeedReframingWarning } from '../services/needs';
 import { interpretNeedEditRequest } from '../services/needs-edit-interpreter.service';
 import {
   applyNeedEdits,
@@ -194,21 +194,10 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
     });
 
     successResponse(res, {
-      needs: needs.map((n) => {
-        const warning = withNeedReframingWarning({ need: n.need });
-        return {
-          id: n.id,
-          category: n.category,
-          need: n.need,
-          description: n.need, // Alias for compatibility
-          evidence: n.evidence,
-          aiConfidence: n.aiConfidence,
-          confirmed: n.confirmed,
-          createdAt: n.createdAt.toISOString(),
-          needsReframing: warning.needsReframing,
-          reframingWarning: warning.reframingWarning,
-        };
-      }),
+      needs: needs.map((need) => toIdentifiedNeedDTO({
+        ...need,
+        category: need.category as NeedCategory,
+      })),
       extracting: false,
       synthesizedAt: needs[0]?.createdAt.toISOString() ?? null,
     });
@@ -578,20 +567,42 @@ export async function consentToShareNeeds(
     // Get user's vessel
     const userVessel = await getOrCreateUserVessel(sessionId, user.id);
 
-    // Verify needs are confirmed
-    const confirmedNeeds = await prisma.identifiedNeed.findMany({
+    // Verify every shared need is a live locked need owned by this user.
+    const lockedLiveNeeds = await prisma.identifiedNeed.findMany({
       where: {
         id: { in: needIds },
         vesselId: userVessel.id,
-        confirmed: true,
+        lockedAt: { not: null },
+        deletedAt: null,
+        supersededByNeedId: null,
       },
     });
 
-    if (confirmedNeeds.length !== needIds.length) {
+    if (lockedLiveNeeds.length !== needIds.length) {
       errorResponse(
         res,
         'VALIDATION_ERROR',
-        'All needs must be confirmed before sharing',
+        'All live needs must be locked before sharing',
+        400
+      );
+      return;
+    }
+
+    const liveNeeds = await prisma.identifiedNeed.findMany({
+      where: {
+        vesselId: userVessel.id,
+        deletedAt: null,
+        supersededByNeedId: null,
+      },
+      select: { id: true },
+    });
+    const requestedNeedIds = new Set(needIds);
+    const allLiveNeedsRequested = liveNeeds.every((need) => requestedNeedIds.has(need.id));
+    if (liveNeeds.length !== needIds.length || !allLiveNeedsRequested) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Every live need must be shared together',
         400
       );
       return;
@@ -1046,8 +1057,16 @@ export async function removeNeed(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await deleteNeed(sessionId, user.id, needId);
-    successResponse(res, { deleted: true, needId });
+    const need = await deleteNeed(sessionId, user.id, needId);
+    await publishSessionEvent(sessionId, 'need.deleted', {
+      forUserId: user.id,
+      userId: user.id,
+      oldId: need.id,
+      need,
+    }).catch((err) =>
+      logger.warn('[removeNeed] Failed to publish need.deleted:', err)
+    );
+    successResponse(res, { deleted: true, needId, need });
   } catch (error) {
     if (needEditErrorResponse(res, error)) return;
     logger.error('[removeNeed] Error:', error);
