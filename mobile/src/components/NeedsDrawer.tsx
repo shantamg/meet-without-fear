@@ -164,10 +164,10 @@ export function NeedsDrawer({
 
   const openDrawer = useCallback(() => {
     isClosing.current = false;
-    currentSnap.current = '3q';
+    currentSnap.current = 'full';
     drawerTranslate.setValue(drawerHostHeightRef.current);
     backdropOpacity.setValue(0);
-    snapTo(position3QRef.current, 0.4);
+    snapTo(positionFullRef.current, 0.6);
   }, [backdropOpacity, drawerTranslate, snapTo]);
 
   const closeDrawer = useCallback(() => {

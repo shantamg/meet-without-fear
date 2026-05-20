@@ -2965,6 +2965,7 @@ export function UnifiedSessionScreen({
           }))}
           status={needsStatus}
           onReview={() => {
+            Keyboard.dismiss();
             setNeedsDrawerMode(getNeedsDrawerModeForNeedsStatus(needsStatus));
             setShowNeedsDrawer(true);
           }}
@@ -3348,6 +3349,7 @@ export function UnifiedSessionScreen({
               primaryAction={{
                 label: 'Review',
                 onPress: () => {
+                  Keyboard.dismiss();
                   setNeedsDrawerMode('reveal');
                   setShowNeedsDrawer(true);
                 },
@@ -3528,6 +3530,7 @@ export function UnifiedSessionScreen({
               status={needsStatus}
               compact
               onReview={() => {
+                Keyboard.dismiss();
                 setNeedsDrawerMode(getNeedsDrawerModeForNeedsStatus(needsStatus));
                 setShowNeedsDrawer(true);
               }}
