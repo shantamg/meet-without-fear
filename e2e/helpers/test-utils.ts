@@ -527,15 +527,14 @@ export async function confirmSideBySideRevealAndValidation(
   await expect(page.getByTestId('needs-reveal-validate-button')).toBeVisible({ timeout });
   await page.getByTestId('needs-reveal-validate-button').click();
 
-  const drawer = page.getByTestId('needs-drawer');
-  await expect(drawer).toBeVisible({ timeout });
-  await expect(drawer.getByText('Needs Side by Side')).toBeVisible({ timeout });
-  await expect(drawer.getByText(/Review both needs lists side by side/i)).toBeVisible({ timeout });
-  await expect(drawer.getByText('You')).toBeVisible({ timeout });
-  await expect(drawer.getByText(partnerName)).toBeVisible({ timeout });
-  await expect(drawer.getByTestId('needs-drawer-side-by-side')).toBeVisible({ timeout });
+  const modal = page.getByTestId('needs-reveal-modal');
+  await expect(modal).toBeVisible({ timeout });
+  await expect(modal.getByText('Needs side by side')).toBeVisible({ timeout });
+  await expect(modal.getByText(/Review both needs lists/i)).toBeVisible({ timeout });
+  await expect(modal.getByText('You')).toBeVisible({ timeout });
+  await expect(modal.getByText(partnerName)).toBeVisible({ timeout });
 
-  await drawer.getByTestId('needs-drawer-validate-needs').click();
+  await modal.getByTestId('needs-reveal-validate').click();
 }
 
 /**

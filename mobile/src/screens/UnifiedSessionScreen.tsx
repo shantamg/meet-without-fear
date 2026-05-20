@@ -7,7 +7,7 @@
  */
 
 import { ReactNode, useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, ScrollView, AppState, Keyboard, KeyboardAvoidingView, Platform, Share, LayoutChangeEvent, Alert } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, ScrollView, AppState, Keyboard, KeyboardAvoidingView, Platform, Share, LayoutChangeEvent, StyleSheet } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1288,9 +1288,14 @@ export function UnifiedSessionScreen({
   }, [currentStage, sessionId]);
 
   const [refineModeNeedId, setRefineModeNeedId] = useState<string | null>(null);
+  const [selectedNeedId, setSelectedNeedId] = useState<string | null>(null);
   const refineModeNeed = useMemo(
     () => needs?.find((need) => need.id === refineModeNeedId) ?? null,
     [needs, refineModeNeedId]
+  );
+  const selectedNeed = useMemo(
+    () => needs?.find((need) => need.id === selectedNeedId) ?? null,
+    [needs, selectedNeedId]
   );
 
   // Wrapped sendMessage with tracking
@@ -1518,7 +1523,7 @@ export function UnifiedSessionScreen({
       return;
     }
 
-    if (auditFixture === 'needs-drawer' && needs && needs.length > 0) {
+    if (auditFixture === 'needs-reveal' && needs && needs.length > 0) {
       setShowNeedsRevealModal(true);
       appliedAuditFixtureRef.current = auditFixture;
     }
@@ -1551,48 +1556,9 @@ export function UnifiedSessionScreen({
     [removeNeedMutation, sessionId]
   );
   const handleNeedCardPress = useCallback((needId: string) => {
-    const need = needs?.find((item) => item.id === needId);
-    if (!need) return;
-    const isSuperseded = Boolean(need.supersededByNeedId);
-    const isDeleted = Boolean(need.deletedAt);
-
-    const actions = [
-      {
-        text: 'Refine',
-        onPress: () => {
-          Keyboard.dismiss();
-          setRefineModeNeedId(needId);
-        },
-      },
-    ];
-
-    if (!isSuperseded && !isDeleted) {
-      actions.push({
-        text: 'Delete',
-        onPress: () => {
-          Alert.alert(
-            'Remove this need?',
-            'It will stay visible in the timeline as removed.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Remove',
-                style: 'destructive',
-                onPress: () => {
-                  void handleRemoveNeed(needId);
-                },
-              },
-            ],
-          );
-        },
-      });
-    }
-
-    Alert.alert('Need options', need.need, [
-      ...actions,
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  }, [handleRemoveNeed, needs]);
+    if (!needs?.some((item) => item.id === needId)) return;
+    setSelectedNeedId(needId);
+  }, [needs]);
   const hasRedesignedStage4 =
     !!stage4State &&
     (currentStage === Stage.STRATEGIC_REPAIR || session?.status === SessionStatus.RESOLVED);
@@ -2999,6 +2965,19 @@ export function UnifiedSessionScreen({
     });
   }, [currentStage, handleNeedCardPress, needs, needsData?.synthesizedAt]);
 
+  const renderMessageExtra = useCallback((message: ChatMessage) => {
+    if (!message.refiningNeedId) return null;
+    const refinedNeed = needs?.find((need) => need.id === message.refiningNeedId);
+    return (
+      <View style={styles.refineThreadIndicator} testID={`refine-thread-indicator-${message.id}`}>
+        <View style={styles.refineThreadStripe} />
+        <Text style={styles.refineThreadText} numberOfLines={2}>
+          Refining: {refinedNeed?.need ?? 'Need'}
+        </Text>
+      </View>
+    );
+  }, [needs, styles]);
+
   // Stage4RedesignPanel is now mounted inside a slide-up Modal (Stage 4 drawer)
   // rather than as an inline chat card. The CTA above the chat input opens it.
 
@@ -4072,6 +4051,7 @@ export function UnifiedSessionScreen({
               )}
             </>
           ) : undefined}
+          renderMessageExtra={renderMessageExtra}
           hideInput={
             redesignedStage4AllowsInput ? false : derivedShouldHideInput
           }
@@ -4280,6 +4260,67 @@ export function UnifiedSessionScreen({
           }}
         />
       )}
+
+      <Modal
+        visible={!!selectedNeed}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedNeedId(null)}
+      >
+        <TouchableOpacity
+          style={styles.sheetBackdrop}
+          activeOpacity={1}
+          onPress={() => setSelectedNeedId(null)}
+          testID="need-options-backdrop"
+        />
+        <View style={styles.needOptionsSheet} testID="need-options-sheet">
+          <View style={styles.sheetHandle} />
+          <Text style={styles.modalPreviewLabel}>Need</Text>
+          <Text style={styles.needOptionsTitle}>{selectedNeed?.need}</Text>
+          <View style={styles.shareActions}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                if (!selectedNeed) return;
+                Keyboard.dismiss();
+                setRefineModeNeedId(selectedNeed.id);
+                setSelectedNeedId(null);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Refine need"
+              testID="need-options-refine"
+            >
+              <Text style={styles.secondaryButtonText}>Refine</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.destructiveButton,
+                (selectedNeed?.deletedAt || selectedNeed?.supersededByNeedId) && styles.disabledButton,
+              ]}
+              disabled={Boolean(selectedNeed?.deletedAt || selectedNeed?.supersededByNeedId)}
+              onPress={() => {
+                if (!selectedNeed) return;
+                const needId = selectedNeed.id;
+                setSelectedNeedId(null);
+                void handleRemoveNeed(needId);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Delete need"
+              testID="need-options-delete"
+            >
+              <Text style={styles.destructiveButtonText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => setSelectedNeedId(null)}
+            accessibilityRole="button"
+            testID="need-options-close"
+          >
+            <Text style={styles.secondaryButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
 
       <Modal
         visible={showNeedsRevealModal}
@@ -5120,11 +5161,59 @@ const useStyles = () => {
       fontWeight: '600',
       fontSize: t.typography.fontSize.md,
     },
+    destructiveButton: {
+      flex: 1,
+      backgroundColor: 'rgba(220, 38, 38, 0.12)',
+      paddingVertical: t.spacing.sm,
+      borderRadius: t.radius.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: 'rgba(220, 38, 38, 0.35)',
+    },
+    destructiveButtonText: {
+      color: '#dc2626',
+      fontWeight: '700',
+      fontSize: t.typography.fontSize.md,
+    },
+    disabledButton: {
+      opacity: 0.45,
+    },
     modalBackdrop: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.6)',
       justifyContent: 'center',
       padding: t.spacing.lg,
+    },
+    sheetBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+    },
+    needOptionsSheet: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: t.colors.bgPrimary,
+      borderTopLeftRadius: t.radius.xl,
+      borderTopRightRadius: t.radius.xl,
+      padding: t.spacing.lg,
+      paddingBottom: t.spacing.xl,
+      gap: t.spacing.md,
+    },
+    sheetHandle: {
+      alignSelf: 'center',
+      width: 42,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: palette.border,
+      marginBottom: t.spacing.xs,
+    },
+    needOptionsTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: t.colors.textPrimary,
+      lineHeight: 24,
     },
     modalCard: {
       backgroundColor: t.colors.bgPrimary,
@@ -5168,6 +5257,32 @@ const useStyles = () => {
     },
     needsRevealColumn: {
       gap: t.spacing.sm,
+    },
+    refineThreadIndicator: {
+      alignSelf: 'flex-end',
+      maxWidth: '86%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.spacing.xs,
+      marginTop: 6,
+      marginRight: t.spacing.sm,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: t.radius.md,
+      backgroundColor: 'rgba(59, 130, 246, 0.10)',
+    },
+    refineThreadStripe: {
+      width: 3,
+      alignSelf: 'stretch',
+      borderRadius: 2,
+      backgroundColor: palette.accent,
+    },
+    refineThreadText: {
+      flex: 1,
+      color: t.colors.textSecondary,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '600',
     },
     cardTitle: {
       fontSize: 18,
