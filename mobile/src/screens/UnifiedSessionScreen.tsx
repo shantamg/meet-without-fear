@@ -1210,6 +1210,7 @@ export function UnifiedSessionScreen({
         return;
       }
       setIsAwaitingInvitationFollowUp(false);
+      setIsAwaitingEmpathyValidationFollowUp(false);
       // Add AI message to the cache - this automatically hides ghost dots
       // because ChatInterface derives showTypingIndicator from last message role
       addAIMessage(sessionId, payload.message);
@@ -1246,6 +1247,7 @@ export function UnifiedSessionScreen({
     onAIError: (payload) => {
       console.error('[UnifiedSessionScreen] AI error received via Ably:', payload.error);
       setIsAwaitingInvitationFollowUp(false);
+      setIsAwaitingEmpathyValidationFollowUp(false);
       // Note: Ghost dots hide automatically because optimistic message is rolled back on error
       handleAIMessageError(sessionId, payload.userMessageId, payload.error, payload.canRetry);
       showError('Something went wrong', 'Your message could not be processed. Please try again.');
@@ -1302,6 +1304,11 @@ export function UnifiedSessionScreen({
   const feedbackCoachInitializedRef = useRef(false);
   const appliedAuditFixtureRef = useRef<string | null>(null);
   const [isAwaitingInvitationFollowUp, setIsAwaitingInvitationFollowUp] = useState(false);
+  // Set when the user submits an empathy-validation action (accurate / partial / not-quite).
+  // Cleared when the next AI message arrives via Ably (in onAIResponse). Keeps the typing
+  // indicator visible during the gap between the validate API call and the AI follow-up.
+  const [isAwaitingEmpathyValidationFollowUp, setIsAwaitingEmpathyValidationFollowUp] =
+    useState(false);
 
   const hasInvitationTransitionResponse = useMemo(() => {
     if (!invitation?.messageConfirmedAt) return false;
@@ -2644,6 +2651,7 @@ export function UnifiedSessionScreen({
 
   const handleValidationAccurate = useCallback(() => {
     markLocalEmpathyValidation('accepted');
+    setIsAwaitingEmpathyValidationFollowUp(true);
     handleValidatePartnerEmpathy(true);
   }, [markLocalEmpathyValidation, handleValidatePartnerEmpathy]);
 
@@ -3982,7 +3990,8 @@ export function UnifiedSessionScreen({
             isResubmittingEmpathy ||
             isRespondingToShareOffer ||
             isConfirmingInvitation ||
-            isAwaitingInvitationFollowUp
+            isAwaitingInvitationFollowUp ||
+            isAwaitingEmpathyValidationFollowUp
           }
           // isInputDisabled prevents sending while API call is in progress
           isInputDisabled={isSending}
@@ -4179,11 +4188,13 @@ export function UnifiedSessionScreen({
           initialStep="feedback"
           onAccurate={() => {
             markLocalEmpathyValidation('accepted');
+            setIsAwaitingEmpathyValidationFollowUp(true);
             handleValidatePartnerEmpathy(true);
             setShowAccuracyFeedbackDrawer(false);
           }}
           onPartiallyAccurate={() => {
             markLocalEmpathyValidation('accepted');
+            setIsAwaitingEmpathyValidationFollowUp(true);
             handleValidatePartnerEmpathy(true, 'Some parts are accurate');
             setShowAccuracyFeedbackDrawer(false);
           }}
@@ -4210,6 +4221,7 @@ export function UnifiedSessionScreen({
         onSendMessage={sendFeedbackCoachMessage}
         onFinalize={(feedback) => {
           markLocalEmpathyValidation('feedback');
+          setIsAwaitingEmpathyValidationFollowUp(true);
           handleValidatePartnerEmpathy(false, feedback);
           finalizeFeedback(feedback);
         }}
