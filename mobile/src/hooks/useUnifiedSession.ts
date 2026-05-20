@@ -735,8 +735,8 @@ export function useUnifiedSession(
 
     // Stage 3: Need Mapping cards
     // Note: needs-summary and needs-reveal-preview inline cards removed.
-    // These are now shown in the NeedsDrawer bottom sheet, opened via
-    // the above-input buttons (needs-review, needs-reveal-validate).
+    // Needs render inline in the transcript; reveal validation still opens
+    // the side-by-side review surface.
 
     // Stage 4: Strategic Repair cards
     if (currentStage === Stage.STRATEGIC_REPAIR) {

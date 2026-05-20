@@ -927,7 +927,7 @@ describe('Typewriter Animation Integration', () => {
 // ============================================================================
 
 describe('Needs Review Panel Visibility', () => {
-  it('shows when needs are available in Stage 3', () => {
+  it('does not show a review panel just because needs are available in Stage 3', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -939,8 +939,8 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(true);
-    expect(result.aboveInputPanel).toBe('needs-review');
+    expect(result.panels.showNeedsSendPanel).toBe(false);
+    expect(result.aboveInputPanel).toBeNull();
   });
 
   it('does not show when not in Stage 3', () => {
@@ -955,10 +955,10 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(false);
+    expect(result.panels.showNeedsSendPanel).toBe(false);
   });
 
-  it('shows needs-share after needs are confirmed so the user can share explicitly', () => {
+  it('shows needs-send after all live needs are locked so the user can share explicitly', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -970,12 +970,11 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(false);
-    expect(result.panels.showNeedsSharePanel).toBe(true);
-    expect(result.aboveInputPanel).toBe('needs-share');
+    expect(result.panels.showNeedsSendPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('needs-send');
   });
 
-  it('shows needs-share even when the local confirm latch is still set after server confirmation', () => {
+  it('shows needs-send even when the local confirm latch is still set after server confirmation', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -987,8 +986,8 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsSharePanel).toBe(true);
-    expect(result.aboveInputPanel).toBe('needs-share');
+    expect(result.panels.showNeedsSendPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('needs-send');
   });
 
   it('does not show when needs are already shared', () => {
@@ -1003,10 +1002,10 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(false);
+    expect(result.panels.showNeedsSendPanel).toBe(false);
   });
 
-  it('still shows when only the confirm latch is set and needs are not shared', () => {
+  it('does not show when only the confirm latch is set and needs are not locked', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -1018,7 +1017,7 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(true);
+    expect(result.panels.showNeedsSendPanel).toBe(false);
   });
 
   it('does not show when no needs available', () => {
@@ -1033,7 +1032,7 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(false);
+    expect(result.panels.showNeedsSendPanel).toBe(false);
   });
 });
 
@@ -1150,13 +1149,13 @@ describe('Needs Reveal Validation Panel Visibility', () => {
     expect(result.aboveInputPanel).toBe('needs-reveal-validation');
   });
 
-  it('needs-review takes priority over needs-reveal-validation', () => {
+  it('needs-send takes priority over needs-reveal-validation', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
       myProgress: { stage: Stage.NEED_MAPPING },
       needsAvailable: true,
-      allNeedsConfirmed: false,
+      allNeedsConfirmed: true,
       needsShared: false,
       hasConfirmedNeedsLocal: false,
       needsRevealAvailable: true,
@@ -1166,6 +1165,6 @@ describe('Needs Reveal Validation Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.aboveInputPanel).toBe('needs-review');
+    expect(result.aboveInputPanel).toBe('needs-send');
   });
 });

@@ -35,8 +35,7 @@ export type AboveInputPanel =
   | 'partner-empathy-validation' // Partner empathy review panel
   | 'feel-heard' // Feel heard confirmation panel
   | 'share-suggestion' // Share suggestion from reconciler (Subject side)
-  | 'needs-review' // Needs review panel (Stage 3: confirm identified needs)
-  | 'needs-share' // Needs share panel (Stage 3: consent to reveal own confirmed needs)
+  | 'needs-send' // Stage 3: share locked live needs with partner
   | 'needs-reveal-validation' // Needs reveal validation panel (Stage 3)
   | 'waiting-banner' // General waiting banner
   | 'compact-agreement-bar' // Compact agreement bar during onboarding
@@ -158,8 +157,7 @@ export interface ChatUIState {
     showPartnerEmpathyValidationPanel: boolean;
     showFeelHeardPanel: boolean;
     showShareSuggestionPanel: boolean;
-    showNeedsReviewPanel: boolean;
-    showNeedsSharePanel: boolean;
+    showNeedsSendPanel: boolean;
     showNeedsRevealValidationPanel: boolean;
     showWaitingBanner: boolean;
     showCompactAgreementBar: boolean;
@@ -388,45 +386,16 @@ function computeShowPartnerEmpathyValidationPanel(inputs: ChatUIStateInputs): bo
 }
 
 /**
- * Determines if needs review panel should show.
- * Shows when needs are available but not yet confirmed, and user hasn't
- * already used the local latch (prevents flash during server refetch).
+ * Determines if the needs-send panel should show.
+ * Shows only after all live needs are locked and before sharing.
  */
-function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
-  const {
-    myStage,
-    needsAvailable,
-    allNeedsConfirmed,
-    needsShared,
-    sessionStatus,
-  } = inputs;
-
-  if (sessionStatus === SessionStatus.RESOLVED) return false;
-
-  const currentStage = myStage ?? Stage.ONBOARDING;
-
-  // Must be in Stage 3
-  if (currentStage !== Stage.NEED_MAPPING) {
-    return false;
-  }
-
-  // Already shared - reveal/waiting state owns the next step.
-  if (needsShared || allNeedsConfirmed) {
-    return false;
-  }
-
-  // Must have needs to show
-  return needsAvailable;
-}
-
-function computeShowNeedsSharePanel(inputs: ChatUIStateInputs): boolean {
+function computeShowNeedsSendPanel(inputs: ChatUIStateInputs): boolean {
   const {
     myStage,
     needsAvailable,
     allNeedsConfirmed,
     needsShared,
     needsRevealReady,
-    hasConfirmedNeedsLocal,
     sessionStatus,
   } = inputs;
 
@@ -543,17 +512,12 @@ function computeAboveInputPanel(
     return 'empathy-statement';
   }
 
-  // Priority 7: Needs review panel (Stage 3)
-  if (panels.showNeedsReviewPanel) {
-    return 'needs-review';
+  // Priority 7: Needs send panel (Stage 3)
+  if (panels.showNeedsSendPanel) {
+    return 'needs-send';
   }
 
-  // Priority 8: Needs share panel (Stage 3)
-  if (panels.showNeedsSharePanel) {
-    return 'needs-share';
-  }
-
-  // Priority 9: Needs reveal validation panel (Stage 3)
+  // Priority 8: Needs reveal validation panel (Stage 3)
   if (panels.showNeedsRevealValidationPanel) {
     return 'needs-reveal-validation';
   }
@@ -631,9 +595,7 @@ function computeShouldHideInput(
   // This prevents the flash of input on initial load before data arrives.
   // Exception: if there's a share suggestion, user CAN chat to respond.
   const currentStage = inputs.myStage ?? Stage.ONBOARDING;
-  // In Stage 3, only hide input for needs-reveal-validation (which has an
-  // above-input panel).  needs-review and needs-share render a compact card
-  // *below* the input — users keep chatting while reviewing/sharing needs.
+  // In Stage 3, only hide input for needs-reveal-validation.
   if (
     currentStage === Stage.NEED_MAPPING &&
     aboveInputPanel === 'needs-reveal-validation'
@@ -714,8 +676,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   const showPartnerEmpathyValidationPanel = computeShowPartnerEmpathyValidationPanel(inputs);
   const showFeelHeardPanel = computeShowFeelHeardPanel(inputs);
   const showShareSuggestionPanel = computeShowShareSuggestionPanel(inputs);
-  const showNeedsReviewPanel = computeShowNeedsReviewPanel(inputs);
-  const showNeedsSharePanel = computeShowNeedsSharePanel(inputs);
+  const showNeedsSendPanel = computeShowNeedsSendPanel(inputs);
   const showNeedsRevealValidationPanel = computeShowNeedsRevealValidationPanel(inputs);
   const showWaitingBanner = computeShouldShowWaitingBanner(waitingStatus);
   const showCompactAgreementBar = isInOnboardingUnsigned;
@@ -728,8 +689,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
     showPartnerEmpathyValidationPanel,
     showFeelHeardPanel,
     showShareSuggestionPanel,
-    showNeedsReviewPanel,
-    showNeedsSharePanel,
+    showNeedsSendPanel,
     showNeedsRevealValidationPanel,
     showWaitingBanner,
     showCompactAgreementBar,

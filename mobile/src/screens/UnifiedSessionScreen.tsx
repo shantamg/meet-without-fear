@@ -409,7 +409,6 @@ export function NeedsIdentifiedChatCard({
       activeOpacity={0.8}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      testID="needs-review-button"
     >
       {!compact ? (
         <View style={styles.needsSummaryHeader}>
@@ -1945,6 +1944,7 @@ export function UnifiedSessionScreen({
     | 'confirmed-invitation'
     | 'responded-to-share-offer'
     | 'confirmed-needs'
+    | 'shared-needs'
     | 'validated-needs';
 
   type LocalEmpathyValidationAction = {
@@ -2133,8 +2133,7 @@ export function UnifiedSessionScreen({
       showEmpathyPanel: shouldShowEmpathyPanel,
       showFeelHeardPanel: shouldShowFeelHeard,
       showShareSuggestionPanel: shouldShowShareSuggestion,
-      showNeedsReviewPanel: shouldShowNeedsReview,
-      showNeedsSharePanel: shouldShowNeedsShare,
+      showNeedsSendPanel: shouldShowNeedsSend,
       showNeedsRevealValidationPanel: shouldShowNeedsRevealValidation,
     },
   } = useChatUIState({
@@ -2310,7 +2309,7 @@ export function UnifiedSessionScreen({
   const readyToShowEmpathy = shouldShowEmpathyPanel;
   const readyToShowFeelHeard = shouldShowFeelHeard;
   const readyToShowShareSuggestion = shouldShowShareSuggestion;
-  const readyToShowNeedsReview = shouldShowNeedsReview || shouldShowNeedsShare || shouldShowNeedsRevealValidation;
+  const readyToShowNeedsReview = shouldShowNeedsSend || shouldShowNeedsRevealValidation;
   const readyToShowNeedsRevealValidation = shouldShowNeedsRevealValidation;
   const readyToShowWaitingBanner = shouldShowWaitingBanner;
 
@@ -2753,8 +2752,8 @@ export function UnifiedSessionScreen({
         // Note: accuracy-feedback case removed - now handled by inline validation card
 
         // Note: needs-summary and needs-reveal-preview cases removed.
-        // These are now shown in the NeedsDrawer bottom sheet, opened via
-        // the above-input buttons (needs-review, needs-reveal-validation).
+        // Needs now render as inline cards; reveal validation still opens
+        // the side-by-side review surface.
 
         // 'strategy-pool-preview' and 'overlap-preview' cases removed -
         // those entry points opened the legacy StrategyPool/OverlapReveal
@@ -3399,11 +3398,28 @@ export function UnifiedSessionScreen({
         // <InvitationReadyModal /> below). No inline panel above the input.
         return undefined;
 
-      case 'needs-review':
-        return undefined;
-
-      case 'needs-share':
-        return undefined;
+      case 'needs-send':
+        return (
+          <MeasuredAnimatedPanel animationValue={needsReviewAnim}>
+            <GuidedActionPanel
+              tone="needs"
+              eyebrow="Needs ready"
+              title="Send your needs?"
+              subtitle={`This shares your locked needs with ${partnerName || 'your partner'} when you are ready.`}
+              compact
+              primaryAction={{
+                label: 'Send my needs',
+                onPress: () => {
+                  handleConsentToShareNeeds(() => {
+                    markCompleted('shared-needs');
+                  });
+                },
+                testID: 'needs-send-button',
+              }}
+              testID="needs-send-panel"
+            />
+          </MeasuredAnimatedPanel>
+        );
 
       case 'needs-reveal-validation':
         return (
@@ -3548,74 +3564,12 @@ export function UnifiedSessionScreen({
     handleConfirmTopicFrame,
     handleValidationAccurate,
     isConfirmingTopicFrame,
-    handleConfirmAllNeeds,
+    handleConsentToShareNeeds,
     handleValidateNeedsReveal,
     handleNeedsNotValidYet,
     markCompleted,
     onStageComplete,
     openOverlay,
-  ]);
-
-  const renderBelowInput = useCallback((): React.ReactNode | undefined => {
-    if (aboveInputPanel === 'needs-review' || aboveInputPanel === 'needs-share') {
-      if (!needs || needs.length === 0) {
-        return undefined;
-      }
-
-      const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
-      let needsStatus: 'ready' | 'confirmed' | 'shared' = 'ready';
-      if (gates?.needsShared === true) {
-        needsStatus = 'shared';
-      } else if (allNeedsConfirmed) {
-        needsStatus = 'confirmed';
-      }
-
-      return (
-        <Animated.View
-          style={{
-            opacity: needsReviewAnim,
-            maxHeight: needsReviewAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, NEEDS_REVIEW_PANEL_EXPANDED_MAX_HEIGHT],
-            }),
-            transform: [{
-              translateY: needsReviewAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [NEEDS_REVIEW_PANEL_ENTER_OFFSET, 0],
-              }),
-            }],
-            overflow: 'hidden',
-          }}
-          pointerEvents="auto"
-        >
-          <View style={styles.needsReviewBelowInputContainer}>
-            <NeedsIdentifiedChatCard
-              needs={needs.map((need) => ({
-                id: need.id,
-                need: need.need,
-                category: String(need.category),
-              }))}
-              status={needsStatus}
-              compact
-              onReview={() => {
-                Keyboard.dismiss();
-                setNeedsDrawerMode(getNeedsDrawerModeForNeedsStatus(needsStatus));
-                setShowNeedsDrawer(true);
-              }}
-            />
-          </View>
-        </Animated.View>
-      );
-    }
-
-    return undefined;
-  }, [
-    aboveInputPanel,
-    needsReviewAnim,
-    styles,
-    needs,
-    myProgress?.gatesSatisfied,
-    allNeedsConfirmed,
   ]);
 
   // -------------------------------------------------------------------------
@@ -4127,11 +4081,7 @@ export function UnifiedSessionScreen({
               ? renderAboveInput
               : undefined
           }
-          renderBelowInput={
-            aboveInputPanel === 'needs-review' || aboveInputPanel === 'needs-share'
-              ? renderBelowInput
-              : undefined
-          }
+          renderBelowInput={undefined}
           renderBelowChat={(transcriptInlineCards.length > 0 || memorySuggestion) ? () => (
             <>
               {transcriptInlineCards.map((card) => renderInlineCard(card))}
