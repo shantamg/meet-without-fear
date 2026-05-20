@@ -19,7 +19,7 @@
  */
 
 import { useMemo, useState, useEffect } from 'react';
-import { Stage, SessionStatus, StrategyPhase } from '@meet-without-fear/shared';
+import { Stage, SessionStatus, StrategyPhase, GetShareSuggestionResponse } from '@meet-without-fear/shared';
 import {
   computeChatUIState,
   ChatUIStateInputs,
@@ -97,12 +97,11 @@ export interface UseChatUIStateProps {
   } | undefined;
   hasPartnerEmpathy: boolean;
   hasLiveProposedEmpathyStatement: boolean;
+  liveProposedEmpathyStatement?: string | null;
   hasSharedEmpathyLocal: boolean;
 
   // Stage 2: Share suggestion (Subject side)
-  shareOfferData: {
-    hasSuggestion?: boolean;
-  } | undefined;
+  shareOfferData: Pick<GetShareSuggestionResponse, 'hasSuggestion' | 'suggestion'> | undefined;
   hasRespondedToShareOfferLocal: boolean;
 
   // Stage 3: Needs
@@ -174,6 +173,10 @@ export interface UseChatUIStateResult {
   panels: ChatUIState['panels'];
 }
 
+function normalizeEmpathyContent(content: string | null | undefined): string {
+  return (content ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 // ============================================================================
 // Hook Implementation
 // ============================================================================
@@ -213,6 +216,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     empathyDraftData,
     hasPartnerEmpathy,
     hasLiveProposedEmpathyStatement,
+    liveProposedEmpathyStatement,
     hasSharedEmpathyLocal,
     shareOfferData,
     hasRespondedToShareOfferLocal,
@@ -237,6 +241,13 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
   // Track previous waiting status for transition detection
   const [previousWaitingStatus, setPreviousWaitingStatus] = useState<WaitingStatusState>(null);
 
+  const proposedRefinedContent =
+    liveProposedEmpathyStatement || empathyDraftData?.draft?.content || '';
+  const hasDistinctRefinedEmpathyContent =
+    normalizeEmpathyContent(proposedRefinedContent).length > 0 &&
+    normalizeEmpathyContent(proposedRefinedContent) !==
+      normalizeEmpathyContent(empathyStatusData?.myAttempt?.content);
+
   // Build inputs for the pure computation function
   const inputs: ChatUIStateInputs = useMemo(() => ({
     // WaitingStatusInputs
@@ -258,6 +269,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasPartnerEmpathy,
     shareOffer: shareOfferData ? {
       hasSuggestion: shareOfferData.hasSuggestion,
+      action: shareOfferData.suggestion?.action,
     } : undefined,
     needs: { allConfirmed: allNeedsConfirmed, shared: needsShared, revealReady: needsRevealReady },
     needsRevealValidation: {
@@ -292,6 +304,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     isConfirmingFeelHeard,
     hasEmpathyContent: hasLiveProposedEmpathyStatement || !!empathyDraftData?.draft?.content,
     hasLiveProposedEmpathyStatement,
+    hasDistinctRefinedEmpathyContent,
     empathyAlreadyConsented: empathyDraftData?.alreadyConsented ?? false,
     hasSharedEmpathyLocal,
     isRefiningEmpathy:
@@ -359,6 +372,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,
     hasLiveProposedEmpathyStatement,
+    hasDistinctRefinedEmpathyContent,
     hasSharedEmpathyLocal,
     hasRespondedToShareOfferLocal,
   ]);

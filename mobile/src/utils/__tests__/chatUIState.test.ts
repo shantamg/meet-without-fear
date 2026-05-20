@@ -189,20 +189,21 @@ describe('Above Input Panel Priority', () => {
     expect(result.aboveInputPanel).not.toBe('feel-heard');
   });
 
-  it('does not show share-suggestion panel before Subject has submitted their own empathy', () => {
+  it('shows share-suggestion panel before Subject has submitted their own empathy', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
       myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
       hasShareSuggestion: true,
+      shareOffer: { hasSuggestion: true },
       hasRespondedToShareOfferLocal: false,
       empathyAlreadyConsented: false,
       empathyDraft: { alreadyConsented: false },
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showShareSuggestionPanel).toBe(false);
-    expect(result.aboveInputPanel).toBeNull();
+    expect(result.panels.showShareSuggestionPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('share-suggestion');
     expect(result.shouldHideInput).toBe(false);
   });
 
@@ -237,6 +238,7 @@ describe('Above Input Panel Priority', () => {
       messageCountSinceSharedContext: 1,
       hasEmpathyContent: true,
       hasLiveProposedEmpathyStatement: true,
+      hasDistinctRefinedEmpathyContent: true,
       empathyStatus: {
         hasNewSharedContext: true,
         myAttemptStatus: 'REFINING',
@@ -731,9 +733,7 @@ describe('Empathy Panel Visibility', () => {
     expect(result.panels.showEmpathyPanel).toBe(false);
   });
 
-  it('shows in refining mode after user engages with Stage 2B', () => {
-    // During REFINING, the panel should re-appear so user can resubmit revised empathy.
-    // empathyAlreadyConsented is true (user shared once) but panel still shows during REFINING.
+  it('does not show in refining mode with only the prior empathy attempt', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -746,7 +746,27 @@ describe('Empathy Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
+    expect(result.panels.showEmpathyPanel).toBe(false);
+  });
+
+  it('shows in refining mode after a distinct revised draft exists', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      isRefiningEmpathy: true,
+      empathyAlreadyConsented: true,
+      messageCountSinceSharedContext: 1,
+      hasEmpathyContent: true,
+      hasLiveProposedEmpathyStatement: true,
+      hasDistinctRefinedEmpathyContent: true,
+      myAttemptContent: true,
+      empathyStatus: { hasNewSharedContext: true },
+    });
+
+    const result = computeChatUIState(inputs);
     expect(result.panels.showEmpathyPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('empathy-statement');
   });
 
   it('does not show in refining mode before user reflects, even when an attempt is reviewable', () => {
@@ -790,6 +810,7 @@ describe('Empathy Panel Visibility', () => {
       messageCountSinceSharedContext: 0,
       hasEmpathyContent: true,
       hasLiveProposedEmpathyStatement: true,
+      hasDistinctRefinedEmpathyContent: true,
       empathyStatus: { hasNewSharedContext: true },
     });
 

@@ -359,11 +359,19 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
 
         // Subscribe to all events
         await channel.subscribe(handleMessage);
+        if (isCleanedUp) {
+          console.log('[Realtime] Cleanup called after subscribe, aborting setup');
+          return;
+        }
 
         // Set up presence if enabled
         if (enablePresence) {
           console.log('[Realtime] Entering presence...');
           await channel.presence.enter({ name: user.name });
+          if (isCleanedUp) {
+            console.log('[Realtime] Cleanup called after presence enter, aborting setup');
+            return;
+          }
           console.log('[Realtime] Presence entered successfully');
 
           // Subscribe to presence events

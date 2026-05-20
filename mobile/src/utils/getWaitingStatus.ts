@@ -83,6 +83,7 @@ export interface WaitingStatusInputs {
   // Stage 2: Share offer from reconciler (Subject side)
   shareOffer: {
     hasSuggestion?: boolean;
+    action?: 'PROCEED' | 'OFFER_OPTIONAL' | 'OFFER_SHARING' | string | null;
   } | undefined;
 
   // Stage 3: Needs confirmation state
@@ -182,14 +183,16 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
     return 'reconciler-analyzing';
   }
 
-  // User needs to respond to share suggestion (Subject side). Do not surface
-  // this while the subject is still doing their own perspective stretch; an
-  // early offer can interrupt the work and make the current prompt feel dead.
+  // User needs to respond to share suggestion (Subject side). This is
+  // non-blocking: the user can keep drafting their own empathy while also
+  // seeing the optional context offer that the guesser is waiting on.
   if (
     shareOffer?.hasSuggestion &&
-    myStage === Stage.PERSPECTIVE_STRETCH &&
-    empathyDraft?.alreadyConsented
+    myStage === Stage.PERSPECTIVE_STRETCH
   ) {
+    if (shareOffer.action === 'OFFER_OPTIONAL') {
+      return 'awaiting-context-share-optional';
+    }
     return 'awaiting-context-share';
   }
 

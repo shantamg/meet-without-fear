@@ -120,6 +120,7 @@ const useStyles = () =>
       alignItems: 'center',
     },
     bubble: {
+      width: '85%',
       maxWidth: '85%',
       backgroundColor: colors.bgSecondary,
       borderRadius: 12,
@@ -140,6 +141,8 @@ const useStyles = () =>
       lineHeight: 26,
       color: colors.textPrimary,
       fontFamily: t.typography.fontFamily.regular,
+      width: '100%',
+      flexShrink: 1,
     },
     deliveryStatus: {
       fontSize: 11,

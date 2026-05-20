@@ -7,7 +7,7 @@
  */
 
 import { ReactNode, useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, ScrollView, AppState, Keyboard, Platform, Share, LayoutChangeEvent } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, ScrollView, AppState, Keyboard, KeyboardAvoidingView, Platform, Share, LayoutChangeEvent } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,6 +28,7 @@ import {
 } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem, ChatCustomCardItem } from '../components/ChatInterface';
+import { ChatInput } from '../components/ChatInput';
 import { SessionChatHeader } from '../components/SessionChatHeader';
 import { FeelHeardConfirmation } from '../components/FeelHeardConfirmation';
 import { BreathingExercise } from '../components/BreathingExercise';
@@ -58,6 +59,7 @@ import { RefinementModalScreen } from './RefinementModalScreen';
 import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
 import { TypewriterText } from '../components/TypewriterText';
 import { GuidedActionPanel } from '../components/GuidedActionPanel';
+import { TypingIndicator } from '../components/TypingIndicator';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { useConfirmTopicFrame } from '../hooks/useSessions';
@@ -676,6 +678,10 @@ export function UnifiedSessionScreen({
 
   } = useUnifiedSession(sessionId);
   const sessionQueriesEnabled = !accessDenied && !loadError;
+  const shouldEnableSessionRealtime =
+    sessionQueriesEnabled &&
+    !!session &&
+    session.status !== SessionStatus.CREATED;
 
   // Sharing status for empathy validation data. Keep these queries
   // behind the same stage/access gates as useUnifiedSession so the badge does
@@ -779,9 +785,11 @@ export function UnifiedSessionScreen({
 
   // Real-time presence and event tracking
   // Disable when session is invalid or failed to load to prevent cascading errors (#428, #522)
+  // Also skip one-person invitation drafts. There is no partner channel work to
+  // do yet, and local dev Ably subscriptions can crash before presence setup.
   const { partnerOnline, connectionStatus, reconnect: _reconnectRealtime } = useRealtime({
     sessionId,
-    enabled: sessionQueriesEnabled,
+    enabled: shouldEnableSessionRealtime,
     enablePresence: true,
     onSessionEvent: (event, data) => {
       console.log('[UnifiedSessionScreen] Received realtime event:', event);
@@ -1276,6 +1284,12 @@ export function UnifiedSessionScreen({
     sendMessage(message);
   }, [sessionId, sendMessage]);
 
+  const usePlainCreatedSessionChat =
+    __DEV__ &&
+    process.env.EXPO_PUBLIC_USE_NATIVE_CREATED_SESSION_CHAT !== 'true' &&
+    session?.status === SessionStatus.CREATED;
+  const plainCreatedAnimatedMessageIdsRef = useRef<Set<string>>(new Set());
+
   // -------------------------------------------------------------------------
   // Local State for View Empathy Statement Drawer (Stage 2)
   // -------------------------------------------------------------------------
@@ -1310,6 +1324,9 @@ export function UnifiedSessionScreen({
     setIsAwaitingInvitationFollowUp(true);
     handleConfirmInvitationMessage();
   }, [handleConfirmInvitationMessage]);
+
+  const shouldRunInvitationFollowUp =
+    currentStage === Stage.ONBOARDING && !hasInvitationTransitionResponse;
 
   const [showPartnerInfo, setShowPartnerInfo] = useState(false);
   const topicFrame = invitation && 'topicFrame' in invitation
@@ -1359,6 +1376,7 @@ export function UnifiedSessionScreen({
       // Topic confirmation only flips topicFrameConfirmedAt. Stage 0→1 advances
       // when the user closes the share modal (X), so the chat doesn't start
       // running while the modal is up.
+      setShowInvitationReadyModal(true);
     },
   });
 
@@ -1382,14 +1400,14 @@ export function UnifiedSessionScreen({
   const handleDismissInvitationReadyModal = useCallback(() => {
     setShowInvitationReadyModal(false);
     setInvitationPanelDismissed(true);
-    if (!invitationConfirmed) {
+    if (shouldRunInvitationFollowUp) {
       confirmInvitationAndAwaitFollowUp();
     }
     if (!shareLaterTooltipShownThisSession) {
       setShowShareLaterTooltip(true);
       setShareLaterTooltipShownThisSession(true);
     }
-  }, [confirmInvitationAndAwaitFollowUp, invitationConfirmed, shareLaterTooltipShownThisSession]);
+  }, [confirmInvitationAndAwaitFollowUp, shareLaterTooltipShownThisSession, shouldRunInvitationFollowUp]);
 
   // Refinement Modal
   const [refinementOfferId, setRefinementOfferId] = useState<string | null>(null);
@@ -1425,13 +1443,41 @@ export function UnifiedSessionScreen({
   );
   const shouldUseRevealedNeeds =
     needsDrawerMode !== 'needs' && (needsComparisonData?.myNeeds?.length ?? 0) > 0;
+  const isRefiningEmpathy =
+    !!empathyStatusData?.hasNewSharedContext ||
+    empathyStatusData?.myAttempt?.status === EmpathyStatus.REFINING;
+  const normalizeEmpathyContent = useCallback(
+    (content: string | null | undefined) => (content ?? '').replace(/\s+/g, ' ').trim().toLowerCase(),
+    []
+  );
+  const empathyDrawerStatement = useMemo(() => {
+    if (!isRefiningEmpathy) {
+      return liveProposedEmpathyStatement || empathyDraftData?.draft?.content || empathyStatusData?.myAttempt?.content || '';
+    }
+
+    const candidate = liveProposedEmpathyStatement || empathyDraftData?.draft?.content || '';
+    if (
+      candidate &&
+      normalizeEmpathyContent(candidate) !== normalizeEmpathyContent(empathyStatusData?.myAttempt?.content)
+    ) {
+      return candidate;
+    }
+
+    return '';
+  }, [
+    empathyDraftData?.draft?.content,
+    empathyStatusData?.myAttempt?.content,
+    isRefiningEmpathy,
+    liveProposedEmpathyStatement,
+    normalizeEmpathyContent,
+  ]);
 
   useEffect(() => {
     if (!auditFixture || appliedAuditFixtureRef.current === auditFixture) return;
 
     if (
       auditFixture === 'empathy-drawer' &&
-      (liveProposedEmpathyStatement || empathyDraftData?.draft?.content || empathyStatusData?.myAttempt?.content)
+      empathyDrawerStatement
     ) {
       setShowEmpathyDrawer(true);
       appliedAuditFixtureRef.current = auditFixture;
@@ -1460,9 +1506,7 @@ export function UnifiedSessionScreen({
   }, [
     allNeedsConfirmed,
     auditFixture,
-    empathyDraftData?.draft?.content,
-    empathyStatusData?.myAttempt?.content,
-    liveProposedEmpathyStatement,
+    empathyDrawerStatement,
     needs,
     partnerEmpathyData?.attempt?.content,
   ]);
@@ -2081,6 +2125,7 @@ export function UnifiedSessionScreen({
     } : undefined,
     hasPartnerEmpathy: !!empathyStatusData?.partnerAttempt,
     hasLiveProposedEmpathyStatement: !!liveProposedEmpathyStatement,
+    liveProposedEmpathyStatement,
     hasSharedEmpathyLocal: isEmpathyShared,
     shareOfferData: shareOfferData ?? undefined,
     // Share offer panel shows ShareTopicPanel which opens ShareTopicDrawer
@@ -2187,11 +2232,6 @@ export function UnifiedSessionScreen({
   // The variables shouldShowInvitationPanel, shouldShowEmpathyPanel,
   // shouldShowFeelHeard, shouldShowShareSuggestion, and shouldShowWaitingBanner
   // are destructured from the hook at the top of this component.
-
-  // Whether user is in "refining" mode (received shared context from partner)
-  const isRefiningEmpathy =
-    !!empathyStatusData?.hasNewSharedContext ||
-    empathyStatusData?.myAttempt?.status === EmpathyStatus.REFINING;
 
   // -------------------------------------------------------------------------
   // Animation Target Flags - Used ONLY for animation target values
@@ -2587,6 +2627,20 @@ export function UnifiedSessionScreen({
     user?.id,
   ]);
 
+  const plainCreatedNewestFlowMessage = useMemo(() => {
+    for (let i = displayMessages.length - 1; i >= 0; i -= 1) {
+      const message = displayMessages[i];
+      if (message.role === MessageRole.USER || message.role === MessageRole.AI) {
+        return message;
+      }
+    }
+    return null;
+  }, [displayMessages]);
+  const showPlainCreatedTypingIndicator =
+    isFetchingInitialMessage ||
+    isAwaitingInvitationFollowUp ||
+    plainCreatedNewestFlowMessage?.role === MessageRole.USER;
+
   // -------------------------------------------------------------------------
   // Validation Cards (Inline in Chat FlatList)
   // -------------------------------------------------------------------------
@@ -2799,6 +2853,22 @@ export function UnifiedSessionScreen({
         testID: 'session-chat-header-share-invitation',
       }
     : undefined;
+
+  useEffect(() => {
+    if (
+      canSharePendingInvitation &&
+      shouldRunInvitationFollowUp &&
+      !showInvitationReadyModal &&
+      !invitationPanelDismissed
+    ) {
+      setShowInvitationReadyModal(true);
+    }
+  }, [
+    canSharePendingInvitation,
+    invitationPanelDismissed,
+    shouldRunInvitationFollowUp,
+    showInvitationReadyModal,
+  ]);
 
   // Shared share-invitation handler used by the InvitationReadyModal.
   const handleShareInvitation = useCallback(async (): Promise<boolean> => {
@@ -3692,6 +3762,138 @@ export function UnifiedSessionScreen({
     );
   }
 
+  if (usePlainCreatedSessionChat) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <SessionChatHeader
+          partnerName={partnerName}
+          partnerOnline={false}
+          connectionStatus={connectionStatus}
+          briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+          rightAction={pendingInvitationShareAction}
+          hideOnlineStatus
+          onBackPress={onNavigateBack}
+          onPress={() => setShowPartnerInfo(true)}
+          conversationTopic={topicFrame}
+          testID="session-chat-header"
+        />
+        {partnerInfoDrawer}
+        <KeyboardAvoidingView
+          style={styles.plainCreatedChatContent}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={0}
+        >
+          <ScrollView
+            style={styles.plainCreatedChatScroll}
+            contentContainerStyle={styles.plainCreatedChatMessages}
+            keyboardShouldPersistTaps="handled"
+          >
+            {displayMessages.map((message, index) => {
+              const previousMessage = displayMessages[index - 1];
+              const shouldTypewrite =
+                message.role === MessageRole.AI &&
+                previousMessage?.role === MessageRole.USER &&
+                !plainCreatedAnimatedMessageIdsRef.current.has(message.id);
+
+              return (
+                <View
+                  key={message.id}
+                  style={[
+                    styles.plainCreatedMessage,
+                    message.role === MessageRole.USER
+                      ? styles.plainCreatedUserMessage
+                      : styles.plainCreatedAIMessage,
+                  ]}
+                >
+                  {shouldTypewrite ? (
+                    <TypewriterText
+                      text={message.content}
+                      style={styles.plainCreatedMessageText}
+                      wordDelay={40}
+                      fadeDuration={120}
+                      onComplete={() => {
+                        plainCreatedAnimatedMessageIdsRef.current.add(message.id);
+                      }}
+                    />
+                  ) : (
+                    <Text style={styles.plainCreatedMessageText}>{message.content}</Text>
+                  )}
+                </View>
+              );
+            })}
+            {showPlainCreatedTypingIndicator && (
+              <View style={styles.plainCreatedTypingIndicator}>
+                <TypingIndicator />
+              </View>
+            )}
+          </ScrollView>
+          {aboveInputPanel === 'topic-proposal' ? renderAboveInput() : null}
+          <ChatInput
+            onSend={sendMessageWithTracking}
+            disabled={isSending}
+            inputDisabled={isSending}
+            failedMessage={failedMessageContent}
+          />
+        </KeyboardAvoidingView>
+        <Modal
+          visible={
+            (shouldShowInvitationPanel || showInvitationReadyModal || auditFixture === 'invitation-ready') &&
+            !!topicFrame &&
+            !!invitationUrl &&
+            !partnerAccepted
+          }
+          transparent
+          animationType="fade"
+          onRequestClose={handleDismissInvitationReadyModal}
+        >
+          <View style={styles.invitationModalBackdrop}>
+            <View
+              style={styles.invitationModalCard}
+              testID="invitation-ready-modal"
+            >
+              <TouchableOpacity
+                style={styles.invitationModalCloseButton}
+                onPress={handleDismissInvitationReadyModal}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                testID="invitation-modal-close-button"
+                hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+              >
+                <Text style={styles.invitationModalCloseText}>×</Text>
+              </TouchableOpacity>
+              <Text style={styles.invitationModalText}>
+                {`Ready to invite ${partnerName || 'your partner'}? They will see the topic we set once they join and you two can work separately at first.`}
+              </Text>
+              <View style={styles.invitationModalActionsRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.invitationModalButton,
+                    styles.invitationModalButtonPrimary,
+                  ]}
+                  onPress={async () => {
+                    const didShare = await handleShareInvitation();
+                    if (didShare) {
+                      setShowInvitationReadyModal(false);
+                      setInvitationPanelDismissed(true);
+                      if (shouldRunInvitationFollowUp) {
+                        confirmInvitationAndAwaitFollowUp();
+                      }
+                    }
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Share invitation"
+                  testID="invitation-modal-share-button"
+                >
+                  <Text style={styles.invitationModalButtonPrimaryText}>Share</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    );
+  }
+
   // -------------------------------------------------------------------------
   // Agreement Confirmation / Waiting - Full Screen Overlay
   // -------------------------------------------------------------------------
@@ -3803,6 +4005,7 @@ export function UnifiedSessionScreen({
           failedMessage={failedMessageContent}
           prefillText={stage4BrainstormPrefill}
           onPrefillConsumed={() => setStage4BrainstormPrefill(null)}
+          keyboardVerticalOffset={0}
           // Cache-First: Ghost dots are derived from last message role in ChatInterface
           // isSending is still needed for brief moment during API call before optimistic message appears
           // isFetchingInitialMessage shows dots while fetching first AI message
@@ -3958,16 +4161,14 @@ export function UnifiedSessionScreen({
       </Modal>
 
       {/* View Empathy Statement Drawer - for viewing full statement */}
-      {(liveProposedEmpathyStatement || empathyDraftData?.draft?.content || empathyStatusData?.myAttempt?.content) && (
+      {!!empathyDrawerStatement && (
         <ViewEmpathyStatementDrawer
           visible={showEmpathyDrawer}
-          statement={liveProposedEmpathyStatement || empathyDraftData?.draft?.content || empathyStatusData?.myAttempt?.content || ''}
+          statement={empathyDrawerStatement}
           partnerName={partnerName}
           isRevising={isRefiningEmpathy}
           onShare={() => {
-            // Capture statement at click time to avoid stale closure
-            // In refining mode, use myAttempt content as fallback
-            const statementToShare = liveProposedEmpathyStatement || empathyDraftData?.draft?.content || empathyStatusData?.myAttempt?.content;
+            const statementToShare = empathyDrawerStatement;
             console.log('[ViewEmpathyStatementDrawer] Share clicked', {
               hasStatement: !!statementToShare,
               statementLength: statementToShare?.length,
@@ -4271,7 +4472,7 @@ export function UnifiedSessionScreen({
                   if (didShare) {
                     setShowInvitationReadyModal(false);
                     setInvitationPanelDismissed(true);
-                    if (!invitationConfirmed) {
+                    if (shouldRunInvitationFollowUp) {
                       confirmInvitationAndAwaitFollowUp();
                     }
                   }
@@ -4363,6 +4564,45 @@ const useStyles = () => {
     },
     content: {
       flex: 1,
+    },
+    plainCreatedChatContent: {
+      flex: 1,
+      backgroundColor: palette.bg,
+    },
+    plainCreatedChatScroll: {
+      flex: 1,
+    },
+    plainCreatedChatMessages: {
+      paddingHorizontal: 18,
+      paddingVertical: 18,
+      gap: 12,
+    },
+    plainCreatedMessage: {
+      maxWidth: '92%',
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+    },
+    plainCreatedAIMessage: {
+      alignSelf: 'flex-start',
+      backgroundColor: 'transparent',
+      paddingHorizontal: 0,
+    },
+    plainCreatedUserMessage: {
+      alignSelf: 'flex-end',
+      backgroundColor: palette.chipBg,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    plainCreatedMessageText: {
+      color: palette.text,
+      fontSize: 16,
+      lineHeight: 23,
+    },
+    plainCreatedTypingIndicator: {
+      alignSelf: 'flex-start',
+      minHeight: 36,
+      justifyContent: 'center',
     },
     initialSessionSurface: {
       flex: 1,

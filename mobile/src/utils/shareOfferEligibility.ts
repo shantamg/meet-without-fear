@@ -25,8 +25,6 @@ export function shouldFetchShareOffer(input: ShareOfferFetchEligibilityInput): b
   return (
     !!input.sessionId &&
     input.accessDenied !== true &&
-    input.currentStage === Stage.PERSPECTIVE_STRETCH &&
-    hasSubmittedOwnEmpathy(input)
+    input.currentStage === Stage.PERSPECTIVE_STRETCH
   );
 }
-

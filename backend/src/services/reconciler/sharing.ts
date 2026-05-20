@@ -85,6 +85,49 @@ async function findReconcilerResultWithRetry(
 // Helper: Generate Post-Share Continuation
 // ============================================================================
 
+async function getPartnerDisplayNameForViewer(
+  sessionId: string,
+  viewerId: string,
+  partnerId: string,
+  fallbackName: string
+): Promise<string> {
+  try {
+    const membership = await prisma.relationshipMember.findFirst({
+      where: {
+        userId: viewerId,
+        relationship: {
+          sessions: { some: { id: sessionId } },
+        },
+      },
+      select: {
+        nickname: true,
+      },
+    });
+
+    if (membership?.nickname?.trim()) {
+      return membership.nickname.trim();
+    }
+
+    const partner = await prisma.user.findUnique({
+      where: { id: partnerId },
+      select: {
+        firstName: true,
+        name: true,
+      },
+    });
+
+    return partner?.firstName?.trim() || partner?.name?.trim() || fallbackName;
+  } catch (error) {
+    logger.warn('Failed to resolve partner display name, using fallback', {
+      sessionId,
+      viewerId,
+      partnerId,
+      error: (error as Error).message,
+    });
+    return fallbackName;
+  }
+}
+
 /**
  * Generate a stage-appropriate continuation message after a user shares context.
  * Uses the actual stage prompts with justSharedWithPartner context for consistency.
@@ -285,45 +328,9 @@ export async function generateContextReceivedReflection(
   guesserName: string,
   subjectName: string,
 ): Promise<string> {
-  const fallback = `Take a moment to sit with what ${subjectName} shared. What comes up for you when you read this? Is anything surprising, or does it confirm what you already sensed?`;
-
-  try {
-    const turnId = `${sessionId}-bridging-${Date.now()}`;
-    const prompt = `${guesserName}'s partner ${subjectName} just shared personal context about their experience. The shared content will be shown directly above your message in a labeled card.
-
-Generate a short message (1-3 sentences) that invites ${guesserName} to reflect on what they just read. Ask what comes up for them, what stands out, whether anything is surprising. Give permission to take their time.
-
-Tone: warm, unhurried, therapeutically attuned. This is a sensitive moment — ${subjectName} just shared something vulnerable.
-Do NOT paraphrase or reveal the shared content. Do NOT use the word "reconciler".
-
-Respond with ONLY the message text, no additional formatting.`;
-
-    const response = await getSonnetResponse({
-      systemPrompt: prompt,
-      messages: [{ role: 'user', content: 'Generate the reflection message.' }],
-      maxTokens: 256,
-      sessionId,
-      turnId,
-      operation: 'reconciler-context-reflection',
-    });
-
-    if (!response) {
-      logger.warn('generateContextReceivedReflection: Sonnet returned null, using fallback');
-      return fallback;
-    }
-
-    // Response should be plain text, just trim it
-    const trimmed = response.trim();
-    if (trimmed.length > 0) {
-      logger.debug('Generated reflection message', { sessionId });
-      return trimmed;
-    }
-
-    return fallback;
-  } catch (error) {
-    logger.error('generateContextReceivedReflection failed', { error: (error as Error).message });
-    return fallback;
-  }
+  void sessionId;
+  void guesserName;
+  return `${subjectName} shared this because there may be a part of their experience your first understanding did not fully catch. Take a moment with it, then tell me what stands out or what shifts in your understanding.`;
 }
 
 // ============================================================================
@@ -902,6 +909,10 @@ export async function respondToShareSuggestion(
 
   const subjectName = shareOffer.result.subjectName;
   const guesserName = shareOffer.result.guesserName;
+  const [subjectSeesGuesserName, guesserSeesSubjectName] = await Promise.all([
+    getPartnerDisplayNameForViewer(sessionId, userId, shareOffer.result.guesserId, guesserName),
+    getPartnerDisplayNameForViewer(sessionId, shareOffer.result.guesserId, userId, subjectName),
+  ]);
 
   // Check if this is a subsequent share (subject has already shared context before)
   const priorShareCount = await prisma.message.count({
@@ -915,12 +926,12 @@ export async function respondToShareSuggestion(
   // Generate AI messages outside transaction (AI calls can be slow)
   // For subsequent shares, use a short static ack to avoid repetitive messages
   const subjectAckPromise = priorShareCount > 0
-    ? Promise.resolve(`Thanks for sharing that additional context with ${guesserName}.`)
-    : generatePostShareContinuation(sessionId, userId, subjectName, guesserName, sharedContent);
+    ? Promise.resolve(`Thanks for sharing that additional context with ${subjectSeesGuesserName}.`)
+    : generatePostShareContinuation(sessionId, userId, subjectName, subjectSeesGuesserName, sharedContent);
 
   const [subjectAckMessage, reflectionMessage] = await Promise.all([
     subjectAckPromise,
-    generateContextReceivedReflection(sessionId, guesserName, subjectName),
+    generateContextReceivedReflection(sessionId, guesserName, guesserSeesSubjectName),
   ]);
 
   // Get subject's current stage for the message

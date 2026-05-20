@@ -480,6 +480,8 @@ const useStyles = () => {
     },
     // Empathy statement: matches drawer styling (bgSecondary, left border accent)
     empathyStatementBubble: {
+      width: '85%',
+      maxWidth: '85%',
       backgroundColor: palette.bgElev,
       borderRadius: 12,
       borderLeftWidth: 3,
@@ -493,6 +495,8 @@ const useStyles = () => {
       lineHeight: 26,
       color: palette.text,
       fontFamily: designFonts.serifItalic,
+      width: '100%',
+      flexShrink: 1,
     },
     // Shared content delivery status indicator (orange for pending/delivered)
     sharedContentDeliveryStatus: {

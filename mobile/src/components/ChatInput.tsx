@@ -95,6 +95,9 @@ export function ChatInput({
     try {
       onSend(message);
     } finally {
+      if (Platform.OS === 'web') {
+        requestAnimationFrame(() => inputRef.current?.focus());
+      }
       // Reset flag after a short delay to allow autocorrect events to be ignored.
       // Must be in finally block so the flag is always cleared even if onSend throws.
       setTimeout(() => {

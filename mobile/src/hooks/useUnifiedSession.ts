@@ -510,6 +510,7 @@ export function useUnifiedSession(
   useEffect(() => {
     // Only mark viewed once per session load, when we have messages
     if (!sessionId || hasMarkedViewed.current || messages.length === 0) return;
+    if (session?.status === SessionStatus.CREATED) return;
 
     // Get the newest message ID (last in the chronologically sorted array)
     const newestMessageId = messages[messages.length - 1]?.id;
@@ -522,7 +523,7 @@ export function useUnifiedSession(
     // the "New" label and the new messages get typewriter animation.
     // The separator will naturally be gone when user returns to the session since
     // they will get a new lastSeenChatItemId from the server (updated by markViewed).
-  }, [sessionId, messages, markViewed]);
+  }, [sessionId, messages, markViewed, session?.status]);
 
   // Reset the flags when sessionId changes (user navigates to a different session)
   useEffect(() => {

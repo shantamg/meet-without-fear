@@ -53,12 +53,13 @@ interface Stage4RedesignFooterProps {
  * marked WILLING or explicitly declined ("leave for now") by the user.
  */
 function allOpenNeedsAddressedOrDeclined(state: GetStage4StateResponse): boolean {
+  const safeState = withStage4Defaults(state);
   const willingProposalIds = new Set(
-    [...state.inventory.sharedProposals, ...state.inventory.individualCommitments]
+    [...safeState.inventory.sharedProposals, ...safeState.inventory.individualCommitments]
       .filter((p) => p.myDecision === Stage4SelectionDecision.WILLING)
       .map((p) => p.id),
   );
-  const rows = [...state.coverageAudit.open, ...state.coverageAudit.partial];
+  const rows = [...safeState.coverageAudit.open, ...safeState.coverageAudit.partial];
   return rows.every((row) => {
     if (row.userDeclinedToAddress) return true;
     return row.coveringProposalIds.some((pid) => willingProposalIds.has(pid));
@@ -101,6 +102,71 @@ function defaultCheckInDate(): string {
   const date = new Date();
   date.setDate(date.getDate() + 10);
   return date.toISOString().slice(0, 10);
+}
+
+function withStage4Defaults(state: GetStage4StateResponse): GetStage4StateResponse {
+  const partial = state as Partial<GetStage4StateResponse>;
+  const inventory = partial.inventory ?? {
+    sharedProposals: [],
+    individualCommitments: [],
+    unaddressedNeeds: [],
+    removedProposalCount: 0,
+    updatedAt: new Date().toISOString(),
+  };
+  const coverageAudit = partial.coverageAudit ?? {
+    covered: [],
+    partial: [],
+    open: [],
+    updatedAt: null,
+  };
+  const walkthrough = partial.walkthrough ?? {
+    phase: 'SUMMARY' as const,
+    currentNeed: null,
+    currentIndex: 0,
+    totalInPhase: 0,
+    ownNeeds: [],
+    partnerNeeds: [],
+    proposalGroups: [],
+    qualityWarnings: [],
+    defaultCheckInDate: defaultCheckInDate(),
+  };
+
+  return {
+    ...state,
+    phase: partial.phase ?? Stage4Phase.INVENTORY_BUILDING,
+    inventory: {
+      ...inventory,
+      sharedProposals: inventory.sharedProposals ?? [],
+      individualCommitments: inventory.individualCommitments ?? [],
+      unaddressedNeeds: inventory.unaddressedNeeds ?? [],
+      removedProposalCount: inventory.removedProposalCount ?? 0,
+      updatedAt: inventory.updatedAt ?? new Date().toISOString(),
+    },
+    coverageAudit: {
+      ...coverageAudit,
+      covered: coverageAudit.covered ?? [],
+      partial: coverageAudit.partial ?? [],
+      open: coverageAudit.open ?? [],
+      updatedAt: coverageAudit.updatedAt ?? null,
+    },
+    mySelections: partial.mySelections ?? [],
+    partnerSelections: partial.partnerSelections ?? [],
+    mySelectionStatus: partial.mySelectionStatus ?? 'NOT_STARTED',
+    partnerSelectionStatus: partial.partnerSelectionStatus ?? 'NOT_STARTED',
+    outcome: partial.outcome ?? null,
+    tendingPreview: partial.tendingPreview ?? null,
+    walkthrough: {
+      ...walkthrough,
+      currentNeed: walkthrough.currentNeed ?? null,
+      currentIndex: walkthrough.currentIndex ?? 0,
+      totalInPhase: walkthrough.totalInPhase ?? 0,
+      ownNeeds: walkthrough.ownNeeds ?? [],
+      partnerNeeds: walkthrough.partnerNeeds ?? [],
+      proposalGroups: walkthrough.proposalGroups ?? [],
+      qualityWarnings: walkthrough.qualityWarnings ?? [],
+      defaultCheckInDate: walkthrough.defaultCheckInDate ?? defaultCheckInDate(),
+    },
+  };
 }
 
 const DATE_INPUT_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -454,7 +520,7 @@ function NeedRows({
 }
 
 export function Stage4RedesignFooter({
-  state,
+  state: rawState,
   partnerName,
   isClosing = false,
   isSharing = false,
@@ -466,6 +532,7 @@ export function Stage4RedesignFooter({
 }: Stage4RedesignFooterProps) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => makeStyles(palette), [palette]);
+  const state = withStage4Defaults(rawState);
   const allProposals = [
     ...state.inventory.sharedProposals,
     ...state.inventory.individualCommitments,
@@ -589,7 +656,7 @@ export function Stage4RedesignFooter({
 }
 
 export function Stage4RedesignPanel({
-  state,
+  state: rawState,
   partnerName,
   isSelecting = false,
   isClosing = false,
@@ -611,6 +678,7 @@ export function Stage4RedesignPanel({
 }: Stage4RedesignPanelProps) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => makeStyles(palette), [palette]);
+  const state = withStage4Defaults(rawState);
   const partnerLabel = partnerName || 'Partner';
   const allProposals = [
     ...state.inventory.sharedProposals,

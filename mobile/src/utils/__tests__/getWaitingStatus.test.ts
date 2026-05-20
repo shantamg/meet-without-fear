@@ -65,14 +65,14 @@ describe('Priority 2: Stage 2 Reconciler States', () => {
     expect(computeWaitingStatus(inputs)).toBe('reconciler-analyzing');
   });
 
-  it('returns null when share suggestion exists before subject submits their own empathy', () => {
+  it('returns awaiting-context-share when share suggestion exists before subject submits their own empathy', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       shareOffer: { hasSuggestion: true },
       empathyDraft: { alreadyConsented: false },
     });
 
-    expect(computeWaitingStatus(inputs)).toBeNull();
+    expect(computeWaitingStatus(inputs)).toBe('awaiting-context-share');
   });
 
   it('returns awaiting-context-share when share suggestion exists after subject submits their own empathy', () => {
@@ -83,6 +83,16 @@ describe('Priority 2: Stage 2 Reconciler States', () => {
     });
 
     expect(computeWaitingStatus(inputs)).toBe('awaiting-context-share');
+  });
+
+  it('returns awaiting-context-share-optional for optional share suggestions', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      shareOffer: { hasSuggestion: true, action: 'OFFER_OPTIONAL' },
+      empathyDraft: { alreadyConsented: false },
+    });
+
+    expect(computeWaitingStatus(inputs)).toBe('awaiting-context-share-optional');
   });
 
   it('does not return awaiting-context-share when in Stage 3 (stage gate)', () => {

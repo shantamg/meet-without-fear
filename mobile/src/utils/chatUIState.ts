@@ -89,6 +89,7 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   // Stage 2: Empathy
   hasEmpathyContent: boolean; // liveProposedEmpathyStatement || empathyDraftData?.draft?.content
   hasLiveProposedEmpathyStatement: boolean;
+  hasDistinctRefinedEmpathyContent: boolean;
   empathyAlreadyConsented: boolean;
   hasSharedEmpathyLocal: boolean; // Local latch to prevent flash
 
@@ -275,6 +276,7 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
     hasSharedEmpathyLocal,
     isRefiningEmpathy,
     myAttemptContent,
+    hasDistinctRefinedEmpathyContent,
     sessionStatus,
   } = inputs;
 
@@ -282,15 +284,11 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
 
   const currentStage = myStage ?? Stage.ONBOARDING;
 
-  // When the partner has just shared context, the next user action should be
-  // reflection in chat. Do not offer review/resubmit until either they have
-  // taken that first turn or the AI has produced a fresh revised draft.
-  if (
-    isRefiningEmpathy &&
-    inputs.messageCountSinceSharedContext === 0 &&
-    !inputs.hasLiveProposedEmpathyStatement
-  ) {
-    return false;
+  // In refining mode, never offer Resubmit with the old attempt as fallback.
+  // The panel should appear only after AI/user flow has produced a distinct
+  // revised draft. Otherwise the user can accidentally resubmit unchanged text.
+  if (isRefiningEmpathy) {
+    return hasDistinctRefinedEmpathyContent;
   }
 
   // Local latch: Once user clicks Share, never show panel again (prevents flash during refetch)
@@ -309,8 +307,8 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
     return false;
   }
 
-  // Must have content to show (from AI, draft, or existing attempt during refining)
-  return hasEmpathyContent || (isRefiningEmpathy && myAttemptContent);
+  // Must have content to show (from AI or draft)
+  return hasEmpathyContent || myAttemptContent;
 }
 
 /**
@@ -344,8 +342,6 @@ function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
     hasRespondedToShareOfferLocal,
     myStage,
     sessionStatus,
-    empathyAlreadyConsented,
-    empathyDraft,
     isRefiningEmpathy,
   } = inputs;
 
@@ -358,18 +354,13 @@ function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
     return false;
   }
 
-  // A subject may receive a share suggestion while they are still working on
-  // their own empathy attempt. Hold it until their own Stage 2 share is done
-  // so the suggestion does not interrupt perspective-taking.
-  const ownEmpathySubmitted = empathyAlreadyConsented || empathyDraft?.alreadyConsented === true;
-
   // Optional context sharing must not block the required Stage 2 refinement
   // review/resubmit path after the partner shares new context.
   if (isRefiningEmpathy) {
     return false;
   }
 
-  return hasShareSuggestion && ownEmpathySubmitted && !hasRespondedToShareOfferLocal;
+  return hasShareSuggestion && !hasRespondedToShareOfferLocal;
 }
 
 /**
@@ -793,6 +784,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     isConfirmingFeelHeard: false,
     hasEmpathyContent: false,
     hasLiveProposedEmpathyStatement: false,
+    hasDistinctRefinedEmpathyContent: false,
     empathyAlreadyConsented: false,
     hasSharedEmpathyLocal: false,
     isRefiningEmpathy: false,
