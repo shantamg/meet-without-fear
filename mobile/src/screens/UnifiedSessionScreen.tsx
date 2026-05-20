@@ -24,7 +24,6 @@ import {
   Stage4ClosureReason,
   Stage4Phase,
   Stage4SelectionDecision,
-  NeedEditOperation,
 } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem, ChatCustomCardItem } from '../components/ChatInterface';
@@ -39,7 +38,7 @@ import { SessionEntryMoodCheck } from '../components/SessionEntryMoodCheck';
 import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
 import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
 import { ShareTopicPanel } from '../components/ShareTopicPanel';
-// NeedsSection removed - needs review/reveal now lives inside NeedsDrawer
+// NeedsSection removed - needs render inline in the chat timeline.
 // StrategyPool/StrategyRanking/OverlapReveal removed - replaced by Stage4RedesignPanel
 import { WaitingRoom } from '../components/WaitingRoom';
 import { AgreementCard } from '../components/AgreementCard';
@@ -54,7 +53,6 @@ import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDr
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
 import { PartnerInfoDrawer } from '../components/PartnerInfoDrawer';
-import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
 import { NeedCard } from '../components/NeedCard';
 import { RefinementModalScreen } from './RefinementModalScreen';
 import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
@@ -89,8 +87,6 @@ import {
   useOpenStage4SubChat,
   useSendStage4SubChatMessage,
   useResolveStage4SubChat,
-  useInterpretNeedEdit,
-  useApplyNeedEdits,
   useRemoveNeed,
   useRequestStrategySuggestions,
   useUpdateStage4WalkthroughNeed,
@@ -449,10 +445,6 @@ export function NeedsIdentifiedChatCard({
   );
 }
 
-export function getNeedsDrawerModeForNeedsStatus(status: 'ready' | 'confirmed' | 'shared'): NeedsDrawerMode {
-  return status === 'shared' ? 'reveal' : 'needs';
-}
-
 export function getEmpathyValidationCardStatus(params: {
   serverValidated?: boolean;
   locallyAccepted?: boolean;
@@ -627,7 +619,6 @@ export function UnifiedSessionScreen({
     isSharingEmpathy,
     isResubmittingEmpathy,
     isRespondingToShareOffer,
-    isConfirmingNeeds,
 
     // Memory suggestion
     memorySuggestion,
@@ -656,7 +647,6 @@ export function UnifiedSessionScreen({
     handleShareEmpathy,
     handleResubmitEmpathy,
     handleValidatePartnerEmpathy,
-    handleConfirmAllNeeds,
     handleConsentToShareNeeds,
     handleValidateNeedsReveal,
     handleNeedsNotValidYet,
@@ -1439,22 +1429,19 @@ export function UnifiedSessionScreen({
   );
 
   // -------------------------------------------------------------------------
-  // Needs Drawer (Stage 3)
+  // Stage 3 needs reveal modal
   // -------------------------------------------------------------------------
-  const [showNeedsDrawer, setShowNeedsDrawer] = useState(false);
-  const [needsDrawerMode, setNeedsDrawerMode] = useState<NeedsDrawerMode>('needs');
+  const [showNeedsRevealModal, setShowNeedsRevealModal] = useState(false);
   const [showStage4Drawer, setShowStage4Drawer] = useState(false);
   const myNeedsSharedForComparison =
     (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true;
   const { data: needsComparisonData } = useNeedsComparison(
     sessionId,
     (allNeedsConfirmed || myNeedsSharedForComparison) && (
-      showNeedsDrawer ||
+      showNeedsRevealModal ||
       myProgress?.stage === Stage.NEED_MAPPING
     ),
   );
-  const shouldUseRevealedNeeds =
-    needsDrawerMode !== 'needs' && (needsComparisonData?.myNeeds?.length ?? 0) > 0;
   const isRefiningEmpathy =
     !!empathyStatusData?.hasNewSharedContext ||
     empathyStatusData?.myAttempt?.status === EmpathyStatus.REFINING;
@@ -1511,8 +1498,7 @@ export function UnifiedSessionScreen({
     }
 
     if (auditFixture === 'needs-drawer' && needs && needs.length > 0) {
-      setNeedsDrawerMode(allNeedsConfirmed ? 'reveal' : 'needs');
-      setShowNeedsDrawer(true);
+      setShowNeedsRevealModal(true);
       appliedAuditFixtureRef.current = auditFixture;
     }
   }, [
@@ -1529,41 +1515,11 @@ export function UnifiedSessionScreen({
       (currentStage === Stage.STRATEGIC_REPAIR || session?.status === SessionStatus.RESOLVED),
   });
   const stage4State = stage4Query.data;
-  const interpretNeedEdit = useInterpretNeedEdit({
-    onError: () => {
-      showError('Could not preview that need edit. Please try again.');
-    },
-  });
-  const applyNeedEdits = useApplyNeedEdits({
-    onError: () => {
-      showError('Could not apply that need edit. Please try again.');
-    },
-  });
   const removeNeedMutation = useRemoveNeed({
     onError: () => {
       showError('Could not remove that need. Please try again.');
     },
   });
-  const handlePreviewNeedEdit = useCallback(
-    async (request: string, targetNeedId?: string) => {
-      const response = await interpretNeedEdit.mutateAsync({
-        sessionId,
-        request,
-        targetNeedId,
-      });
-      return response.plan ?? null;
-    },
-    [interpretNeedEdit, sessionId]
-  );
-  const handleApplyNeedEdits = useCallback(
-    async (operations: NeedEditOperation[]) => {
-      await applyNeedEdits.mutateAsync({
-        sessionId,
-        operations,
-      });
-    },
-    [applyNeedEdits, sessionId]
-  );
   const handleRemoveNeed = useCallback(
     async (needId: string) => {
       await removeNeedMutation.mutateAsync({
@@ -2024,9 +1980,9 @@ export function UnifiedSessionScreen({
       setShowFeedbackCoachChat(false);
     }
 
-    // Stage 3 drawers: needs drawer
+    // Stage 3 modal: needs reveal
     if (currentStage !== undefined && currentStage !== Stage.NEED_MAPPING) {
-      setShowNeedsDrawer(false);
+      setShowNeedsRevealModal(false);
     }
   }, [myProgress?.stage]);
 
@@ -2829,7 +2785,6 @@ export function UnifiedSessionScreen({
       handleShareEmpathy,
       handleSaveEmpathyDraft,
       handleValidatePartnerEmpathy,
-      handleConfirmAllNeeds,
       handleConsentToShareNeeds,
       handleRespondToShareOffer,
       sendMessage,
@@ -3433,8 +3388,7 @@ export function UnifiedSessionScreen({
                 label: 'Review',
                 onPress: () => {
                   Keyboard.dismiss();
-                  setNeedsDrawerMode('reveal');
-                  setShowNeedsDrawer(true);
+                  setShowNeedsRevealModal(true);
                 },
                 testID: 'needs-reveal-validate-button',
               }}
@@ -4306,64 +4260,79 @@ export function UnifiedSessionScreen({
         />
       )}
 
-      {/* Needs Drawer - bottom sheet for Stage 3 needs/reveal */}
-      <NeedsDrawer
-        visible={showNeedsDrawer}
-        onClose={() => setShowNeedsDrawer(false)}
-        mode={needsDrawerMode}
-        needs={(shouldUseRevealedNeeds ? (needsComparisonData?.myNeeds ?? []) : (needs ?? [])).map((n) => {
-          const maybeWarned = n as typeof n & {
-            needsReframing?: boolean;
-            reframingWarning?: string;
-          };
-          return {
-            id: n.id,
-            category: n.category || n.need,
-            need: n.need,
-            confirmed: n.confirmed,
-            needsReframing: maybeWarned.needsReframing,
-            reframingWarning: maybeWarned.reframingWarning,
-          };
-        })}
-        onAdjustNeeds={() => {
-          setShowNeedsDrawer(false);
-        }}
-        onConfirmNeeds={() => {
-          if (allNeedsConfirmed) {
-            handleConsentToShareNeeds(() => {
-              markCompleted('confirmed-needs');
-              setShowNeedsDrawer(false);
-            });
-          } else {
-            handleConfirmAllNeeds(() => {
-              setShowNeedsDrawer(false);
-            });
-          }
-        }}
-        onPreviewNeedEdit={needsDrawerMode === 'needs' ? handlePreviewNeedEdit : undefined}
-        onApplyNeedEdits={needsDrawerMode === 'needs' ? handleApplyNeedEdits : undefined}
-        onRemoveNeed={needsDrawerMode === 'needs' ? handleRemoveNeed : undefined}
-        confirmNeedsLabel={allNeedsConfirmed ? 'Share my needs' : 'Confirm my needs'}
-        confirmingNeedsLabel={allNeedsConfirmed ? 'Sharing...' : 'Confirming...'}
-        isConfirming={isConfirmingNeeds}
-        partnerNeeds={(needsComparisonData?.partnerNeeds ?? []).map((n) => ({
-          id: n.id,
-          category: String(n.category) || n.need,
-          need: n.need,
-          confirmed: n.confirmed,
-        }))}
-        onValidateNeeds={() => {
-          markCompleted('validated-needs');
-          handleValidateNeedsReveal(() => onStageComplete?.(Stage.NEED_MAPPING));
-        }}
-        onNeedsNotValidYet={() => {
-          handleNeedsNotValidYet(() => {
-            setShowNeedsDrawer(false);
-          });
-        }}
-        partnerName={partnerName}
-        testID="needs-drawer"
-      />
+      <Modal
+        visible={showNeedsRevealModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNeedsRevealModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard} testID="needs-reveal-modal">
+            <Text style={styles.modalTitle}>Needs side by side</Text>
+            <Text style={styles.modalSubtitle}>
+              Review both needs lists, then decide whether they feel accurate enough to carry forward.
+            </Text>
+            <ScrollView style={styles.needsRevealScroll} contentContainerStyle={styles.needsRevealContent}>
+              <View style={styles.needsRevealColumn}>
+                <Text style={styles.modalPreviewLabel}>You</Text>
+                {(needsComparisonData?.myNeeds ?? []).map((need) => (
+                  <View key={need.id} style={styles.modalPreview}>
+                    <Text style={styles.needsSummaryCategory}>{String(need.category)}</Text>
+                    <Text style={styles.modalPreviewText}>{need.need}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={styles.needsRevealColumn}>
+                <Text style={styles.modalPreviewLabel}>{partnerName || 'Partner'}</Text>
+                {(needsComparisonData?.partnerNeeds ?? []).map((need) => (
+                  <View key={need.id} style={styles.modalPreview}>
+                    <Text style={styles.needsSummaryCategory}>{String(need.category)}</Text>
+                    <Text style={styles.modalPreviewText}>{need.need}</Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+            <View style={styles.shareActions}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => {
+                  handleNeedsNotValidYet(() => {
+                    setShowNeedsRevealModal(false);
+                  });
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Needs not reviewed yet"
+                testID="needs-reveal-not-reviewed"
+              >
+                <Text style={styles.secondaryButtonText}>Not reviewed yet</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={() => {
+                  markCompleted('validated-needs');
+                  handleValidateNeedsReveal(() => {
+                    setShowNeedsRevealModal(false);
+                    onStageComplete?.(Stage.NEED_MAPPING);
+                  });
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Validate needs"
+                testID="needs-reveal-validate"
+              >
+                <Text style={styles.primaryButtonText}>Looks accurate</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => setShowNeedsRevealModal(false)}
+              accessibilityRole="button"
+              testID="needs-reveal-close"
+            >
+              <Text style={styles.secondaryButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Stage 4 redesign drawer — bottom-sheet wrapper around Stage4RedesignPanel. */}
       <Modal
@@ -5168,6 +5137,16 @@ const useStyles = () => {
       fontSize: 15,
       lineHeight: 22,
       color: t.colors.textPrimary,
+    },
+    needsRevealScroll: {
+      maxHeight: 360,
+    },
+    needsRevealContent: {
+      gap: t.spacing.md,
+      paddingBottom: t.spacing.xs,
+    },
+    needsRevealColumn: {
+      gap: t.spacing.sm,
     },
     cardTitle: {
       fontSize: 18,

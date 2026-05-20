@@ -32,6 +32,7 @@
 import { test, expect, devices, Page, BrowserContext, APIRequestContext } from '@playwright/test';
 import {
   cleanupE2EData,
+  confirmNeedsSummaryAndConsent,
   getE2EHeaders,
   SessionBuilder,
   confirmSideBySideRevealAndValidation,
@@ -243,11 +244,11 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     ]);
 
     // ========================================
-    // STEP 3: Reload and verify needs review phase
+    // STEP 3: Reload and verify inline needs phase
     // ========================================
-    console.log(`${elapsed()} === STEP 3: Verify needs review phase ===`);
+    console.log(`${elapsed()} === STEP 3: Verify inline needs phase ===`);
 
-    // Reload pages to show needs review UI
+    // Reload pages to show inline needs UI
     await Promise.all([
       pageA.reload(),
       pageB.reload(),
@@ -262,30 +263,26 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     await handleMoodCheck(pageA);
     await handleMoodCheck(pageB);
 
-    await expect(pageA.getByTestId('needs-review-button')).toBeVisible({ timeout: 30000 });
-    await expect(pageB.getByTestId('needs-review-button')).toBeVisible({ timeout: 30000 });
     await expectNeedsSummaryFromApi(apiA, API_BASE_URL, sessionId, 'User A');
     await expectNeedsSummaryFromApi(apiB, API_BASE_URL, sessionId, 'User B');
 
     console.log(`${elapsed()} Needs summary UI visible for both users`);
 
     // Verify at least one need card is visible for each user
-    const needCardA = pageA.locator('[data-testid^="needs-drawer-need-"]').first();
-    const needCardB = pageB.locator('[data-testid^="needs-drawer-need-"]').first();
+    const needCardA = pageA.locator('[data-testid^="inline-need-card-"]').first();
+    const needCardB = pageB.locator('[data-testid^="inline-need-card-"]').first();
 
-    await pageA.getByTestId('needs-review-button').click();
-    await pageB.getByTestId('needs-review-button').click();
-    await expect(needCardA).toBeVisible({ timeout: 5000 });
-    await expect(needCardB).toBeVisible({ timeout: 5000 });
+    await expect(needCardA).toBeVisible({ timeout: 30000 });
+    await expect(needCardB).toBeVisible({ timeout: 30000 });
 
     console.log(`${elapsed()} Need cards visible for both users`);
 
-    // Screenshot needs review state
-    await pageA.screenshot({ path: 'test-results/stage-3-02-needs-review-user-a.png' });
-    await pageB.screenshot({ path: 'test-results/stage-3-02-needs-review-user-b.png' });
+    // Screenshot inline needs state
+    await pageA.screenshot({ path: 'test-results/stage-3-02-inline-needs-user-a.png' });
+    await pageB.screenshot({ path: 'test-results/stage-3-02-inline-needs-user-b.png' });
 
-    await pageA.getByTestId('needs-drawer-confirm').click();
-    await pageB.getByTestId('needs-drawer-confirm').click();
+    await confirmNeedsSummaryAndConsent(pageA, apiA, API_BASE_URL, sessionId, 'User A');
+    await confirmNeedsSummaryAndConsent(pageB, apiB, API_BASE_URL, sessionId, 'User B');
 
     await Promise.all([
       waitForStage(apiA, API_BASE_URL, sessionId, 3, 'User A', 30000),

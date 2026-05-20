@@ -344,7 +344,7 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     // Wait for extraction to complete
     await harness.userAPage.waitForTimeout(2000);
 
-    // Reload both pages to show needs review UI
+    // Reload both pages to show inline needs UI
     await Promise.all([
       harness.userAPage.reload(),
       harness.userBPage.reload(),
@@ -359,18 +359,18 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     await handleMoodCheck(harness.userAPage);
     await handleMoodCheck(harness.userBPage);
 
-    await expect(harness.userAPage.getByTestId('needs-review-button')).toBeVisible({ timeout: 30000 });
-    await expect(harness.userBPage.getByTestId('needs-review-button')).toBeVisible({ timeout: 30000 });
     await expectNeedsSummaryFromApi(apiA, API_BASE_URL, harness.sessionId, 'User A');
     await expectNeedsSummaryFromApi(apiB, API_BASE_URL, harness.sessionId, 'User B');
+    await expect(harness.userAPage.locator('[data-testid^="inline-need-card-"]').first()).toBeVisible({ timeout: 30000 });
+    await expect(harness.userBPage.locator('[data-testid^="inline-need-card-"]').first()).toBeVisible({ timeout: 30000 });
 
-    // Screenshot needs review state
+    // Screenshot inline needs state
     // Note: maxDiffPixels 500 to allow for sub-pixel rendering variance between
-    // runs (observed 104px diff at needs-review, 314px diff at common-ground with 100px limit)
-    await expect(harness.userAPage).toHaveScreenshot('full-flow-03-needs-review-user-a.png', {
+    // runs (observed 104px diff at inline needs, 314px diff at common-ground with 100px limit)
+    await expect(harness.userAPage).toHaveScreenshot('full-flow-03-inline-needs-user-a.png', {
       maxDiffPixels: 500,
     });
-    await expect(harness.userBPage).toHaveScreenshot('full-flow-04-needs-review-user-b.png', {
+    await expect(harness.userBPage).toHaveScreenshot('full-flow-04-inline-needs-user-b.png', {
       maxDiffPixels: 500,
     });
 
