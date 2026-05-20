@@ -976,6 +976,15 @@ export function ChatInterface({
           isSpeaking={isSpeaking && currentId === message.id}
           onSpeakerPress={isAIMessage ? () => handleSpeakerPress(message.content, message.id) : undefined}
           partnerName={partnerName}
+          onPress={
+            (message.role === MessageRole.SHARED_CONTEXT || message.role === MessageRole.EMPATHY_STATEMENT) && onContextSharedPress
+              ? () => onContextSharedPress(
+                  message.timestamp,
+                  message.sharedContentDirection === 'sent',
+                  message.role === MessageRole.EMPATHY_STATEMENT ? 'empathy-shared' : 'context-shared',
+                )
+              : undefined
+          }
         />
         {renderMessageExtra?.(message)}
       </>

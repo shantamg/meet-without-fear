@@ -1925,12 +1925,14 @@ export function UnifiedSessionScreen({
   );
   const isEmpathyValidated =
     isLocalEmpathyValidationActive && localEmpathyValidationAction?.action === 'accepted';
+  const hasSentLocalEmpathyFeedback =
+    isLocalEmpathyValidationActive && localEmpathyValidationAction?.action === 'feedback';
   const isEmpathyShared = completedActions.has('shared-empathy');
-  const effectiveMyValidation = isEmpathyValidated
+  const effectiveMyValidation = isEmpathyValidated || hasSentLocalEmpathyFeedback
     ? {
         ...sharingStatus.myValidation,
-        validated: true,
-        awaitingRevision: false,
+        validated: isEmpathyValidated,
+        awaitingRevision: hasSentLocalEmpathyFeedback,
       }
     : sharingStatus.myValidation;
 
@@ -2393,37 +2395,13 @@ export function UnifiedSessionScreen({
       metadata: indicator.metadata,
     }));
 
-    // Add indicators for SHARED_CONTEXT and EMPATHY_STATEMENT messages.
-    // Self-authored SHARED_CONTEXT indicator is derived from mySharedAt in deriveIndicators().
-    // Self-authored EMPATHY_STATEMENT indicators are included here so users see "Empathy shared" in their timeline.
-    // Partner-authored SHARED_CONTEXT is hidden until user completes Stage 1 (PERSPECTIVE_STRETCH)
-    // to avoid premature "shared something new" notifications.
-    const hasCompletedStage1 = myProgress?.stage !== undefined && myProgress.stage >= Stage.PERSPECTIVE_STRETCH;
-    const sharedContentIndicators: ChatIndicatorItem[] = messages
-      .filter((m) => {
-        if (m.role !== MessageRole.SHARED_CONTEXT && m.role !== MessageRole.EMPATHY_STATEMENT) return false;
-        const isFromMe = user?.id ? m.senderId === user.id : false;
-        // Self-authored SHARED_CONTEXT is already handled by deriveIndicators (via mySharedAt)
-        if (isFromMe && m.role === MessageRole.SHARED_CONTEXT) return false;
-        // Suppress partner SHARED_CONTEXT until user has completed Stage 1
-        if (!isFromMe && m.role === MessageRole.SHARED_CONTEXT && !hasCompletedStage1) return false;
-        return true;
-      })
-      .map((m) => {
-        const isFromMe = user?.id ? m.senderId === user.id : false;
-        return {
-          type: 'indicator' as const,
-          indicatorType: m.role === MessageRole.EMPATHY_STATEMENT ? 'empathy-shared' as const : 'context-shared' as const,
-          id: `shared-${m.id}`,
-          timestamp: m.timestamp,
-          metadata: {
-            isFromMe,
-            partnerName: partnerName || 'Partner',
-          },
-        };
-      });
-
-    const allIndicators: ChatIndicatorItem[] = [...baseIndicators, ...sharedContentIndicators];
+    // SHARED_CONTEXT and EMPATHY_STATEMENT no longer emit standalone line indicators
+    // here — the SharedFrame on the message bubble carries its own top-rule label
+    // ("CONTEXT FROM JANE" / "EMPATHY SHARED WITH JANE") that serves as the
+    // chapter break. A separate indicator above the frame would double-bill.
+    // Self-authored SHARED_CONTEXT (which has no inline bubble) is still covered
+    // by deriveIndicators via mySharedAt.
+    const allIndicators: ChatIndicatorItem[] = [...baseIndicators];
 
     // --- Empathy validated indicator ---
     // Pin to the attempt's revealedAt timestamp (stable, set once when partner saw it).
@@ -2645,41 +2623,8 @@ export function UnifiedSessionScreen({
   // Validation Cards (Inline in Chat FlatList)
   // -------------------------------------------------------------------------
   const validationCards = useMemo((): ChatValidationCardItem[] => {
-    if (
-      !partnerEmpathyData?.attempt?.content ||
-      !partnerEmpathyData.attempt.revealedAt ||
-      myProgress?.stage !== Stage.PERSPECTIVE_STRETCH
-    ) {
-      return [];
-    }
-
-    const attemptId = partnerEmpathyData.attempt.id;
-    const isValidated = partnerEmpathyData.validated || isEmpathyValidated;
-
-    let cardStatus: 'pending' | 'validated' | 'feedback-given' | 'superseded';
-    cardStatus = getEmpathyValidationCardStatus({
-      serverValidated: isValidated,
-      locallySentFeedback:
-        isLocalEmpathyValidationActive && localEmpathyValidationAction?.action === 'feedback',
-    });
-
-    return [{
-      type: 'validation-card',
-      id: `validation-${attemptId}`,
-      timestamp: partnerEmpathyData.attempt.revealedAt,
-      partnerName: partnerName || 'Partner',
-      empathyContent: partnerEmpathyData.attempt.content,
-      status: cardStatus,
-      attemptId,
-    }];
-  }, [
-    partnerEmpathyData,
-    myProgress?.stage,
-    partnerName,
-    isEmpathyValidated,
-    isLocalEmpathyValidationActive,
-    localEmpathyValidationAction?.action,
-  ]);
+    return [];
+  }, []);
 
   // -------------------------------------------------------------------------
 
@@ -3341,6 +3286,23 @@ export function UnifiedSessionScreen({
           </MeasuredAnimatedPanel>
         );
 
+      case 'partner-empathy-validation':
+        return (
+          <GuidedActionPanel
+            tone="review"
+            eyebrow="Empathy review"
+            title="Does this feel right?"
+            subtitle="If something feels off or missing, write it in the chat."
+            compact
+            primaryAction={{
+              label: 'Yes, mostly',
+              onPress: handleValidationAccurate,
+              testID: 'partner-empathy-yes-button',
+            }}
+            testID="partner-empathy-validation-panel"
+          />
+        );
+
       case 'invitation':
         // The invitation step is now rendered as a centered modal (see
         // <InvitationReadyModal /> below). No inline panel above the input.
@@ -3491,6 +3453,7 @@ export function UnifiedSessionScreen({
     handleSignCompact,
     handleConfirmFeelHeard,
     handleConfirmTopicFrame,
+    handleValidationAccurate,
     isConfirmingTopicFrame,
     handleConfirmAllNeeds,
     handleValidateNeedsReveal,

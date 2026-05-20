@@ -7,8 +7,9 @@
 
 import { useRef, useEffect } from 'react';
 import { View, Text, Animated } from 'react-native';
-import { AnimationState, SharedContextItem, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
+import { AnimationState, SharedContextItem } from '@meet-without-fear/shared';
 import { createStyles } from '../../../theme/styled';
+import { designFonts, useAppAppearance } from '../../../theme';
 import type { ChatItemRendererProps } from './types';
 
 /** Duration of the fade-in animation (ms) */
@@ -65,35 +66,17 @@ export function SharedContextRenderer({
     ? `New context from ${item.partnerName}`
     : 'New context from your partner';
 
-  const getDeliveryStatusText = (status: SharedContentDeliveryStatus): string => {
-    switch (status) {
-      case 'sending':
-        return 'Sending...';
-      case 'pending':
-        return 'Submitted for review';
-      case 'delivered':
-        return 'Delivered';
-      case 'seen':
-        return '\u2713 Seen';
-      case 'superseded':
-        return 'Updated version below';
-    }
-  };
-
   const content = (
-    <View>
-      <Text style={styles.label}>{contextLabel}</Text>
-      <Text style={styles.contentText}>{item.content}</Text>
-      {item.deliveryStatus && (
-        <Text
-          style={[
-            styles.deliveryStatus,
-            item.deliveryStatus === 'seen' && styles.deliveryStatusSeen,
-          ]}
-        >
-          {getDeliveryStatusText(item.deliveryStatus)}
-        </Text>
-      )}
+    <View style={styles.frame}>
+      <View style={styles.line} />
+      <View style={styles.inner}>
+        <View style={styles.labelRow}>
+          <Text style={styles.arrow}>↓</Text>
+          <Text style={styles.label}>{contextLabel}</Text>
+        </View>
+        <Text style={styles.contentText}>{item.content}</Text>
+      </View>
+      <View style={styles.line} />
     </View>
   );
 
@@ -102,55 +85,62 @@ export function SharedContextRenderer({
 
   return (
     <View style={styles.container} testID={`shared-context-${item.id}`}>
-      <View style={styles.bubble}>
-        {isAnimating ? (
-          <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>
-        ) : (
-          content
-        )}
-      </View>
+      {isAnimating ? (
+        <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>
+      ) : (
+        content
+      )}
     </View>
   );
 }
 
-const useStyles = () =>
-  createStyles((t) => ({
+const useStyles = () => {
+  const { palette } = useAppAppearance();
+  return createStyles((t) => ({
     container: {
       marginVertical: t.spacing.md,
       paddingHorizontal: t.spacing.lg,
-      alignItems: 'flex-start',
+      alignItems: 'center',
     },
-    bubble: {
-      maxWidth: '85%',
-      backgroundColor: '#F0F4F8',
-      borderRadius: 12,
-      padding: 16,
-      borderLeftWidth: 4,
-      borderLeftColor: '#005AC1',
+    frame: {
+      width: '92%',
+    },
+    line: {
+      width: '100%',
+      height: 1,
+      backgroundColor: palette.border,
+    },
+    labelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 16,
+    },
+    arrow: {
+      fontSize: 22,
+      fontWeight: '700',
+      lineHeight: 22,
+      color: palette.accent,
     },
     label: {
-      fontSize: 10,
+      fontSize: 14,
       fontWeight: '700',
-      color: '#005AC1',
+      color: palette.accent,
       textTransform: 'uppercase',
-      letterSpacing: 0.5,
-      marginBottom: 6,
+      letterSpacing: 1.4,
+      fontFamily: designFonts.mono,
+      flexShrink: 1,
+    },
+    inner: {
+      paddingVertical: 18,
+      paddingHorizontal: 18,
+      backgroundColor: palette.accentSoft,
     },
     contentText: {
       fontSize: t.typography.fontSize.md,
       lineHeight: 22,
-      color: '#1e293b', // Dark text for light background
-      fontFamily: t.typography.fontFamily.regular,
-    },
-    deliveryStatus: {
-      fontSize: 11,
-      fontWeight: '500',
-      color: '#ea580c', // Orange-600 for better contrast on light background
-      textAlign: 'right',
-      marginTop: t.spacing.sm,
-      textTransform: 'capitalize',
-    },
-    deliveryStatusSeen: {
-      color: '#16a34a', // Green-600 for better contrast on light
+      color: palette.text,
+      fontFamily: designFonts.sans,
     },
   }));
+};

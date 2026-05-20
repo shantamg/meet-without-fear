@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { View, Text, Animated, Easing } from 'react-native';
+import { View, Text, Animated, Easing, TouchableOpacity } from 'react-native';
 import { MessageRole, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
@@ -48,6 +48,8 @@ interface ChatBubbleProps {
   hideSpeaker?: boolean;
   /** Partner's name for personalized messages (e.g., SHARED_CONTEXT) */
   partnerName?: string;
+  /** Tap handler for shared-content frames (opens activity drawer) */
+  onPress?: () => void;
 }
 
 // ============================================================================
@@ -73,6 +75,7 @@ export function ChatBubble({
   onSpeakerPress,
   hideSpeaker = false,
   partnerName,
+  onPress,
 }: ChatBubbleProps) {
   const styles = useStyles();
   const isUser = message.role === MessageRole.USER;
@@ -228,16 +231,15 @@ export function ChatBubble({
     return status === 'superseded';
   };
 
+  const isSharedFrame = isEmpathyStatement || isSharedContext;
+  const sharedFrameDirection: 'sent' | 'received' =
+    message.sharedContentDirection === 'sent' ? 'sent' : 'received';
+
   // Determine container alignment
   const getContainerStyle = () => {
     if (isUser) return styles.userContainer;
     if (isSystem) return styles.systemContainer;
-    if (isEmpathyStatement) return styles.empathyStatementContainer;
-    if (isSharedContext) {
-      return message.sharedContentDirection === 'sent'
-        ? styles.sharedContextSentContainer
-        : styles.sharedContextContainer;
-    }
+    if (isSharedFrame) return styles.sharedFrameContainer;
     if (isShareSuggestion) return styles.shareSuggestionContainer;
     return styles.aiContainer;
   };
@@ -247,8 +249,11 @@ export function ChatBubble({
     if (isIntervention) return styles.interventionBubble;
     if (isUser) return styles.userBubble;
     if (isSystem) return styles.systemBubble;
-    if (isEmpathyStatement) return styles.empathyStatementBubble;
-    if (isSharedContext) return styles.sharedContextBubble;
+    if (isSharedFrame) {
+      return sharedFrameDirection === 'sent'
+        ? styles.sharedFrameBubbleSent
+        : styles.sharedFrameBubbleReceived;
+    }
     if (isShareSuggestion) return styles.shareSuggestionBubble;
     return styles.aiBubble;
   };
@@ -256,7 +261,6 @@ export function ChatBubble({
   // Determine text style
   const getTextStyle = () => {
     if (isSystem && !isIntervention) return styles.systemText;
-    if (isEmpathyStatement) return styles.empathyStatementText;
     return styles.text;
   };
 
@@ -270,59 +274,70 @@ export function ChatBubble({
       return null;
     }
 
-    // Empathy statements - use fade-in for new messages
-    if (isEmpathyStatement) {
+    // Shared frame (empathy statements, shared context, validation feedback)
+    if (isSharedFrame) {
       const deliveryStatus = message.sharedContentDeliveryStatus;
-      const header =
-        message.sharedContentDirection === 'received'
-          ? (partnerName ? `Empathy from ${partnerName}` : 'Empathy from your partner')
-          : 'What you shared';
-      const content = (
-        <View>
-          <Text style={styles.empathyStatementHeader}>{header}</Text>
-          <Text style={styles.empathyStatementText}>{message.content}</Text>
-          {/* Delivery status indicator - only show when we have a status */}
-          {deliveryStatus && (
-            <Text style={[
-              styles.sharedContentDeliveryStatus,
-              isSendingStatus(deliveryStatus) && styles.sharedContentDeliveryStatusSending,
-              isSeenStatus(deliveryStatus) && styles.sharedContentDeliveryStatusSeen,
-              isSupersededStatus(deliveryStatus) && styles.sharedContentDeliveryStatusSuperseded,
-            ]}>
-              {getSharedContentStatusText(deliveryStatus)}
-            </Text>
-          )}
-        </View>
-      );
-      if (isFadeInAnimating) {
-        return <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>;
-      }
-      return content;
-    }
+      const showDeliveryStatus =
+        !!deliveryStatus && sharedFrameDirection !== 'received';
 
-    // Shared context (from reconciler) - use fade-in for new messages
-    if (isSharedContext) {
-      const contextLabel = isValidationFeedback
-        ? (partnerName ? `Feedback from ${partnerName}` : 'Feedback from your partner')
-        : message.sharedContentDirection === 'sent'
-          ? (partnerName ? `Context shared with ${partnerName}` : 'Context shared')
-        : (partnerName ? `New context from ${partnerName}` : 'New context from your partner');
-      const deliveryStatus = message.sharedContentDeliveryStatus;
+      // Top-rule label: voice-distinct between content types
+      const label = isEmpathyStatement
+        ? sharedFrameDirection === 'received'
+          ? (partnerName ? `Empathy from ${partnerName}` : 'Empathy from your partner')
+          : (partnerName ? `Empathy shared with ${partnerName}` : 'Empathy shared')
+        : isValidationFeedback
+          ? (partnerName ? `Feedback from ${partnerName}` : 'Feedback from your partner')
+          : sharedFrameDirection === 'sent'
+            ? (partnerName ? `Context shared with ${partnerName}` : 'Context shared')
+            : (partnerName ? `Context from ${partnerName}` : 'Context from your partner');
+
+      const labelStyle =
+        sharedFrameDirection === 'sent'
+          ? styles.sharedFrameLabelSent
+          : styles.sharedFrameLabelReceived;
+      const lineStyle =
+        sharedFrameDirection === 'sent'
+          ? styles.sharedFrameLineSent
+          : styles.sharedFrameLineReceived;
+      const bodyTextStyle = isEmpathyStatement
+        ? styles.sharedFrameBodyEmpathy
+        : styles.sharedFrameBody;
+
       const content = (
-        <View>
-          <Text style={styles.sharedContextLabel}>{contextLabel}</Text>
-          <Text style={styles.sharedContextText}>{message.content}</Text>
-          {/* Delivery status indicator */}
-          {deliveryStatus && (
-            <Text style={[
-              styles.sharedContentDeliveryStatusLight,
-              isSeenStatus(deliveryStatus) && styles.sharedContentDeliveryStatusSeenLight,
-            ]}>
-              {getSharedContentStatusText(deliveryStatus)}
-            </Text>
-          )}
+        <View style={styles.sharedFrame}>
+          <View style={[styles.sharedFrameLine, lineStyle]} />
+          <View
+            style={[
+              styles.sharedFrameInner,
+              sharedFrameDirection === 'sent'
+                ? styles.sharedFrameInnerSent
+                : styles.sharedFrameInnerReceived,
+            ]}
+          >
+            <View style={styles.sharedFrameLabelRow}>
+              <Text style={[styles.sharedFrameArrow, labelStyle]}>
+                {sharedFrameDirection === 'sent' ? '↑' : '↓'}
+              </Text>
+              <Text style={[styles.sharedFrameLabel, labelStyle]}>{label}</Text>
+            </View>
+            <Text style={bodyTextStyle}>{message.content}</Text>
+            {showDeliveryStatus && (
+              <Text
+                style={[
+                  styles.sharedFrameDelivery,
+                  isSendingStatus(deliveryStatus) && styles.sharedFrameDeliverySending,
+                  isSeenStatus(deliveryStatus) && styles.sharedFrameDeliverySeen,
+                  isSupersededStatus(deliveryStatus) && styles.sharedFrameDeliverySuperseded,
+                ]}
+              >
+                {getSharedContentStatusText(deliveryStatus)}
+              </Text>
+            )}
+          </View>
+          <View style={[styles.sharedFrameLine, lineStyle]} />
         </View>
       );
+
       if (isFadeInAnimating) {
         return <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>;
       }
@@ -385,9 +400,20 @@ export function ChatBubble({
       style={[styles.container, getContainerStyle(), containerAnimationStyle]}
       testID={`chat-bubble-${message.id}`}
     >
-      <View style={[styles.bubble, isAI && styles.aiBubbleContainer, getBubbleStyle()]}>
-        {renderContent()}
-      </View>
+      {isSharedFrame && onPress ? (
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={onPress}
+          style={[styles.bubble, getBubbleStyle()]}
+          testID={`shared-frame-press-${message.id}`}
+        >
+          {renderContent()}
+        </TouchableOpacity>
+      ) : (
+        <View style={[styles.bubble, isAI && styles.aiBubbleContainer, getBubbleStyle()]}>
+          {renderContent()}
+        </View>
+      )}
       <View style={styles.metaContainer}>
         {/* Speaker button for AI messages */}
         {isAI && !hideSpeaker && onSpeakerPress && (
@@ -466,40 +492,89 @@ const useStyles = () => {
       borderTopLeftRadius: 0,
       borderBottomLeftRadius: 0,
     },
-    // Empathy statement container: centered
-    empathyStatementContainer: {
+    // Shared frame: centered "envelope" treatment for content shared between people.
+    // The top/bottom rules are continuous with the chat's chapter dividers — the
+    // tinted body is the divider extruded into a container. This makes shared
+    // moments read as cross-person artifacts, not as private AI-chat bubbles.
+    sharedFrameContainer: {
       alignItems: 'center',
+      marginVertical: t.spacing.md,
+      paddingHorizontal: 0,
     },
-    // Empathy statement header: centered
-    empathyStatementHeader: {
-      fontSize: t.typography.fontSize.md,
+    sharedFrameBubbleReceived: {
+      width: '92%',
+      maxWidth: '92%',
+      backgroundColor: 'transparent',
+      padding: 0,
+    },
+    sharedFrameBubbleSent: {
+      width: '92%',
+      maxWidth: '92%',
+      backgroundColor: 'transparent',
+      padding: 0,
+    },
+    sharedFrame: {
+      width: '100%',
+    },
+    sharedFrameLine: {
+      width: '100%',
+      height: 1,
+    },
+    sharedFrameLineReceived: {
+      backgroundColor: palette.border,
+    },
+    sharedFrameLineSent: {
+      backgroundColor: palette.border,
+    },
+    sharedFrameLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 16,
+    },
+    sharedFrameArrow: {
+      fontSize: 22,
       fontWeight: '700',
-      color: palette.textMuted,
-      textAlign: 'center',
-      marginBottom: t.spacing.sm,
+      lineHeight: 22,
     },
-    // Empathy statement: matches drawer styling (bgSecondary, left border accent)
-    empathyStatementBubble: {
-      width: '85%',
-      maxWidth: '85%',
-      backgroundColor: palette.bgElev,
-      borderRadius: 12,
-      borderLeftWidth: 3,
-      borderLeftColor: palette.accent,
-      padding: 20,
+    sharedFrameLabel: {
+      fontSize: 14,
+      fontWeight: '700',
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+      fontFamily: designFonts.mono,
+      flexShrink: 1,
     },
-    // Empathy statement text: italic, matches drawer
-    empathyStatementText: {
+    sharedFrameLabelReceived: {
+      color: palette.accent,
+    },
+    sharedFrameLabelSent: {
+      color: palette.info,
+    },
+    sharedFrameInner: {
+      paddingVertical: 18,
+      paddingHorizontal: 18,
+    },
+    sharedFrameInnerReceived: {
+      backgroundColor: palette.accentSoft,
+    },
+    sharedFrameInnerSent: {
+      backgroundColor: palette.infoSoft,
+    },
+    sharedFrameBody: {
+      fontSize: t.typography.fontSize.md,
+      lineHeight: 22,
+      color: palette.text,
+      fontFamily: designFonts.sans,
+    },
+    sharedFrameBodyEmpathy: {
       fontSize: 17,
       fontStyle: 'italic',
       lineHeight: 26,
       color: palette.text,
       fontFamily: designFonts.serifItalic,
-      width: '100%',
-      flexShrink: 1,
     },
-    // Shared content delivery status indicator (orange for pending/delivered)
-    sharedContentDeliveryStatus: {
+    sharedFrameDelivery: {
       fontSize: 11,
       fontWeight: '500',
       color: palette.warning,
@@ -507,63 +582,16 @@ const useStyles = () => {
       marginTop: t.spacing.sm,
       textTransform: 'capitalize',
     },
-    // Shared content delivery status for light backgrounds (orange for pending/delivered)
-    sharedContentDeliveryStatusLight: {
-      fontSize: 11,
-      fontWeight: '500',
-      color: palette.warning,
-      textAlign: 'right',
-      marginTop: t.spacing.sm,
-      textTransform: 'capitalize',
-    },
-    // Blue "Sending" status (optimistic UI - message being sent)
-    sharedContentDeliveryStatusSending: {
+    sharedFrameDeliverySending: {
       color: palette.info,
       fontStyle: 'italic',
     },
-    // Green "Seen" status (dark background)
-    sharedContentDeliveryStatusSeen: {
+    sharedFrameDeliverySeen: {
       color: palette.success,
     },
-    // Green "Seen" status (light background)
-    sharedContentDeliveryStatusSeenLight: {
-      color: palette.success,
-    },
-    // Gray "Superseded" status (content was replaced by updated version)
-    sharedContentDeliveryStatusSuperseded: {
+    sharedFrameDeliverySuperseded: {
       color: palette.textFaint,
       fontStyle: 'italic',
-    },
-    // Shared context: subtle container
-    sharedContextContainer: {
-      alignItems: 'flex-start',
-      marginVertical: t.spacing.md,
-    },
-    sharedContextSentContainer: {
-      alignItems: 'flex-end',
-      marginVertical: t.spacing.md,
-    },
-    sharedContextBubble: {
-      backgroundColor: palette.bgElev,
-      borderWidth: 1,
-      borderColor: palette.border,
-      borderRadius: 12,
-      padding: 16,
-    },
-    sharedContextLabel: {
-      fontSize: 10,
-      fontWeight: '700',
-      color: palette.textMuted,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-      marginBottom: 6,
-      fontFamily: designFonts.mono,
-    },
-    sharedContextText: {
-      fontSize: t.typography.fontSize.md,
-      lineHeight: 22,
-      color: palette.text,
-      fontFamily: designFonts.sans,
     },
     // Share suggestion: what user will share (from reconciler)
     shareSuggestionContainer: {

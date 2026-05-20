@@ -179,17 +179,6 @@ export function ChatIndicator({
     }
   };
 
-  // Whether this indicator links to another page (shows arrow)
-  const hasArrow = type === 'context-shared'
-    || type === 'empathy-shared'
-    || type === 'needs-identified'
-    || type === 'common-ground-found'
-    || type === 'strategies-ready'
-    || type === 'overlap-revealed'
-    || type === 'agreement-reached';
-  const hasLeadingArrow = (type === 'context-shared' || type === 'empathy-shared')
-    && metadata?.isFromMe === false;
-
   const getLineStyle = () => {
     switch (type) {
       case 'invitation-sent':
@@ -309,13 +298,7 @@ export function ChatIndicator({
     <View style={styles.lineContainer}>
       <View style={[styles.line, getLineStyle()]} />
       <View style={styles.textContainer}>
-        {hasArrow && hasLeadingArrow && (
-          <Text style={[styles.arrow, getTextStyle()]}>→</Text>
-        )}
         <Text style={[styles.text, getTextStyle()]}>{getIndicatorText()}</Text>
-        {hasArrow && !hasLeadingArrow && (
-          <Text style={[styles.arrow, getTextStyle()]}>→</Text>
-        )}
       </View>
       <View style={[styles.line, getLineStyle()]} />
     </View>
@@ -375,10 +358,6 @@ const useStyles = () => {
       textTransform: 'uppercase',
       letterSpacing: 1,
       fontWeight: '700',
-    },
-    arrow: {
-      fontSize: 16,
-      fontWeight: '600',
     },
     // Stage chapter bar — full-width sticky section header at stage transitions
     stageChapterBar: {
