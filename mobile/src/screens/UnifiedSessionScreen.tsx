@@ -7,7 +7,7 @@
  */
 
 import { ReactNode, useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, ScrollView, AppState, Keyboard, KeyboardAvoidingView, Platform, Share, LayoutChangeEvent } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, ScrollView, AppState, Keyboard, KeyboardAvoidingView, Platform, Share, LayoutChangeEvent, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -55,6 +55,7 @@ import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
 import { PartnerInfoDrawer } from '../components/PartnerInfoDrawer';
 import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
+import { NeedCard } from '../components/NeedCard';
 import { RefinementModalScreen } from './RefinementModalScreen';
 import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
 import { TypewriterText } from '../components/TypewriterText';
@@ -1276,6 +1277,11 @@ export function UnifiedSessionScreen({
     lastTrackedStageRef.current = currentStage;
   }, [currentStage, sessionId]);
 
+  const [refineModeNeedId, setRefineModeNeedId] = useState<string | null>(null);
+  const refineModeNeed = useMemo(
+    () => needs?.find((need) => need.id === refineModeNeedId) ?? null,
+    [needs, refineModeNeedId]
+  );
 
   // Wrapped sendMessage with tracking
   // Cache-First Architecture: Ghost dots are now derived from last message role
@@ -1283,8 +1289,8 @@ export function UnifiedSessionScreen({
   // When AI response arrives (via Ably), it's added to cache → last message is AI → dots hide
   const sendMessageWithTracking = useCallback((message: string) => {
     trackMessageSent(sessionId, message.length);
-    sendMessage(message);
-  }, [sessionId, sendMessage]);
+    sendMessage(message, refineModeNeedId ? { refiningNeedId: refineModeNeedId } : undefined);
+  }, [sessionId, sendMessage, refineModeNeedId]);
 
   const usePlainCreatedSessionChat =
     __DEV__ &&
@@ -1568,6 +1574,49 @@ export function UnifiedSessionScreen({
     },
     [removeNeedMutation, sessionId]
   );
+  const handleNeedCardPress = useCallback((needId: string) => {
+    const need = needs?.find((item) => item.id === needId);
+    if (!need) return;
+    const isSuperseded = Boolean(need.supersededByNeedId);
+    const isDeleted = Boolean(need.deletedAt);
+
+    const actions = [
+      {
+        text: 'Refine',
+        onPress: () => {
+          Keyboard.dismiss();
+          setRefineModeNeedId(needId);
+        },
+      },
+    ];
+
+    if (!isSuperseded && !isDeleted) {
+      actions.push({
+        text: 'Delete',
+        onPress: () => {
+          Alert.alert(
+            'Remove this need?',
+            'It will stay visible in the timeline as removed.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Remove',
+                style: 'destructive',
+                onPress: () => {
+                  void handleRemoveNeed(needId);
+                },
+              },
+            ],
+          );
+        },
+      });
+    }
+
+    Alert.alert('Need options', need.need, [
+      ...actions,
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [handleRemoveNeed, needs]);
   const hasRedesignedStage4 =
     !!stage4State &&
     (currentStage === Stage.STRATEGIC_REPAIR || session?.status === SessionStatus.RESOLVED);
@@ -2939,40 +2988,41 @@ export function UnifiedSessionScreen({
     session?.createdAt,
   ]);
 
-  const needsReviewCards = useMemo((): ChatCustomCardItem[] => {
+  const inlineNeedCards = useMemo((): ChatCustomCardItem[] => {
     if (currentStage !== Stage.NEED_MAPPING) return [];
-    if (!needsData?.synthesizedAt || !needs || needs.length === 0) return [];
-    if (aboveInputPanel === 'needs-review' || aboveInputPanel === 'needs-share') return [];
-    const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
-    let needsStatus: 'ready' | 'confirmed' | 'shared' = 'ready';
-    if (gates?.needsShared === true) {
-      needsStatus = 'shared';
-    } else if (allNeedsConfirmed) {
-      needsStatus = 'confirmed';
-    }
+    if (!needs || needs.length === 0) return [];
 
-    return [{
+    return needs.map((need): ChatCustomCardItem => {
+      const status =
+        need.deletedAt
+          ? 'deleted'
+          : need.supersededByNeedId
+            ? 'superseded'
+            : need.lockedAt
+              ? 'locked'
+              : 'draft';
+
+      return {
       type: 'custom-card',
-      id: `needs-identified-${needsData.synthesizedAt}`,
+      id: `identified-need-${need.id}`,
       animate: true,
-      timestamp: needsData.synthesizedAt,
+      timestamp: need.createdAt || needsData?.synthesizedAt || new Date().toISOString(),
       render: () => (
-        <NeedsIdentifiedChatCard
-          needs={needs.map((need) => ({
+        <NeedCard
+          need={{
             id: need.id,
-            need: need.need,
             category: String(need.category),
-          }))}
-          status={needsStatus}
-          onReview={() => {
-            Keyboard.dismiss();
-            setNeedsDrawerMode(getNeedsDrawerModeForNeedsStatus(needsStatus));
-            setShowNeedsDrawer(true);
+            description: need.need,
+            status,
+            warning: need.reframingWarning,
           }}
+          onPress={() => handleNeedCardPress(need.id)}
+          testID={`inline-need-card-${need.id}`}
         />
       ),
-    }];
-  }, [currentStage, needsData?.synthesizedAt, needs, myProgress?.gatesSatisfied, allNeedsConfirmed, aboveInputPanel]);
+    };
+    });
+  }, [currentStage, handleNeedCardPress, needs, needsData?.synthesizedAt]);
 
   // Stage4RedesignPanel is now mounted inside a slide-up Modal (Stage 4 drawer)
   // rather than as an inline chat card. The CTA above the chat input opens it.
@@ -3029,8 +3079,8 @@ export function UnifiedSessionScreen({
   ]);
 
   const chatCustomCards = useMemo(
-    () => [...sourceInnerThoughtsCards, ...inviteeOpeningCards, ...needsReviewCards],
-    [sourceInnerThoughtsCards, inviteeOpeningCards, needsReviewCards]
+    () => [...sourceInnerThoughtsCards, ...inviteeOpeningCards, ...inlineNeedCards],
+    [sourceInnerThoughtsCards, inviteeOpeningCards, inlineNeedCards]
   );
 
   // -------------------------------------------------------------------------
@@ -3217,6 +3267,23 @@ export function UnifiedSessionScreen({
             testID: 'back-to-path-forward-button',
           }}
           testID="back-to-path-forward-panel"
+        />
+      );
+    }
+    if (refineModeNeed) {
+      return (
+        <GuidedActionPanel
+          tone="needs"
+          eyebrow="Refining"
+          title={refineModeNeed.need}
+          subtitle="Your next message will stay attached to this need."
+          compact
+          primaryAction={{
+            label: '×',
+            onPress: () => setRefineModeNeedId(null),
+            testID: 'exit-need-refine-button',
+          }}
+          testID="need-refine-bar"
         />
       );
     }
@@ -3446,6 +3513,7 @@ export function UnifiedSessionScreen({
     }
   }, [
     aboveInputPanel,
+    refineModeNeed,
     hasRedesignedStage4,
     stage4State,
     session?.status,
@@ -4052,6 +4120,7 @@ export function UnifiedSessionScreen({
               : undefined
           }
           renderAboveInput={
+            refineModeNeed ||
             aboveInputPanel ||
             (hasRedesignedStage4 && !!stage4State) ||
             (session?.status === SessionStatus.RESOLVED && viewingResolvedHistory)

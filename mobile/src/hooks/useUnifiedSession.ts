@@ -826,7 +826,7 @@ export function useUnifiedSession(
   // -------------------------------------------------------------------------
 
   const handleSendMessage = useCallback(
-    (content: string) => {
+    (content: string, options?: { refiningNeedId?: string | null }) => {
       if (!sessionId) return;
 
       // Prevent duplicate submissions
@@ -840,7 +840,7 @@ export function useUnifiedSession(
 
       // Send message with SSE streaming for AI response
       // Metadata handling is done via onMetadata callback to the streaming hook
-      streamingSendMessage({ sessionId, content, currentStage });
+      streamingSendMessage({ sessionId, content, currentStage, refiningNeedId: options?.refiningNeedId ?? null });
     },
     [sessionId, currentStage, streamingSendMessage, isSending, isStreaming]
   );

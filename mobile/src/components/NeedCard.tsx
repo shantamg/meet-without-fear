@@ -13,9 +13,12 @@ import { useAppAppearance } from '@/theme';
 // ============================================================================
 
 interface Need {
+  id?: string;
   category: string;
   description: string;
+  need?: string;
   warning?: string;
+  status?: 'draft' | 'locked' | 'superseded' | 'deleted';
 }
 
 interface NeedCardProps {
@@ -43,7 +46,18 @@ export function NeedCard({
       <Text style={styles.category}>
         {need.category}
       </Text>
-      <Text style={styles.description}>{need.description}</Text>
+      <Text
+        style={[
+          styles.description,
+          need.status === 'superseded' && styles.supersededText,
+          need.status === 'deleted' && styles.deletedText,
+        ]}
+      >
+        {need.description || need.need}
+      </Text>
+      {need.status === 'locked' && <Text style={styles.badge}>Locked</Text>}
+      {need.status === 'superseded' && <Text style={styles.badge}>Refined ↓</Text>}
+      {need.status === 'deleted' && <Text style={[styles.badge, styles.deletedBadge]}>Removed</Text>}
       {need.warning && (
         <Text style={styles.warning}>{need.warning}</Text>
       )}
@@ -95,6 +109,27 @@ const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => 
     fontSize: 16,
     color: palette.text,
     lineHeight: 22,
+  },
+  supersededText: {
+    opacity: 0.55,
+  },
+  deletedText: {
+    opacity: 0.55,
+    textDecorationLine: 'line-through',
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: palette.bgElev,
+    color: palette.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  deletedBadge: {
+    color: palette.danger,
   },
   warning: {
     marginTop: 10,
