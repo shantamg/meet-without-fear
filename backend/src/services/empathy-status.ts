@@ -62,6 +62,24 @@ export async function buildEmpathyExchangeStatus(
     }),
   ]);
 
+  // Look up validation events for both attempts. `validatedAt` here is the
+  // timestamp the OTHER party confirmed the attempt — the right anchor for
+  // "{partner} confirmed your understanding" indicators in the timeline.
+  const [myAttemptValidation, partnerAttemptValidation] = await Promise.all([
+    myAttempt && partnerId
+      ? prisma.empathyValidation.findUnique({
+        where: { attemptId_userId: { attemptId: myAttempt.id, userId: partnerId } },
+        select: { validatedAt: true, validated: true },
+      })
+      : Promise.resolve(null),
+    partnerAttempt
+      ? prisma.empathyValidation.findUnique({
+        where: { attemptId_userId: { attemptId: partnerAttempt.id, userId } },
+        select: { validatedAt: true, validated: true },
+      })
+      : Promise.resolve(null),
+  ]);
+
   // Check if MY attempt is being analyzed (not partner's)
   const analyzing = myAttempt?.status === 'ANALYZING';
 
@@ -204,6 +222,10 @@ export async function buildEmpathyExchangeStatus(
         consentRecordId: myAttempt.consentRecordId ?? '',
         status: myAttempt.status,
         revealedAt: myAttempt.revealedAt?.toISOString() ?? null,
+        validatedAt:
+          myAttemptValidation?.validated
+            ? myAttemptValidation.validatedAt?.toISOString() ?? null
+            : null,
         revisionCount: myAttempt.revisionCount,
         deliveryStatus: getEmpathyDeliveryStatus(myAttempt.status),
       }
@@ -218,6 +240,10 @@ export async function buildEmpathyExchangeStatus(
         consentRecordId: partnerAttempt.consentRecordId ?? '',
         status: partnerAttempt.status,
         revealedAt: partnerAttempt.revealedAt?.toISOString() ?? null,
+        validatedAt:
+          partnerAttemptValidation?.validated
+            ? partnerAttemptValidation.validatedAt?.toISOString() ?? null
+            : null,
         revisionCount: partnerAttempt.revisionCount,
       }
       : null,

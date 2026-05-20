@@ -6,14 +6,14 @@ describe('deriveEmpathyValidatedIndicator', () => {
     expect(deriveEmpathyValidatedIndicator(null, '2026-01-01T00:00:00Z', 'Catherine')).toBeNull();
   });
 
-  it('returns null when revealedAt is missing, even if VALIDATED (no Date.now() fallback)', () => {
+  it('returns null when validatedAt is missing, even if VALIDATED (no Date.now() fallback)', () => {
     // This guards the milestone-divider-position bug: a `new Date()` fallback
     // would re-anchor the indicator on every render and the divider would
     // visually slide just above the most-recent AI message each turn.
     expect(deriveEmpathyValidatedIndicator('VALIDATED', null, 'Catherine')).toBeNull();
   });
 
-  it('pins the indicator to revealedAt when validated', () => {
+  it('pins the indicator to validatedAt when validated', () => {
     const indicator = deriveEmpathyValidatedIndicator(
       'VALIDATED',
       '2026-05-08T12:00:00.000Z',

@@ -94,7 +94,7 @@ import {
   useRequestStrategySuggestions,
   useUpdateStage4WalkthroughNeed,
 } from '../hooks/useStages';
-import { deriveEmpathyValidatedIndicator, deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
+import { deriveEmpathyValidatedIndicator, derivePartnerEmpathyConfirmedIndicator, deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
 import {
   getPersistedMessageRefreshQueryKeys,
@@ -2411,17 +2411,32 @@ export function UnifiedSessionScreen({
     const allIndicators: ChatIndicatorItem[] = [...baseIndicators];
 
     // --- Empathy validated indicator ---
-    // Pin to the attempt's revealedAt timestamp (stable, set once when partner saw it).
-    // If revealedAt is missing we intentionally skip the indicator rather than fall back
-    // to `new Date()`, which would re-anchor the divider on every render and cause it to
-    // visually slide just above the most-recent AI message on every turn.
+    // Pin to validatedAt (stable timestamp set when the partner confirmed the
+    // attempt). Earlier code anchored to revealedAt, which placed the indicator
+    // before any AI messages exchanged between reveal and confirmation.
+    // If validatedAt is missing we intentionally skip the indicator rather than
+    // fall back to `new Date()`, which would re-anchor the divider on every
+    // render and cause it to visually slide just above the most-recent AI
+    // message on every turn.
     const empathyValidatedIndicator = deriveEmpathyValidatedIndicator(
       empathyStatusData?.myAttempt?.status ?? null,
-      empathyStatusData?.myAttempt?.revealedAt ?? null,
+      empathyStatusData?.myAttempt?.validatedAt ?? null,
       partnerName || 'Partner'
     );
     if (empathyValidatedIndicator) {
       allIndicators.push(empathyValidatedIndicator);
+    }
+
+    // --- Partner empathy confirmed indicator ---
+    // Pinned to partnerEmpathyData.validatedAt (stable server timestamp).
+    // Fires when the current user confirmed the partner's empathy as accurate.
+    const partnerEmpathyConfirmedIndicator = derivePartnerEmpathyConfirmedIndicator(
+      partnerEmpathyData?.validated ?? false,
+      partnerEmpathyData?.validatedAt ?? null,
+      partnerName || 'Partner'
+    );
+    if (partnerEmpathyConfirmedIndicator) {
+      allIndicators.push(partnerEmpathyConfirmedIndicator);
     }
 
     // --- Stage chapter markers ---
@@ -2435,7 +2450,7 @@ export function UnifiedSessionScreen({
     allIndicators.push(...chapterIndicators);
 
     return allIndicators;
-  }, [isInviter, session?.status, invitationMessageConfirmedAt, invitationAcceptedAt, milestones?.witnessStartedAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
+  }, [isInviter, session?.status, invitationMessageConfirmedAt, invitationAcceptedAt, milestones?.witnessStartedAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.validatedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
 
 
 

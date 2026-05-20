@@ -76,6 +76,8 @@ export interface EmpathyAttemptDTO {
   consentRecordId: string;
   status: EmpathyStatus;
   revealedAt: string | null;
+  /** When the recipient validated this attempt (null until validated). */
+  validatedAt: string | null;
   revisionCount: number;
   /** Monotonic server-side status version used to ignore stale local/realtime state */
   statusVersion?: number;

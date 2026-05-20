@@ -21,6 +21,7 @@ import { designFonts, useAppAppearance } from '../theme';
 function getSemanticCategory(type: ChatIndicatorType): 'informational' | 'success' | 'warning' {
   switch (type) {
     case 'empathy-validated': return 'success';
+    case 'partner-empathy-confirmed': return 'success';
     case 'reconciler-gaps-found':
     case 'strategies-ready':
       return 'warning';
@@ -54,6 +55,7 @@ export type ChatIndicatorType =
   | 'agreement-reached'
   // Semantic indicator types
   | 'empathy-validated'         // Partner confirmed your understanding (success)
+  | 'partner-empathy-confirmed' // You confirmed partner's understanding (success)
   | 'stage-chapter';            // Stage transition chapter marker (informational)
 
 interface ChatIndicatorProps {
@@ -172,6 +174,10 @@ export function ChatIndicator({
       case 'empathy-validated':
         const validatorName = metadata?.partnerName || 'Partner';
         return `${validatorName} confirmed your understanding`;
+      case 'partner-empathy-confirmed': {
+        const partner = metadata?.partnerName || 'Partner';
+        return `You confirmed ${partner}'s understanding`;
+      }
       case 'stage-chapter':
         return metadata?.stageName || 'New Chapter';
       default:
@@ -213,6 +219,7 @@ export function ChatIndicator({
         return styles.agreementReachedLine;
       // Semantic indicator types
       case 'empathy-validated':
+      case 'partner-empathy-confirmed':
       case 'stage-chapter': {
         const category = getSemanticCategory(type);
         return { backgroundColor: semanticColors[category].line };
@@ -256,6 +263,7 @@ export function ChatIndicator({
         return styles.agreementReachedText;
       // Semantic indicator types
       case 'empathy-validated':
+      case 'partner-empathy-confirmed':
       case 'stage-chapter': {
         const category = getSemanticCategory(type);
         return { color: semanticColors[category].text };
