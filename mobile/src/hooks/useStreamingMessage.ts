@@ -16,6 +16,7 @@ import {
   GetMessagesResponse,
   Stage,
   CapturedNeedInput,
+  IdentifiedNeedDTO,
 } from '@meet-without-fear/shared';
 import { messageKeys, sessionKeys, stageKeys, timelineKeys } from './queryKeys';
 import { getPersistedMessageRefreshQueryKeys } from '../utils/realtimeInvalidation';
@@ -30,6 +31,7 @@ interface UserMessageEvent {
   id: string;
   content: string;
   timestamp: string;
+  refiningNeedId?: string | null;
 }
 
 interface ChunkEvent {
@@ -56,6 +58,13 @@ export interface StreamMetadata {
   proposedEmpathyStatement?: string | null;
   proposedStrategies?: string[];
   proposedNeeds?: CapturedNeedInput[];
+  proposedNeed?: CapturedNeedInput;
+  needAction?: {
+    type: 'refine' | 'delete' | 'lock';
+    needId?: string;
+    supersedes?: string;
+  };
+  needParseError?: string;
   needsCaptured?: boolean;
   topicFrame?: string | null;
   analysis?: string;
@@ -73,6 +82,7 @@ export interface SendStreamingMessageParams {
   sessionId: string;
   content: string;
   currentStage?: Stage;
+  refiningNeedId?: string | null;
 }
 
 /** Options for the streaming hook */
@@ -571,7 +581,7 @@ export function useStreamingMessage(
    */
   const sendMessage = useCallback(
     async (params: SendStreamingMessageParams) => {
-      const { sessionId, content, currentStage } = params;
+      const { sessionId, content, currentStage, refiningNeedId } = params;
 
       // Store params for retry
       lastParamsRef.current = params;
@@ -601,6 +611,7 @@ export function useStreamingMessage(
         content,
         stage: currentStage ?? Stage.ONBOARDING,
         timestamp: new Date().toISOString(),
+        refiningNeedId: refiningNeedId ?? null,
         status: 'sending',
       };
 
@@ -635,7 +646,7 @@ export function useStreamingMessage(
             'Content-Type': 'application/json',
             ...authHeaders,
           },
-          body: JSON.stringify({ content }),
+          body: JSON.stringify({ content, refiningNeedId: refiningNeedId ?? undefined }),
           pollingInterval: 0, // Disable polling, use SSE
         });
 
@@ -691,6 +702,7 @@ export function useStreamingMessage(
               updateMessageInCache(sessionId, optimisticUserIdRef.current, {
                 timestamp: data.timestamp,
                 content: data.content, // In case server modified content
+                refiningNeedId: data.refiningNeedId ?? null,
               }, currentStage);
               optimisticUserIdRef.current = ''; // Clear after update
             } else {
@@ -703,6 +715,7 @@ export function useStreamingMessage(
                 content: data.content,
                 stage: currentStage ?? Stage.ONBOARDING,
                 timestamp: data.timestamp,
+                refiningNeedId: data.refiningNeedId ?? null,
               };
               addMessageToCache(sessionId, realUserMessage, currentStage);
             }

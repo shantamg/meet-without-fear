@@ -435,22 +435,31 @@ model EmotionalReading {
 }
 
 model IdentifiedNeed {
-  id           String       @id @default(cuid())
-  vessel       UserVessel   @relation(fields: [vesselId], references: [id], onDelete: Cascade)
-  vesselId     String
-  need         String // From universal needs taxonomy
-  category     NeedCategory
-  evidence     String[] // Quotes/references supporting this need
-  confirmed    Boolean      @default(false) // User confirmed this need
-  aiConfidence Float // AI confidence in identification
-  createdAt    DateTime     @default(now())
+  id                 String           @id @default(cuid())
+  vessel             UserVessel       @relation(fields: [vesselId], references: [id], onDelete: Cascade)
+  vesselId           String
+  need               String // From universal needs taxonomy
+  category           NeedCategory
+  evidence           String[] // Quotes/references supporting this need
+  confirmed          Boolean          @default(false) // User confirmed this need
+  aiConfidence       Float // AI confidence in identification
+  supersededByNeed   IdentifiedNeed?  @relation("NeedSupersession", fields: [supersededByNeedId], references: [id], onDelete: SetNull)
+  supersededByNeedId String?
+  supersedes         IdentifiedNeed[] @relation("NeedSupersession")
+  lockedAt           DateTime?
+  deletedAt          DateTime?
+  createdAt          DateTime         @default(now())
 
   // Link to shared version if consented
   consentedContent ConsentedContent?
 
   proposalLinks StrategyProposalNeed[]
+  refiningMessages Message[]
 
   @@index([vesselId])
+  @@index([supersededByNeedId])
+  @@index([lockedAt])
+  @@index([deletedAt])
 }
 
 enum NeedCategory {
@@ -622,16 +631,18 @@ enum ConsentDecision {
 // ============================================================================
 
 model Message {
-  id        String      @id @default(cuid())
-  session   Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId String
-  sender    User?       @relation(fields: [senderId], references: [id], onDelete: SetNull)
-  senderId  String? // null for AI messages
-  forUserId String? // Which user the AI was responding to (for data isolation)
-  role      MessageRole
-  content   String      @db.Text
-  stage     Int
-  timestamp DateTime    @default(now())
+  id             String          @id @default(cuid())
+  session        Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId      String
+  sender         User?           @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  senderId       String? // null for AI messages
+  forUserId      String? // Which user the AI was responding to (for data isolation)
+  role           MessageRole
+  content        String          @db.Text
+  stage          Int
+  timestamp      DateTime        @default(now())
+  refiningNeed   IdentifiedNeed? @relation(fields: [refiningNeedId], references: [id], onDelete: SetNull)
+  refiningNeedId String?
 
   // NOTE: Message-level embedding removed per fact-ledger architecture
   // Session-level contentEmbedding on UserVessel is used instead
@@ -644,6 +655,7 @@ model Message {
   @@index([sessionId, forUserId, role])
   @@index([senderId])
   @@index([forUserId])
+  @@index([refiningNeedId])
 }
 
 enum MessageRole {

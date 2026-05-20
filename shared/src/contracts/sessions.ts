@@ -156,6 +156,7 @@ export type ResumeSessionResponseInput = z.infer<typeof resumeSessionResponseSch
 
 export const sendMessageRequestSchema = z.object({
   content: z.string().min(1, 'Message is required').max(5000, 'Message too long'),
+  refiningNeedId: z.string().nullable().optional(),
 });
 
 export type SendMessageRequestInput = z.infer<typeof sendMessageRequestSchema>;

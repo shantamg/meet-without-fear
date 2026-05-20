@@ -2,7 +2,7 @@ import { NeedCategory } from '@meet-without-fear/shared';
 import { prisma } from '../../lib/prisma';
 import { getModelCompletion } from '../../lib/bedrock';
 import { validateNeedIsUniversal } from '../needs';
-import { applyNeedEdits, NeedEditForbiddenError } from '../needs-edit-applier.service';
+import { applyNeedAction, applyNeedEdits, NeedEditForbiddenError } from '../needs-edit-applier.service';
 import { interpretNeedEditRequest } from '../needs-edit-interpreter.service';
 
 jest.mock('../../lib/prisma');
@@ -128,7 +128,10 @@ describe('Stage 3 need edit services', () => {
         confirmed: true,
       }),
     });
-    expect(prisma.identifiedNeed.delete).toHaveBeenCalledWith({ where: { id: 'need-2' } });
+    expect(prisma.identifiedNeed.update).toHaveBeenCalledWith({
+      where: { id: 'need-2' },
+      data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+    });
     expect(result.applied).toHaveLength(3);
     expect(result.needs[0]).toEqual(
       expect.objectContaining({
@@ -156,5 +159,79 @@ describe('Stage 3 need edit services', () => {
     ).rejects.toBeInstanceOf(NeedEditForbiddenError);
 
     expect(prisma.identifiedNeed.update).not.toHaveBeenCalled();
+  });
+
+  it('applies a refine need action by creating a new need and superseding the old one', async () => {
+    (prisma.identifiedNeed.findFirst as jest.Mock).mockResolvedValueOnce(need());
+    (prisma.identifiedNeed.create as jest.Mock).mockResolvedValueOnce(
+      need({
+        id: 'need-new',
+        need: 'I need more care and reliability around our shared space.',
+        category: NeedCategory.FAIRNESS,
+        createdAt: new Date('2026-05-19T12:01:00.000Z'),
+      })
+    );
+    (prisma.identifiedNeed.update as jest.Mock).mockResolvedValueOnce(
+      need({ supersededByNeedId: 'need-new' })
+    );
+    (prisma.identifiedNeed.findMany as jest.Mock).mockResolvedValueOnce([
+      need({ supersededByNeedId: 'need-new' }),
+      need({
+        id: 'need-new',
+        need: 'I need more care and reliability around our shared space.',
+        createdAt: new Date('2026-05-19T12:01:00.000Z'),
+      }),
+    ]);
+
+    const result = await applyNeedAction(sessionId, userId, {
+      type: 'refine',
+      supersedes: 'need-1',
+      need: 'reliability',
+      category: NeedCategory.FAIRNESS,
+      description: 'I need more care and reliability around our shared space.',
+      evidence: ['care and reliability'],
+    });
+
+    expect(prisma.identifiedNeed.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        vesselId,
+        need: 'I need more care and reliability around our shared space.',
+        category: NeedCategory.FAIRNESS,
+        confirmed: false,
+      }),
+    });
+    expect(prisma.identifiedNeed.update).toHaveBeenCalledWith({
+      where: { id: 'need-1' },
+      data: { supersededByNeedId: 'need-new' },
+    });
+    expect(result.action).toBe('refine');
+    expect(result.oldNeed).toEqual(expect.objectContaining({ status: 'superseded' }));
+    expect(result.need).toEqual(expect.objectContaining({ id: 'need-new' }));
+  });
+
+  it('applies delete and lock need actions without hard-deleting rows', async () => {
+    (prisma.identifiedNeed.findFirst as jest.Mock)
+      .mockResolvedValueOnce(need())
+      .mockResolvedValueOnce(need({ id: 'need-2' }));
+    (prisma.identifiedNeed.update as jest.Mock)
+      .mockResolvedValueOnce(need({ deletedAt: new Date('2026-05-19T12:02:00.000Z') }))
+      .mockResolvedValueOnce(need({ id: 'need-2', confirmed: true, lockedAt: new Date('2026-05-19T12:03:00.000Z') }));
+    (prisma.identifiedNeed.findMany as jest.Mock)
+      .mockResolvedValueOnce([need({ deletedAt: new Date('2026-05-19T12:02:00.000Z') })])
+      .mockResolvedValueOnce([need({ id: 'need-2', confirmed: true, lockedAt: new Date('2026-05-19T12:03:00.000Z') })]);
+
+    const deleted = await applyNeedAction(sessionId, userId, { type: 'delete', needId: 'need-1' });
+    const locked = await applyNeedAction(sessionId, userId, { type: 'lock', needId: 'need-2' });
+
+    expect(prisma.identifiedNeed.update).toHaveBeenCalledWith({
+      where: { id: 'need-1' },
+      data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+    });
+    expect(prisma.identifiedNeed.update).toHaveBeenCalledWith({
+      where: { id: 'need-2' },
+      data: expect.objectContaining({ lockedAt: expect.any(Date), confirmed: true }),
+    });
+    expect(deleted.need).toEqual(expect.objectContaining({ status: 'deleted' }));
+    expect(locked.need).toEqual(expect.objectContaining({ status: 'locked' }));
   });
 });

@@ -1,8 +1,10 @@
 import {
   AffectedNeed,
   ApplyNeedEditsResponse,
+  ApplyNeedActionResponse,
   IdentifiedNeedDTO,
   NeedCategory,
+  ParsedNeedAction,
   NeedEditOperation,
 } from '@meet-without-fear/shared';
 import { Prisma } from '@prisma/client';
@@ -18,6 +20,9 @@ type NeedRow = {
   evidence: string[];
   aiConfidence: number;
   confirmed: boolean;
+  lockedAt?: Date | null;
+  deletedAt?: Date | null;
+  supersededByNeedId?: string | null;
   createdAt: Date;
 };
 
@@ -82,6 +87,9 @@ function cleanNeedText(value: unknown): string {
 
 function toDTO(row: NeedRow): IdentifiedNeedDTO {
   const warned = withNeedReframingWarning(row);
+  const deletedAt = row.deletedAt ?? null;
+  const lockedAt = row.lockedAt ?? null;
+  const supersededByNeedId = row.supersededByNeedId ?? null;
   return {
     id: row.id,
     need: row.need,
@@ -89,7 +97,18 @@ function toDTO(row: NeedRow): IdentifiedNeedDTO {
     description: row.need,
     evidence: row.evidence,
     confirmed: row.confirmed,
+    lockedAt: lockedAt?.toISOString() ?? null,
+    deletedAt: deletedAt?.toISOString() ?? null,
+    supersededByNeedId,
+    status: deletedAt
+      ? 'deleted'
+      : supersededByNeedId
+        ? 'superseded'
+        : lockedAt
+          ? 'locked'
+          : 'draft',
     aiConfidence: row.aiConfidence,
+    createdAt: row.createdAt.toISOString(),
     needsReframing: warned.needsReframing,
     reframingWarning: warned.reframingWarning,
   };
@@ -166,7 +185,7 @@ export async function applyNeedEdits(
   const applied = await prisma.$transaction(async (tx) => {
     const vessel = await getOrCreateUserVessel(sessionId, userId, tx);
     const currentNeeds = (await tx.identifiedNeed.findMany({
-      where: { vesselId: vessel.id },
+      where: { vesselId: vessel.id, deletedAt: null },
       orderBy: { createdAt: 'asc' },
     })) as NeedRow[];
 
@@ -196,7 +215,10 @@ export async function applyNeedEdits(
           },
         });
       } else if (operation.type === 'removeNeed' && operation.needId) {
-        await tx.identifiedNeed.delete({ where: { id: operation.needId } });
+        await tx.identifiedNeed.update({
+          where: { id: operation.needId },
+          data: { deletedAt: new Date() },
+        });
       }
     }
 
@@ -224,5 +246,84 @@ export async function deleteNeed(sessionId: string, userId: string, needId: stri
     select: { id: true },
   });
   if (!need) throw new NeedEditValidationError('Need not found.');
-  await prisma.identifiedNeed.delete({ where: { id: needId } });
+  await prisma.identifiedNeed.update({
+    where: { id: needId },
+    data: { deletedAt: new Date() },
+  });
+}
+
+export async function applyNeedAction(
+  sessionId: string,
+  userId: string,
+  action: ParsedNeedAction
+): Promise<ApplyNeedActionResponse> {
+  await assertNeedsEditable(sessionId, userId);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const vessel = await getOrCreateUserVessel(sessionId, userId, tx);
+
+    if (action.type === 'refine') {
+      const oldNeedId = action.supersedes;
+      if (!oldNeedId) throw new NeedEditValidationError('Refine action requires supersedes.');
+      const current = await tx.identifiedNeed.findFirst({
+        where: { id: oldNeedId, vesselId: vessel.id, deletedAt: null },
+      }) as NeedRow | null;
+      if (!current) throw new NeedEditValidationError('Need not found.');
+
+      const text = cleanNeedText(action.description || action.need);
+      if (!text) throw new NeedEditValidationError('Refined need text is required.');
+      const newNeed = await tx.identifiedNeed.create({
+        data: {
+          vesselId: vessel.id,
+          need: text,
+          category: normalizeCategory(action.category, current.category),
+          evidence: Array.isArray(action.evidence)
+            ? action.evidence.map((entry) => cleanVisibleAIText(entry)).filter(Boolean)
+            : current.evidence,
+          aiConfidence: 0.9,
+          confirmed: false,
+        },
+      }) as NeedRow;
+      const oldNeed = await tx.identifiedNeed.update({
+        where: { id: current.id },
+        data: { supersededByNeedId: newNeed.id },
+      }) as NeedRow;
+
+      return { oldNeed, newNeed };
+    }
+
+    const targetId = action.needId;
+    if (!targetId) throw new NeedEditValidationError(`${action.type} action requires needId.`);
+    const current = await tx.identifiedNeed.findFirst({
+      where: { id: targetId, vesselId: vessel.id },
+    }) as NeedRow | null;
+    if (!current) throw new NeedEditValidationError('Need not found.');
+
+    if (action.type === 'delete') {
+      const deleted = await tx.identifiedNeed.update({
+        where: { id: current.id },
+        data: { deletedAt: new Date() },
+      }) as NeedRow;
+      return { oldNeed: deleted, newNeed: deleted };
+    }
+
+    const locked = await tx.identifiedNeed.update({
+      where: { id: current.id },
+      data: { lockedAt: new Date(), confirmed: true },
+    }) as NeedRow;
+    return { oldNeed: locked, newNeed: locked };
+  });
+
+  const vessel = await getOrCreateUserVessel(sessionId, userId);
+  const needs = (await prisma.identifiedNeed.findMany({
+    where: { vesselId: vessel.id },
+    orderBy: { createdAt: 'asc' },
+  })) as NeedRow[];
+
+  return {
+    action: action.type,
+    oldNeed: result.oldNeed ? toDTO(result.oldNeed) : undefined,
+    need: result.newNeed ? toDTO(result.newNeed) : undefined,
+    needs: needs.map(toDTO),
+  };
 }

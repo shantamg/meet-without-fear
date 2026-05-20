@@ -130,13 +130,15 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('what truly matters');
     });
 
-    it('Stage 3 prompt includes CONFIRMING mode', () => {
+    it('Stage 3 prompt includes one-at-a-time mode beats', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
-      expect(prompt).toContain('CONFIRMING');
-      expect(prompt).toContain('summary');
-      expect(prompt).toContain('FOUR MODES');
+      expect(prompt).toContain('SURFACE-ONE');
+      expect(prompt).toContain('REFINE');
+      expect(prompt).toContain('CONFIRM-AND-LOCK');
+      expect(prompt).toContain('BRIDGE-TO-NEXT');
+      expect(prompt).toContain('MODE BEATS');
     });
 
     it('Stage 3 prompt includes post-reveal phase guidance only when needsShared gate is satisfied', () => {
@@ -188,13 +190,13 @@ describe('Stage Prompts Service', () => {
       expect(prompt).not.toContain('When you step back and look at all of this');
     });
 
-    it('Stage 3 prompt preserves existing REDIRECTING, SUGGESTING, DEEPENING modes', () => {
+    it('Stage 3 prompt preserves redirecting and deepening guidance', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
       expect(prompt).toContain('REDIRECTING');
-      expect(prompt).toContain('SUGGESTING');
       expect(prompt).toContain('DEEPENING');
+      expect(prompt).toContain('Offer needs language as a suggestion');
     });
 
     it('returns Stage 4 prompt for stage 4', () => {
@@ -946,10 +948,12 @@ describe('Stage Prompts Service', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
-      expect(prompt).toContain('The only XML-style tags you may use are exactly <thinking>, <draft>, <needs>, and <dispatch>.');
+      expect(prompt).toContain('The only XML-style tags you may use are exactly <thinking>, <draft>, <need>, <need-action>, and <dispatch>.');
       expect(prompt).toContain('Flags such as FeelHeardCheck, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>');
       expect(prompt).toContain('never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>');
-      expect(prompt).toContain('The <needs> tag is only for the structured Stage 3 needs JSON shown above');
+      expect(prompt).toContain('Never emit more than one `<need>` or `<need-action>` per turn; if ambiguous, ask before emitting');
+      expect(prompt).toContain('SURFACE-ONE');
+      expect(prompt).toContain('CONFIRM-AND-LOCK');
     });
 
     it('does NOT include old tool call instructions', () => {

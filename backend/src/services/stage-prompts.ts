@@ -89,19 +89,28 @@ Emit this block on every Stage 4 turn. Only action ADD with classification PROPO
 
   const needsSection = stage === 3
     ? `
-When you are in CONFIRMING mode and present a reviewable needs summary, include a hidden structured payload immediately after </thinking>:
-<needs>
-[
+When a single need is ready to capture, include one hidden structured payload immediately after </thinking>:
+<need>
   {
     "need": "short needs label using the user's words",
     "category": "SAFETY|CONNECTION|AUTONOMY|RECOGNITION|MEANING|FAIRNESS",
     "description": "specific need statement in the user's words",
     "evidence": ["short quote or phrase the user actually said"]
   }
-]
-</needs>
-Only include needs this user clearly named or accepted. Never include partner needs. Do not infer extra needs.`
+</need>
+For revisions, removals, or locks, include one hidden action:
+<need-action type="refine" supersedes="need-id">{ "need": "...", "category": "...", "description": "...", "evidence": [] }</need-action>
+<need-action type="delete" needId="need-id" />
+<need-action type="lock" needId="need-id" />
+Only include needs this user clearly named or accepted. Never include partner needs. Do not infer extra needs.
+Never emit more than one <need> or <need-action> per turn; if ambiguous, ask before emitting.`
     : '';
+
+  const allowedTags = stage === 3
+    ? '<thinking>, <draft>, <need>, <need-action>, and <dispatch>'
+    : stage === 4
+      ? '<thinking>, <draft>, <needs>, <stage4_proposals>, and <dispatch>'
+      : '<thinking>, <draft>, <needs>, and <dispatch>';
 
   return `
 OUTPUT FORMAT:
@@ -112,9 +121,9 @@ Strategy: [brief]${strategySection}
 </thinking>${needsSection}${draftSection}
 
 Then write the user-facing response (plain text, no tags).
-IMPORTANT: The only XML-style tags you may use are exactly <thinking>, <draft>, <needs>, and <dispatch>.
+IMPORTANT: The only XML-style tags you may use are exactly ${allowedTags}.
 Flags such as FeelHeardCheck, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>; never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>.
-The <needs> tag is only for the structured Stage 3 needs JSON shown above. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
+The Stage 3 need tags are only for the structured payloads shown above. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
 
 OFF-RAMPS (only when needed):
 - If asked how this works / process: <dispatch>EXPLAIN_PROCESS</dispatch>
@@ -434,6 +443,12 @@ export interface PromptContext {
   isFirstMessage?: boolean;
   /** Current empathy draft content for refinement in Stage 2 */
   empathyDraft?: string | null;
+  /** Stage 3 need currently being refined via reply-context mode */
+  refiningNeed?: {
+    id: string;
+    need: string;
+    category?: string;
+  } | null;
   /** Whether user is actively refining their empathy draft */
   isRefiningEmpathy?: boolean;
   /** Shared context from partner (when guesser is in REFINING status from reconciler flow) */
@@ -872,11 +887,11 @@ ${FACILITATOR_RULES}
 YOUR OPENING (first turn only — after transition):
 Help ${context.userName} shift from what's wrong with the other person to what matters to them personally. Invite them to step back and reflect on what this situation is really about for them — framed around what they need or what's missing, not what the other person is doing wrong.
 
-FOUR MODES:
-- REDIRECTING: User is framing things in terms of the other person. Gently bring the focus back to the user — help them name what feels important or missing for them when that happens.
-- SUGGESTING: User is exploring but hasn't landed on needs language. Offer a need as a suggestion, not a correction — propose a word and check whether it resonates. Let them accept, reject, or refine.
-- DEEPENING: User has named something that matters. Help them explore what that need looks like in practice — what changes when it's met, what it means day-to-day.
-- CONFIRMING: User has articulated what feels like their core needs. Present a clean summary of what they've named so far and tell them it is ready for review in the app. Format as a simple list they can review. Do not ask a direct chat question like "Does that capture it?" when the app's next interaction is the review/confirm button. No hardcoded threshold for when to enter this mode — use your judgment based on conversational signals that they've landed. Do not enter CONFIRMING just because one compressed message names several needs; if the story is high-stakes or contains safety, accountability, autonomy, recognition, belonging, or self-trust, deepen at least one named cluster before capture.
+MODE BEATS:
+- SURFACE-ONE: Help the user name one need in their own words. Capture that one need when it is clear enough.
+- REFINE: If they are editing or clarifying a captured need, focus only on that need until it feels true enough.
+- CONFIRM-AND-LOCK: When the user clearly accepts one captured need, lock that need. Do not lock all needs at once.
+- BRIDGE-TO-NEXT: After one need is captured or locked, invite the next thing that matters without summarizing a whole list.
 
 UNIVERSAL NEEDS FRAMEWORK (internal lens — don't teach this explicitly):
 Safety, Connection, Autonomy, Recognition, Meaning, Fairness. Most positions map to one or two of these.
@@ -896,7 +911,8 @@ FORBIDDEN in Stage 3:
 No-hallucination guard: Use the user's exact words when reflecting needs. Never add context, feelings, or details they didn't provide.
 
 NEEDS CAPTURE:
-When ${context.userName} has clearly landed on their own needs and you present a clean summary for review, set NeedsReady:Y and include the hidden <needs> block. In visible text, say you have captured a draft of what matters to them for their review and that they can use the review button to confirm or adjust it. Do not ask "Does that capture it?" or invite an inline chat answer unless you are also keeping the chat interaction open. Do not say anything about sharing, partner readiness, or side-by-side reveal.
+Never emit more than one \`<need>\` or \`<need-action>\` per turn; if ambiguous, ask before emitting
+When ${context.userName} has clearly landed on one need, set NeedsReady:Y and include one hidden <need> block for that need only. In visible text, acknowledge the need and invite either refinement/locking or the next thing that matters. Do not say anything about sharing, partner readiness, or side-by-side reveal.
 
 COMPRESSED-NEEDS PACING:
 If ${context.userName} gives one dense answer that stacks multiple real needs, first reflect the clusters and ask one deepening question about the need that carries the most risk or consequence. For James/Catherine-like no-shared-agreement pressure, make sure safety/accountability/autonomy/self-trust and care/belonging/recognition/heard needs have enough user-owned texture before NeedsReady:Y. Capture after that texture exists, not at the first well-worded list.
@@ -916,6 +932,12 @@ ${buildResponseProtocol(3)}`;
   const earlyStage3 = context.turnCount <= 2;
   if (earlyStage3) {
     dynamicParts.push('EARLY STAGE 3: User just arrived from empathy work. They may still be processing emotions — give them a breath before asking what matters.');
+  }
+
+  if (context.refiningNeed) {
+    dynamicParts.push(`REFINING NEED CONTEXT:
+The user is refining need ${context.refiningNeed.id} currently reading: "${context.refiningNeed.need}".
+Focus on this need only this turn. If the user's update is clear, emit <need-action type="refine" supersedes="${context.refiningNeed.id}"> for the revised version. If they dismiss or say never mind, respond conversationally and do not emit a tag.`);
   }
 
   // Content-aware pacing (every turn): let what the user said drive the mode,

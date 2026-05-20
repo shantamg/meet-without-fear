@@ -40,7 +40,8 @@ import { handleDispatch, type DispatchContext } from '../services/dispatch-handl
 import { getMilestoneContext, getSharedContentContext } from '../services/shared-context';
 import { CONTEXT_WINDOW, trimConversationHistory } from '../utils/token-budget';
 import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from '../services/llm-telemetry';
-import { captureProposedNeedsForUser } from '../services/needs';
+import { captureProposedNeedsForUser, captureSingleNeedForUser } from '../services/needs';
+import { applyNeedAction } from '../services/needs-edit-applier.service';
 import { cleanVisibleAIText } from '../utils/visible-text';
 import { captureStage4Turn } from '../services/stage4-capture.service';
 import { applyStage4AutoClosureFromSignal } from '../services/stage4-auto-closure.service';
@@ -903,6 +904,7 @@ export async function getConversationHistory(
         content: m.content,
         stage: m.stage,
         timestamp: m.timestamp.toISOString(),
+        refiningNeedId: m.refiningNeedId ?? null,
       })),
       hasMore,
     });
@@ -1203,7 +1205,7 @@ export async function getInitialMessage(
  * SSE event type definitions
  */
 type SSEEvent =
-  | { event: 'user_message'; data: { id: string; content: string; timestamp: string } }
+  | { event: 'user_message'; data: { id: string; content: string; timestamp: string; refiningNeedId?: string | null } }
   | { event: 'chunk'; data: { text: string } }
   | { event: 'metadata'; data: { metadata: SessionStateToolInput } }
   | { event: 'text_complete'; data: { metadata: SessionStateToolInput } }
@@ -1258,7 +1260,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const { content } = parseResult.data;
+    const { content, refiningNeedId } = parseResult.data;
 
     // Check session exists and user has access
     const session = await prisma.session.findFirst({
@@ -1303,6 +1305,29 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
     const currentStage = progress?.stage ?? 0;
 
+    let refiningNeedContext: { id: string; need: string; category?: string } | null = null;
+    if (currentStage === 3 && refiningNeedId) {
+      const vessel = await prisma.userVessel.findUnique({
+        where: { userId_sessionId: { userId: user.id, sessionId } },
+        select: { id: true },
+      });
+      const refiningNeed = vessel
+        ? await prisma.identifiedNeed.findFirst({
+            where: { id: refiningNeedId, vesselId: vessel.id },
+            select: { id: true, need: true, category: true },
+          })
+        : null;
+      if (!refiningNeed) {
+        res.status(400).json({ error: 'Invalid refiningNeedId' });
+        return;
+      }
+      refiningNeedContext = {
+        id: refiningNeed.id,
+        need: refiningNeed.need,
+        category: refiningNeed.category,
+      };
+    }
+
     // =========================================================================
     // Save user message
     // =========================================================================
@@ -1313,6 +1338,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         role: 'USER',
         content,
         stage: currentStage,
+        refiningNeedId: refiningNeedContext?.id ?? null,
       },
     });
     await touchUserSessionActivity(sessionId, user.id, userMessage.timestamp);
@@ -1347,6 +1373,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         id: userMessage.id,
         content: userMessage.content,
         timestamp: userMessage.timestamp.toISOString(),
+        refiningNeedId: userMessage.refiningNeedId ?? null,
       },
     });
 
@@ -1609,6 +1636,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       sharedContextFromPartner: stage2BSharedContext || undefined,
       empathyDraft: empathyDraftContent || undefined,
       isRefiningEmpathy: isRefiningEmpathy || undefined,
+      refiningNeed: refiningNeedContext,
       stage4InventoryContext,
       stage4OpenNeeds,
       stage4ListenFirstMode,
@@ -1678,6 +1706,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     let tagTrapBuffer = ''; // Buffer for checking semantic tags after thinking
     let thinkingContent = ''; // Store hidden thinking for logging
     let draftContent = ''; // Store draft content for metadata
+    let needTagContent = ''; // Store structured single Stage 3 need metadata
+    let needActionTagContent = ''; // Store structured Stage 3 need action metadata
     let needsTagContent = ''; // Store structured Stage 3 needs metadata
     let stage4ProposalsTagContent = ''; // Store structured Stage 4 proposal metadata
     let dispatchTagContent = ''; // Store dispatch tag content for handling
@@ -1717,6 +1747,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           .replace(/<thinking>[\s\S]*/gi, '')                // Unclosed thinking (strip to end)
           .replace(/<\/thinking>/gi, '')                     // Orphaned closing tag
           .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
+          .replace(/<need>[\s\S]*?<\/need>/gi, '')
+          .replace(/<need-action\b[^>]*>[\s\S]*?<\/need-action>/gi, '')
+          .replace(/<need-action\b[^>]*\/>/gi, '')
           .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
           .replace(/<stage4_proposals>[\s\S]*?<\/stage4_proposals>/gi, '')
           .replace(/<stage4_proposals>[\s\S]*/gi, '')
@@ -1751,6 +1784,18 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         }
 
         // Extract structured Stage 3 needs if present.
+        const needMatch = buffer.match(/<need>([\s\S]*?)<\/need>/i);
+        if (needMatch) {
+          needTagContent = needMatch[1].trim();
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN NEED]:`, needTagContent.substring(0, 160) + (needTagContent.length > 160 ? '...' : ''));
+        }
+
+        const needActionMatch = buffer.match(/<need-action\b[^>]*>[\s\S]*?<\/need-action>|<need-action\b[^>]*\/>/i);
+        if (needActionMatch) {
+          needActionTagContent = needActionMatch[0].trim();
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN NEED ACTION]:`, needActionTagContent.substring(0, 160) + (needActionTagContent.length > 160 ? '...' : ''));
+        }
+
         const needsMatch = buffer.match(/<needs>([\s\S]*?)<\/needs>/i);
         if (needsMatch) {
           needsTagContent = needsMatch[1].trim();
@@ -1774,6 +1819,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         // Do NOT use .trim() - it breaks word spacing between chunks
         return buffer
           .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
+          .replace(/<need>[\s\S]*?<\/need>/gi, '')
+          .replace(/<need-action\b[^>]*>[\s\S]*?<\/need-action>/gi, '')
+          .replace(/<need-action\b[^>]*\/>/gi, '')
           .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
           .replace(/<stage4_proposals>[\s\S]*?<\/stage4_proposals>/gi, '')
           .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
@@ -1820,6 +1868,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             // Check for complete tags
             const hasDraftStart = tagTrapBuffer.includes('<draft>');
             const hasDraftEnd = tagTrapBuffer.includes('</draft>');
+            const hasNeedStart = tagTrapBuffer.includes('<need>');
+            const hasNeedEnd = tagTrapBuffer.includes('</need>');
+            const hasNeedActionStart = /<need-action\b/i.test(tagTrapBuffer);
+            const hasNeedActionEnd = /<\/need-action>|<need-action\b[^>]*\/>/i.test(tagTrapBuffer);
             const hasNeedsStart = tagTrapBuffer.includes('<needs>');
             const hasNeedsEnd = tagTrapBuffer.includes('</needs>');
             const hasStage4ProposalsStart = tagTrapBuffer.includes('<stage4_proposals>');
@@ -1829,12 +1881,14 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
             // Check for partial tag starts at the end of buffer
             // Matches: <d..., <n..., </d..., </n..., etc. - anything that could become
-            // <draft>, </draft>, <dispatch>, </dispatch>, <needs>, </needs>,
+            // <draft>, </draft>, <dispatch>, </dispatch>, <need>, <need-action>, <needs>, </needs>,
             // <stage4_proposals>, or </stage4_proposals>.
-            const hasPotentialTagStart = /<\/?(d|n|s)[a-z0-9_]*$/i.test(tagTrapBuffer);
+            const hasPotentialTagStart = /<\/?(d|n|s)[a-z0-9_-]*$/i.test(tagTrapBuffer);
 
             // If we see opening tags, wait for closing tags
             const waitingForDraft = hasDraftStart && !hasDraftEnd;
+            const waitingForNeed = hasNeedStart && !hasNeedEnd;
+            const waitingForNeedAction = hasNeedActionStart && !hasNeedActionEnd;
             const waitingForNeeds = hasNeedsStart && !hasNeedsEnd;
             const waitingForStage4Proposals = hasStage4ProposalsStart && !hasStage4ProposalsEnd;
             const waitingForDispatch = hasDispatchStart && !hasDispatchEnd;
@@ -1844,6 +1898,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             // 2. Check if remaining content looks like response text (not starting with <)
             const strippedBuffer = tagTrapBuffer
               .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
+              .replace(/<need>[\s\S]*?<\/need>/gi, '')
+              .replace(/<need-action\b[^>]*>[\s\S]*?<\/need-action>/gi, '')
+              .replace(/<need-action\b[^>]*\/>/gi, '')
               .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
               .replace(/<stage4_proposals>[\s\S]*?<\/stage4_proposals>/gi, '')
               .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
@@ -1855,7 +1912,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             // - No partial tag at the end that might become a hidden semantic tag
             // OR buffer is too big (safety limit)
             const hasResponseContent = trimmedStripped.length > 50 && !trimmedStripped.startsWith('<');
-            const safeToExit = !waitingForDraft && !waitingForNeeds && !waitingForStage4Proposals && !waitingForDispatch && hasResponseContent && !hasPotentialTagStart;
+            const safeToExit = !waitingForDraft && !waitingForNeed && !waitingForNeedAction && !waitingForNeeds && !waitingForStage4Proposals && !waitingForDispatch && hasResponseContent && !hasPotentialTagStart;
 
             if (safeToExit || tagTrapBuffer.length > 2000) {
               isTrappingTags = false;
@@ -1871,11 +1928,13 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             // Check if we have unclosed tags that need buffering
             const hasUnclosedDispatch = combined.includes('<dispatch>') && !combined.includes('</dispatch>');
             const hasUnclosedDraft = combined.includes('<draft>') && !combined.includes('</draft>');
+            const hasUnclosedNeed = combined.includes('<need>') && !combined.includes('</need>');
+            const hasUnclosedNeedAction = /<need-action\b/i.test(combined) && !(/<\/need-action>|<need-action\b[^>]*\/>/i.test(combined));
             const hasUnclosedNeeds = combined.includes('<needs>') && !combined.includes('</needs>');
             const hasUnclosedStage4Proposals = combined.includes('<stage4_proposals>') && !combined.includes('</stage4_proposals>');
-            const hasPotentialTagStart = /<\/?(d|n|s)[a-z0-9_]*$/i.test(combined);
+            const hasPotentialTagStart = /<\/?(d|n|s)[a-z0-9_-]*$/i.test(combined);
 
-            if (hasUnclosedDispatch || hasUnclosedDraft || hasUnclosedNeeds || hasUnclosedStage4Proposals || hasPotentialTagStart) {
+            if (hasUnclosedDispatch || hasUnclosedDraft || hasUnclosedNeed || hasUnclosedNeedAction || hasUnclosedNeeds || hasUnclosedStage4Proposals || hasPotentialTagStart) {
               // Buffer and wait for closing tag
               tagTrapBuffer = combined;
             } else {
@@ -1934,8 +1993,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       // The accumulated text may contain <draft>...</draft> that needs stripping
       // =========================================================================
       const needsBlock = needsTagContent ? `<needs>${needsTagContent}</needs>\n` : '';
+      const needBlock = needTagContent ? `<need>${needTagContent}</need>\n` : '';
+      const needActionBlock = needActionTagContent ? `${needActionTagContent}\n` : '';
       const stage4ProposalsBlock = stage4ProposalsTagContent ? `<stage4_proposals>${stage4ProposalsTagContent}</stage4_proposals>\n` : '';
-      const fullResponse = `<thinking>${thinkingContent}</thinking>\n${needsBlock}${stage4ProposalsBlock}${accumulatedText}`;
+      const fullResponse = `<thinking>${thinkingContent}</thinking>\n${needBlock}${needActionBlock}${needsBlock}${stage4ProposalsBlock}${accumulatedText}`;
       const parsed = parseMicroTagResponse(fullResponse);
 
       // Extract metadata from parsed response
@@ -1949,6 +2010,15 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       }
       if (currentStage === 3 && parsed.proposedNeeds.length > 0) {
         metadata.proposedNeeds = parsed.proposedNeeds;
+      }
+      if (currentStage === 3 && parsed.proposedNeed) {
+        metadata.proposedNeed = parsed.proposedNeed;
+      }
+      if (currentStage === 3 && parsed.needAction) {
+        metadata.needAction = parsed.needAction;
+      }
+      if (currentStage === 3 && parsed.needParseError) {
+        metadata.needParseError = parsed.needParseError;
       }
 
       // Use draftContent captured during streaming (more reliable than re-parsing)
@@ -1966,6 +2036,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         offerReadyToShare: metadata.offerReadyToShare,
         hasDraft: !!parsed.draft,
         proposedNeedsCount: metadata.proposedNeeds?.length ?? 0,
+        proposedNeed: !!metadata.proposedNeed,
+        needAction: metadata.needAction?.type ?? null,
+        needParseError: metadata.needParseError ?? null,
         stage4ProposalCount: metadata.stage4Proposals?.length ?? 0,
         dispatchTag: dispatchTagContent || parsed.dispatchTag,
       });
@@ -2074,7 +2147,41 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       return;
     }
 
-    if (currentStage === 3 && metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
+    if (currentStage === 3 && metadata.needParseError) {
+      logger.warn(`[sendMessageStream:${requestId}] Ignoring invalid Stage 3 need tag: ${metadata.needParseError}`);
+    }
+
+    if (currentStage === 3 && metadata.proposedNeed) {
+      const captured = await captureSingleNeedForUser(sessionId, user.id, metadata.proposedNeed);
+      metadata.needsCaptured = true;
+      logger.info(`[sendMessageStream:${requestId}] Captured single need ${captured.need.id} for user ${user.id}`);
+
+      await publishSessionEvent(sessionId, 'need.captured', {
+        forUserId: user.id,
+        userId: user.id,
+        need: captured.need,
+        capturedAt: captured.capturedAt.toISOString(),
+      }).catch((err) =>
+        logger.warn(`[sendMessageStream:${requestId}] Failed to publish need.captured:`, err)
+      );
+    } else if (currentStage === 3 && metadata.needAction) {
+      const applied = await applyNeedAction(sessionId, user.id, metadata.needAction);
+      metadata.needsCaptured = applied.action === 'refine';
+      const eventType = applied.action === 'refine'
+        ? 'need.refined'
+        : applied.action === 'delete'
+          ? 'need.deleted'
+          : 'need.locked';
+      await publishSessionEvent(sessionId, eventType, {
+        forUserId: user.id,
+        userId: user.id,
+        oldId: applied.oldNeed?.id,
+        newId: applied.action === 'refine' ? applied.need?.id : undefined,
+        need: applied.need,
+      }).catch((err) =>
+        logger.warn(`[sendMessageStream:${requestId}] Failed to publish ${eventType}:`, err)
+      );
+    } else if (currentStage === 3 && metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
       const captured = await captureProposedNeedsForUser(sessionId, user.id, metadata.proposedNeeds);
       metadata.needsCaptured = captured.needs.length > 0;
       logger.info(`[sendMessageStream:${requestId}] Captured ${captured.needs.length} proposed needs for user ${user.id}`);

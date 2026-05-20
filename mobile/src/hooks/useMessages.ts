@@ -175,6 +175,7 @@ export interface SendMessageParams {
   content: string;
   emotionalIntensity?: number;
   emotionalContext?: string;
+  refiningNeedId?: string | null;
   /** Optional current stage (for optimistic message placement) */
   currentStage?: Stage;
 }
@@ -220,12 +221,14 @@ export function useSendMessage(
       content,
       emotionalIntensity,
       emotionalContext,
+      refiningNeedId,
     }: SendMessageParams) => {
       const request: SendMessageRequest = {
         sessionId,
         content,
         emotionalIntensity,
         emotionalContext,
+        refiningNeedId,
       };
       return post<SendMessageResponse, SendMessageRequest>(
         `/sessions/${sessionId}/messages`,
@@ -237,7 +240,7 @@ export function useSendMessage(
     // =========================================================================
     // OPTIMISTIC UPDATE: Add user message to cache immediately
     // =========================================================================
-    onMutate: async ({ sessionId, content, currentStage }) => {
+    onMutate: async ({ sessionId, content, currentStage, refiningNeedId }) => {
       // Cancel any outgoing refetches so they don't overwrite our optimistic update
       await queryClient.cancelQueries({ queryKey: messageKeys.infinite(sessionId) });
       await queryClient.cancelQueries({ queryKey: messageKeys.list(sessionId) });
@@ -260,6 +263,7 @@ export function useSendMessage(
         content,
         stage: currentStage ?? Stage.ONBOARDING,
         timestamp: new Date().toISOString(),
+        refiningNeedId: refiningNeedId ?? null,
       };
 
       // Helper to add optimistic message to regular cache

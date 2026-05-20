@@ -6,7 +6,7 @@
  */
 
 import type { Tool } from '@aws-sdk/client-bedrock-runtime';
-import type { CapturedNeedInput } from '@meet-without-fear/shared';
+import type { CapturedNeedInput, ParsedNeedAction } from '@meet-without-fear/shared';
 import type { ParsedStage4ProposalInput } from '../utils/micro-tag-parser';
 
 /**
@@ -69,6 +69,9 @@ export interface SessionStateToolInput {
   proposedStrategies?: string[];
   stage4Proposals?: ParsedStage4ProposalInput[];
   proposedNeeds?: CapturedNeedInput[];
+  proposedNeed?: CapturedNeedInput;
+  needAction?: ParsedNeedAction;
+  needParseError?: string;
   needsCaptured?: boolean;
   stage4Capture?: {
     appliedOperationCount: number;

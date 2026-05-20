@@ -90,6 +90,10 @@ export type SessionEventType =
   | 'empathy.status_updated' // Reconciler completed, empathy statuses changed
   // Stage 3: Need Mapping events
   | 'session.needs_extracted' // Current user's structured needs were captured
+  | 'need.captured'
+  | 'need.refined'
+  | 'need.locked'
+  | 'need.deleted'
   | 'partner.needs_confirmed' // Partner confirmed their identified needs
   | 'partner.needs_shared' // Partner consented to share needs
   | 'partner.needs_validated' // Partner validated or rejected side-by-side needs

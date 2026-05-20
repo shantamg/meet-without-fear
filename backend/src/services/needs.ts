@@ -9,7 +9,7 @@
 
 import { resetBedrockClient } from '../lib/bedrock';
 import { prisma } from '../lib/prisma';
-import { NeedCategory, type CapturedNeedInput } from '@meet-without-fear/shared';
+import { NeedCategory, type CapturedNeedInput, type IdentifiedNeedDTO } from '@meet-without-fear/shared';
 import { cleanVisibleAIText } from '../utils/visible-text';
 
 // ============================================================================
@@ -31,6 +31,9 @@ export interface IdentifiedNeedRecord {
   evidence: string[];
   aiConfidence: number;
   confirmed: boolean;
+  lockedAt?: Date | null;
+  deletedAt?: Date | null;
+  supersededByNeedId?: string | null;
   createdAt: Date;
   needsReframing?: boolean;
   reframingWarning?: string;
@@ -38,6 +41,11 @@ export interface IdentifiedNeedRecord {
 
 export interface CaptureProposedNeedsResult {
   needs: IdentifiedNeedRecord[];
+  capturedAt: Date;
+}
+
+export interface CaptureSingleNeedResult {
+  need: IdentifiedNeedDTO;
   capturedAt: Date;
 }
 
@@ -77,6 +85,35 @@ export function withNeedReframingWarning<T extends { need: string }>(
     ...need,
     needsReframing: !validation.ok,
     reframingWarning: validation.warning,
+  };
+}
+
+export function toIdentifiedNeedDTO(need: IdentifiedNeedRecord): IdentifiedNeedDTO {
+  const warned = withNeedReframingWarning(need);
+  const lockedAt = need.lockedAt ?? null;
+  const deletedAt = need.deletedAt ?? null;
+  const supersededByNeedId = need.supersededByNeedId ?? null;
+  return {
+    id: need.id,
+    need: need.need,
+    category: need.category,
+    description: need.need,
+    evidence: need.evidence,
+    confirmed: need.confirmed,
+    lockedAt: lockedAt?.toISOString() ?? null,
+    deletedAt: deletedAt?.toISOString() ?? null,
+    supersededByNeedId,
+    status: deletedAt
+      ? 'deleted'
+      : supersededByNeedId
+        ? 'superseded'
+        : lockedAt
+          ? 'locked'
+          : 'draft',
+    aiConfidence: need.aiConfidence,
+    createdAt: need.createdAt.toISOString(),
+    needsReframing: warned.needsReframing,
+    reframingWarning: warned.reframingWarning,
   };
 }
 
@@ -169,6 +206,66 @@ export async function captureProposedNeedsForUser(
         category: need.category as unknown as NeedCategory,
       })
     ),
+    capturedAt,
+  };
+}
+
+export async function captureSingleNeedForUser(
+  sessionId: string,
+  userId: string,
+  item: CapturedNeedInput
+): Promise<CaptureSingleNeedResult> {
+  const vessel = await getOrCreateUserVessel(sessionId, userId);
+  const capturedAt = new Date();
+
+  const evidence = Array.isArray(item.evidence)
+    ? item.evidence.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+
+  const created = await prisma.$transaction(async (tx) => {
+    const need = await tx.identifiedNeed.create({
+      data: {
+        vesselId: vessel.id,
+        need: cleanVisibleAIText(item.description || item.need),
+        category: item.category,
+        evidence: evidence.map((entry) => cleanVisibleAIText(entry)).filter(Boolean),
+        aiConfidence: 0.85,
+        confirmed: false,
+      },
+    });
+
+    const progress = await tx.stageProgress.findUnique({
+      where: {
+        sessionId_userId_stage: {
+          sessionId,
+          userId,
+          stage: 3,
+        },
+      },
+    });
+
+    if (progress) {
+      const gates = (progress.gatesSatisfied as Record<string, unknown> | null) ?? {};
+      await tx.stageProgress.update({
+        where: { id: progress.id },
+        data: {
+          gatesSatisfied: {
+            ...gates,
+            needsCaptured: true,
+            needsCapturedAt: capturedAt.toISOString(),
+          },
+        },
+      });
+    }
+
+    return need;
+  });
+
+  return {
+    need: toIdentifiedNeedDTO({
+      ...created,
+      category: created.category as unknown as NeedCategory,
+    }),
     capturedAt,
   };
 }
