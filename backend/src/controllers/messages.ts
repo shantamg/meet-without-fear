@@ -47,6 +47,7 @@ import { cleanVisibleAIText } from '../utils/visible-text';
 import { captureStage4Turn } from '../services/stage4-capture.service';
 import { applyStage4AutoClosureFromSignal } from '../services/stage4-auto-closure.service';
 import { isExplicitAskForInput } from '../services/stage4-prompts';
+import { getStage4State as buildStage4State, Stage4StateNotFoundError } from '../services/stage4-state';
 
 // ============================================================================
 // Helpers
@@ -115,6 +116,65 @@ async function getStage4InventoryPromptContext(sessionId: string, currentUserId:
       return `- ${details.join(' | ')}`;
     })
     .join('\n');
+}
+
+async function getStage4WalkthroughPromptContext(
+  sessionId: string,
+  currentUserId: string
+): Promise<string | null> {
+  try {
+    const state = await buildStage4State(sessionId, currentUserId);
+    const walkthrough = state.walkthrough;
+    const lines = [
+      `phase=${walkthrough.phase}`,
+      `currentIndex=${walkthrough.currentIndex + 1}`,
+      `totalInPhase=${walkthrough.totalInPhase}`,
+    ];
+
+    if (walkthrough.currentNeed) {
+      lines.push(
+        `currentNeedId=${walkthrough.currentNeed.id}`,
+        `currentNeedLabel="${walkthrough.currentNeed.label}"`,
+        `currentNeedSource=${walkthrough.currentNeed.source}`,
+        `currentNeedStatus=${walkthrough.currentNeed.status}`,
+      );
+    } else {
+      lines.push('currentNeedId=null');
+    }
+
+    const formatNeed = (need: typeof walkthrough.ownNeeds[number]) =>
+      `- id=${need.id} | status=${need.status} | label="${need.label}"`;
+    if (walkthrough.ownNeeds.length > 0) {
+      lines.push('ownNeeds:', ...walkthrough.ownNeeds.map(formatNeed));
+    }
+    if (walkthrough.partnerNeeds.length > 0) {
+      lines.push('partnerNeeds:', ...walkthrough.partnerNeeds.map(formatNeed));
+    }
+
+    const currentProposalLines = walkthrough.proposalGroups
+      .flatMap((group) =>
+        group.proposals.map((proposal) => {
+          const details = [
+            `- group=${group.key}`,
+            `id=${proposal.id}`,
+            `kind=${proposal.kind}`,
+            `description="${proposal.description}"`,
+          ];
+          if (proposal.duration) details.push(`duration="${proposal.duration}"`);
+          if (proposal.measureOfSuccess) details.push(`success="${proposal.measureOfSuccess}"`);
+          return details.join(' | ');
+        })
+      );
+    if (currentProposalLines.length > 0) {
+      lines.push('currentNeedProposals:', ...currentProposalLines);
+    }
+
+    return lines.join('\n');
+  } catch (error) {
+    if (error instanceof Stage4StateNotFoundError) return null;
+    logger.warn('[getStage4WalkthroughPromptContext] failed', { error });
+    return null;
+  }
 }
 
 /**
@@ -1611,6 +1671,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       ? await getStage4InventoryPromptContext(sessionId, user.id)
       : null;
 
+    const stage4WalkthroughContext = currentStage === 4
+      ? await getStage4WalkthroughPromptContext(sessionId, user.id)
+      : null;
+
     const stage4OpenNeeds = currentStage === 4
       ? await getStage4OpenNeedsForPrompt(sessionId, user.id)
       : null;
@@ -1639,6 +1703,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       isRefiningEmpathy: isRefiningEmpathy || undefined,
       refiningNeed: refiningNeedContext,
       stage4InventoryContext,
+      stage4WalkthroughContext,
       stage4OpenNeeds,
       stage4ListenFirstMode,
       topicFrame: session.topicFrameConfirmedAt ? session.topicFrame : undefined,

@@ -490,6 +490,8 @@ export interface PromptContext {
   previousEmpathyContent?: string | null;
   /** Stage 4: active proposal inventory with stable IDs for typed add/revise/remove decisions */
   stage4InventoryContext?: string | null;
+  /** Stage 4: canonical walkthrough phase/current need/proposals from the Stage 4 state service */
+  stage4WalkthroughContext?: string | null;
   /** Stage 4 Phase 6 — open (not declined, not yet willing-covered) needs surfaced for COVERAGE_REVIEW proactive raising */
   stage4OpenNeeds?: Array<{ needLabel: string }> | null;
   /** Stage 4 Phase 6 — when true, main-chat persona switches to listen-first reflection mode (session RESOLVED, no check-in yet, user hasn't asked for input) */
@@ -1012,6 +1014,8 @@ Not a proposal: guarded process consent or a boundary about the exercise ("I can
 Not a proposal yet: a desired outcome, test, or success marker ("I'd walk away knowing where I stand", "I could live with either answer", "I'd know whether this can change"). Reflect it as a success criterion, then ask what concrete action would produce that outcome.
 
 When a proposal is vague, help sharpen it by asking about ONE missing criterion at a time. Don't dump all four criteria at once.
+When the user has already provided enough context to infer a reasonable duration, success marker, or boundary condition, fill that detail in provisionally instead of asking another question. Say it as a draft/assumption ("I'm hearing this as...") and keep it revisable.
+Only ask a follow-up when filling the missing detail would require a real leap or could change the meaning of the proposal.
 
 AI IDEAS:
 Ask before contributing AI ideas. If ${context.userName} declines AI ideas, accept that and keep inviting their own options.
@@ -1054,6 +1058,14 @@ ${buildResponseProtocol(4)}`;
   const dynamicParts: string[] = [];
   const baseDynamic = buildBaseDynamicGuidance(context);
   if (baseDynamic) dynamicParts.push(baseDynamic);
+  if (context.stage4WalkthroughContext) {
+    dynamicParts.push(`CANONICAL STAGE 4 WALKTHROUGH STATE:
+${context.stage4WalkthroughContext}
+
+Use this as the source of truth for which need is being explored right now. Stay on currentNeed unless the user clearly asks to move on, the current need is already marked covered/skipped in this state, or the walkthrough phase is QUALITY_REVIEW.
+Do not choose a different open need from the broader coverage list while currentNeed is present.
+If the user gives a concrete enough option for currentNeed, capture or revise the proposal and then either move forward or ask whether they want one more option for that same need. Do not require every detail before moving on when missing details can be inferred provisionally from context.`);
+  }
   if (context.stage4InventoryContext) {
     dynamicParts.push(`CURRENT STAGE 4 PROPOSAL INVENTORY:
 ${context.stage4InventoryContext}

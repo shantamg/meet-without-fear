@@ -372,6 +372,28 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('emit action REVISE with targetProposalId instead of ADD');
     });
 
+    it('Stage 4 prompt includes canonical walkthrough state and keeps focus on current need', () => {
+      const context = createContext({
+        stage4WalkthroughContext:
+          'phase=MY_NEEDS\ncurrentNeedId=need-1\ncurrentNeedLabel="To feel taken seriously"\ncurrentNeedStatus=in_progress',
+      });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('CANONICAL STAGE 4 WALKTHROUGH STATE');
+      expect(prompt).toContain('currentNeedLabel="To feel taken seriously"');
+      expect(prompt).toContain('source of truth for which need is being explored right now');
+      expect(prompt).toContain('Do not choose a different open need');
+    });
+
+    it('Stage 4 prompt tells the AI to infer missing proposal details when context supports it', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('infer a reasonable duration, success marker, or boundary condition');
+      expect(prompt).toContain('fill that detail in provisionally instead of asking another question');
+      expect(prompt).toContain('Only ask a follow-up when filling the missing detail would require a real leap');
+    });
+
     it('returns topic-articulation prompt for stage 0 with isInvitationPhase', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };
