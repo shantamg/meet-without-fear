@@ -467,7 +467,7 @@ export async function expectNeedsSummaryFromApi(
 }
 
 /**
- * Share locked Stage 3 needs through the visible send panel.
+ * Share Stage 3 needs through the needs drawer.
  */
 export async function confirmNeedsSummaryAndConsent(
   page: Page,
@@ -477,9 +477,13 @@ export async function confirmNeedsSummaryAndConsent(
   label: string,
   timeout = 30000
 ): Promise<void> {
-  await expect(page.locator('[data-testid^="inline-need-card-"]').first()).toBeVisible({ timeout });
-  await expect(page.getByTestId('needs-send-button')).toBeVisible({ timeout });
-  await page.getByTestId('needs-send-button').click();
+  await expect(page.getByTestId('needs-drawer-open-button')).toBeVisible({ timeout });
+  await page.getByTestId('needs-drawer-open-button').click();
+  await expect(page.getByTestId('needs-drawer-send')).toBeVisible({ timeout });
+  page.once('dialog', async (dialog) => {
+    await dialog.accept();
+  });
+  await page.getByTestId('needs-drawer-send').click();
 
   await waitForProgressGate(api, apiBaseUrl, sessionId, 'needsShared', label, timeout);
 }

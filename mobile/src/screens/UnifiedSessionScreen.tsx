@@ -7,11 +7,12 @@
  */
 
 import { ReactNode, useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, ScrollView, AppState, Keyboard, KeyboardAvoidingView, Platform, Share, LayoutChangeEvent, StyleSheet } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, ScrollView, AppState, Keyboard, KeyboardAvoidingView, Platform, Share, LayoutChangeEvent, StyleSheet, Alert } from 'react-native';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { Trash2, X } from 'lucide-react-native';
 import {
   Stage,
   STAGE_COLORS,
@@ -25,6 +26,8 @@ import {
   Stage4Phase,
   Stage4SelectionDecision,
   IdentifiedNeedDTO,
+  NeedEditConversationTurn,
+  NeedEditPlan,
 } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem, ChatCustomCardItem } from '../components/ChatInterface';
@@ -39,7 +42,7 @@ import { SessionEntryMoodCheck } from '../components/SessionEntryMoodCheck';
 import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
 import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
 import { ShareTopicPanel } from '../components/ShareTopicPanel';
-// NeedsSection removed - needs render inline in the chat timeline.
+// NeedsSection removed - needs render in a drawer opened from the bottom CTA.
 // StrategyPool/StrategyRanking/OverlapReveal removed - replaced by Stage4RedesignPanel
 import { WaitingRoom } from '../components/WaitingRoom';
 import { AgreementCard } from '../components/AgreementCard';
@@ -54,7 +57,11 @@ import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDr
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
 import { PartnerInfoDrawer } from '../components/PartnerInfoDrawer';
-import { NeedCard } from '../components/NeedCard';
+import {
+  createNeedRefinementMessage,
+  NeedRefinementChatMessage,
+  NeedRefinementDrawer,
+} from '../components/NeedRefinementDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
 import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
 import { TypewriterText } from '../components/TypewriterText';
@@ -89,6 +96,8 @@ import {
   useSendStage4SubChatMessage,
   useResolveStage4SubChat,
   patchNeedsCacheWithNeed,
+  useApplyNeedEdits,
+  useInterpretNeedEdit,
   useRemoveNeed,
   useRequestStrategySuggestions,
   useUpdateStage4WalkthroughNeed,
@@ -103,7 +112,7 @@ import {
 } from '../utils/realtimeInvalidation';
 import { useToast } from '../contexts/ToastContext';
 import { createStyles } from '../theme/styled';
-import { appWidthStyle, useAppAppearance } from '../theme';
+import { appWidthStyle, modalPageStyle, useAppAppearance } from '../theme';
 import { WaitingBanner } from '../components/WaitingBanner';
 import {
   trackInvitationSent,
@@ -621,6 +630,8 @@ export function UnifiedSessionScreen({
     isSharingEmpathy,
     isResubmittingEmpathy,
     isRespondingToShareOffer,
+    isConfirmingNeeds,
+    isSharingNeeds,
 
     // Memory suggestion
     memorySuggestion,
@@ -649,6 +660,7 @@ export function UnifiedSessionScreen({
     handleShareEmpathy,
     handleResubmitEmpathy,
     handleValidatePartnerEmpathy,
+    handleConfirmAllNeeds,
     handleConsentToShareNeeds,
     handleValidateNeedsReveal,
     handleNeedsNotValidYet,
@@ -1287,16 +1299,20 @@ export function UnifiedSessionScreen({
     lastTrackedStageRef.current = currentStage;
   }, [currentStage, sessionId]);
 
-  const [refineModeNeedId, setRefineModeNeedId] = useState<string | null>(null);
-  const [selectedNeedId, setSelectedNeedId] = useState<string | null>(null);
-  const refineModeNeed = useMemo(
-    () => needs?.find((need) => need.id === refineModeNeedId) ?? null,
-    [needs, refineModeNeedId]
+  const [needRefinementNeedId, setNeedRefinementNeedId] = useState<string | null>(null);
+  const [needRefinementThreads, setNeedRefinementThreads] = useState<Record<string, NeedRefinementChatMessage[]>>({});
+  const [showNeedsDrawer, setShowNeedsDrawer] = useState(false);
+  const activeNeeds = useMemo(
+    () => (needs ?? []).filter((need) => !need.deletedAt && !need.supersededByNeedId),
+    [needs]
   );
-  const selectedNeed = useMemo(
-    () => needs?.find((need) => need.id === selectedNeedId) ?? null,
-    [needs, selectedNeedId]
+  const needRefinementNeed = useMemo(
+    () => needs?.find((need) => need.id === needRefinementNeedId) ?? null,
+    [needs, needRefinementNeedId]
   );
+  const needRefinementMessages = needRefinementNeedId
+    ? (needRefinementThreads[needRefinementNeedId] ?? [])
+    : [];
 
   // Wrapped sendMessage with tracking
   // Cache-First Architecture: Ghost dots are now derived from last message role
@@ -1304,8 +1320,8 @@ export function UnifiedSessionScreen({
   // When AI response arrives (via Ably), it's added to cache → last message is AI → dots hide
   const sendMessageWithTracking = useCallback((message: string) => {
     trackMessageSent(sessionId, message.length);
-    sendMessage(message, refineModeNeedId ? { refiningNeedId: refineModeNeedId } : undefined);
-  }, [sessionId, sendMessage, refineModeNeedId]);
+    sendMessage(message);
+  }, [sessionId, sendMessage]);
 
   const usePlainCreatedSessionChat =
     __DEV__ &&
@@ -1541,6 +1557,15 @@ export function UnifiedSessionScreen({
       (currentStage === Stage.STRATEGIC_REPAIR || session?.status === SessionStatus.RESOLVED),
   });
   const stage4State = stage4Query.data;
+  const interpretNeedEditMutation = useInterpretNeedEdit();
+  const applyNeedEditsMutation = useApplyNeedEdits({
+    onSuccess: () => {
+      setNeedRefinementNeedId(null);
+    },
+    onError: () => {
+      showError('Could not update that need. Please try again.');
+    },
+  });
   const removeNeedMutation = useRemoveNeed({
     onError: () => {
       showError('Could not remove that need. Please try again.');
@@ -1555,10 +1580,128 @@ export function UnifiedSessionScreen({
     },
     [removeNeedMutation, sessionId]
   );
-  const handleNeedCardPress = useCallback((needId: string) => {
-    if (!needs?.some((item) => item.id === needId)) return;
-    setSelectedNeedId(needId);
-  }, [needs]);
+  const confirmRemoveNeed = useCallback(
+    (need: IdentifiedNeedDTO) => {
+      const message = 'This will remove it from your list before sharing.';
+      const deleteNeed = () => {
+        void handleRemoveNeed(need.id);
+      };
+
+      if (Platform.OS === 'web') {
+        const confirmed = typeof globalThis.confirm === 'function'
+          ? globalThis.confirm(`Delete this need?\n\n${message}`)
+          : true;
+        if (confirmed) deleteNeed();
+        return;
+      }
+
+      Alert.alert(
+        'Delete this need?',
+        message,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: deleteNeed,
+          },
+        ]
+      );
+    },
+    [handleRemoveNeed]
+  );
+  const appendNeedRefinementMessage = useCallback(
+    (needId: string, message: NeedRefinementChatMessage) => {
+      setNeedRefinementThreads((current) => ({
+        ...current,
+        [needId]: [...(current[needId] ?? []), message],
+      }));
+    },
+    []
+  );
+  const handleOpenNeedRefinement = useCallback((needId: string) => {
+    setNeedRefinementNeedId(needId);
+    setShowNeedsDrawer(false);
+  }, []);
+  const handleSendNeedRefinementMessage = useCallback(
+    (content: string) => {
+      const targetNeed = needRefinementNeed;
+      if (!targetNeed) return;
+
+      const existingMessages = needRefinementThreads[targetNeed.id] ?? [];
+      const request = content.trim();
+      if (!request) return;
+
+      const userMessage = createNeedRefinementMessage({
+        id: `need-refine-user-${Date.now()}`,
+        sessionId,
+        role: MessageRole.USER,
+        content: request,
+      });
+      appendNeedRefinementMessage(targetNeed.id, userMessage);
+
+      const conversationHistory: NeedEditConversationTurn[] = [];
+      for (let index = 0; index < existingMessages.length; index += 1) {
+        const message = existingMessages[index];
+        if (message.role !== MessageRole.USER) continue;
+        const response = existingMessages[index + 1];
+        if (!response || response.role !== MessageRole.AI) continue;
+        conversationHistory.push({
+          request: message.content,
+          plan: response.plan ?? undefined,
+          clarification: response.plan ? undefined : response.content,
+        });
+      }
+
+      interpretNeedEditMutation.mutate(
+        {
+          sessionId,
+          targetNeedId: targetNeed.id,
+          request,
+          conversationHistory,
+        },
+        {
+          onSuccess: (result) => {
+            const aiContent =
+              result.plan?.summary ||
+              result.clarificationMessage ||
+              'Tell me a little more about what should change in this need.';
+            appendNeedRefinementMessage(targetNeed.id, createNeedRefinementMessage({
+              id: `need-refine-ai-${Date.now()}`,
+              sessionId,
+              role: MessageRole.AI,
+              content: aiContent,
+              plan: result.plan ?? null,
+            }));
+          },
+          onError: () => {
+            appendNeedRefinementMessage(targetNeed.id, createNeedRefinementMessage({
+              id: `need-refine-error-${Date.now()}`,
+              sessionId,
+              role: MessageRole.AI,
+              content: 'I could not refine that just now. Try saying what feels off in a different way.',
+            }));
+          },
+        }
+      );
+    },
+    [
+      appendNeedRefinementMessage,
+      interpretNeedEditMutation,
+      needRefinementNeed,
+      needRefinementThreads,
+      sessionId,
+    ]
+  );
+  const handleApplyNeedRefinementPlan = useCallback(
+    (plan: NeedEditPlan) => {
+      applyNeedEditsMutation.mutate({
+        sessionId,
+        operations: plan.operations,
+      });
+    },
+    [applyNeedEditsMutation, sessionId]
+  );
   const hasRedesignedStage4 =
     !!stage4State &&
     (currentStage === Stage.STRATEGIC_REPAIR || session?.status === SessionStatus.RESOLVED);
@@ -1916,6 +2059,49 @@ export function UnifiedSessionScreen({
       return next;
     });
   }, []);
+
+  const confirmAndSendNeedsList = useCallback(() => {
+    const message = `This will share this needs list with ${partnerName || 'your partner'}. You will not be able to edit these needs after sending.`;
+    const sendNeeds = () => {
+      const shareNeeds = () => {
+        handleConsentToShareNeeds(() => {
+          markCompleted('confirmed-needs');
+          markCompleted('shared-needs');
+          setShowNeedsDrawer(false);
+        });
+      };
+
+      if (allNeedsConfirmed) {
+        shareNeeds();
+        return;
+      }
+
+      handleConfirmAllNeeds(() => {
+        markCompleted('confirmed-needs');
+        shareNeeds();
+      });
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = typeof globalThis.confirm === 'function'
+        ? globalThis.confirm(`Send these needs?\n\n${message}`)
+        : true;
+      if (confirmed) sendNeeds();
+      return;
+    }
+
+    Alert.alert(
+      'Send these needs?',
+      message,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send',
+          onPress: sendNeeds,
+        },
+      ]
+    );
+  }, [allNeedsConfirmed, handleConfirmAllNeeds, handleConsentToShareNeeds, markCompleted, partnerName]);
 
   // Extract frequently-read booleans to prevent FlatList re-renders
   const isLocalEmpathyValidationActive = isLocalEmpathyValidationCurrent(
@@ -2430,6 +2616,18 @@ export function UnifiedSessionScreen({
       allIndicators.push(partnerEmpathyConfirmedIndicator);
     }
 
+    if (currentStage === Stage.NEED_MAPPING && needs && needs.length > 0) {
+      for (const need of needs) {
+        if (need.deletedAt || need.supersededByNeedId) continue;
+        allIndicators.push({
+          type: 'indicator',
+          indicatorType: 'needs-identified',
+          id: `need-added-${need.id}`,
+          timestamp: need.createdAt || needsData?.synthesizedAt || new Date().toISOString(),
+        });
+      }
+    }
+
     // --- Stage chapter markers ---
     // Chapter bars usually appear at the milestone that opens the chapter.
     // Witness is the exception: invitees first see the topic intro card, so
@@ -2441,7 +2639,7 @@ export function UnifiedSessionScreen({
     allIndicators.push(...chapterIndicators);
 
     return allIndicators;
-  }, [isInviter, session?.status, invitationMessageConfirmedAt, invitationAcceptedAt, milestones?.witnessStartedAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.validatedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
+  }, [isInviter, session?.status, invitationMessageConfirmedAt, invitationAcceptedAt, milestones?.witnessStartedAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.validatedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage, currentStage, needs, needsData?.synthesizedAt]);
 
 
 
@@ -2929,55 +3127,6 @@ export function UnifiedSessionScreen({
     session?.createdAt,
   ]);
 
-  const inlineNeedCards = useMemo((): ChatCustomCardItem[] => {
-    if (currentStage !== Stage.NEED_MAPPING) return [];
-    if (!needs || needs.length === 0) return [];
-
-    return needs.map((need): ChatCustomCardItem => {
-      const status =
-        need.deletedAt
-          ? 'deleted'
-          : need.supersededByNeedId
-            ? 'superseded'
-            : need.lockedAt
-              ? 'locked'
-              : 'draft';
-
-      return {
-      type: 'custom-card',
-      id: `identified-need-${need.id}`,
-      animate: true,
-      timestamp: need.createdAt || needsData?.synthesizedAt || new Date().toISOString(),
-      render: () => (
-        <NeedCard
-          need={{
-            id: need.id,
-            category: String(need.category),
-            description: need.need,
-            status,
-            warning: need.reframingWarning,
-          }}
-          onPress={() => handleNeedCardPress(need.id)}
-          testID={`inline-need-card-${need.id}`}
-        />
-      ),
-    };
-    });
-  }, [currentStage, handleNeedCardPress, needs, needsData?.synthesizedAt]);
-
-  const renderMessageExtra = useCallback((message: ChatMessage) => {
-    if (!message.refiningNeedId) return null;
-    const refinedNeed = needs?.find((need) => need.id === message.refiningNeedId);
-    return (
-      <View style={styles.refineThreadIndicator} testID={`refine-thread-indicator-${message.id}`}>
-        <View style={styles.refineThreadStripe} />
-        <Text style={styles.refineThreadText} numberOfLines={2}>
-          Refining: {refinedNeed?.need ?? 'Need'}
-        </Text>
-      </View>
-    );
-  }, [needs, styles]);
-
   // Stage4RedesignPanel is now mounted inside a slide-up Modal (Stage 4 drawer)
   // rather than as an inline chat card. The CTA above the chat input opens it.
 
@@ -3033,8 +3182,8 @@ export function UnifiedSessionScreen({
   ]);
 
   const chatCustomCards = useMemo(
-    () => [...sourceInnerThoughtsCards, ...inviteeOpeningCards, ...inlineNeedCards],
-    [sourceInnerThoughtsCards, inviteeOpeningCards, inlineNeedCards]
+    () => [...sourceInnerThoughtsCards, ...inviteeOpeningCards],
+    [sourceInnerThoughtsCards, inviteeOpeningCards]
   );
 
   // -------------------------------------------------------------------------
@@ -3224,23 +3373,6 @@ export function UnifiedSessionScreen({
         />
       );
     }
-    if (refineModeNeed) {
-      return (
-        <GuidedActionPanel
-          tone="needs"
-          eyebrow="Refining"
-          title={refineModeNeed.need}
-          subtitle="Your next message will stay attached to this need."
-          compact
-          primaryAction={{
-            label: '×',
-            onPress: () => setRefineModeNeedId(null),
-            testID: 'exit-need-refine-button',
-          }}
-          testID="need-refine-bar"
-        />
-      );
-    }
     switch (aboveInputPanel) {
       case 'compact-agreement-bar':
         return (
@@ -3358,20 +3490,20 @@ export function UnifiedSessionScreen({
           <MeasuredAnimatedPanel animationValue={needsReviewAnim}>
             <GuidedActionPanel
               tone="needs"
-              eyebrow="Needs ready"
-              title="Send your needs?"
-              subtitle={`This shares your locked needs with ${partnerName || 'your partner'} when you are ready.`}
+              eyebrow="What matters"
+              title={activeNeeds.length === 1 ? '1 need captured' : `${activeNeeds.length} needs captured`}
+              subtitle="Open your list to refine, remove, or send when ready."
               compact
+              pressable
               primaryAction={{
-                label: 'Send my needs',
+                label: 'Review needs',
                 onPress: () => {
-                  handleConsentToShareNeeds(() => {
-                    markCompleted('shared-needs');
-                  });
+                  Keyboard.dismiss();
+                  setShowNeedsDrawer(true);
                 },
-                testID: 'needs-send-button',
+                testID: 'needs-drawer-open-button',
               }}
-              testID="needs-send-panel"
+              testID="needs-drawer-panel"
             />
           </MeasuredAnimatedPanel>
         );
@@ -3414,6 +3546,29 @@ export function UnifiedSessionScreen({
         );
 
       default:
+        if (currentStage === Stage.NEED_MAPPING && activeNeeds.length > 0) {
+          const needCount = activeNeeds.length;
+          return (
+            <GuidedActionPanel
+              tone="needs"
+              eyebrow="What matters"
+              title={needCount === 1 ? '1 need captured' : `${needCount} needs captured`}
+              subtitle="Open your list to refine or remove anything before sharing."
+              compact
+              pressable
+              primaryAction={{
+                label: 'Review needs',
+                onPress: () => {
+                  Keyboard.dismiss();
+                  setShowNeedsDrawer(true);
+                },
+                testID: 'needs-drawer-open-button',
+              }}
+              testID="needs-drawer-panel"
+            />
+          );
+        }
+
         // Fallback: when no other panel is queued and we're in the redesigned
         // Stage 4, surface the proposal-review entry point above the input so
         // the user always has a way to open the Stage 4 drawer.
@@ -3483,7 +3638,6 @@ export function UnifiedSessionScreen({
     }
   }, [
     aboveInputPanel,
-    refineModeNeed,
     hasRedesignedStage4,
     stage4State,
     session?.status,
@@ -3524,6 +3678,8 @@ export function UnifiedSessionScreen({
     markCompleted,
     onStageComplete,
     openOverlay,
+    currentStage,
+    activeNeeds.length,
   ]);
 
   // -------------------------------------------------------------------------
@@ -4028,8 +4184,8 @@ export function UnifiedSessionScreen({
               : undefined
           }
           renderAboveInput={
-            refineModeNeed ||
             aboveInputPanel ||
+            (currentStage === Stage.NEED_MAPPING && activeNeeds.length > 0) ||
             (hasRedesignedStage4 && !!stage4State) ||
             (session?.status === SessionStatus.RESOLVED && viewingResolvedHistory)
               ? renderAboveInput
@@ -4051,7 +4207,6 @@ export function UnifiedSessionScreen({
               )}
             </>
           ) : undefined}
-          renderMessageExtra={renderMessageExtra}
           hideInput={
             redesignedStage4AllowsInput ? false : derivedShouldHideInput
           }
@@ -4262,65 +4417,115 @@ export function UnifiedSessionScreen({
       )}
 
       <Modal
-        visible={!!selectedNeed}
-        transparent
+        visible={showNeedsDrawer}
         animationType="slide"
-        onRequestClose={() => setSelectedNeedId(null)}
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowNeedsDrawer(false)}
+        testID="needs-drawer-modal"
       >
-        <TouchableOpacity
-          style={styles.sheetBackdrop}
-          activeOpacity={1}
-          onPress={() => setSelectedNeedId(null)}
-          testID="need-options-backdrop"
-        />
-        <View style={styles.needOptionsSheet} testID="need-options-sheet">
-          <View style={styles.sheetHandle} />
-          <Text style={styles.modalPreviewLabel}>Need</Text>
-          <Text style={styles.needOptionsTitle}>{selectedNeed?.need}</Text>
-          <View style={styles.shareActions}>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => {
-                if (!selectedNeed) return;
-                Keyboard.dismiss();
-                setRefineModeNeedId(selectedNeed.id);
-                setSelectedNeedId(null);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Refine need"
-              testID="need-options-refine"
-            >
-              <Text style={styles.secondaryButtonText}>Refine</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.destructiveButton,
-                (selectedNeed?.deletedAt || selectedNeed?.supersededByNeedId) && styles.disabledButton,
-              ]}
-              disabled={Boolean(selectedNeed?.deletedAt || selectedNeed?.supersededByNeedId)}
-              onPress={() => {
-                if (!selectedNeed) return;
-                const needId = selectedNeed.id;
-                setSelectedNeedId(null);
-                void handleRemoveNeed(needId);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Delete need"
-              testID="need-options-delete"
-            >
-              <Text style={styles.destructiveButtonText}>Delete</Text>
-            </TouchableOpacity>
+        <SafeAreaProvider>
+          <View style={styles.fullScreenDrawerPage}>
+            <SafeAreaView style={styles.needsFullDrawer} edges={['top', 'bottom']} testID="needs-drawer">
+              <View style={styles.needsFullHeader}>
+                <View style={styles.needsFullHeaderText}>
+                  <Text style={styles.needsFullEyebrow}>What matters</Text>
+                  <Text style={styles.needsFullTitle}>
+                    {activeNeeds.length === 1 ? '1 need captured' : `${activeNeeds.length} needs captured`}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.needsFullCloseButton}
+                  onPress={() => setShowNeedsDrawer(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close needs drawer"
+                  testID="needs-drawer-close"
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <X color={styles.drawerIconColor.color} size={24} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.needsFullSubtitle}>
+                Refine or remove anything before sharing with {partnerName || 'your partner'}.
+              </Text>
+
+              <ScrollView
+                style={styles.needsFullList}
+                contentContainerStyle={[
+                  styles.needsFullContent,
+                  !myNeedsSharedForComparison && styles.needsFullContentWithFooter,
+                ]}
+                showsVerticalScrollIndicator={false}
+              >
+                {activeNeeds.map((need) => (
+                  <TouchableOpacity
+                    key={need.id}
+                    style={styles.needsFullRow}
+                    onPress={() => handleOpenNeedRefinement(need.id)}
+                    activeOpacity={0.78}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Refine need: ${need.need}`}
+                    testID={`needs-drawer-row-${need.id}`}
+                  >
+                    <View style={styles.needsFullRowText}>
+                      <Text style={styles.needsFullCategory}>{String(need.category)}</Text>
+                      <Text style={styles.needsFullNeedText}>{need.need}</Text>
+                      {need.reframingWarning ? (
+                        <Text style={styles.needsFullWarning}>{need.reframingWarning}</Text>
+                      ) : null}
+                    </View>
+                    <TouchableOpacity
+                    style={styles.needsFullTrashButton}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      confirmRemoveNeed(need);
+                    }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete need: ${need.need}`}
+                      testID={`needs-drawer-delete-${need.id}`}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Trash2 color={styles.drawerDangerColor.color} size={17} strokeWidth={2.2} />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {!myNeedsSharedForComparison ? (
+                <View style={styles.needsFullFooter}>
+                  <TouchableOpacity
+                    style={[
+                      styles.needsFullProgressButton,
+                      (isConfirmingNeeds || isSharingNeeds) && styles.needsFullProgressButtonDisabled,
+                    ]}
+                    onPress={confirmAndSendNeedsList}
+                    disabled={isConfirmingNeeds || isSharingNeeds}
+                    accessibilityRole="button"
+                    accessibilityLabel="Send my needs"
+                    testID="needs-drawer-send"
+                  >
+                    <Text style={styles.needsFullProgressButtonText}>
+                      {isConfirmingNeeds || isSharingNeeds ? 'Sending...' : 'Send my needs'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </SafeAreaView>
           </View>
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => setSelectedNeedId(null)}
-            accessibilityRole="button"
-            testID="need-options-close"
-          >
-            <Text style={styles.secondaryButtonText}>Close</Text>
-          </TouchableOpacity>
-        </View>
+        </SafeAreaProvider>
       </Modal>
+
+      <NeedRefinementDrawer
+        visible={!!needRefinementNeed}
+        need={needRefinementNeed}
+        sessionId={sessionId}
+        messages={needRefinementMessages}
+        isSending={interpretNeedEditMutation.isPending}
+        isApplying={applyNeedEditsMutation.isPending}
+        onSendMessage={handleSendNeedRefinementMessage}
+        onApplyPlan={handleApplyNeedRefinementPlan}
+        onClose={() => setNeedRefinementNeedId(null)}
+      />
 
       <Modal
         visible={showNeedsRevealModal}
@@ -5209,6 +5414,145 @@ const useStyles = () => {
       backgroundColor: palette.border,
       marginBottom: t.spacing.xs,
     },
+    fullScreenDrawerPage: {
+      ...modalPageStyle,
+      backgroundColor: palette.bg,
+    },
+    needsFullDrawer: {
+      flex: 1,
+      backgroundColor: palette.bg,
+      ...appWidthStyle,
+    },
+    needsFullHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 16,
+      paddingHorizontal: 24,
+      paddingTop: 12,
+      paddingBottom: 10,
+    },
+    needsFullHeaderText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    needsFullEyebrow: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: palette.textFaint,
+      textTransform: 'uppercase',
+      letterSpacing: 0,
+      marginBottom: 6,
+    },
+    needsFullTitle: {
+      fontSize: 28,
+      lineHeight: 34,
+      fontWeight: '700',
+      color: palette.text,
+    },
+    needsFullCloseButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    drawerIconColor: {
+      color: palette.textMuted,
+    },
+    drawerDangerColor: {
+      color: palette.danger,
+    },
+    needsFullSubtitle: {
+      paddingHorizontal: 24,
+      marginTop: 2,
+      marginBottom: 22,
+      fontSize: 16,
+      lineHeight: 24,
+      color: palette.textMuted,
+    },
+    needsFullList: {
+      flex: 1,
+    },
+    needsFullContent: {
+      gap: 12,
+      paddingHorizontal: 24,
+      paddingBottom: 24,
+    },
+    needsFullContentWithFooter: {
+      paddingBottom: 12,
+    },
+    needsFullRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      paddingVertical: 18,
+      paddingHorizontal: 18,
+      borderRadius: 14,
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    needsFullRowText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    needsFullCategory: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: palette.info,
+      marginBottom: 6,
+      textTransform: 'uppercase',
+      letterSpacing: 0,
+    },
+    needsFullNeedText: {
+      fontSize: 17,
+      lineHeight: 25,
+      color: palette.text,
+    },
+    needsFullWarning: {
+      marginTop: 10,
+      color: palette.warning,
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '600',
+    },
+    needsFullTrashButton: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.bg,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    needsFullFooter: {
+      paddingHorizontal: 24,
+      paddingTop: 14,
+      paddingBottom: 8,
+      backgroundColor: palette.bg,
+      borderTopWidth: 1,
+      borderTopColor: palette.border,
+    },
+    needsFullProgressButton: {
+      borderRadius: 24,
+      paddingVertical: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.accent,
+    },
+    needsFullProgressButtonDisabled: {
+      opacity: 0.55,
+    },
+    needsFullProgressButtonText: {
+      color: palette.bg,
+      fontSize: 16,
+      fontWeight: '700',
+    },
     needOptionsTitle: {
       fontSize: 18,
       fontWeight: '700',
@@ -5257,32 +5601,6 @@ const useStyles = () => {
     },
     needsRevealColumn: {
       gap: t.spacing.sm,
-    },
-    refineThreadIndicator: {
-      alignSelf: 'flex-end',
-      maxWidth: '86%',
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: t.spacing.xs,
-      marginTop: 6,
-      marginRight: t.spacing.sm,
-      paddingVertical: 6,
-      paddingHorizontal: 10,
-      borderRadius: t.radius.md,
-      backgroundColor: 'rgba(59, 130, 246, 0.10)',
-    },
-    refineThreadStripe: {
-      width: 3,
-      alignSelf: 'stretch',
-      borderRadius: 2,
-      backgroundColor: palette.accent,
-    },
-    refineThreadText: {
-      flex: 1,
-      color: t.colors.textSecondary,
-      fontSize: 12,
-      lineHeight: 16,
-      fontWeight: '600',
     },
     cardTitle: {
       fontSize: 18,

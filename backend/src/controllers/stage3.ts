@@ -436,16 +436,16 @@ export async function confirmNeeds(req: Request, res: Response): Promise<void> {
     }
 
     // Confirm all specified needs
+    const now = new Date();
     await prisma.identifiedNeed.updateMany({
       where: {
         id: { in: needIds },
         vesselId: userVessel.id,
       },
-      data: { confirmed: true },
+      data: { confirmed: true, lockedAt: now },
     });
 
     // Update stage progress with needsIdentifiedAt milestone
-    const now = new Date();
     const gatesSatisfied = {
       ...(progress?.gatesSatisfied as Record<string, unknown> || {}),
       needsConfirmed: true,
@@ -567,22 +567,22 @@ export async function consentToShareNeeds(
     // Get user's vessel
     const userVessel = await getOrCreateUserVessel(sessionId, user.id);
 
-    // Verify every shared need is a live locked need owned by this user.
-    const lockedLiveNeeds = await prisma.identifiedNeed.findMany({
+    // Verify every shared need is a live confirmed need owned by this user.
+    const confirmedLiveNeeds = await prisma.identifiedNeed.findMany({
       where: {
         id: { in: needIds },
         vesselId: userVessel.id,
-        lockedAt: { not: null },
+        confirmed: true,
         deletedAt: null,
         supersededByNeedId: null,
       },
     });
 
-    if (lockedLiveNeeds.length !== needIds.length) {
+    if (confirmedLiveNeeds.length !== needIds.length) {
       errorResponse(
         res,
         'VALIDATION_ERROR',
-        'All live needs must be locked before sharing',
+        'All live needs must be confirmed before sharing',
         400
       );
       return;

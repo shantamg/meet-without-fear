@@ -360,6 +360,8 @@ Tone: Warm and practical. Answer process questions without diving deep yet.
 const WHAT_MATTERS_APPROACH = `
 When they frame things in terms of the other person, redirect gently to what matters to them personally — what they need or what's missing.
 Offer needs language as a suggestion, not a correction. Let them find their own words.
+If you already understand what they mean concretely enough to capture it in their words, capture it. Do not keep asking what it looks like, what it gives them, or what changes when it is met just to deepen. Ask one clarifying question only when you do not yet understand the need well enough to write it down.
+Brief is not the same as guarded. A direct, clear answer can be complete.
 `;
 
 /**
@@ -913,9 +915,7 @@ No-hallucination guard: Use the user's exact words when reflecting needs. Never 
 NEEDS CAPTURE:
 Never emit more than one \`<need>\` or \`<need-action>\` per turn; if ambiguous, ask before emitting
 When ${context.userName} has clearly landed on one need, set NeedsReady:Y and include one hidden <need> block for that need only. In visible text, acknowledge the need and invite either refinement/locking or the next thing that matters. Do not say anything about sharing, partner readiness, or side-by-side reveal.
-
-COMPRESSED-NEEDS PACING:
-If ${context.userName} gives one dense answer that stacks multiple real needs, first reflect the clusters and ask one deepening question about the need that carries the most risk or consequence. For James/Catherine-like no-shared-agreement pressure, make sure safety/accountability/autonomy/self-trust and care/belonging/recognition/heard needs have enough user-owned texture before NeedsReady:Y. Capture after that texture exists, not at the first well-worded list.
+Don't capture before you understand. But once you understand what ${context.userName} means, capture it — don't keep asking. If one dense answer names several real needs, capture one clear need this turn and invite the next thing that matters; do not force extra exploration just because the answer was compressed.
 
 Length: default 1–3 sentences. Go longer only if they explicitly ask for help or detail.
 ${LATERAL_PROBING_GUIDANCE}
@@ -943,7 +943,7 @@ Focus on this need only this turn. If the user's update is clear, emit <need-act
   // Content-aware pacing (every turn): let what the user said drive the mode,
   // not a turn counter. A user who names three clear needs in one rich message
   // should be validated; a user still venting in positions should be excavated.
-  dynamicParts.push('PACING — LET CONTENT DRIVE THE MODE, NOT TURN COUNT: If the user has clearly named what matters to them (e.g., "partnership", "to feel safe", "to be heard"), move into DEEPENING and explore what that looks like — do not artificially hold back. If they are still framing things in terms of the other person, stay in REDIRECTING — bring it back to what matters to them. Do not rush users who are still exploring, and do not stall users who have already landed.');
+  dynamicParts.push('PACING — LET CONTENT DRIVE THE MODE, NOT TURN COUNT: If the user has clearly named what matters to them (e.g., "partnership", "to feel safe", "to be heard"), either capture it or ask one concrete clarifying question only if you do not yet understand what they mean. If they are still framing things in terms of the other person, redirect gently to what matters to them. Do not rush users who are still exploring, and do not stall users who have already landed.');
 
   if (context.emotionalIntensity >= 8) {
     dynamicParts.push('HIGH USER INTENSITY: The user is very activated/distressed. Slow down. Validate first, reframe gently. Your tone should be calm and grounding, not matching their intensity.');

@@ -437,7 +437,7 @@ describe('Stage 3 API', () => {
             id: { in: [mockNeedId1] },
             vesselId: mockVesselId,
           },
-          data: { confirmed: true },
+          data: { confirmed: true, lockedAt: expect.any(Date) },
         })
       );
     });

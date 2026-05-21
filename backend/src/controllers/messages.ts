@@ -41,7 +41,8 @@ import { getMilestoneContext, getSharedContentContext } from '../services/shared
 import { CONTEXT_WINDOW, trimConversationHistory } from '../utils/token-budget';
 import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from '../services/llm-telemetry';
 import { captureProposedNeedsForUser, captureSingleNeedForUser } from '../services/needs';
-import { applyNeedAction } from '../services/needs-edit-applier.service';
+import { applyNeedAction, applyNeedEdits } from '../services/needs-edit-applier.service';
+import { interpretNeedEditRequest } from '../services/needs-edit-interpreter.service';
 import { cleanVisibleAIText } from '../utils/visible-text';
 import { captureStage4Turn } from '../services/stage4-capture.service';
 import { applyStage4AutoClosureFromSignal } from '../services/stage4-auto-closure.service';
@@ -2151,6 +2152,53 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       logger.warn(`[sendMessageStream:${requestId}] Ignoring invalid Stage 3 need tag: ${metadata.needParseError}`);
     }
 
+    if (
+      currentStage === 3 &&
+      refiningNeedContext &&
+      !metadata.proposedNeed &&
+      !metadata.needAction &&
+      (!metadata.proposedNeeds || metadata.proposedNeeds.length === 0)
+    ) {
+      try {
+        const interpretedEdit = await interpretNeedEditRequest(sessionId, user.id, {
+          targetNeedId: refiningNeedContext.id,
+          request: [
+            `The user is refining this need: "${refiningNeedContext.need}".`,
+            `Their message was: "${content}".`,
+            `The assistant response was: "${accumulatedText.trim()}".`,
+            'If the assistant response contains a clearer wording for this same need, return an updateNeedText operation for the target need. If it does not contain a clear revision, ask for clarification.',
+          ].join('\n'),
+        });
+
+        if (interpretedEdit.plan?.operations?.length) {
+          const applied = await applyNeedEdits(sessionId, user.id, interpretedEdit.plan.operations);
+          metadata.needsCaptured = true;
+          logger.info(`[sendMessageStream:${requestId}] Applied ${applied.applied.length} fallback need refinement operation(s) for ${refiningNeedContext.id}`);
+
+          for (const affected of applied.applied) {
+            const updatedNeed = affected.needId
+              ? applied.needs.find((need) => need.id === affected.needId)
+              : undefined;
+            const eventType = affected.operation === 'remove'
+              ? 'need.deleted'
+              : affected.operation === 'add'
+                ? 'need.captured'
+                : 'need.refined';
+            await publishSessionEvent(sessionId, eventType, {
+              forUserId: user.id,
+              userId: user.id,
+              need: updatedNeed,
+              affectedNeed: affected,
+            }).catch((err) =>
+              logger.warn(`[sendMessageStream:${requestId}] Failed to publish ${eventType}:`, err)
+            );
+          }
+        }
+      } catch (error) {
+        logger.warn(`[sendMessageStream:${requestId}] Fallback need refinement did not apply`, error);
+      }
+    }
+
     if (currentStage === 3 && metadata.proposedNeed) {
       const captured = await captureSingleNeedForUser(sessionId, user.id, metadata.proposedNeed);
       metadata.needsCaptured = true;
@@ -2217,6 +2265,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         role: 'AI',
         content: accumulatedText.trim(),
         stage: effectiveStage, // Use effective stage (21 for Stage 2B) for analytics
+        refiningNeedId: refiningNeedContext?.id ?? null,
       },
     });
     logger.info(`[sendMessageStream:${requestId}] AI message created: ${aiMessage.id}`);

@@ -244,11 +244,11 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     ]);
 
     // ========================================
-    // STEP 3: Reload and verify inline needs phase
+    // STEP 3: Reload and verify needs drawer CTA phase
     // ========================================
-    console.log(`${elapsed()} === STEP 3: Verify inline needs phase ===`);
+    console.log(`${elapsed()} === STEP 3: Verify needs drawer CTA phase ===`);
 
-    // Reload pages to show inline needs UI
+    // Reload pages to show the needs CTA
     await Promise.all([
       pageA.reload(),
       pageB.reload(),
@@ -266,20 +266,14 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     await expectNeedsSummaryFromApi(apiA, API_BASE_URL, sessionId, 'User A');
     await expectNeedsSummaryFromApi(apiB, API_BASE_URL, sessionId, 'User B');
 
-    console.log(`${elapsed()} Needs summary UI visible for both users`);
+    await expect(pageA.getByTestId('needs-drawer-open-button')).toBeVisible({ timeout: 30000 });
+    await expect(pageB.getByTestId('needs-drawer-open-button')).toBeVisible({ timeout: 30000 });
 
-    // Verify at least one need card is visible for each user
-    const needCardA = pageA.locator('[data-testid^="inline-need-card-"]').first();
-    const needCardB = pageB.locator('[data-testid^="inline-need-card-"]').first();
+    console.log(`${elapsed()} Needs drawer CTA visible for both users`);
 
-    await expect(needCardA).toBeVisible({ timeout: 30000 });
-    await expect(needCardB).toBeVisible({ timeout: 30000 });
-
-    console.log(`${elapsed()} Need cards visible for both users`);
-
-    // Screenshot inline needs state
-    await pageA.screenshot({ path: 'test-results/stage-3-02-inline-needs-user-a.png' });
-    await pageB.screenshot({ path: 'test-results/stage-3-02-inline-needs-user-b.png' });
+    // Screenshot needs CTA state
+    await pageA.screenshot({ path: 'test-results/stage-3-02-needs-cta-user-a.png' });
+    await pageB.screenshot({ path: 'test-results/stage-3-02-needs-cta-user-b.png' });
 
     await confirmNeedsSummaryAndConsent(pageA, apiA, API_BASE_URL, sessionId, 'User A');
     await confirmNeedsSummaryAndConsent(pageB, apiB, API_BASE_URL, sessionId, 'User B');

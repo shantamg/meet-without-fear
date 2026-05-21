@@ -303,7 +303,7 @@ export function useUnifiedSession(
   const needsForGating = needsData?.needs ?? [];
   const liveNeedsForGating = needsForGating.filter((n) => !n.deletedAt && !n.supersededByNeedId);
   const allNeedsConfirmedForGating =
-    liveNeedsForGating.length > 0 && liveNeedsForGating.every((n) => Boolean(n.lockedAt));
+    liveNeedsForGating.length > 0 && liveNeedsForGating.every((n) => Boolean(n.confirmed));
   const myNeedsSharedForGating =
     (progressData?.myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true;
 
@@ -359,7 +359,7 @@ export function useUnifiedSession(
   const { mutate: resubmitEmpathy, isPending: isResubmittingEmpathy } = useResubmitEmpathy();
   const { mutate: skipRefinement } = useSkipRefinement();
   const { mutate: confirmNeeds, isPending: isConfirmingNeeds } = useConfirmNeeds();
-  const { mutate: consentShareNeeds } = useConsentShareNeeds();
+  const { mutate: consentShareNeeds, isPending: isSharingNeeds } = useConsentShareNeeds();
   const { mutate: validateNeedsMutation } = useValidateNeeds();
   const { mutate: proposeStrategy, isPending: isProposing } = useProposeStrategy();
   const { mutate: requestSuggestions, isPending: isGenerating } =
@@ -404,6 +404,7 @@ export function useUnifiedSession(
         queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
       }
       if (sessionId && metadata.needsCaptured) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
@@ -572,7 +573,7 @@ export function useUnifiedSession(
   // Needs confirmation state
   const needs = useMemo(() => needsData?.needs ?? [], [needsData?.needs]);
   const liveNeeds = needs.filter((n) => !n.deletedAt && !n.supersededByNeedId);
-  const allNeedsConfirmed = liveNeeds.length > 0 && liveNeeds.every((n) => Boolean(n.lockedAt));
+  const allNeedsConfirmed = liveNeeds.length > 0 && liveNeeds.every((n) => Boolean(n.confirmed));
   const needsRevealValidationItems = useMemo<LegacyNeedsRevealItem[]>(() => [], []);
   const needsRevealReady =
     (needsComparisonData?.myNeeds?.length ?? 0) > 0 &&
@@ -1068,9 +1069,9 @@ export function useUnifiedSession(
 
   const handleConfirmAllNeeds = useCallback(
     (onSuccess?: () => void) => {
-      if (!sessionId || needs.length === 0) return;
+      if (!sessionId || liveNeeds.length === 0) return;
 
-      const needIds = needs.map((need) => need.id);
+      const needIds = liveNeeds.map((need) => need.id);
 
       confirmNeeds(
         { sessionId, needIds },
@@ -1079,14 +1080,14 @@ export function useUnifiedSession(
         }
       );
     },
-    [sessionId, needs, confirmNeeds]
+    [sessionId, liveNeeds, confirmNeeds]
   );
 
   const handleConsentToShareNeeds = useCallback(
     (onSuccess?: () => void) => {
-      if (!sessionId || needs.length === 0) return;
+      if (!sessionId || liveNeeds.length === 0) return;
 
-      const needIds = needs.map((need) => need.id);
+      const needIds = liveNeeds.map((need) => need.id);
 
       consentShareNeeds(
         { sessionId, needIds },
@@ -1097,7 +1098,7 @@ export function useUnifiedSession(
         }
       );
     },
-    [sessionId, needs, consentShareNeeds]
+    [sessionId, liveNeeds, consentShareNeeds]
   );
 
   const handleValidateNeedsReveal = useCallback(
@@ -1300,6 +1301,7 @@ export function useUnifiedSession(
     isRespondingToShareOffer,
     isProposing,
     isConfirmingNeeds,
+    isSharingNeeds,
 
     // Actions
     sendMessage: handleSendMessage,

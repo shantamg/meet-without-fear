@@ -679,6 +679,7 @@ export function useStreamingMessage(
             content: '',
             stage: currentStage ?? Stage.ONBOARDING,
             timestamp: new Date().toISOString(),
+            refiningNeedId: refiningNeedId ?? null,
             status: 'streaming',
           };
           addMessageToCache(sessionId, placeholderAIMessage, currentStage);
@@ -746,6 +747,7 @@ export function useStreamingMessage(
                 content: accumulatedTextRef.current,
                 stage: currentStage ?? Stage.ONBOARDING,
                 timestamp: new Date().toISOString(),
+                refiningNeedId: refiningNeedId ?? null,
                 status: 'streaming',
               };
               addMessageToCache(sessionId, updatedAIMessage, currentStage);
@@ -817,6 +819,7 @@ export function useStreamingMessage(
               content: accumulatedTextRef.current,
               stage: currentStage ?? Stage.ONBOARDING,
               timestamp: new Date().toISOString(),
+              refiningNeedId: refiningNeedId ?? null,
               status: 'sent',
             };
             addMessageToCache(sessionId, finalAIMessage, currentStage);
@@ -896,6 +899,7 @@ export function useStreamingMessage(
                   content: accumulatedTextRef.current,
                   stage: currentStage ?? Stage.ONBOARDING,
                   timestamp: new Date().toISOString(),
+                  refiningNeedId: refiningNeedId ?? null,
                   status: 'sent',
                 };
                 addMessageToCache(sessionId, finalAIMessage, currentStage);

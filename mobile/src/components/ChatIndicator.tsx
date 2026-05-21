@@ -160,7 +160,7 @@ export function ChatIndicator({
         return `${name} shared empathy • Awaiting review`;
       // Stage 3: Need Mapping
       case 'needs-identified':
-        return 'Needs identified';
+        return 'Need added';
       case 'common-ground-found':
         return 'Needs overlap ready to review';
       // Stage 4: Strategic Repair

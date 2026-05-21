@@ -171,15 +171,15 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('That insight belongs to the users');
     });
 
-    it('Stage 3 prompt slows down compressed high-stakes needs before capture', () => {
+    it('Stage 3 prompt trusts clear compressed needs instead of forcing extra deepening', () => {
       const context = createContext({ userName: 'Catherine', partnerName: 'James' });
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
-      expect(prompt).toContain('COMPRESSED-NEEDS PACING');
-      expect(prompt).toContain('one dense answer that stacks multiple real needs');
-      expect(prompt).toContain('safety/accountability/autonomy/self-trust');
-      expect(prompt).toContain('care/belonging/recognition/heard');
-      expect(prompt).toContain('before NeedsReady:Y');
+      expect(prompt).not.toContain('COMPRESSED-NEEDS PACING');
+      expect(prompt).not.toContain('safety/accountability/autonomy/self-trust');
+      expect(prompt).not.toContain('care/belonging/recognition/heard');
+      expect(prompt).toContain('If one dense answer names several real needs, capture one clear need this turn');
+      expect(prompt).toContain('do not force extra exploration just because the answer was compressed');
     });
 
     it('Stage 3 prompt does not contain hardcoded user-facing opening phrase', () => {
@@ -190,12 +190,12 @@ describe('Stage Prompts Service', () => {
       expect(prompt).not.toContain('When you step back and look at all of this');
     });
 
-    it('Stage 3 prompt preserves redirecting and deepening guidance', () => {
+    it('Stage 3 prompt preserves redirecting and clear-answer capture guidance', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
-      expect(prompt).toContain('REDIRECTING');
-      expect(prompt).toContain('DEEPENING');
+      expect(prompt).toContain('redirect gently to what matters to them');
+      expect(prompt).toContain('ask one concrete clarifying question only if you do not yet understand');
       expect(prompt).toContain('Offer needs language as a suggestion');
     });
 

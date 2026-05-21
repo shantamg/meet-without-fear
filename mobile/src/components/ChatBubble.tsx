@@ -437,7 +437,7 @@ const useStyles = () => {
   const { palette } = useAppAppearance();
   return createStyles((t) => ({
     container: {
-      width: '100%',
+      alignSelf: 'stretch',
       marginVertical: 6,
       paddingHorizontal: 18,
     },
@@ -455,7 +455,10 @@ const useStyles = () => {
     },
     // AI messages should be full width
     aiBubbleContainer: {
+      alignSelf: 'stretch',
+      width: '100%',
       maxWidth: '100%',
+      flexShrink: 1,
     },
     // User messages: bgSecondary background, 16px border-radius
     userBubble: {
@@ -626,6 +629,7 @@ const useStyles = () => {
       lineHeight: 23,
       color: palette.text,
       fontFamily: designFonts.sans,
+      flexShrink: 1,
     },
     systemText: {
       fontSize: t.typography.fontSize.sm,

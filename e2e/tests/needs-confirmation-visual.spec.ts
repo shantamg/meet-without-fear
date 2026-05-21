@@ -2,7 +2,7 @@
  * Needs Confirmation Visual Test
  *
  * Focused test for the needs confirmation UI in the main session screen.
- * This tests the inline needs-summary card that appears during Stage 3.
+ * This tests the needs drawer CTA that appears during Stage 3.
  */
 
 import { test, expect, devices, BrowserContext, Page, APIRequestContext } from '@playwright/test';
@@ -110,7 +110,7 @@ test.describe('Needs Confirmation Visual', () => {
     const needsData = await needsResponse.json();
     console.log(`Needs response: ${needsData.data?.needs?.length || 0} needs`);
 
-    // Reload to see the needs-summary card
+    // Reload to see the needs drawer CTA
     await pageA.reload();
     await pageA.waitForLoadState('networkidle');
 
@@ -132,10 +132,10 @@ test.describe('Needs Confirmation Visual', () => {
     });
     console.log('Screenshot: needs-confirm-02-with-needs.png');
 
-    // Check for the needs summary elements
-    const needsSummary = pageA.getByText('Your Identified Needs');
-    const summaryVisible = await needsSummary.isVisible({ timeout: 5000 }).catch(() => false);
-    console.log(`Needs summary visible: ${summaryVisible}`);
+    // Check for the needs drawer CTA
+    const needsCta = pageA.getByTestId('needs-drawer-open-button');
+    const ctaVisible = await needsCta.isVisible({ timeout: 5000 }).catch(() => false);
+    console.log(`Needs drawer CTA visible: ${ctaVisible}`);
 
     const confirmButton = pageA.getByText('Confirm my needs');
     const confirmVisible = await confirmButton.isVisible({ timeout: 2000 }).catch(() => false);

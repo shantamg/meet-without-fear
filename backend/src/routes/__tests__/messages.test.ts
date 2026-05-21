@@ -10,6 +10,8 @@ import {
 } from '../../controllers/messages';
 import { prisma } from '../../lib/prisma';
 import { getSonnetStreamingResponse } from '../../lib/bedrock';
+import { interpretNeedEditRequest } from '../../services/needs-edit-interpreter.service';
+import { applyNeedEdits } from '../../services/needs-edit-applier.service';
 
 // Mock Prisma
 jest.mock('../../lib/prisma');
@@ -93,6 +95,15 @@ jest.mock('../../services/global-memory', () => ({
 jest.mock('../../services/reconciler', () => ({
   runReconcilerForDirection: jest.fn().mockResolvedValue(null),
   getSharedContextForGuesser: jest.fn().mockResolvedValue(null),
+}));
+
+jest.mock('../../services/needs-edit-interpreter.service', () => ({
+  interpretNeedEditRequest: jest.fn(),
+}));
+
+jest.mock('../../services/needs-edit-applier.service', () => ({
+  applyNeedAction: jest.fn(),
+  applyNeedEdits: jest.fn(),
 }));
 
 // Mock request context
@@ -229,6 +240,134 @@ describe('Messages API (Fire-and-Forget)', () => {
   });
 
   describe('POST /sessions/:id/messages/stream (sendMessageStream)', () => {
+    it('applies a fallback need edit when refinement chat produces no need-action tag', async () => {
+      const stage3Progress = {
+        id: 'progress-3',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 3,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      };
+      const session = {
+        id: mockSessionId,
+        status: 'ACTIVE',
+        relationship: {
+          members: [{ userId: mockUser.id }, { userId: 'partner-1' }],
+        },
+      };
+      const targetNeed = {
+        id: 'need-1',
+        need: 'To feel taken seriously when I say something matters to me',
+        category: 'RECOGNITION',
+      };
+      const userMessage = {
+        id: 'msg-user-refine',
+        sessionId: mockSessionId,
+        senderId: mockUser.id,
+        role: 'USER',
+        content: 'Can this be more specific?',
+        stage: 3,
+        timestamp: new Date('2026-05-20T19:37:00Z'),
+        refiningNeedId: targetNeed.id,
+      };
+      const aiMessage = {
+        id: 'msg-ai-refine',
+        sessionId: mockSessionId,
+        senderId: null,
+        forUserId: mockUser.id,
+        role: 'AI',
+        content: 'Got it — you need to be taken seriously when you set a boundary. Does that feel right now?',
+        stage: 3,
+        timestamp: new Date('2026-05-20T19:37:01Z'),
+      };
+      const operation = {
+        type: 'updateNeedText' as const,
+        needId: targetNeed.id,
+        newText: 'To be taken seriously when I set a boundary',
+        newCategory: 'RECOGNITION' as const,
+      };
+      const updatedNeed = {
+        id: targetNeed.id,
+        need: operation.newText,
+        category: operation.newCategory,
+        description: operation.newText,
+        evidence: [],
+        confirmed: true,
+        aiConfidence: 0.9,
+        createdAt: new Date('2026-05-20T19:30:00Z').toISOString(),
+        lockedAt: null,
+        deletedAt: null,
+        supersededByNeedId: null,
+        status: 'draft',
+      };
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(session);
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue(session);
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(stage3Progress);
+      (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue(stage3Progress);
+      (prisma.message.create as jest.Mock).mockImplementation(async ({ data }) => (
+        data.role === 'USER'
+          ? { ...userMessage, content: data.content, refiningNeedId: data.refiningNeedId }
+          : { ...aiMessage, content: data.content, stage: data.stage }
+      ));
+      (prisma.message.findMany as jest.Mock).mockResolvedValue([userMessage]);
+      (prisma.message.count as jest.Mock).mockResolvedValue(1);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ name: 'Partner' });
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue({ id: 'vessel-1' });
+      (prisma.identifiedNeed.findFirst as jest.Mock).mockResolvedValue(targetNeed);
+      (interpretNeedEditRequest as jest.Mock).mockResolvedValue({
+        plan: {
+          summary: 'Make the need more specific.',
+          operations: [operation],
+          affectedNeeds: [],
+        },
+      });
+      (applyNeedEdits as jest.Mock).mockResolvedValue({
+        needs: [updatedNeed],
+        applied: [{
+          needId: targetNeed.id,
+          before: { text: targetNeed.need, category: 'RECOGNITION' },
+          after: { text: operation.newText, category: 'RECOGNITION' },
+          operation: 'text_change',
+        }],
+        warnings: [],
+      });
+
+      async function* llmStream() {
+        yield { type: 'text', text: 'Mode: WHAT_MATTERS\nNeedsReady:N\n</thinking>\n' };
+        yield { type: 'text', text: aiMessage.content };
+        yield { type: 'done' };
+      }
+      (getSonnetStreamingResponse as jest.Mock).mockReturnValue(llmStream());
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: { content: userMessage.content, refiningNeedId: targetNeed.id },
+      });
+      const { res, writeMock } = createMockResponse();
+
+      await sendMessageStream(req as Request, res as Response);
+
+      expect(interpretNeedEditRequest).toHaveBeenCalledWith(
+        mockSessionId,
+        mockUser.id,
+        expect.objectContaining({ targetNeedId: targetNeed.id })
+      );
+      expect(applyNeedEdits).toHaveBeenCalledWith(mockSessionId, mockUser.id, [operation]);
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            role: 'AI',
+            refiningNeedId: targetNeed.id,
+          }),
+        })
+      );
+      const sseOutput = writeMock.mock.calls.map(([chunk]) => String(chunk)).join('');
+      expect(sseOutput).toContain('"needsCaptured":true');
+    });
+
     it('does not auto-advance Stage 1 from LLM — feel-heard confirmation is button-only', async () => {
       const stage1Progress = {
         id: 'progress-1',

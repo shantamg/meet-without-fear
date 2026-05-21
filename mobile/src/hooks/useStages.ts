@@ -1579,13 +1579,26 @@ export function useConfirmNeeds(
       });
     },
     onSuccess: (_, { sessionId }) => {
+      const confirmedAt = new Date().toISOString();
       patchStage3Gates(queryClient, sessionId, {
         needsConfirmed: true,
-        needsConfirmedAt: new Date().toISOString(),
+        needsConfirmedAt: confirmedAt,
+      });
+      queryClient.setQueryData<GetNeedsResponse>(stageKeys.needs(sessionId), (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          needs: old.needs.map((need) =>
+            need.deletedAt || need.supersededByNeedId
+              ? need
+              : { ...need, confirmed: true, lockedAt: need.lockedAt ?? confirmedAt }
+          ),
+        };
       });
       queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
     },
     ...options,
   });
