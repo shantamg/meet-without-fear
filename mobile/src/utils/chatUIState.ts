@@ -36,7 +36,7 @@ export type AboveInputPanel =
   | 'feel-heard' // Feel heard confirmation panel
   | 'share-suggestion' // Share suggestion from reconciler (Subject side)
   | 'needs-send' // Stage 3: share locked live needs with partner
-  | 'needs-reveal-validation' // Needs reveal validation panel (Stage 3)
+  | 'needs-reveal-validation' // Legacy needs reveal continue panel (Stage 3)
   | 'waiting-banner' // General waiting banner
   | 'compact-agreement-bar' // Compact agreement bar during onboarding
   | null;
@@ -409,9 +409,9 @@ function computeShowNeedsSendPanel(inputs: ChatUIStateInputs): boolean {
 }
 
 /**
- * Determines if the needs reveal validation panel should show.
- * Shows when both needs lists are available but not yet validated by the
- * current user.
+ * Determines if the legacy needs reveal continue panel should show.
+ * New sessions advance to Stage 4 as soon as both users send needs; this keeps
+ * older/stale Stage 3 states recoverable without asking users to judge accuracy.
  */
 function computeShowNeedsRevealValidationPanel(inputs: ChatUIStateInputs): boolean {
   const {

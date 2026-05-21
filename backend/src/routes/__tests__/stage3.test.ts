@@ -633,6 +633,18 @@ describe('Stage 3 API', () => {
         ...mockStageProgress,
         gatesSatisfied: { needsConfirmed: true, needsShared: true },
       });
+      (prisma.stageProgress.upsert as jest.Mock).mockResolvedValue({
+        id: 'progress-stage-4',
+        sessionId: mockSessionId,
+        stage: 4,
+        status: 'IN_PROGRESS',
+      });
+      (prisma.message.create as jest.Mock).mockImplementation(({ data }) => ({
+        id: `msg-${data.forUserId}`,
+        content: data.content,
+        timestamp: new Date(),
+        forUserId: data.forUserId,
+      }));
 
       const req = createMockRequest({
         user: mockUser,
@@ -722,9 +734,12 @@ describe('Stage 3 API', () => {
             consented: true,
             waitingForPartner: false,
             needsRevealReady: true,
+            advancedToStage4: true,
           }),
         })
       );
+      expect(prisma.stageProgress.upsert).toHaveBeenCalledTimes(2);
+      expect(prisma.message.create).toHaveBeenCalledTimes(2);
     });
 
     it('requires authentication', async () => {

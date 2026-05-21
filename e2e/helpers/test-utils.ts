@@ -519,9 +519,9 @@ export async function waitForNeedsReveal(
 }
 
 /**
- * Assert the side-by-side needs reveal and the noticing/validation step, then
- * validate the needs reveal through the UI. After both partners run this helper,
- * Stage 4 should be created by the backend transition.
+ * Legacy fallback: assert the side-by-side needs reveal and continue through it.
+ * Current sessions normally advance to Stage 4 automatically once both partners
+ * send needs.
  */
 export async function confirmSideBySideRevealAndValidation(
   page: Page,
@@ -534,7 +534,7 @@ export async function confirmSideBySideRevealAndValidation(
   const modal = page.getByTestId('needs-reveal-modal');
   await expect(modal).toBeVisible({ timeout });
   await expect(modal.getByText('Needs side by side')).toBeVisible({ timeout });
-  await expect(modal.getByText(/Review both needs lists/i)).toBeVisible({ timeout });
+  await expect(modal.getByText(/You have both sent your needs/i)).toBeVisible({ timeout });
   await expect(modal.getByText('You')).toBeVisible({ timeout });
   await expect(modal.getByText(partnerName)).toBeVisible({ timeout });
 

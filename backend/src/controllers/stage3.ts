@@ -12,7 +12,7 @@
  */
 
 import { Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma, StageProgress } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { confirmNeedsRequestSchema, ConsentContentType, NeedCategory } from '@meet-without-fear/shared';
@@ -78,6 +78,94 @@ async function hasPartnerSharedNeeds(
 
   const gates = partnerProgress.gatesSatisfied as Record<string, unknown> | null;
   return gates?.needsShared === true;
+}
+
+async function completeStage3AfterMutualNeedsShare(
+  sessionId: string,
+  currentUserId: string,
+  partnerId: string,
+  now: Date,
+  currentProgress: Pick<StageProgress, 'gatesSatisfied'> | null | undefined,
+  partnerProgress: Pick<StageProgress, 'gatesSatisfied'> | null | undefined
+): Promise<void> {
+  const reviewedAt = now.toISOString();
+  const mergeGates = (progress: Pick<StageProgress, 'gatesSatisfied'> | null | undefined) => ({
+    ...((progress?.gatesSatisfied as Record<string, unknown> | null) || {}),
+    needsShared: true,
+    needsValidated: true,
+    needsValidatedAt: reviewedAt,
+    needsRevealReviewedAt: reviewedAt,
+  }) satisfies Prisma.InputJsonValue;
+
+  for (const uid of [currentUserId, partnerId]) {
+    const progress = uid === currentUserId ? currentProgress : partnerProgress;
+    await prisma.stageProgress.update({
+      where: {
+        sessionId_userId_stage: {
+          sessionId,
+          userId: uid,
+          stage: 3,
+        },
+      },
+      data: {
+        gatesSatisfied: mergeGates(progress),
+        status: 'COMPLETED',
+        completedAt: now,
+      },
+    });
+
+    await prisma.stageProgress.upsert({
+      where: {
+        sessionId_userId_stage: {
+          sessionId,
+          userId: uid,
+          stage: 4,
+        },
+      },
+      create: {
+        sessionId,
+        userId: uid,
+        stage: 4,
+        status: 'IN_PROGRESS',
+        startedAt: now,
+      },
+      update: {},
+    });
+  }
+
+  const transitionContent =
+    'You have both sent your needs. Now you can work through what might honor them, one need at a time.';
+
+  const transitionMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
+  for (const uid of [currentUserId, partnerId]) {
+    const message = await prisma.message.create({
+      data: {
+        sessionId,
+        senderId: null,
+        forUserId: uid,
+        role: 'AI',
+        content: transitionContent,
+        stage: 4,
+      },
+    });
+    transitionMessages.push({ id: message.id, content: message.content, timestamp: message.timestamp, forUserId: uid });
+  }
+
+  for (const transitionMessage of transitionMessages) {
+    await publishSessionEvent(sessionId, 'partner.stage_completed', {
+      forUserId: transitionMessage.forUserId,
+      previousStage: 3,
+      currentStage: 4,
+      userId: currentUserId,
+      triggeredByUserId: currentUserId,
+      message: {
+        id: transitionMessage.id,
+        content: transitionMessage.content,
+        timestamp: transitionMessage.timestamp,
+        forUserId: transitionMessage.forUserId,
+      },
+    });
+  }
 }
 
 async function hasPartnerValidatedNeeds(
@@ -645,11 +733,22 @@ export async function consentToShareNeeds(
       },
     });
 
-    // Check if partner has also shared
-    const partnerShared = await hasPartnerSharedNeeds(sessionId, user.id);
-
     // Notify partner via real-time
     const partnerId = await getPartnerUserId(sessionId, user.id);
+    const partnerProgress = partnerId
+      ? await prisma.stageProgress.findUnique({
+          where: {
+            sessionId_userId_stage: {
+              sessionId,
+              userId: partnerId,
+              stage: 3,
+            },
+          },
+        })
+      : null;
+    const partnerGates = partnerProgress?.gatesSatisfied as Record<string, unknown> | null;
+    const partnerShared = partnerGates?.needsShared === true;
+
     if (partnerId) {
       await notifyPartner(sessionId, partnerId, 'partner.needs_shared', {
         stage: 3,
@@ -664,6 +763,14 @@ export async function consentToShareNeeds(
         stage: 3,
         needsRevealReady: true,
       });
+      await completeStage3AfterMutualNeedsShare(
+        sessionId,
+        user.id,
+        partnerId,
+        now,
+        { gatesSatisfied },
+        partnerProgress
+      );
     }
 
     successResponse(res, {
@@ -671,6 +778,7 @@ export async function consentToShareNeeds(
       sharedAt: now.toISOString(),
       waitingForPartner: !partnerShared,
       needsRevealReady: partnerShared,
+      advancedToStage4: partnerShared,
     });
   } catch (error) {
     logger.error('[consentToShareNeeds] Error:', error);
@@ -823,7 +931,7 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
       }
 
       const transitionContent =
-        'You have both checked the needs lists and marked them valid. Now move to strategies that can honor what each of you needs.';
+        'You have both sent your needs. Now you can work through what might honor them, one need at a time.';
 
       const transitionMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
       for (const uid of [user.id, partnerId]) {

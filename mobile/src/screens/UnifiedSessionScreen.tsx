@@ -663,7 +663,6 @@ export function UnifiedSessionScreen({
     handleConfirmAllNeeds,
     handleConsentToShareNeeds,
     handleValidateNeedsReveal,
-    handleNeedsNotValidYet,
     handleConfirmAgreement,
     handleResolveSession,
     handleRespondToShareOffer,
@@ -3513,11 +3512,11 @@ export function UnifiedSessionScreen({
           <MeasuredAnimatedPanel animationValue={needsReviewAnim}>
             <GuidedActionPanel
               tone="needs"
-              eyebrow="Needs review"
-              title="Review needs together"
-              subtitle="Open both needs lists side by side before continuing."
+              eyebrow="Needs shared"
+              title="Needs side by side"
+              subtitle="Take in both lists, then continue into repair."
               primaryAction={{
-                label: 'Review',
+                label: 'Continue',
                 onPress: () => {
                   Keyboard.dismiss();
                   setShowNeedsRevealModal(true);
@@ -3674,7 +3673,6 @@ export function UnifiedSessionScreen({
     isConfirmingTopicFrame,
     handleConsentToShareNeeds,
     handleValidateNeedsReveal,
-    handleNeedsNotValidYet,
     markCompleted,
     onStageComplete,
     openOverlay,
@@ -4537,7 +4535,7 @@ export function UnifiedSessionScreen({
           <View style={styles.modalCard} testID="needs-reveal-modal">
             <Text style={styles.modalTitle}>Needs side by side</Text>
             <Text style={styles.modalSubtitle}>
-              Review both needs lists, then decide whether they feel accurate enough to carry forward.
+              You have both sent your needs. Take a moment with both lists before moving into what might honor them.
             </Text>
             <ScrollView style={styles.needsRevealScroll} contentContainerStyle={styles.needsRevealContent}>
               <View style={styles.needsRevealColumn}>
@@ -4561,19 +4559,6 @@ export function UnifiedSessionScreen({
             </ScrollView>
             <View style={styles.shareActions}>
               <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={() => {
-                  handleNeedsNotValidYet(() => {
-                    setShowNeedsRevealModal(false);
-                  });
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Needs not reviewed yet"
-                testID="needs-reveal-not-reviewed"
-              >
-                <Text style={styles.secondaryButtonText}>Not reviewed yet</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
                 style={styles.primaryButton}
                 onPress={() => {
                   markCompleted('validated-needs');
@@ -4583,10 +4568,10 @@ export function UnifiedSessionScreen({
                   });
                 }}
                 accessibilityRole="button"
-                accessibilityLabel="Validate needs"
+                accessibilityLabel="Continue to Stage 4"
                 testID="needs-reveal-validate"
               >
-                <Text style={styles.primaryButtonText}>Looks accurate</Text>
+                <Text style={styles.primaryButtonText}>Continue to Stage 4</Text>
               </TouchableOpacity>
             </View>
             <TouchableOpacity

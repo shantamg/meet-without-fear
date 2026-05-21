@@ -6,8 +6,7 @@
  * - Triggering needs extraction via API (AI returns deterministic fixture responses)
  * - Reviewing and confirming identified needs
  * - Explicitly consenting to share needs
- * - Both users seeing side-by-side needs
- * - Both users validating the needs reveal
+ * - Both users making side-by-side needs available
  * - Both users advancing to Stage 4
  *
  * SUCCESS CRITERIA:
@@ -16,7 +15,7 @@
  * - Both users see needs review UI and confirm needs
  * - Both users explicitly share/consent before reveal
  * - Both users see side-by-side needs without overlap badges
- * - Both users validate the needs reveal and advance to Stage 4
+ * - Both users advance to Stage 4 after both have sent needs
  * - 8+ screenshots document each state for both users
  *
  * VISUAL REGRESSION BASELINES:
@@ -35,7 +34,6 @@ import {
   confirmNeedsSummaryAndConsent,
   getE2EHeaders,
   SessionBuilder,
-  confirmSideBySideRevealAndValidation,
   expectNeedsComparisonFromApi,
   expectNeedsSummaryFromApi,
   waitForNeedsReveal,
@@ -318,24 +316,19 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     await handleMoodCheck(pageA);
     await handleMoodCheck(pageB);
 
-    await expect(pageA.getByTestId('needs-reveal-validate-button')).toBeVisible({ timeout: 10000 });
-    await expect(pageB.getByTestId('needs-reveal-validate-button')).toBeVisible({ timeout: 10000 });
     await expectNeedsComparisonFromApi(apiA, API_BASE_URL, sessionId, 'User A');
     await expectNeedsComparisonFromApi(apiB, API_BASE_URL, sessionId, 'User B');
 
-    console.log(`${elapsed()} Side-by-side reveal data visible for both users`);
+    console.log(`${elapsed()} Side-by-side reveal data available for both users`);
 
     // Screenshot needs reveal state
     await pageA.screenshot({ path: 'test-results/stage-3-05-common-ground-user-a.png' });
     await pageB.screenshot({ path: 'test-results/stage-3-05-common-ground-user-b.png' });
 
     // ========================================
-    // STEP 8: Both users validate needs reveal
+    // STEP 8: Backend advances to Stage 4 after both users send needs
     // ========================================
-    console.log(`${elapsed()} === STEP 8: Validate needs reveal ===`);
-
-    await confirmSideBySideRevealAndValidation(pageA, userB.name);
-    await confirmSideBySideRevealAndValidation(pageB, userA.name);
+    console.log(`${elapsed()} === STEP 8: Wait for automatic Stage 4 transition ===`);
 
     await Promise.all([
       waitForStage(apiA, API_BASE_URL, sessionId, 4, 'User A', 30000),

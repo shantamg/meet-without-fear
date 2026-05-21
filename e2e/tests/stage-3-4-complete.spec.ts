@@ -313,20 +313,6 @@ test.describe('Stage 3-4 Complete Flow', () => {
     await expectNeedsComparisonFromApi(apiA, API_BASE_URL, sessionId, 'User A');
     await expectNeedsComparisonFromApi(apiB, API_BASE_URL, sessionId, 'User B');
 
-    console.log(`${elapsed()} User A validating needs reveal...`);
-    const validateA = await apiA.post(`${API_BASE_URL}/api/sessions/${sessionId}/needs/validate`, {
-      validated: true,
-    });
-    const validateDataA = await validateA.json();
-    console.log(`${elapsed()} User A validated needs: ${validateDataA.data?.validated}`);
-
-    console.log(`${elapsed()} User B validating needs reveal...`);
-    const validateB = await apiB.post(`${API_BASE_URL}/api/sessions/${sessionId}/needs/validate`, {
-      validated: true,
-    });
-    const validateDataB = await validateB.json();
-    console.log(`${elapsed()} User B validated needs: ${validateDataB.data?.validated}`);
-
     await Promise.all([
       waitForStage(apiA, API_BASE_URL, sessionId, 4, 'User A', 30000),
       waitForStage(apiB, API_BASE_URL, sessionId, 4, 'User B', 30000),

@@ -11,7 +11,7 @@ Endpoints for identifying needs, confirming them, and validating revealed needs 
 
 ## Overview
 
-Stage 3 helps each user articulate what matters to them in needs language, then both partners validate the side-by-side needs reveal before advancing.
+Stage 3 helps each user articulate what matters to them in needs language. Once both partners send their needs, the side-by-side reveal is available and Stage 4 can begin.
 
 Key concepts:
 - **Need articulation**: Each user chats with AI and names their own needs
@@ -367,6 +367,7 @@ interface ConsentShareNeedsResponse {
 3. Notifies clients when both users have consented and the side-by-side reveal is ready
 
 Validation: needIds must reference confirmed needs; at least 1. Consenting sets the caller's `needsShared` gate and moves the caller's Stage-3 status to `GATE_PENDING`. The partner-side check `partnerProgress.gatesSatisfied.needsShared === true` (surfaced via the `hasPartnerSharedNeeds` helper) is what unblocks the needs-validation step.
+When both partners have sent needs, the backend completes Stage 3 for both sides and opens Stage 4. The legacy `needsValidated` gate is populated automatically for compatibility; there is no second user-facing accuracy confirmation.
 
 ---
 
@@ -380,13 +381,13 @@ GET /api/v1/sessions/:id/needs/comparison
 
 > **Alias**: `GET /api/v1/sessions/:id/needs/reveal` routes to the same handler for clients using the Stage 3 capture/consent/reveal/validation vocabulary.
 
-Returns each partner's needs grouped for display; useful before the validation step completes.
+Returns each partner's needs grouped for display. This supports the side-by-side reveal and Stage 4 orientation.
 
 ---
 
-## Validate Needs
+## Validate Needs (Legacy Compatibility)
 
-Confirm that you have reviewed your partner's revealed needs. Both partners must validate before advancing to Stage 4.
+Older clients can still call this endpoint to mark the side-by-side reveal reviewed. New clients should treat `POST /needs/consent` as the decisive user-facing action: once both partners send needs, Stage 4 opens automatically.
 
 ```
 POST /api/v1/sessions/:id/needs/validate
@@ -407,15 +408,15 @@ interface ValidateNeedsResponse {
   validated: boolean;
   validatedAt: string | null;
   partnerValidated: boolean;
-  canAdvance: boolean;  // true when both partners have validated
+  canAdvance: boolean;  // true when this compatibility call opens Stage 4
 }
 ```
 
 ### Side Effects
 
-Calling this endpoint with `validated !== false` sets the caller's `needsValidated` gate.
+Calling this endpoint with `validated !== false` sets the caller's `needsValidated` compatibility gate.
 
-When both partners validate (`canAdvance === true`):
+When both partners have the compatibility gate (`canAdvance === true`):
 1. Both partners' Stage-3 status transitions to `COMPLETED`
 2. Both partners' Stage-4 progress records are created (`IN_PROGRESS`)
 3. A transition message is published to both users
@@ -446,9 +447,9 @@ To advance from Stage 3 to Stage 4:
 |------|-------------|
 | `needsConfirmed` | Caller confirmed at least one need |
 | `needsShared` | Caller consented to share confirmed needs |
-| `needsValidated` | Caller called `POST /needs/validate` (both partners must satisfy this gate to advance) |
+| `needsValidated` | Compatibility gate set automatically once both partners have sent needs |
 
-The partner-side check reads `partnerProgress.gatesSatisfied.needsShared`; there is no standalone `partnerNeedsConfirmed` gate. Stage-3 status transitions: `IN_PROGRESS → GATE_PENDING` (after sharing needs) → `COMPLETED` (when both partners have validated).
+The partner-side check reads `partnerProgress.gatesSatisfied.needsShared`; there is no standalone `partnerNeedsConfirmed` gate. Stage-3 status transitions: `IN_PROGRESS → GATE_PENDING` (after one side shares needs and waits) → `COMPLETED` (as soon as both partners have shared).
 
 ---
 
@@ -466,10 +467,7 @@ flowchart TD
     Wait -->|No| WaitState[Waiting]
     Wait -->|Yes| ShowNeeds[View partner needs side-by-side]
     ShowNeeds --> Notice[AI asks: What do you notice?]
-    Notice --> Validate[Validate revealed needs]
-    Validate --> BothValidated{Both validated?}
-    BothValidated -->|No| WaitPartner[Wait for partner]
-    BothValidated -->|Yes| Advance[Advance to Stage 4]
+    Notice --> Stage4[Stage 4 begins]
 ```
 
 ---

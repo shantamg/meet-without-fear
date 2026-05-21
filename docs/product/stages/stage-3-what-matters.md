@@ -115,12 +115,12 @@ After both users complete their needs exploration:
 3. **Reveal**: Both needs shown side by side
 4. **Minimal framing**: AI says something brief, then asks: **"What do you notice?"**
 5. **Emotional processing**: AI helps users name what it is like to see both lists without interpreting the relationship for them
-6. **Validity gate**: Each user validates whether both revealed lists feel accurate enough to carry into Stage 4
+6. **Continue**: Once both users have sent needs, Stage 4 can begin; there is no second accuracy confirmation for the other person's needs
 7. **No interpretation**: AI does not frame needs as compatible, overlapping, complementary, or shared -- that seeing belongs to the users
 
 ## Success Criteria
 
-Each user has articulated what matters to them in needs language that doesn't depend on the other person acting a specific way. Both users have confirmed their own needs, consented to share them, seen the side-by-side reveal, processed what they notice, and validated that the revealed needs are accurate enough to carry into Stage 4.
+Each user has articulated what matters to them in needs language that doesn't depend on the other person acting a specific way. Both users have confirmed and sent their own needs, seen the side-by-side reveal, and are ready to carry those needs into Stage 4.
 
 ## Failure Paths
 

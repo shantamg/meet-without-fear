@@ -9,7 +9,7 @@
  * - Both users complete Stage 0 (compact signing)
  * - Both users complete Stage 1 (witnessing + feel-heard)
  * - Both users complete Stage 2 (empathy drafting + sharing + reconciler)
- * - Both users complete Stage 3 (needs extraction + side-by-side validation)
+ * - Both users complete Stage 3 (needs extraction + mutual needs sharing)
  * - Both users complete Stage 4 (strategies + ranking + agreement)
  * - Session marked complete after agreement confirmation
  * - Test passes 3 consecutive runs without flakiness
@@ -31,7 +31,6 @@ import {
   navigateToShareFromSession,
   navigateBackToChat,
   confirmNeedsSummaryAndConsent,
-  confirmSideBySideRevealAndValidation,
   expectNeedsComparisonFromApi,
   expectNeedsSummaryFromApi,
   waitForNeedsReveal,
@@ -391,8 +390,6 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     await handleMoodCheck(harness.userAPage);
     await handleMoodCheck(harness.userBPage);
 
-    await expect(harness.userAPage.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout: 10000 });
-    await expect(harness.userBPage.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout: 10000 });
     await expectNeedsComparisonFromApi(apiA, API_BASE_URL, harness.sessionId, 'User A');
     await expectNeedsComparisonFromApi(apiB, API_BASE_URL, harness.sessionId, 'User B');
 
@@ -407,11 +404,7 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     // ==========================================
     // === STAGE 3 → STAGE 4 TRANSITION ===
     // ==========================================
-    // CRITICAL: Both users must notice the side-by-side reveal and confirm
-    // the needs reveal. The backend creates Stage 4 after both validations.
-
-    await confirmSideBySideRevealAndValidation(harness.userAPage, harness.config.userB.name);
-    await confirmSideBySideRevealAndValidation(harness.userBPage, harness.config.userA.name);
+    // The backend creates Stage 4 as soon as both users send needs.
 
     await Promise.all([
       waitForStage(apiA, API_BASE_URL, harness.sessionId, 4, 'User A', 30000),
