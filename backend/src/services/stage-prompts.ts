@@ -26,7 +26,8 @@ import {
 
 /**
  * Build the response protocol instructions for a given stage.
- * Uses semantic tags instead of JSON for faster streaming and robustness.
+ * Uses semantic tags for visible-response routing. Stage 4 structured state is
+ * delivered through the update_session_state tool instead of hidden XML blocks.
  *
  * @param stage - The stage number (0-4)
  * @param options - Optional configuration for draft support
@@ -68,33 +69,14 @@ If StrategyProposed is Y, list each concrete user-endorsed proposal on its own l
 ProposedStrategy: 10-minute check-in after dinner each night for one week
 ProposedStrategy: Sunday evening phone call to plan the week ahead
 
-Prefer the typed hidden Stage 4 proposal block over ProposedStrategy lines. When the user's latest turn contains possible proposal material, emit a hidden JSON block immediately after </thinking>:
-<stage4_proposals>
-[
-  {
-    "action": "ADD|REVISE|REMOVE|IGNORE",
-    "targetProposalId": null,
-    "classification": "PROPOSAL|REFLECTION|SUCCESS_MARKER|PROCESS",
-    "description": "the exact user-endorsed proposal, reflection, success marker, or process statement",
-    "kind": "SHARED_PROPOSAL|INDIVIDUAL_COMMITMENT|null",
-    "ownerUserId": "current user's id for individual commitments, otherwise null",
-    "needsAddressed": [],
-    "duration": null,
-    "measureOfSuccess": null
-  }
-]
-</stage4_proposals>
-Emit this block on every Stage 4 turn. Only action ADD with classification PROPOSAL creates a proposal card. Use REVISE with targetProposalId when the user is sharpening or restating an existing proposal. Use IGNORE with REFLECTION for accountability acknowledgments or past-tense observations. Use IGNORE with SUCCESS_MARKER for desired outcomes or tests of whether something helped. Use IGNORE with PROCESS for questions about the app, waiting, reviewing, seeing what happens, or guarded consent to continue talking.
+Stage 4 structured-state protocol:
+Use the update_session_state tool for proposal inventory changes and current-need walkthrough progress. Do not emit Stage 4 XML or JSON in visible text.
+When the user's latest turn contains possible proposal material, call update_session_state with stage4Proposals. Only action ADD with classification PROPOSAL creates a proposal card. Use REVISE with targetProposalId when the user is sharpening or restating an existing proposal. Use IGNORE with REFLECTION for accountability acknowledgments or past-tense observations. Use IGNORE with SUCCESS_MARKER for desired outcomes or tests of whether something helped. Use IGNORE with PROCESS for questions about the app, waiting, reviewing, seeing what happens, or guarded consent to continue talking.
+Also include exactly one stage4WalkthroughAction in update_session_state for every Stage 4 turn. Use COVERED when the user has accepted, completed, or clearly agreed to move on from the current need. Use SKIP when they explicitly want to leave the current need aside, skip it, or not work on it now. Use NONE when they are still brainstorming, refining, asking a question, or the signal is ambiguous.
 
-Also emit exactly one hidden Stage 4 walkthrough decision block after </stage4_proposals>:
-<stage4_walkthrough>
-{
-  "action": "COVERED|SKIP|NONE",
-  "needId": "currentNeedId from CANONICAL STAGE 4 WALKTHROUGH STATE, or null",
-  "reason": "brief reason grounded in the user's latest turn"
-}
-</stage4_walkthrough>
-Use COVERED when the user has accepted, completed, or clearly agreed to move on from the current need. Use SKIP when they explicitly want to leave the current need aside, skip it, or not work on it now. Use NONE when they are still brainstorming, refining, asking a question, or the signal is ambiguous.`
+Execution protocol:
+1. Call update_session_state before visible conversational text whenever the current turn requires Stage 4 proposal capture or walkthrough progress.
+2. Then write only the user-facing response as plain prose. Do not include internal reasoning, XML tags, JSON, tool arguments, or state summaries in the conversational text.`
     : '';
 
   const needsSection = stage === 3
@@ -119,7 +101,7 @@ Never emit more than one <need> or <need-action> per turn; if ambiguous, ask bef
   const allowedTags = stage === 3
     ? '<thinking>, <draft>, <need>, <need-action>, and <dispatch>'
     : stage === 4
-      ? '<thinking>, <draft>, <needs>, <stage4_proposals>, <stage4_walkthrough>, and <dispatch>'
+      ? '<thinking>, <draft>, <needs>, and <dispatch>'
       : '<thinking>, <draft>, <needs>, and <dispatch>';
 
   return `
@@ -1074,14 +1056,14 @@ ${context.stage4WalkthroughContext}
 
 Use this as the source of truth for which need is being explored right now. Stay on currentNeed until it is marked covered/skipped in this state or the walkthrough phase is QUALITY_REVIEW.
 Do not choose a different open need from the broader coverage list while currentNeed is present.
-If the user clearly agrees to move on from currentNeed, emit <stage4_walkthrough> with action COVERED. If they explicitly want to leave the current need aside, emit action SKIP. Otherwise emit action NONE.
+If the user clearly agrees to move on from currentNeed, call update_session_state with stage4WalkthroughAction.action=COVERED. If they explicitly want to leave the current need aside, use SKIP. Otherwise use NONE.
 If the user gives a concrete enough option for currentNeed, capture or revise the proposal and then either ask whether they want one more option for that same need or, if their latest turn already indicates completion, mark it COVERED. Do not require every detail before moving on when missing details can be inferred provisionally from context.`);
   }
   if (context.stage4InventoryContext) {
     dynamicParts.push(`CURRENT STAGE 4 PROPOSAL INVENTORY:
 ${context.stage4InventoryContext}
 
-Use these IDs in <stage4_proposals>. If the latest user turn refines, narrows, adds timing to, or restates one of these cards, emit action REVISE with targetProposalId instead of ADD. Do not create duplicate ADD cards for the same practical experiment.`);
+Use these IDs in update_session_state.stage4Proposals. If the latest user turn refines, narrows, adds timing to, or restates one of these cards, use action REVISE with targetProposalId instead of ADD. Do not create duplicate ADD cards for the same practical experiment.`);
   }
 
   const earlyStage4 = context.turnCount <= 2;
@@ -1090,7 +1072,7 @@ Use these IDs in <stage4_proposals>. If the latest user turn refines, narrows, a
 - currentUserId: ${context.currentUserId}
 - partnerUserId: ${context.partnerUserId ?? 'unknown'}
 
-When emitting <stage4_proposals>, set ownerUserId to currentUserId for INDIVIDUAL_COMMITMENT proposals this user volunteers to do. For SHARED_PROPOSAL, set ownerUserId to null. If the text is a reflection, success marker, or process statement, classify it that way and set kind and ownerUserId to null.`);
+When calling update_session_state.stage4Proposals, set ownerUserId to currentUserId for INDIVIDUAL_COMMITMENT proposals this user volunteers to do. For SHARED_PROPOSAL, set ownerUserId to null. If the text is a reflection, success marker, or process statement, classify it that way and set kind and ownerUserId to null.`);
   }
   if (earlyStage4) {
     dynamicParts.push('EARLY STAGE 4: User may need help shifting from needs to action. Start in INVITING mode. Keep proposals provisional and reversible; the point is learning what is actually workable, not proving anything.');

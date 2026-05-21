@@ -682,7 +682,7 @@ export type StreamEvent =
 /**
  * Anthropic tool definition type for the Messages API.
  */
-interface AnthropicToolDef {
+export interface AnthropicToolDef {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
@@ -817,11 +817,13 @@ export async function* getSonnetStreamingResponse(
       ...(tools && tools.length > 0 ? { tools } : {}),
     } as any);
 
-    // Track accumulated content for tool use and response logging
+    // Track visible prose separately from tool invocations. Tool payloads must
+    // never be appended to the text buffer that is streamed or logged as prose.
     let currentToolUseId: string | undefined;
     let currentToolName: string | undefined;
     let accumulatedToolInput = '';
     let accumulatedResponseText = '';
+    const toolInvocations: Array<{ name: string; input: Record<string, unknown> }> = [];
 
     for await (const event of stream) {
       // Text delta
@@ -851,7 +853,7 @@ export async function* getSonnetStreamingResponse(
           logger.error('[Bedrock] Failed to parse tool input JSON:', parseError);
         }
 
-        accumulatedResponseText += `\n\n[TOOL CALL: ${currentToolName}]\n${JSON.stringify(parsedInput, null, 2)}`;
+        toolInvocations.push({ name: currentToolName, input: parsedInput });
 
         yield {
           type: 'tool_use',
@@ -894,6 +896,7 @@ export async function* getSonnetStreamingResponse(
       metadata: {
         cacheReadInputTokens: cacheReadTokens,
         cacheWriteInputTokens: cacheWriteTokens,
+        toolInvocations: toolInvocations.map((tool) => ({ name: tool.name })),
         ...(streamContextSizes ? { contextSizes: streamContextSizes } : {}),
       },
     });

@@ -327,12 +327,13 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('desired-outcome fragments');
       expect(prompt).toContain('walk away knowing');
       expect(prompt).toContain('Do NOT write generic labels such as "User will..."');
-      expect(prompt).toContain('<stage4_proposals>');
-      expect(prompt).toContain('"action": "ADD|REVISE|REMOVE|IGNORE"');
-      expect(prompt).toContain('"classification": "PROPOSAL|REFLECTION|SUCCESS_MARKER|PROCESS"');
-      expect(prompt).toContain('Emit this block on every Stage 4 turn');
+      expect(prompt).toContain('update_session_state');
+      expect(prompt).toContain('stage4Proposals');
+      expect(prompt).toContain('ADD with classification PROPOSAL');
       expect(prompt).toContain('Only action ADD with classification PROPOSAL creates a proposal card');
       expect(prompt).toContain('guarded consent to continue talking');
+      expect(prompt).toContain('stage4WalkthroughAction');
+      expect(prompt).toContain('Do not emit Stage 4 XML or JSON in visible text');
       expect(prompt).toContain('I can talk about next steps');
       expect(prompt).toContain('one person');
       expect(prompt).toContain('as if it were a shared agreement');
@@ -369,7 +370,7 @@ describe('Stage Prompts Service', () => {
 
       expect(prompt).toContain('CURRENT STAGE 4 PROPOSAL INVENTORY');
       expect(prompt).toContain('id=proposal-1');
-      expect(prompt).toContain('emit action REVISE with targetProposalId instead of ADD');
+      expect(prompt).toContain('use action REVISE with targetProposalId instead of ADD');
     });
 
     it('Stage 4 prompt includes canonical walkthrough state and keeps focus on current need', () => {
@@ -383,8 +384,8 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('currentNeedLabel="To feel taken seriously"');
       expect(prompt).toContain('source of truth for which need is being explored right now');
       expect(prompt).toContain('Stay on currentNeed until it is marked covered/skipped');
-      expect(prompt).toContain('<stage4_walkthrough>');
-      expect(prompt).toContain('"action": "COVERED|SKIP|NONE"');
+      expect(prompt).toContain('stage4WalkthroughAction.action=COVERED');
+      expect(prompt).toContain('use SKIP');
       expect(prompt).toContain('Do not choose a different open need');
     });
 
@@ -981,13 +982,14 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('CONFIRM-AND-LOCK');
     });
 
-    it('does NOT include old tool call instructions', () => {
+    it('only includes tool call instructions for Stage 4', () => {
       const context = createContext();
-      const prompt = fullPrompt(buildStagePrompt(1, context));
+      const stage1Prompt = fullPrompt(buildStagePrompt(1, context));
+      const stage4Prompt = fullPrompt(buildStagePrompt(4, context));
 
-      // Should not have tool call instructions
-      expect(prompt).not.toContain('update_session_state');
-      expect(prompt).not.toContain('THIRD: Call');
+      expect(stage1Prompt).not.toContain('update_session_state');
+      expect(stage1Prompt).not.toContain('THIRD: Call');
+      expect(stage4Prompt).toContain('update_session_state');
     });
   });
 

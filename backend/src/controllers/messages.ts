@@ -16,7 +16,12 @@ import { getSonnetResponse, getSonnetStreamingResponse, BrainActivityCallType, i
 import { brainService } from '../services/brain-service';
 import { buildInitialMessagePrompt, buildStagePrompt, buildStagePromptString } from '../services/stage-prompts';
 import { parseMicroTagResponse } from '../utils/micro-tag-parser';
-import { type SessionStateToolInput } from '../services/stage-tools';
+import {
+  getToolsForStage,
+  parseSessionStateToolInput,
+  SESSION_STATE_TOOL_NAME,
+  type SessionStateToolInput,
+} from '../services/stage-tools';
 import {
   sendMessageRequestSchema,
   feelHeardRequestSchema,
@@ -1831,8 +1836,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       topicFrame: session.topicFrameConfirmedAt ? session.topicFrame : undefined,
     }, { isInvitationPhase });
 
-    // Prompt already includes semantic tag format instructions via buildResponseProtocol()
-    // No tool use instruction needed - we parse <thinking>, <draft>, <dispatch>, and <needs> tags instead
+    // Stage 4 uses tool calls as the primary structured-state channel so proposal
+    // and walkthrough metadata cannot leak into visible chat text. Earlier stages
+    // still use the existing semantic tag protocol.
 
     // Format context bundle and inject into last user message (includes notable facts)
     const formattedContext = formatContextForPrompt(contextBundle, {
@@ -1906,7 +1912,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       const streamGenerator = getSonnetStreamingResponse({
         systemPrompt: prompt,
         messages: messagesWithContext,
-        // No tools needed - using semantic tag format (<thinking>, <draft>, <dispatch>)
+        tools: currentStage === 4 ? getToolsForStage(currentStage) : undefined,
         maxTokens: 1536,
         sessionId,
         turnId,
@@ -2151,7 +2157,21 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             }
           }
         }
-        // tool_use events are no longer expected with semantic router format
+        if (event.type === 'tool_use') {
+          if (event.name === SESSION_STATE_TOOL_NAME) {
+            const toolMetadata = parseSessionStateToolInput(event.input);
+            metadata = { ...metadata, ...toolMetadata };
+            logger.info(`[sendMessageStream:${requestId}] [TOOL ${event.name}]:`, {
+              stage4ProposalCount: toolMetadata.stage4Proposals?.length ?? 0,
+              stage4WalkthroughAction: toolMetadata.stage4WalkthroughAction?.action ?? null,
+              offerFeelHeardCheck: toolMetadata.offerFeelHeardCheck,
+              offerReadyToShare: toolMetadata.offerReadyToShare,
+            });
+          } else {
+            logger.warn(`[sendMessageStream:${requestId}] Ignoring unknown tool call: ${event.name}`);
+          }
+          continue;
+        }
 
         // Check for done event with error flag (generator catches errors internally
         // and yields a done event with an error string instead of throwing)
@@ -2210,10 +2230,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       if (parsed.proposedStrategies.length > 0) {
         metadata.proposedStrategies = parsed.proposedStrategies;
       }
-      if (currentStage === 4 && parsed.stage4ProposalBlockPresent) {
+      if (currentStage === 4 && parsed.stage4ProposalBlockPresent && !metadata.stage4Proposals) {
         metadata.stage4Proposals = parsed.stage4Proposals;
       }
-      if (currentStage === 4 && parsed.stage4WalkthroughAction) {
+      if (currentStage === 4 && parsed.stage4WalkthroughAction && !metadata.stage4WalkthroughAction) {
         metadata.stage4WalkthroughAction = parsed.stage4WalkthroughAction;
       }
       if (currentStage === 3 && parsed.proposedNeeds.length > 0) {
