@@ -1473,6 +1473,7 @@ export function UnifiedSessionScreen({
   // Stage 3 needs reveal modal
   // -------------------------------------------------------------------------
   const [showNeedsRevealModal, setShowNeedsRevealModal] = useState(false);
+  const [showNeedsReferenceDrawer, setShowNeedsReferenceDrawer] = useState(false);
   const [showStage4Drawer, setShowStage4Drawer] = useState(false);
   const myNeedsSharedForComparison =
     (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true;
@@ -1480,7 +1481,9 @@ export function UnifiedSessionScreen({
     sessionId,
     (allNeedsConfirmed || myNeedsSharedForComparison) && (
       showNeedsRevealModal ||
-      myProgress?.stage === Stage.NEED_MAPPING
+      showNeedsReferenceDrawer ||
+      myProgress?.stage === Stage.NEED_MAPPING ||
+      currentStage === Stage.STRATEGIC_REPAIR
     ),
   );
   const isRefiningEmpathy =
@@ -3577,7 +3580,26 @@ export function UnifiedSessionScreen({
             ...stage4State.inventory.individualCommitments,
           ];
           const proposalCount = allProposals.length;
-          if (proposalCount === 0) return undefined;
+          if (proposalCount === 0) {
+            return (
+              <GuidedActionPanel
+                tone="needs"
+                eyebrow="What matters"
+                title="Needs are available"
+                subtitle="Keep both lists nearby while you start with the first need."
+                compact
+                primaryAction={{
+                  label: 'View needs',
+                  onPress: () => {
+                    Keyboard.dismiss();
+                    setShowNeedsReferenceDrawer(true);
+                  },
+                  testID: 'stage4-needs-reference-button',
+                }}
+                testID="stage4-needs-reference-panel"
+              />
+            );
+          }
 
           const who = partnerName || 'them';
           const mineSubmitted = stage4State.mySelectionStatus === 'SUBMITTED';
@@ -3622,12 +3644,23 @@ export function UnifiedSessionScreen({
             <GuidedActionPanel
               tone="review"
               title={title}
+              subtitle={subtitle}
               compact
-              pressable
               primaryAction={{
                 label,
-                onPress: () => setShowStage4Drawer(true),
+                onPress: () => {
+                  Keyboard.dismiss();
+                  setShowStage4Drawer(true);
+                },
                 testID: 'stage4-review-button',
+              }}
+              secondaryAction={{
+                label: 'Needs',
+                onPress: () => {
+                  Keyboard.dismiss();
+                  setShowNeedsReferenceDrawer(true);
+                },
+                testID: 'stage4-needs-reference-button',
               }}
               testID="stage4-review-panel"
             />
@@ -4586,6 +4619,75 @@ export function UnifiedSessionScreen({
         </View>
       </Modal>
 
+      <Modal
+        visible={showNeedsReferenceDrawer}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowNeedsReferenceDrawer(false)}
+        testID="needs-reference-drawer-modal"
+      >
+        <SafeAreaProvider>
+          <View style={styles.fullScreenDrawerPage}>
+            <SafeAreaView style={styles.needsReferenceDrawer} edges={['top', 'bottom']} testID="needs-reference-drawer">
+              <View style={styles.needsFullHeader}>
+                <View style={styles.needsFullHeaderText}>
+                  <Text style={styles.needsFullEyebrow}>What matters</Text>
+                  <Text style={styles.needsFullTitle}>Needs side by side</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.needsFullCloseButton}
+                  onPress={() => setShowNeedsReferenceDrawer(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close needs drawer"
+                  testID="needs-reference-drawer-close"
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <X color={styles.drawerIconColor.color} size={24} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.needsFullSubtitle}>
+                Keep these nearby while you work through what might honor them, one need at a time.
+              </Text>
+
+              <ScrollView
+                style={styles.needsReferenceScroll}
+                contentContainerStyle={styles.needsReferenceContent}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.needsReferenceSection}>
+                  <Text style={styles.needsReferenceSectionTitle}>You</Text>
+                  {(needsComparisonData?.myNeeds ?? []).length > 0 ? (
+                    (needsComparisonData?.myNeeds ?? []).map((need) => (
+                      <View key={need.id} style={styles.needsReferenceRow}>
+                        <Text style={styles.needsFullCategory}>{String(need.category)}</Text>
+                        <Text style={styles.needsFullNeedText}>{need.need}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.needsReferenceEmpty}>Your needs are loading.</Text>
+                  )}
+                </View>
+
+                <View style={styles.needsReferenceSection}>
+                  <Text style={styles.needsReferenceSectionTitle}>{partnerName || 'Partner'}</Text>
+                  {(needsComparisonData?.partnerNeeds ?? []).length > 0 ? (
+                    (needsComparisonData?.partnerNeeds ?? []).map((need) => (
+                      <View key={need.id} style={styles.needsReferenceRow}>
+                        <Text style={styles.needsFullCategory}>{String(need.category)}</Text>
+                        <Text style={styles.needsFullNeedText}>{need.need}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.needsReferenceEmpty}>Their needs are loading.</Text>
+                  )}
+                </View>
+              </ScrollView>
+            </SafeAreaView>
+          </View>
+        </SafeAreaProvider>
+      </Modal>
+
       {/* Stage 4 redesign drawer — bottom-sheet wrapper around Stage4RedesignPanel. */}
       <Modal
         visible={showStage4Drawer && hasRedesignedStage4 && !!stage4State}
@@ -5537,6 +5639,48 @@ const useStyles = () => {
       color: palette.bg,
       fontSize: 16,
       fontWeight: '700',
+    },
+    needsReferenceDrawer: {
+      flex: 1,
+      backgroundColor: palette.bg,
+      ...appWidthStyle,
+    },
+    needsReferenceScroll: {
+      flex: 1,
+    },
+    needsReferenceContent: {
+      gap: 22,
+      paddingHorizontal: 24,
+      paddingBottom: 28,
+    },
+    needsReferenceSection: {
+      gap: 12,
+    },
+    needsReferenceSectionTitle: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: palette.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0,
+    },
+    needsReferenceRow: {
+      paddingVertical: 18,
+      paddingHorizontal: 18,
+      borderRadius: 14,
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    needsReferenceEmpty: {
+      paddingVertical: 18,
+      paddingHorizontal: 18,
+      borderRadius: 14,
+      backgroundColor: palette.bgElev,
+      borderWidth: 1,
+      borderColor: palette.border,
+      color: palette.textMuted,
+      fontSize: 15,
+      lineHeight: 22,
     },
     needOptionsTitle: {
       fontSize: 18,
