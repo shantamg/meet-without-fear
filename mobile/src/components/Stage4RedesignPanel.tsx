@@ -775,8 +775,8 @@ export function Stage4RedesignPanel({
           </View>
         ))}
 
-        {!hasProposal && (
-          <View style={styles.actions}>
+        <View style={styles.actions}>
+          {!hasProposal ? (
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={() =>
@@ -786,39 +786,27 @@ export function Stage4RedesignPanel({
               testID="stage4-current-need-brainstorm"
             >
               <Send color={palette.bg} size={17} />
-              <Text style={styles.primaryButtonText}>Suggest options</Text>
+              <Text style={styles.primaryButtonText}>Brainstorm options</Text>
             </TouchableOpacity>
-          </View>
-        )}
-
-        <View style={styles.actions}>
+          ) : (
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => onMarkNeedCovered?.(currentNeed.id)}
+              accessibilityRole="button"
+              testID="stage4-current-need-covered"
+            >
+              <Text style={styles.primaryButtonText}>
+                {walkthrough.phase === 'MY_NEEDS' ? 'This need feels covered' : 'Continue'}
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => onMarkNeedCovered?.(currentNeed.id)}
-            accessibilityRole="button"
-            testID="stage4-current-need-covered"
-          >
-            <Text style={styles.primaryButtonText}>
-              {walkthrough.phase === 'MY_NEEDS' ? 'This need feels covered' : 'Continue'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() =>
-              (onSuggestOptions ?? onBrainstormNeed)?.(currentNeed.label, currentNeed.id)
-            }
-            accessibilityRole="button"
-            testID="stage4-current-need-more-options"
-          >
-            <Text style={styles.secondaryButtonText}>Try one more option</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.secondaryButton}
+            style={styles.tertiaryButton}
             onPress={() => onSkipNeed?.(currentNeed.id)}
             accessibilityRole="button"
             testID="stage4-current-need-skip"
           >
-            <Text style={styles.secondaryButtonText}>Leave for later</Text>
+            <Text style={styles.tertiaryButtonText}>Skip this need for now</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1365,6 +1353,17 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   secondaryButtonText: {
     color: palette.text,
     fontSize: 15,
+    fontWeight: '600',
+  },
+  tertiaryButton: {
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  tertiaryButtonText: {
+    color: palette.textMuted,
+    fontSize: 14,
     fontWeight: '600',
   },
   disabledButtonText: {
