@@ -3587,7 +3587,7 @@ export function UnifiedSessionScreen({
             const totalInPhase = Math.max(1, walkthrough.totalInPhase);
             const subtitle =
               currentNeedProposalCount === 0
-                ? 'Open this to gather options, mark it covered, or skip it.'
+                ? 'Keep working in chat; open this only if you want to skip.'
                 : currentNeedProposalCount === 1
                   ? 'Open this to refine the option, mark it covered, or skip it.'
                   : `Open this to refine ${currentNeedProposalCount} options, mark it covered, or skip it.`;

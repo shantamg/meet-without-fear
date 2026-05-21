@@ -781,17 +781,11 @@ export function Stage4RedesignPanel({
 
         <View style={styles.actions}>
           {!hasProposal ? (
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() =>
-                (onSuggestOptions ?? onBrainstormNeed)?.(currentNeed.label, currentNeed.id)
-              }
-              accessibilityRole="button"
-              testID="stage4-current-need-brainstorm"
-            >
-              <Send color={palette.bg} size={17} />
-              <Text style={styles.primaryButtonText}>Brainstorm options</Text>
-            </TouchableOpacity>
+            <View style={styles.statusBlock} testID="stage4-current-need-chat-guidance">
+              <Text style={styles.statusText}>
+                Keep brainstorming in the chat. When something feels workable, it will appear here.
+              </Text>
+            </View>
           ) : (
             <TouchableOpacity
               style={styles.primaryButton}

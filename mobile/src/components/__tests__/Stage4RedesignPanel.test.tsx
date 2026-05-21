@@ -207,6 +207,27 @@ describe('Stage4RedesignPanel', () => {
     expect(screen.getByText('Covered')).toBeTruthy();
   });
 
+  it('does not let the drawer brainstorm options for an empty current need', () => {
+    const emptyState: GetStage4StateResponse = {
+      ...walkthroughNeedsState,
+      walkthrough: {
+        ...walkthroughNeedsState.walkthrough!,
+        proposalGroups: walkthroughNeedsState.walkthrough!.proposalGroups.map((group) => ({
+          ...group,
+          proposals: [],
+        })),
+      },
+    };
+
+    render(<Stage4RedesignPanel {...defaultProps} state={emptyState} />);
+
+    expect(screen.getByTestId('stage4-current-need-chat-guidance')).toBeTruthy();
+    expect(screen.getByText(/Keep brainstorming in the chat/i)).toBeTruthy();
+    expect(screen.queryByTestId('stage4-current-need-brainstorm')).toBeNull();
+    expect(screen.queryByTestId('stage4-current-need-covered')).toBeNull();
+    expect(screen.getByTestId('stage4-current-need-skip')).toBeTruthy();
+  });
+
   it('hides the share footer while walking needs one at a time', () => {
     render(
       <Stage4RedesignFooter
