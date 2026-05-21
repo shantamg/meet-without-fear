@@ -345,6 +345,7 @@ function ProposalCard({
   partnerName,
   isSelecting,
   readOnly,
+  showStance = true,
   onSelectProposal,
   onRefineProposal,
 }: {
@@ -352,6 +353,7 @@ function ProposalCard({
   partnerName: string;
   isSelecting?: boolean;
   readOnly?: boolean;
+  showStance?: boolean;
   onSelectProposal: (proposalId: string, decision: Stage4SelectionDecision) => void;
   onRefineProposal?: (proposalId: string, description: string) => void;
 }) {
@@ -399,44 +401,48 @@ function ProposalCard({
         </Text>
       ))}
 
-      <Text style={styles.stanceLabel}>Your stance</Text>
-      <View style={styles.segmentedControl}>
-        {[
-          Stage4SelectionDecision.WILLING,
-          Stage4SelectionDecision.NOT_WILLING,
-        ].map((decision) => {
-          const selected = proposal.myDecision === decision;
-          const disabled = Boolean(isSelecting || readOnly);
-          return (
-            <TouchableOpacity
-              key={decision}
-              style={[
-                styles.segment,
-                selected && styles.segmentSelected,
-                disabled && !selected && styles.segmentDisabled,
-              ]}
-              onPress={() => onSelectProposal(proposal.id, decision)}
-              disabled={disabled}
-              accessibilityRole="button"
-              accessibilityLabel={`${decisionLabels[decision]} for proposal`}
-              accessibilityState={{ selected, disabled }}
-            >
-              <Text
-                style={[
-                  styles.segmentText,
-                  selected && styles.segmentTextSelected,
-                ]}
-              >
-                {decisionLabels[decision]}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      {showStance && (
+        <>
+          <Text style={styles.stanceLabel}>Your stance</Text>
+          <View style={styles.segmentedControl}>
+            {[
+              Stage4SelectionDecision.WILLING,
+              Stage4SelectionDecision.NOT_WILLING,
+            ].map((decision) => {
+              const selected = proposal.myDecision === decision;
+              const disabled = Boolean(isSelecting || readOnly);
+              return (
+                <TouchableOpacity
+                  key={decision}
+                  style={[
+                    styles.segment,
+                    selected && styles.segmentSelected,
+                    disabled && !selected && styles.segmentDisabled,
+                  ]}
+                  onPress={() => onSelectProposal(proposal.id, decision)}
+                  disabled={disabled}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${decisionLabels[decision]} for proposal`}
+                  accessibilityState={{ selected, disabled }}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      selected && styles.segmentTextSelected,
+                    ]}
+                  >
+                    {decisionLabels[decision]}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-      <Text style={styles.partnerState}>
-        {partnerStateLabel(partnerName, proposal.partnerDecisionVisible)}
-      </Text>
+          <Text style={styles.partnerState}>
+            {partnerStateLabel(partnerName, proposal.partnerDecisionVisible)}
+          </Text>
+        </>
+      )}
     </View>
   );
 }
@@ -560,8 +566,12 @@ export function Stage4RedesignFooter({
     state.inventory.sharedProposals.every((p) => Boolean(p.myDecision));
   const needsGated = allOpenNeedsAddressedOrDeclined(state);
   const who = partnerName || 'They';
+  const isWalkingNeeds =
+    state.walkthrough.phase === 'MY_NEEDS' ||
+    state.walkthrough.phase === 'PARTNER_NEEDS';
 
   if (state.outcome) return null;
+  if (isWalkingNeeds) return null;
 
   if (allProposals.length === 0) {
     return (
@@ -756,6 +766,7 @@ export function Stage4RedesignPanel({
                   partnerName={partnerLabel}
                   isSelecting={isSelecting}
                   readOnly={proposalSelectionsReadOnly || Boolean(group.readOnly)}
+                  showStance={false}
                   onSelectProposal={onSelectProposal}
                   onRefineProposal={group.readOnly ? undefined : onRefineProposal}
                 />
@@ -824,26 +835,28 @@ export function Stage4RedesignPanel({
           </View>
         </View>
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Candidate agreements</Text>
-          {allProposals.filter((proposal) => proposal.myDecision === Stage4SelectionDecision.WILLING).length === 0 ? (
-            <Text style={styles.emptyText}>No willing options yet.</Text>
+          <Text style={styles.sectionTitle}>Options to consider</Text>
+          {allProposals.length === 0 ? (
+            <Text style={styles.emptyText}>No proposals captured yet.</Text>
           ) : (
-            allProposals
-              .filter((proposal) => proposal.myDecision === Stage4SelectionDecision.WILLING)
-              .map((proposal) => {
-                const warning = walkthrough.qualityWarnings.find((item) => item.proposalId === proposal.id);
-                return (
-                  <View key={proposal.id} style={styles.proposalCard}>
-                    <Text style={styles.proposalDescription}>{proposal.description}</Text>
-                    {proposal.duration && <Text style={styles.proposalMeta}>Timing: {proposal.duration}</Text>}
-                    {proposal.measureOfSuccess && <Text style={styles.proposalMeta}>Check: {proposal.measureOfSuccess}</Text>}
-                    <Text style={styles.proposalMeta}>Check-in: {walkthrough.defaultCheckInDate}</Text>
-                    {warning && (
-                      <Text style={styles.actionHint}>{warning.warning} {warning.suggestedRevision}</Text>
-                    )}
-                  </View>
-                );
-              })
+            allProposals.map((proposal) => {
+              const warning = walkthrough.qualityWarnings.find((item) => item.proposalId === proposal.id);
+              return (
+                <View key={proposal.id}>
+                  <ProposalCard
+                    proposal={proposal}
+                    partnerName={partnerLabel}
+                    isSelecting={isSelecting}
+                    readOnly={proposalSelectionsReadOnly}
+                    onSelectProposal={onSelectProposal}
+                    onRefineProposal={onRefineProposal}
+                  />
+                  {warning && (
+                    <Text style={styles.actionHint}>{warning.warning} {warning.suggestedRevision}</Text>
+                  )}
+                </View>
+              );
+            })
           )}
         </View>
         {!hideFooter && (
