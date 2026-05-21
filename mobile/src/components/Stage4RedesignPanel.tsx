@@ -706,7 +706,6 @@ export function Stage4RedesignPanel({
   // backend, so the partner never sees a stale stance. Only a finalized
   // outcome locks them.
   const proposalSelectionsReadOnly = Boolean(state.outcome);
-  const [showAllNeeds, setShowAllNeeds] = useState(false);
 
   const coverageHasRows =
     state.coverageAudit.covered.length > 0 ||
@@ -730,33 +729,7 @@ export function Stage4RedesignPanel({
             <Text style={styles.walkthroughTitle}>Working toward agreements</Text>
             <Text style={styles.walkthroughProgress}>{phaseLabel}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.viewAllButton}
-            onPress={() => setShowAllNeeds((value) => !value)}
-            accessibilityRole="button"
-            testID="stage4-view-all-needs"
-          >
-            <Text style={styles.viewAllButtonText}>{showAllNeeds ? 'Hide list' : 'View all'}</Text>
-          </TouchableOpacity>
         </View>
-
-        {showAllNeeds && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>All needs</Text>
-            <Text style={styles.coverageTitle}>Your needs</Text>
-            {walkthrough.ownNeeds.map((need) => (
-              <Text key={need.id} style={styles.reviewNeedRow}>
-                {need.label} · {need.status.replace('_', ' ')}
-              </Text>
-            ))}
-            <Text style={styles.coverageTitle}>Their needs</Text>
-            {walkthrough.partnerNeeds.map((need) => (
-              <Text key={need.id} style={styles.reviewNeedRow}>
-                {need.label} · {need.status.replace('_', ' ')}
-              </Text>
-            ))}
-          </View>
-        )}
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>
@@ -1106,31 +1079,12 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     lineHeight: 18,
     marginTop: 2,
   },
-  viewAllButton: {
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: palette.bgElev,
-  },
-  viewAllButtonText: {
-    color: palette.text,
-    fontSize: 13,
-    fontWeight: '600',
-  },
   focusNeedText: {
     color: palette.text,
     fontSize: 17,
     lineHeight: 24,
     fontWeight: '600',
     marginBottom: 8,
-  },
-  reviewNeedRow: {
-    color: palette.text,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 6,
   },
   card: {
     backgroundColor: palette.bgElev,
