@@ -359,11 +359,7 @@ export function ChatTimeline({
             disabled={isInputDisabled}
           />
         )}
-        {renderAboveInput ? (
-          <View style={styles.actionPanelContainer}>
-            {renderAboveInput()}
-          </View>
-        ) : null}
+        {renderAboveInput?.()}
       </View>
     </KeyboardAvoidingView>
   );
@@ -416,9 +412,5 @@ const useStyles = () =>
     },
     bottomContainer: {
       // Container for emotion slider, panels above input, and input
-    },
-    actionPanelContainer: {
-      paddingBottom: t.spacing.sm,
-      backgroundColor: t.colors.bgPrimary,
     },
   }));

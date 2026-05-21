@@ -204,7 +204,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: PANEL_BORDER_ACCENT_WIDTH,
   },
   containerCompact: {
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
   },
   iconWrap: {
     paddingTop: PANEL_ICON_TOP_ALIGNMENT_OFFSET,
@@ -273,7 +274,6 @@ const styles = StyleSheet.create({
   subtitleCompact: {
     fontSize: typography.fontSize.sm,
     lineHeight: spacing.lg,
-    marginBottom: spacing.xs,
   },
   actions: {
     flexDirection: 'row',
