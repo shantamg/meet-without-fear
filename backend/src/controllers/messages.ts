@@ -436,12 +436,25 @@ const PLANNER_LINE_PREFIXES = [
   'i need to make sure both lists',
 ];
 
+function stripUntaggedReasoningPreamble(text: string): string {
+  const marker = text.match(/\bFor\s+stage4_(?:walkthrough|proposals)\s*:/i);
+  if (!marker || marker.index === undefined) return text;
+
+  const afterMarker = text.slice(marker.index);
+  const nextParagraph = afterMarker.match(/\n\s*\n+/);
+  if (!nextParagraph || nextParagraph.index === undefined) return text;
+
+  const visibleStart = marker.index + nextParagraph.index + nextParagraph[0].length;
+  return text.slice(visibleStart);
+}
+
 export function scrubVisibleAIText(
   text: string,
   options: { preserveBoundaryWhitespace?: boolean } = {}
 ): { text: string; scrubbed: boolean } {
   const before = text;
-  const plannerScrubbed = text
+  const preambleScrubbed = stripUntaggedReasoningPreamble(text);
+  const plannerScrubbed = preambleScrubbed
     .split(/\r?\n/)
     .filter((line) => {
       const trimmed = line.trim().toLowerCase();

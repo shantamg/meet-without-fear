@@ -192,6 +192,32 @@ describe('Messages API (Fire-and-Forget)', () => {
           scrubbed: false,
         });
       });
+
+      it('removes untagged Stage 4 reasoning before the visible answer', () => {
+        const result = scrubVisibleAIText([
+          'This is them accepting my invitation to add another option for the same need.',
+          '',
+          'So I have:',
+          '- Previous proposal idea: play 20 Questions',
+          '- Current addition: Would You Rather',
+          '',
+          'These are both specific games. capture them as options and then check if they are done brainstorming.',
+          '',
+          'For stage4_walkthrough: The user is still actively brainstorming for the current need, so action=NONE.',
+          '',
+          '',
+          'Got it — so 20 Questions or Would You Rather, both could create that shared lightness.',
+          '',
+          'Is that enough to work with, or do you want one more option for this need?',
+        ].join('\n'));
+
+        expect(result.scrubbed).toBe(true);
+        expect(result.text).toBe([
+          'Got it — so 20 Questions or Would You Rather, both could create that shared lightness.',
+          '',
+          'Is that enough to work with, or do you want one more option for this need?',
+        ].join('\n'));
+      });
     });
 
     describe('isReadyForStage3RevealText', () => {
