@@ -32,10 +32,52 @@ import {
 // Helpers
 // ============================================================================
 
-const STAGE4_TRANSITION_CONTENT = [
-  'You have both sent your needs and can now see what each of you named.',
-  'The work shifts now: not to deciding everything, just to putting ideas on the table one need at a time. What comes up for you when you think about what might help with your first need?',
-].join('\n\n');
+function buildStage4TransitionContent(firstNeed?: string | null): string {
+  const needText = firstNeed?.trim();
+  const needLine = needText
+    ? `Let's start with one of yours: ${needText}.`
+    : "Let's start with one of yours.";
+
+  return [
+    'You have both sent your needs and can now see what each of you named.',
+    `${needLine} The work now is not to decide everything, just to put ideas on the table. What might help honor that need?`,
+  ].join('\n\n');
+}
+
+async function getFirstStage4NeedText(sessionId: string, userId: string): Promise<string | null> {
+  const vessel = await getOrCreateUserVessel(sessionId, userId);
+  const firstNeed = await prisma.identifiedNeed.findFirst({
+    where: {
+      vesselId: vessel.id,
+      confirmed: true,
+      deletedAt: null,
+      supersededByNeedId: null,
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { need: true },
+  });
+
+  return firstNeed?.need ?? null;
+}
+
+async function createStage4TransitionMessage(
+  sessionId: string,
+  forUserId: string
+): Promise<{ id: string; content: string; timestamp: Date; forUserId: string }> {
+  const firstNeed = await getFirstStage4NeedText(sessionId, forUserId);
+  const message = await prisma.message.create({
+    data: {
+      sessionId,
+      senderId: null,
+      forUserId,
+      role: 'AI',
+      content: buildStage4TransitionContent(firstNeed),
+      stage: 4,
+    },
+  });
+
+  return { id: message.id, content: message.content, timestamp: message.timestamp, forUserId };
+}
 
 /**
  * Get or create user vessel for a session
@@ -138,21 +180,9 @@ async function completeStage3AfterMutualNeedsShare(
     });
   }
 
-  const transitionContent = STAGE4_TRANSITION_CONTENT;
-
   const transitionMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
   for (const uid of [currentUserId, partnerId]) {
-    const message = await prisma.message.create({
-      data: {
-        sessionId,
-        senderId: null,
-        forUserId: uid,
-        role: 'AI',
-        content: transitionContent,
-        stage: 4,
-      },
-    });
-    transitionMessages.push({ id: message.id, content: message.content, timestamp: message.timestamp, forUserId: uid });
+    transitionMessages.push(await createStage4TransitionMessage(sessionId, uid));
   }
 
   for (const transitionMessage of transitionMessages) {
@@ -934,21 +964,9 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
         });
       }
 
-      const transitionContent = STAGE4_TRANSITION_CONTENT;
-
       const transitionMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
       for (const uid of [user.id, partnerId]) {
-        const message = await prisma.message.create({
-          data: {
-            sessionId,
-            senderId: null,
-            forUserId: uid,
-            role: 'AI',
-            content: transitionContent,
-            stage: 4,
-          },
-        });
-        transitionMessages.push({ id: message.id, content: message.content, timestamp: message.timestamp, forUserId: uid });
+        transitionMessages.push(await createStage4TransitionMessage(sessionId, uid));
       }
 
       for (const transitionMessage of transitionMessages) {
