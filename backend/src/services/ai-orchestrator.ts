@@ -524,13 +524,20 @@ export async function orchestrateResponse(
   try {
     // Note: Extended thinking is not supported by Claude 3.5 Sonnet v2 on Bedrock
     // Disabling thinkingBudget for now to ensure real AI responses
+    const stateCapturePrompt = {
+      staticBlock: systemPrompt.staticBlock,
+      dynamicBlock: `${systemPrompt.dynamicBlock}
+
+STATE CAPTURE PASS:
+Call update_session_state with any persisted state required by the latest user turn. Do not write conversational prose in this pass.`,
+    };
     const completionOrText = await getModelCompletionWithTools(routingDecision.model, {
-      systemPrompt,
+      systemPrompt: stateCapturePrompt,
       messages: messagesWithContext,
       tools: getToolsForStage(context.stage),
-      maxTokens: routingDecision.model === 'haiku' ? 1536 : 2048,
+      maxTokens: 1024,
       sessionId: context.sessionId,
-      operation: `orchestrator-response-${routingDecision.model}`,
+      operation: `orchestrator-state-capture-${routingDecision.model}`,
       turnId,
       callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
       // thinkingBudget: 1024, // Disabled - not supported on Bedrock Sonnet v2
@@ -541,6 +548,39 @@ export async function orchestrateResponse(
     modelResponse = completion?.text ?? null;
     const sessionStateTool = completion?.toolInvocations.find((tool) => tool.name === SESSION_STATE_TOOL_NAME);
     const toolMetadata = sessionStateTool ? parseSessionStateToolInput(sessionStateTool.input) : {};
+
+    if (!modelResponse && sessionStateTool) {
+      const visiblePrompt = {
+        staticBlock: systemPrompt.staticBlock,
+        dynamicBlock: `${systemPrompt.dynamicBlock}
+
+VISIBLE RESPONSE PASS:
+Persisted state has already been captured for this turn. The update_session_state tool is intentionally unavailable now. Ignore any instruction to call it in this pass.
+Captured state summary for your private context: ${JSON.stringify({
+  topicFrame: toolMetadata.topicFrame,
+  offerFeelHeardCheck: toolMetadata.offerFeelHeardCheck,
+  offerReadyToShare: toolMetadata.offerReadyToShare,
+  proposedEmpathyStatement: toolMetadata.proposedEmpathyStatement ? '[captured]' : undefined,
+  proposedNeed: toolMetadata.proposedNeed,
+  needAction: toolMetadata.needAction,
+  stage4ProposalCount: toolMetadata.stage4Proposals?.length,
+  stage4WalkthroughAction: toolMetadata.stage4WalkthroughAction,
+})}
+Write only the user-facing conversational response. Do not include tool JSON, XML tags beyond the normal hidden <thinking> protocol, or state summaries.`,
+      };
+      const visibleCompletion = await getModelCompletionWithTools(routingDecision.model, {
+        systemPrompt: visiblePrompt,
+        messages: messagesWithContext,
+        maxTokens: routingDecision.model === 'haiku' ? 1536 : 2048,
+        sessionId: context.sessionId,
+        operation: `orchestrator-visible-response-${routingDecision.model}`,
+        turnId,
+        callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
+      });
+      modelResponse = typeof visibleCompletion === 'string'
+        ? visibleCompletion
+        : visibleCompletion?.text ?? null;
+    }
 
     const responseTime = Date.now() - responseStartTime;
     traceSteps.push({

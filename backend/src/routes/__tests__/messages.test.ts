@@ -33,6 +33,7 @@ jest.mock('../../services/partner-session-classifier', () => ({
 // Mock bedrock
 jest.mock('../../lib/bedrock', () => ({
   getSonnetResponse: jest.fn().mockResolvedValue('Mock response'),
+  getModelCompletionWithTools: jest.fn().mockResolvedValue({ text: null, toolInvocations: [] }),
   getSonnetStreamingResponse: jest.fn(),
   BrainActivityCallType: {
     ORCHESTRATED_RESPONSE: 'ORCHESTRATED_RESPONSE',

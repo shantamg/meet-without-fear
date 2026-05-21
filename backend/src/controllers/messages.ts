@@ -12,7 +12,7 @@ import { Prisma } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
-import { getSonnetResponse, getSonnetStreamingResponse, BrainActivityCallType, isMockLLMEnabled } from '../lib/bedrock';
+import { getModelCompletionWithTools, getSonnetResponse, getSonnetStreamingResponse, BrainActivityCallType, isMockLLMEnabled } from '../lib/bedrock';
 import { brainService } from '../services/brain-service';
 import { buildInitialMessagePrompt, buildStagePrompt, buildStagePromptString } from '../services/stage-prompts';
 import { parseMicroTagResponse } from '../utils/micro-tag-parser';
@@ -1908,10 +1908,70 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     let isDispatchMessage = false; // Track if this is a dispatch response (skip processing)
 
     try {
-      const streamGenerator = getSonnetStreamingResponse({
-        systemPrompt: prompt,
+      const stateCapturePrompt = {
+        staticBlock: prompt.staticBlock,
+        dynamicBlock: `${prompt.dynamicBlock}
+
+STATE CAPTURE PASS:
+Call update_session_state with any persisted state required by the latest user turn. Do not write conversational prose in this pass.`,
+      };
+      const stateCapture = await getModelCompletionWithTools('sonnet', {
+        systemPrompt: stateCapturePrompt,
         messages: messagesWithContext,
         tools: getToolsForStage(currentStage),
+        maxTokens: 1024,
+        sessionId,
+        turnId,
+        operation: 'structured-state-capture',
+        callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
+      });
+      const sessionStateTool = stateCapture?.toolInvocations.find((tool) => tool.name === SESSION_STATE_TOOL_NAME);
+      if (sessionStateTool) {
+        metadata = { ...metadata, ...parseSessionStateToolInput(sessionStateTool.input) };
+        logger.info(`[sendMessageStream:${requestId}] [PRESTREAM TOOL ${sessionStateTool.name}]:`, {
+          topicFrame: Boolean(metadata.topicFrame),
+          proposedNeed: Boolean(metadata.proposedNeed),
+          needAction: metadata.needAction?.type ?? null,
+          stage4ProposalCount: metadata.stage4Proposals?.length ?? 0,
+          stage4WalkthroughAction: metadata.stage4WalkthroughAction?.action ?? null,
+          offerFeelHeardCheck: metadata.offerFeelHeardCheck,
+          offerReadyToShare: metadata.offerReadyToShare,
+        });
+      } else if (stateCapture?.text) {
+        const parsedStateFallback = parseMicroTagResponse(stateCapture.text);
+        metadata.offerFeelHeardCheck = parsedStateFallback.offerFeelHeardCheck;
+        metadata.offerReadyToShare = parsedStateFallback.offerReadyToShare;
+        if (currentStage === 3 && parsedStateFallback.proposedNeed) metadata.proposedNeed = parsedStateFallback.proposedNeed;
+        if (currentStage === 3 && parsedStateFallback.needAction) metadata.needAction = parsedStateFallback.needAction;
+        if (currentStage === 3 && parsedStateFallback.proposedNeeds.length > 0) metadata.proposedNeeds = parsedStateFallback.proposedNeeds;
+        if (currentStage === 4 && parsedStateFallback.stage4ProposalBlockPresent) metadata.stage4Proposals = parsedStateFallback.stage4Proposals;
+        if (currentStage === 4 && parsedStateFallback.stage4WalkthroughAction) metadata.stage4WalkthroughAction = parsedStateFallback.stage4WalkthroughAction;
+        if ((currentStage === 0 || isInvitationPhase) && parsedStateFallback.topicFrame) metadata.topicFrame = parsedStateFallback.topicFrame;
+        if (currentStage === 2 && parsedStateFallback.draft) metadata.proposedEmpathyStatement = parsedStateFallback.draft;
+        logger.warn(`[sendMessageStream:${requestId}] Structured state capture returned text without tool; parsed legacy fallback.`);
+      }
+
+      const visiblePrompt = {
+        staticBlock: prompt.staticBlock,
+        dynamicBlock: `${prompt.dynamicBlock}
+
+VISIBLE RESPONSE PASS:
+Persisted state has already been captured for this turn. The update_session_state tool is intentionally unavailable now. Ignore any instruction to call it in this pass.
+Captured state summary for your private context: ${JSON.stringify({
+  topicFrame: metadata.topicFrame,
+  offerFeelHeardCheck: metadata.offerFeelHeardCheck,
+  offerReadyToShare: metadata.offerReadyToShare,
+  proposedEmpathyStatement: metadata.proposedEmpathyStatement ? '[captured]' : undefined,
+  proposedNeed: metadata.proposedNeed,
+  needAction: metadata.needAction,
+  stage4ProposalCount: metadata.stage4Proposals?.length,
+  stage4WalkthroughAction: metadata.stage4WalkthroughAction,
+})}
+Write only the user-facing conversational response. Do not include tool JSON, XML tags beyond the normal hidden <thinking> protocol, or state summaries.`,
+      };
+      const streamGenerator = getSonnetStreamingResponse({
+        systemPrompt: visiblePrompt,
+        messages: messagesWithContext,
         maxTokens: 1536,
         sessionId,
         turnId,
