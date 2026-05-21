@@ -408,6 +408,11 @@ export function useUnifiedSession(
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
+      if (sessionId && metadata.stage4WalkthroughAction && metadata.stage4WalkthroughAction.action !== 'NONE') {
+        queryClient.invalidateQueries({ queryKey: stageKeys.stage4(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      }
     },
     [sessionId, saveDraft, setStreamTriggeredFeelHeard, setAiRecommendsReadyToShare,
      setLiveProposedEmpathyStatement, queryClient]

@@ -48,6 +48,7 @@ import { captureStage4Turn } from '../services/stage4-capture.service';
 import { applyStage4AutoClosureFromSignal } from '../services/stage4-auto-closure.service';
 import { isExplicitAskForInput } from '../services/stage4-prompts';
 import { getStage4State as buildStage4State, Stage4StateNotFoundError } from '../services/stage4-state';
+import type { ParsedStage4WalkthroughAction } from '../utils/micro-tag-parser';
 
 // ============================================================================
 // Helpers
@@ -177,31 +178,12 @@ async function getStage4WalkthroughPromptContext(
   }
 }
 
-function isStage4CompletionPrompt(content: string): boolean {
-  return /\b(feel complete|feels complete|anything else (?:you(?:'d| would) )?want to add|want to add|should we move|ready to move|move to (?:one of )?the other needs|one more option|mark (?:it|this|the current need) covered)\b/i.test(content);
-}
-
-function isStage4MoveForwardReply(content: string): boolean {
-  const text = content.trim().toLowerCase();
-  return (
-    /^(yes|yep|yeah|ok|okay|sure|done)\.?$/.test(text) ||
-    /\b(move on|next need|next one|that's good|that is good|looks good|sounds good|good enough|that's enough|that works|feels complete|feel complete|complete enough)\b/i.test(content)
-  );
-}
-
-async function applyStage4WalkthroughAdvanceFromChat(
+async function applyStage4WalkthroughAction(
   sessionId: string,
   userId: string,
-  latestUserContent: string,
-  history: Array<{ role: string; content: string }>
+  action: ParsedStage4WalkthroughAction
 ): Promise<boolean> {
-  if (!isStage4MoveForwardReply(latestUserContent)) return false;
-
-  const previousAI = history
-    .slice(0, -1)
-    .reverse()
-    .find((message) => message.role === 'AI');
-  if (!previousAI || !isStage4CompletionPrompt(previousAI.content)) return false;
+  if (action.action === 'NONE') return false;
 
   const before = await buildStage4State(sessionId, userId);
   const currentNeed = before.walkthrough.currentNeed;
@@ -210,6 +192,15 @@ async function applyStage4WalkthroughAdvanceFromChat(
     return false;
   }
   if (currentNeed.status === 'covered' || currentNeed.status === 'skipped') return false;
+  if (action.needId && action.needId !== currentNeed.id) {
+    logger.warn('[applyStage4WalkthroughAction] Ignoring action for non-current need', {
+      sessionId,
+      userId,
+      actionNeedId: action.needId,
+      currentNeedId: currentNeed.id,
+    });
+    return false;
+  }
 
   const progress = await prisma.stageProgress.findUnique({
     where: { sessionId_userId_stage: { sessionId, userId, stage: 4 } },
@@ -232,8 +223,13 @@ async function applyStage4WalkthroughAdvanceFromChat(
       ? existing.skippedNeedIds.filter((id): id is string => typeof id === 'string')
       : []
   );
-  covered.add(currentNeed.id);
-  skipped.delete(currentNeed.id);
+  if (action.action === 'COVERED') {
+    covered.add(currentNeed.id);
+    skipped.delete(currentNeed.id);
+  } else {
+    skipped.add(currentNeed.id);
+    covered.delete(currentNeed.id);
+  }
 
   const remainingOwn = before.walkthrough.ownNeeds.find(
     (need) => !covered.has(need.id) && !skipped.has(need.id)
@@ -271,16 +267,19 @@ async function applyStage4WalkthroughAdvanceFromChat(
           coveredNeedIds: [...covered],
           skippedNeedIds: [...skipped],
           updatedAt: new Date().toISOString(),
-          updatedFrom: 'chat_completion_signal',
+          updatedFrom: 'ai_walkthrough_action',
+          lastAction: action.action,
+          lastReason: action.reason ?? null,
         },
       } satisfies Prisma.InputJsonValue,
     },
   });
 
-  logger.info('[applyStage4WalkthroughAdvanceFromChat] Advanced Stage 4 walkthrough from chat', {
+  logger.info('[applyStage4WalkthroughAction] Advanced Stage 4 walkthrough from model action', {
     sessionId,
     userId,
-    coveredNeedId: currentNeed.id,
+    needId: currentNeed.id,
+    action: action.action,
     nextPhase: phase,
     nextNeedId: currentNeedId,
   });
@@ -1595,10 +1594,6 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     });
     const history = historyDesc.slice().reverse();
 
-    if (currentStage === 4) {
-      await applyStage4WalkthroughAdvanceFromChat(sessionId, user.id, content, history);
-    }
-
     // Count ALL user messages for this session (not just from the limited history window)
     // This prevents turn IDs from getting stuck when conversation exceeds 20 messages
     // Also count user messages in the CURRENT stage only — stage-specific guards
@@ -1890,6 +1885,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     let needActionTagContent = ''; // Store structured Stage 3 need action metadata
     let needsTagContent = ''; // Store structured Stage 3 needs metadata
     let stage4ProposalsTagContent = ''; // Store structured Stage 4 proposal metadata
+    let stage4WalkthroughTagContent = ''; // Store structured Stage 4 walkthrough metadata
     let dispatchTagContent = ''; // Store dispatch tag content for handling
     let isDispatchMessage = false; // Track if this is a dispatch response (skip processing)
 
@@ -1934,6 +1930,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           .replace(/<stage4_proposals>[\s\S]*?<\/stage4_proposals>/gi, '')
           .replace(/<stage4_proposals>[\s\S]*/gi, '')
           .replace(/<\/stage4_proposals>/gi, '')
+          .replace(/<stage4_walkthrough>[\s\S]*?<\/stage4_walkthrough>/gi, '')
+          .replace(/<stage4_walkthrough>[\s\S]*/gi, '')
+          .replace(/<\/stage4_walkthrough>/gi, '')
           .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
 
         // Trim LEADING whitespace only on the FIRST chunk (after </thinking> tag removal)
@@ -1988,6 +1987,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           logger.info(`[sendMessageStream:${requestId}] [HIDDEN STAGE 4 PROPOSALS]:`, stage4ProposalsTagContent.substring(0, 160) + (stage4ProposalsTagContent.length > 160 ? '...' : ''));
         }
 
+        const stage4WalkthroughMatch = buffer.match(/<stage4_walkthrough>([\s\S]*?)<\/stage4_walkthrough>/i);
+        if (stage4WalkthroughMatch) {
+          stage4WalkthroughTagContent = stage4WalkthroughMatch[1].trim();
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN STAGE 4 WALKTHROUGH]:`, stage4WalkthroughTagContent.substring(0, 160) + (stage4WalkthroughTagContent.length > 160 ? '...' : ''));
+        }
+
         // Extract dispatch tag if present - store for handling after streaming
         const dispatchMatch = buffer.match(/<dispatch>([\s\S]*?)<\/dispatch>/i);
         if (dispatchMatch) {
@@ -2004,6 +2009,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           .replace(/<need-action\b[^>]*\/>/gi, '')
           .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
           .replace(/<stage4_proposals>[\s\S]*?<\/stage4_proposals>/gi, '')
+          .replace(/<stage4_walkthrough>[\s\S]*?<\/stage4_walkthrough>/gi, '')
           .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
       };
 
@@ -2056,6 +2062,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             const hasNeedsEnd = tagTrapBuffer.includes('</needs>');
             const hasStage4ProposalsStart = tagTrapBuffer.includes('<stage4_proposals>');
             const hasStage4ProposalsEnd = tagTrapBuffer.includes('</stage4_proposals>');
+            const hasStage4WalkthroughStart = tagTrapBuffer.includes('<stage4_walkthrough>');
+            const hasStage4WalkthroughEnd = tagTrapBuffer.includes('</stage4_walkthrough>');
             const hasDispatchStart = tagTrapBuffer.includes('<dispatch>');
             const hasDispatchEnd = tagTrapBuffer.includes('</dispatch>');
 
@@ -2071,6 +2079,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             const waitingForNeedAction = hasNeedActionStart && !hasNeedActionEnd;
             const waitingForNeeds = hasNeedsStart && !hasNeedsEnd;
             const waitingForStage4Proposals = hasStage4ProposalsStart && !hasStage4ProposalsEnd;
+            const waitingForStage4Walkthrough = hasStage4WalkthroughStart && !hasStage4WalkthroughEnd;
             const waitingForDispatch = hasDispatchStart && !hasDispatchEnd;
 
             // Process buffer and check if we can exit:
@@ -2083,6 +2092,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
               .replace(/<need-action\b[^>]*\/>/gi, '')
               .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
               .replace(/<stage4_proposals>[\s\S]*?<\/stage4_proposals>/gi, '')
+              .replace(/<stage4_walkthrough>[\s\S]*?<\/stage4_walkthrough>/gi, '')
               .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
             const trimmedStripped = strippedBuffer.trim();
 
@@ -2092,7 +2102,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             // - No partial tag at the end that might become a hidden semantic tag
             // OR buffer is too big (safety limit)
             const hasResponseContent = trimmedStripped.length > 50 && !trimmedStripped.startsWith('<');
-            const safeToExit = !waitingForDraft && !waitingForNeed && !waitingForNeedAction && !waitingForNeeds && !waitingForStage4Proposals && !waitingForDispatch && hasResponseContent && !hasPotentialTagStart;
+            const safeToExit = !waitingForDraft && !waitingForNeed && !waitingForNeedAction && !waitingForNeeds && !waitingForStage4Proposals && !waitingForStage4Walkthrough && !waitingForDispatch && hasResponseContent && !hasPotentialTagStart;
 
             if (safeToExit || tagTrapBuffer.length > 2000) {
               isTrappingTags = false;
@@ -2112,9 +2122,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             const hasUnclosedNeedAction = /<need-action\b/i.test(combined) && !(/<\/need-action>|<need-action\b[^>]*\/>/i.test(combined));
             const hasUnclosedNeeds = combined.includes('<needs>') && !combined.includes('</needs>');
             const hasUnclosedStage4Proposals = combined.includes('<stage4_proposals>') && !combined.includes('</stage4_proposals>');
+            const hasUnclosedStage4Walkthrough = combined.includes('<stage4_walkthrough>') && !combined.includes('</stage4_walkthrough>');
             const hasPotentialTagStart = /<\/?(d|n|s)[a-z0-9_-]*$/i.test(combined);
 
-            if (hasUnclosedDispatch || hasUnclosedDraft || hasUnclosedNeed || hasUnclosedNeedAction || hasUnclosedNeeds || hasUnclosedStage4Proposals || hasPotentialTagStart) {
+            if (hasUnclosedDispatch || hasUnclosedDraft || hasUnclosedNeed || hasUnclosedNeedAction || hasUnclosedNeeds || hasUnclosedStage4Proposals || hasUnclosedStage4Walkthrough || hasPotentialTagStart) {
               // Buffer and wait for closing tag
               tagTrapBuffer = combined;
             } else {
@@ -2176,7 +2187,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       const needBlock = needTagContent ? `<need>${needTagContent}</need>\n` : '';
       const needActionBlock = needActionTagContent ? `${needActionTagContent}\n` : '';
       const stage4ProposalsBlock = stage4ProposalsTagContent ? `<stage4_proposals>${stage4ProposalsTagContent}</stage4_proposals>\n` : '';
-      const fullResponse = `<thinking>${thinkingContent}</thinking>\n${needBlock}${needActionBlock}${needsBlock}${stage4ProposalsBlock}${accumulatedText}`;
+      const stage4WalkthroughBlock = stage4WalkthroughTagContent ? `<stage4_walkthrough>${stage4WalkthroughTagContent}</stage4_walkthrough>\n` : '';
+      const fullResponse = `<thinking>${thinkingContent}</thinking>\n${needBlock}${needActionBlock}${needsBlock}${stage4ProposalsBlock}${stage4WalkthroughBlock}${accumulatedText}`;
       const parsed = parseMicroTagResponse(fullResponse);
 
       // Extract metadata from parsed response
@@ -2187,6 +2199,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       }
       if (currentStage === 4 && parsed.stage4ProposalBlockPresent) {
         metadata.stage4Proposals = parsed.stage4Proposals;
+      }
+      if (currentStage === 4 && parsed.stage4WalkthroughAction) {
+        metadata.stage4WalkthroughAction = parsed.stage4WalkthroughAction;
       }
       if (currentStage === 3 && parsed.proposedNeeds.length > 0) {
         metadata.proposedNeeds = parsed.proposedNeeds;
@@ -2542,6 +2557,23 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           skippedOperationCount: captureResult.skippedOperationCount,
           selectionCaptured: Boolean(captureResult.selection),
         });
+      }
+
+      if (metadata.stage4WalkthroughAction) {
+        const advanced = await applyStage4WalkthroughAction(
+          sessionId,
+          user.id,
+          metadata.stage4WalkthroughAction
+        );
+        if (advanced) {
+          await publishSessionEvent(sessionId, 'session.strategies_updated', {
+            stage: 4,
+            updatedBy: user.id,
+            walkthroughUpdated: true,
+            action: metadata.stage4WalkthroughAction.action,
+            needId: metadata.stage4WalkthroughAction.needId ?? null,
+          });
+        }
       }
 
       const autoClosure = await applyStage4AutoClosureFromSignal({

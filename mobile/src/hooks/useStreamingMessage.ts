@@ -66,6 +66,11 @@ export interface StreamMetadata {
   };
   needParseError?: string;
   needsCaptured?: boolean;
+  stage4WalkthroughAction?: {
+    action: 'COVERED' | 'SKIP' | 'NONE';
+    needId?: string;
+    reason?: string;
+  };
   topicFrame?: string | null;
   analysis?: string;
 }

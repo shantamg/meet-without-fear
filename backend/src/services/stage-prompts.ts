@@ -84,7 +84,17 @@ Prefer the typed hidden Stage 4 proposal block over ProposedStrategy lines. When
   }
 ]
 </stage4_proposals>
-Emit this block on every Stage 4 turn. Only action ADD with classification PROPOSAL creates a proposal card. Use REVISE with targetProposalId when the user is sharpening or restating an existing proposal. Use IGNORE with REFLECTION for accountability acknowledgments or past-tense observations. Use IGNORE with SUCCESS_MARKER for desired outcomes or tests of whether something helped. Use IGNORE with PROCESS for questions about the app, waiting, reviewing, seeing what happens, or guarded consent to continue talking.`
+Emit this block on every Stage 4 turn. Only action ADD with classification PROPOSAL creates a proposal card. Use REVISE with targetProposalId when the user is sharpening or restating an existing proposal. Use IGNORE with REFLECTION for accountability acknowledgments or past-tense observations. Use IGNORE with SUCCESS_MARKER for desired outcomes or tests of whether something helped. Use IGNORE with PROCESS for questions about the app, waiting, reviewing, seeing what happens, or guarded consent to continue talking.
+
+Also emit exactly one hidden Stage 4 walkthrough decision block after </stage4_proposals>:
+<stage4_walkthrough>
+{
+  "action": "COVERED|SKIP|NONE",
+  "needId": "currentNeedId from CANONICAL STAGE 4 WALKTHROUGH STATE, or null",
+  "reason": "brief reason grounded in the user's latest turn"
+}
+</stage4_walkthrough>
+Use COVERED when the user has accepted, completed, or clearly agreed to move on from the current need. Use SKIP when they explicitly want to leave the current need aside, skip it, or not work on it now. Use NONE when they are still brainstorming, refining, asking a question, or the signal is ambiguous.`
     : '';
 
   const needsSection = stage === 3
@@ -109,7 +119,7 @@ Never emit more than one <need> or <need-action> per turn; if ambiguous, ask bef
   const allowedTags = stage === 3
     ? '<thinking>, <draft>, <need>, <need-action>, and <dispatch>'
     : stage === 4
-      ? '<thinking>, <draft>, <needs>, <stage4_proposals>, and <dispatch>'
+      ? '<thinking>, <draft>, <needs>, <stage4_proposals>, <stage4_walkthrough>, and <dispatch>'
       : '<thinking>, <draft>, <needs>, and <dispatch>';
 
   return `
@@ -1063,9 +1073,9 @@ ${buildResponseProtocol(4)}`;
 ${context.stage4WalkthroughContext}
 
 Use this as the source of truth for which need is being explored right now. Stay on currentNeed until it is marked covered/skipped in this state or the walkthrough phase is QUALITY_REVIEW.
-If the user says they are ready to move on while currentNeed is still in_progress or needs_options, do not start another need in chat. Briefly say that one is on the table and direct them to open the Stage 4 panel and mark the current need covered or skip it so the app can keep their place.
 Do not choose a different open need from the broader coverage list while currentNeed is present.
-If the user gives a concrete enough option for currentNeed, capture or revise the proposal and then ask whether they want one more option for that same need or are ready to mark it covered in the Stage 4 panel. Do not require every detail before moving on when missing details can be inferred provisionally from context.`);
+If the user clearly agrees to move on from currentNeed, emit <stage4_walkthrough> with action COVERED. If they explicitly want to leave the current need aside, emit action SKIP. Otherwise emit action NONE.
+If the user gives a concrete enough option for currentNeed, capture or revise the proposal and then either ask whether they want one more option for that same need or, if their latest turn already indicates completion, mark it COVERED. Do not require every detail before moving on when missing details can be inferred provisionally from context.`);
   }
   if (context.stage4InventoryContext) {
     dynamicParts.push(`CURRENT STAGE 4 PROPOSAL INVENTORY:

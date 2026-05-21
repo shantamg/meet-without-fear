@@ -513,5 +513,22 @@ Response after multiple newlines.`;
       expect(result.response).toBe('');
       expect(result.draft).toBe('A proposed empathy statement.');
     });
+
+    it('extracts Stage 4 walkthrough action and strips it from visible response', () => {
+      const raw = `<thinking>Mode: REPAIR</thinking>
+<stage4_walkthrough>
+{ "action": "SKIP", "needId": "need-2", "reason": "User wants to leave this aside for now." }
+</stage4_walkthrough>
+Okay, we can leave that one for now.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.stage4WalkthroughAction).toEqual({
+        action: 'SKIP',
+        needId: 'need-2',
+        reason: 'User wants to leave this aside for now.',
+      });
+      expect(result.response).toBe('Okay, we can leave that one for now.');
+    });
   });
 });
