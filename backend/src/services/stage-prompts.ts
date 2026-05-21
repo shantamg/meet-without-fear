@@ -1062,9 +1062,10 @@ ${buildResponseProtocol(4)}`;
     dynamicParts.push(`CANONICAL STAGE 4 WALKTHROUGH STATE:
 ${context.stage4WalkthroughContext}
 
-Use this as the source of truth for which need is being explored right now. Stay on currentNeed unless the user clearly asks to move on, the current need is already marked covered/skipped in this state, or the walkthrough phase is QUALITY_REVIEW.
+Use this as the source of truth for which need is being explored right now. Stay on currentNeed until it is marked covered/skipped in this state or the walkthrough phase is QUALITY_REVIEW.
+If the user says they are ready to move on while currentNeed is still in_progress or needs_options, do not start another need in chat. Briefly say that one is on the table and direct them to open the Stage 4 panel and mark the current need covered or skip it so the app can keep their place.
 Do not choose a different open need from the broader coverage list while currentNeed is present.
-If the user gives a concrete enough option for currentNeed, capture or revise the proposal and then either move forward or ask whether they want one more option for that same need. Do not require every detail before moving on when missing details can be inferred provisionally from context.`);
+If the user gives a concrete enough option for currentNeed, capture or revise the proposal and then ask whether they want one more option for that same need or are ready to mark it covered in the Stage 4 panel. Do not require every detail before moving on when missing details can be inferred provisionally from context.`);
   }
   if (context.stage4InventoryContext) {
     dynamicParts.push(`CURRENT STAGE 4 PROPOSAL INVENTORY:

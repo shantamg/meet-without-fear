@@ -382,6 +382,8 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('CANONICAL STAGE 4 WALKTHROUGH STATE');
       expect(prompt).toContain('currentNeedLabel="To feel taken seriously"');
       expect(prompt).toContain('source of truth for which need is being explored right now');
+      expect(prompt).toContain('Stay on currentNeed until it is marked covered/skipped');
+      expect(prompt).toContain('mark the current need covered or skip it');
       expect(prompt).toContain('Do not choose a different open need');
     });
 

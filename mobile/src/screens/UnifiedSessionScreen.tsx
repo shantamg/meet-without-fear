@@ -3587,10 +3587,10 @@ export function UnifiedSessionScreen({
             const totalInPhase = Math.max(1, walkthrough.totalInPhase);
             const subtitle =
               currentNeedProposalCount === 0
-                ? 'Open this to gather options for the need in focus.'
+                ? 'Open this to gather options, mark it covered, or skip it.'
                 : currentNeedProposalCount === 1
-                  ? 'Open this to refine the option for the need in focus.'
-                  : `Open this to refine ${currentNeedProposalCount} options for the need in focus.`;
+                  ? 'Open this to refine the option, mark it covered, or skip it.'
+                  : `Open this to refine ${currentNeedProposalCount} options, mark it covered, or skip it.`;
 
             return (
               <GuidedActionPanel
