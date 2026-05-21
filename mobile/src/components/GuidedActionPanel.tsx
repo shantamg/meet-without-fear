@@ -273,6 +273,7 @@ const styles = StyleSheet.create({
   subtitleCompact: {
     fontSize: typography.fontSize.sm,
     lineHeight: spacing.lg,
+    marginBottom: spacing.xs,
   },
   actions: {
     flexDirection: 'row',
