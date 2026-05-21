@@ -740,6 +740,14 @@ describe('Stage 3 API', () => {
       );
       expect(prisma.stageProgress.upsert).toHaveBeenCalledTimes(2);
       expect(prisma.message.create).toHaveBeenCalledTimes(2);
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            stage: 4,
+            content: expect.stringContaining('What comes up for you'),
+          }),
+        })
+      );
     });
 
     it('requires authentication', async () => {
@@ -823,6 +831,14 @@ describe('Stage 3 API', () => {
       );
       expect(prisma.stageProgress.upsert).toHaveBeenCalledTimes(2);
       expect(prisma.message.create).toHaveBeenCalledTimes(2);
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            stage: 4,
+            content: expect.stringContaining('What comes up for you'),
+          }),
+        })
+      );
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(jsonMock).toHaveBeenCalledWith(
         expect.objectContaining({

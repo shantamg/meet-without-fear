@@ -32,6 +32,11 @@ import {
 // Helpers
 // ============================================================================
 
+const STAGE4_TRANSITION_CONTENT = [
+  'You have both sent your needs and can now see what each of you named.',
+  'The work shifts now: not to deciding everything, just to putting ideas on the table one need at a time. What comes up for you when you think about what might help with your first need?',
+].join('\n\n');
+
 /**
  * Get or create user vessel for a session
  */
@@ -133,8 +138,7 @@ async function completeStage3AfterMutualNeedsShare(
     });
   }
 
-  const transitionContent =
-    'You have both sent your needs. Now you can work through what might honor them, one need at a time.';
+  const transitionContent = STAGE4_TRANSITION_CONTENT;
 
   const transitionMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
   for (const uid of [currentUserId, partnerId]) {
@@ -930,8 +934,7 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
         });
       }
 
-      const transitionContent =
-        'You have both sent your needs. Now you can work through what might honor them, one need at a time.';
+      const transitionContent = STAGE4_TRANSITION_CONTENT;
 
       const transitionMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
       for (const uid of [user.id, partnerId]) {
