@@ -731,6 +731,10 @@ export function Stage4RedesignPanel({
         ? `Your needs: ${walkthrough.currentIndex + 1} of ${Math.max(1, walkthrough.totalInPhase)}`
         : `Their needs: ${walkthrough.currentIndex + 1} of ${Math.max(1, walkthrough.totalInPhase)}`;
     const hasProposal = walkthrough.proposalGroups.some((group) => group.proposals.length > 0);
+    const phaseNeeds = walkthrough.phase === 'MY_NEEDS' ? walkthrough.ownNeeds : walkthrough.partnerNeeds;
+    const previousNeeds = phaseNeeds.filter(
+      (need) => need.id !== currentNeed.id && (need.status === 'covered' || need.status === 'skipped')
+    );
 
     return (
       <View style={styles.container} testID="stage4-redesign-panel">
@@ -809,6 +813,20 @@ export function Stage4RedesignPanel({
             <Text style={styles.tertiaryButtonText}>Skip this need for now</Text>
           </TouchableOpacity>
         </View>
+
+        {previousNeeds.length > 0 && (
+          <View style={styles.referenceBlock} testID="stage4-previous-needs">
+            <Text style={styles.referenceTitle}>Already reviewed</Text>
+            {previousNeeds.map((need) => (
+              <View key={need.id} style={styles.referenceRow}>
+                <Text style={styles.referenceText}>{need.label}</Text>
+                <Text style={styles.referenceStatus}>
+                  {need.status === 'covered' ? 'Covered' : 'Skipped'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     );
   }
@@ -1364,6 +1382,34 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   tertiaryButtonText: {
     color: palette.textMuted,
     fontSize: 14,
+    fontWeight: '600',
+  },
+  referenceBlock: {
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    gap: 8,
+  },
+  referenceTitle: {
+    color: palette.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  referenceRow: {
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+    paddingTop: 8,
+    gap: 3,
+  },
+  referenceText: {
+    color: palette.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  referenceStatus: {
+    color: palette.textFaint,
+    fontSize: 12,
     fontWeight: '600',
   },
   disabledButtonText: {

@@ -110,6 +110,12 @@ const walkthroughNeedsState: GetStage4StateResponse = {
     totalInPhase: 2,
     ownNeeds: [
       {
+        id: 'coverage-0',
+        label: 'A previously reviewed need',
+        source: 'YOU',
+        status: 'covered',
+      },
+      {
         id: 'coverage-1',
         label: 'Feeling heard',
         source: 'YOU',
@@ -190,6 +196,15 @@ describe('Stage4RedesignPanel', () => {
     expect(screen.queryByText('Your stance')).toBeNull();
     expect(screen.queryByText(/Eve hasn't shared their stance yet/i)).toBeNull();
     expect(screen.queryByLabelText('Willing for proposal')).toBeNull();
+  });
+
+  it('shows reviewed needs as a secondary reference while walking the current need', () => {
+    render(<Stage4RedesignPanel {...defaultProps} state={walkthroughNeedsState} />);
+
+    expect(screen.getByTestId('stage4-previous-needs')).toBeTruthy();
+    expect(screen.getByText('Already reviewed')).toBeTruthy();
+    expect(screen.getByText('A previously reviewed need')).toBeTruthy();
+    expect(screen.getByText('Covered')).toBeTruthy();
   });
 
   it('hides the share footer while walking needs one at a time', () => {
