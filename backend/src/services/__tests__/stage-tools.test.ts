@@ -35,6 +35,7 @@ describe('SESSION_STATE_TOOL', () => {
 describe('parseSessionStateToolInput', () => {
   it('should parse valid input correctly', () => {
     const input = {
+      topicFrame: 'Being interrupted during dinner',
       offerFeelHeardCheck: true,
       offerReadyToShare: false,
       proposedEmpathyStatement: 'I feel overwhelmed...',
@@ -42,16 +43,17 @@ describe('parseSessionStateToolInput', () => {
 
     const result = parseSessionStateToolInput(input);
 
+    expect(result.topicFrame).toBe('Being interrupted during dinner');
     expect(result.offerFeelHeardCheck).toBe(true);
     expect(result.offerReadyToShare).toBe(false);
     expect(result.proposedEmpathyStatement).toBe('I feel overwhelmed...');
   });
 
-  it('should default boolean fields to false when missing', () => {
+  it('should leave boolean fields undefined when missing', () => {
     const result = parseSessionStateToolInput({});
 
-    expect(result.offerFeelHeardCheck).toBe(false);
-    expect(result.offerReadyToShare).toBe(false);
+    expect(result.offerFeelHeardCheck).toBeUndefined();
+    expect(result.offerReadyToShare).toBeUndefined();
   });
 
   it('should leave string fields undefined when missing', () => {
@@ -68,7 +70,7 @@ describe('parseSessionStateToolInput', () => {
 
     const result = parseSessionStateToolInput(input);
 
-    expect(result.offerFeelHeardCheck).toBe(false);
+    expect(result.offerFeelHeardCheck).toBeUndefined();
     expect(result.proposedEmpathyStatement).toBeUndefined();
   });
 
@@ -107,6 +109,41 @@ describe('parseSessionStateToolInput', () => {
       action: 'COVERED',
       needId: 'need-1',
       reason: 'The user agreed this is enough to move on.',
+    });
+  });
+
+  it('should parse Stage 3 need capture and actions', () => {
+    const result = parseSessionStateToolInput({
+      proposedNeed: {
+        need: 'to be taken seriously',
+        category: 'RECOGNITION',
+        description: 'To feel taken seriously when I set a boundary',
+        evidence: ['taken seriously'],
+      },
+      needAction: {
+        type: 'refine',
+        supersedes: 'need-old',
+        need: 'to be heard',
+        category: 'RECOGNITION',
+        description: 'To feel heard when I set a boundary',
+        evidence: ['heard'],
+      },
+    });
+
+    expect(result.proposedNeed).toEqual({
+      need: 'to be taken seriously',
+      category: 'RECOGNITION',
+      description: 'To feel taken seriously when I set a boundary',
+      evidence: ['taken seriously'],
+    });
+    expect(result.needAction).toEqual({
+      type: 'refine',
+      needId: undefined,
+      supersedes: 'need-old',
+      need: 'to be heard',
+      category: 'RECOGNITION',
+      description: 'To feel heard when I set a boundary',
+      evidence: ['heard'],
     });
   });
 

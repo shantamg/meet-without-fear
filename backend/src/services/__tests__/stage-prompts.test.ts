@@ -408,13 +408,13 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Partner');
     });
 
-    it('stage 0 prompt instructs the AI to emit a topic via <draft> tags', () => {
+    it('stage 0 prompt instructs the AI to emit a topic via update_session_state', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };
       const prompt = fullPrompt(buildStagePrompt(0, context, options));
 
-      // Stage 0 emits the TOPIC (not an invitation message) inline as <draft>
-      expect(prompt).toContain('<draft>');
+      // Stage 0 emits the TOPIC (not an invitation message) via tool state.
+      expect(prompt).toContain('update_session_state.topicFrame');
       // Must never bring back the invitation-message concept
       expect(prompt).not.toContain('invitationMessage');
     });
@@ -439,7 +439,7 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('personal attacks');
       expect(prompt).toContain('Do not flatten');
       expect(prompt).toContain('vague phrases like "conflict"');
-      expect(prompt).toContain('<draft>\ntopic text\n</draft>');
+      expect(prompt).toContain('update_session_state.topicFrame');
     });
   });
 
@@ -952,13 +952,13 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Do NOT invite more freeform chat unless the input remains visible');
     });
 
-    it('Stage 0 protocol instructs the AI to emit a topic via <draft> tags', () => {
+    it('Stage 0 protocol instructs the AI to emit a topic via update_session_state', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };
       const prompt = fullPrompt(buildStagePrompt(0, context, options));
 
-      // Stage 0 now emits the proposed TOPIC inline as <draft> (not an invitation message).
-      expect(prompt).toContain('<draft>');
+      // Stage 0 now emits the proposed TOPIC via tool state (not an invitation message).
+      expect(prompt).toContain('update_session_state.topicFrame');
       expect(prompt).toContain('without inviting freeform chat unless the input remains visible');
     });
 
@@ -974,20 +974,23 @@ describe('Stage Prompts Service', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
-      expect(prompt).toContain('The only XML-style tags you may use are exactly <thinking>, <draft>, <need>, <need-action>, and <dispatch>.');
+      expect(prompt).toContain('The only XML-style tags you may use are exactly <thinking> and <dispatch>.');
       expect(prompt).toContain('Flags such as FeelHeardCheck, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>');
       expect(prompt).toContain('never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>');
-      expect(prompt).toContain('Never emit more than one `<need>` or `<need-action>` per turn; if ambiguous, ask before emitting');
+      expect(prompt).toContain('Never capture more than one proposedNeed or needAction per turn; if ambiguous, ask before calling update_session_state');
       expect(prompt).toContain('SURFACE-ONE');
       expect(prompt).toContain('CONFIRM-AND-LOCK');
     });
 
-    it('only includes tool call instructions for Stage 4', () => {
+    it('includes tool call instructions for persisted state across stages', () => {
       const context = createContext();
       const stage1Prompt = fullPrompt(buildStagePrompt(1, context));
+      const stage3Prompt = fullPrompt(buildStagePrompt(3, context));
       const stage4Prompt = fullPrompt(buildStagePrompt(4, context));
 
-      expect(stage1Prompt).not.toContain('update_session_state');
+      expect(stage1Prompt).toContain('update_session_state');
+      expect(stage1Prompt).toContain('offerFeelHeardCheck=true');
+      expect(stage3Prompt).toContain('proposedNeed');
       expect(stage1Prompt).not.toContain('THIRD: Call');
       expect(stage4Prompt).toContain('update_session_state');
     });
@@ -1023,12 +1026,12 @@ describe('Stage Prompts Service', () => {
       expect(result.staticBlock).toContain('CLARIFYING');
     });
 
-    it('static block includes ReadyShare flag and draft tags', () => {
+    it('static block includes ReadyShare flag and tool draft guidance', () => {
       const context = createContext();
       const result = buildStagePrompt(21, context);
 
       expect(result.staticBlock).toContain('ReadyShare:Y');
-      expect(result.staticBlock).toContain('<draft>');
+      expect(result.staticBlock).toContain('update_session_state.proposedEmpathyStatement');
     });
 
     it('dynamic block includes abstract guidance when provided (no raw partner content)', () => {

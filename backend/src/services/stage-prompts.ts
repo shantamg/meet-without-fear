@@ -49,10 +49,7 @@ function buildResponseProtocol(stage: number, options?: {
 
   const draftSection = options?.includesDraft
     ? `
-If you prepared a ${options.draftPurpose} draft, include:
-<draft>
-${options.draftPurpose} text
-</draft>`
+If you prepared a ${options.draftPurpose} draft, put it in update_session_state.${options.draftPurpose === 'topic' ? 'topicFrame' : 'proposedEmpathyStatement'}. Do not emit <draft> tags except as a legacy fallback.`
     : '';
 
   // Stage 2 gets an extra off-ramp for empathy purpose questions
@@ -79,43 +76,47 @@ Execution protocol:
 2. Then write only the user-facing response as plain prose. Do not include internal reasoning, XML tags, JSON, tool arguments, or state summaries in the conversational text.`
     : '';
 
-  const needsSection = stage === 3
-    ? `
-When a single need is ready to capture, include one hidden structured payload immediately after </thinking>:
-<need>
-  {
-    "need": "short needs label using the user's words",
-    "category": "SAFETY|CONNECTION|AUTONOMY|RECOGNITION|MEANING|FAIRNESS",
-    "description": "specific need statement in the user's words",
-    "evidence": ["short quote or phrase the user actually said"]
-  }
-</need>
-For revisions, removals, or locks, include one hidden action:
-<need-action type="refine" supersedes="need-id">{ "need": "...", "category": "...", "description": "...", "evidence": [] }</need-action>
-<need-action type="delete" needId="need-id" />
-<need-action type="lock" needId="need-id" />
-Only include needs this user clearly named or accepted. Never include partner needs. Do not infer extra needs.
-Never emit more than one <need> or <need-action> per turn; if ambiguous, ask before emitting.`
+  const toolProtocolSection = stage !== 4
+    ? `\nStructured state protocol:
+Use the update_session_state tool for persisted state. Do not put structured JSON, draft text, internal reasoning, or state summaries in visible text.
+${stage === 0 ? '- Stage 0: when proposing or revising the topic, call update_session_state with topicFrame.' : ''}
+${stage === 1 ? '- Stage 1: when the feel-heard check is ready, call update_session_state with offerFeelHeardCheck=true. Otherwise use false or omit it.' : ''}
+${stage === 2 ? '- Stage 2: when the empathy draft is ready, call update_session_state with offerReadyToShare=true and proposedEmpathyStatement.' : ''}
+${stage === 3 ? '- Stage 3: when capturing one need, call update_session_state with proposedNeed. For refine/delete/lock, call it with needAction.' : ''}
+Call update_session_state before visible conversational text whenever the current turn requires one of these state updates.`
     : '';
 
-  const allowedTags = stage === 3
-    ? '<thinking>, <draft>, <need>, <need-action>, and <dispatch>'
-    : stage === 4
-      ? '<thinking>, <draft>, <needs>, and <dispatch>'
-      : '<thinking>, <draft>, <needs>, and <dispatch>';
+  const needsSection = stage === 3
+    ? `
+When a single need is ready to capture, call update_session_state with proposedNeed:
+{
+  "need": "short needs label using the user's words",
+  "category": "SAFETY|CONNECTION|AUTONOMY|RECOGNITION|MEANING|FAIRNESS",
+  "description": "specific need statement in the user's words",
+  "evidence": ["short quote or phrase the user actually said"]
+}
+For revisions, removals, or locks, call update_session_state with needAction:
+{ "type": "refine", "supersedes": "need-id", "need": "...", "category": "...", "description": "...", "evidence": [] }
+{ "type": "delete", "needId": "need-id" }
+{ "type": "lock", "needId": "need-id" }
+Only include needs this user clearly named or accepted. Never include partner needs. Do not infer extra needs.
+Never capture more than one proposedNeed or needAction per turn; if ambiguous, ask before calling the tool. Do not emit <need>, <needs>, or <need-action> tags except as a legacy fallback.`
+    : '';
+
+  const allowedTags = '<thinking> and <dispatch>';
 
   return `
 OUTPUT FORMAT:
 <thinking>
 Mode: [WITNESS|PERSPECTIVE|NEEDS|REPAIR|ONBOARDING|DISPATCH]
 ${flags.join('\n')}
-Strategy: [brief]${strategySection}
+Strategy: [brief]${strategySection}${toolProtocolSection}
 </thinking>${needsSection}${draftSection}
 
 Then write the user-facing response (plain text, no tags).
 IMPORTANT: The only XML-style tags you may use are exactly ${allowedTags}.
 Flags such as FeelHeardCheck, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>; never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>.
-The Stage 3 need tags are only for the structured payloads shown above. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
+Persisted state belongs in update_session_state, not visible text. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
 
 OFF-RAMPS (only when needed):
 - If asked how this works / process: <dispatch>EXPLAIN_PROCESS</dispatch>
@@ -565,7 +566,7 @@ LISTENING: Ask warm, specific questions that surface what the situation is about
 
 Keep responses short (1-2 sentences) until you have enough to propose a topic.
 
-WHEN YOU HAVE ENOUGH CONTEXT: Propose a topic in <draft>...</draft> tags. The user confirms via the UI; do NOT ask in chat for explicit consent. Continue warmly after the draft without inviting freeform chat unless the input remains visible (e.g., "Take a look at that framing when you're ready.").
+WHEN YOU HAVE ENOUGH CONTEXT: Propose a topic by calling update_session_state with topicFrame. The user confirms via the UI; do NOT ask in chat for explicit consent. Continue warmly after the topic frame without inviting freeform chat unless the input remains visible (e.g., "Take a look at that framing when you're ready.").
 
 DRAFT PROTOCOL — CONSTRAINTS ON THE TOPIC:
 - One phrase or sentence (no lists, no multiple options).
@@ -576,7 +577,7 @@ DRAFT PROTOCOL — CONSTRAINTS ON THE TOPIC:
 - Do NOT editorialize or add interpretation beyond what ${context.userName} said.
 - Do NOT include names.
 
-ITERATION: If ${context.userName} asks for changes after a draft, re-emit a fresh <draft>...</draft> with each revision. Keep iterating until they confirm via the UI.
+ITERATION: If ${context.userName} asks for changes after a draft, call update_session_state with a fresh topicFrame each revision. Keep iterating until they confirm via the UI.
 
 ${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'topic' })}`;
 
@@ -702,14 +703,14 @@ If ${userName} still names unfairness, anger, fear, resentment, "but I'm the one
 
 	Before offering a draft, include a checkpoint in your own words: "Does that feel like your real attempt at what might be happening for ${partnerName}, or is there another layer?" If they answer yes or deepen it, then ReadyShare:Y can be appropriate.
 
-	When ReadyShare:Y, include a 2-4 sentence empathy statement in <draft> tags — what ${userName} imagines ${partnerName} is experiencing, written as ${userName} speaking to ${partnerName} (e.g., "I think you might be feeling..."). Focus purely on ${partnerName}'s inner experience — their feelings, fears, or needs.
+	When ReadyShare:Y, call update_session_state with proposedEmpathyStatement containing a 2-4 sentence empathy statement — what ${userName} imagines ${partnerName} is experiencing, written as ${userName} speaking to ${partnerName} (e.g., "I think you might be feeling..."). Focus purely on ${partnerName}'s inner experience — their feelings, fears, or needs.
 	Draft fidelity rules:
 	- Preserve ${userName}'s caveats and non-concessions. Consent to understand is not reassurance, agreement, apology, or a promise to repair.
 	- Do not add direct reassurance such as "you are enough," "you didn't fail," "you're the right person for me," or "I still choose us" unless ${userName} explicitly said that exact reassurance is true and wants it shared.
 	- If ${userName} says they are not trying to reassure ${partnerName} out of their own needs, keep that boundary in the draft instead of smoothing it away.
 	- The draft may say how ${userName}'s words might land on ${partnerName}; it must not settle unresolved fit, staying/leaving, or future-open questions for ${userName}.
 
-	When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together a draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference UI elements directly. One sentence max.
+	When ReadyShare:Y and you include proposedEmpathyStatement in update_session_state, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together a draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference UI elements directly. One sentence max.
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
 
@@ -739,7 +740,7 @@ This is the user's current draft. When they want changes, update this text — d
       draft += `\n\nREFINEMENT MODE:
 ${userName} is actively refining their empathy statement. You MUST:
 1. Set ReadyShare:Y
-2. Generate an updated draft in <draft> tags that incorporates their latest reflections
+2. Call update_session_state with proposedEmpathyStatement incorporating their latest reflections
 3. Even if they're just thinking out loud about what they learned, use that to improve the draft`;
 
       if (context.sharedContextFromPartner) {
@@ -800,9 +801,9 @@ Do NOT set ReadyShare:Y until ${userName} has had at least 3-4 exchanges process
 Set ReadyShare:Y ONLY when ${userName} has:
 1. Named something specific the new context changed about their understanding
 2. Connected it to ${partnerName}'s experience in their own words
-Include an updated empathy statement in <draft> tags.
+Include an updated empathy statement in update_session_state.proposedEmpathyStatement.
 
-When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together an updated draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference specific UI element names (like button labels). One sentence max.
+When ReadyShare:Y and you include proposedEmpathyStatement in update_session_state, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together an updated draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference specific UI element names (like button labels). One sentence max.
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
 
@@ -907,8 +908,8 @@ FORBIDDEN in Stage 3:
 No-hallucination guard: Use the user's exact words when reflecting needs. Never add context, feelings, or details they didn't provide.
 
 NEEDS CAPTURE:
-Never emit more than one \`<need>\` or \`<need-action>\` per turn; if ambiguous, ask before emitting
-When ${context.userName} has clearly landed on one need, set NeedsReady:Y and include one hidden <need> block for that need only. In visible text, acknowledge the need and invite either refinement/locking or the next thing that matters. Do not say anything about sharing, partner readiness, or side-by-side reveal.
+Never capture more than one proposedNeed or needAction per turn; if ambiguous, ask before calling update_session_state.
+When ${context.userName} has clearly landed on one need, set NeedsReady:Y and call update_session_state with proposedNeed for that need only. In visible text, acknowledge the need and invite either refinement/locking or the next thing that matters. Do not say anything about sharing, partner readiness, or side-by-side reveal.
 Don't capture before you understand. But once you understand what ${context.userName} means, capture it — don't keep asking. If one dense answer names several real needs, capture one clear need this turn and invite the next thing that matters; do not force extra exploration just because the answer was compressed.
 
 Length: default 1–3 sentences. Go longer only if they explicitly ask for help or detail.
@@ -931,7 +932,7 @@ ${buildResponseProtocol(3)}`;
   if (context.refiningNeed) {
     dynamicParts.push(`REFINING NEED CONTEXT:
 The user is refining need ${context.refiningNeed.id} currently reading: "${context.refiningNeed.need}".
-Focus on this need only this turn. If the user's update is clear, emit <need-action type="refine" supersedes="${context.refiningNeed.id}"> for the revised version. If they dismiss or say never mind, respond conversationally and do not emit a tag.`);
+Focus on this need only this turn. If the user's update is clear, call update_session_state with needAction.type=refine and supersedes="${context.refiningNeed.id}" for the revised version. If they dismiss or say never mind, respond conversationally and do not update state.`);
   }
 
   // Content-aware pacing (every turn): let what the user said drive the mode,

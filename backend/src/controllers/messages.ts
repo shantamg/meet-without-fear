@@ -1836,9 +1836,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       topicFrame: session.topicFrameConfirmedAt ? session.topicFrame : undefined,
     }, { isInvitationPhase });
 
-    // Stage 4 uses tool calls as the primary structured-state channel so proposal
-    // and walkthrough metadata cannot leak into visible chat text. Earlier stages
-    // still use the existing semantic tag protocol.
+    // Tool calls are the primary structured-state channel. Legacy semantic tags
+    // are still parsed below as a compatibility fallback and scrubbed defensively.
 
     // Format context bundle and inject into last user message (includes notable facts)
     const formattedContext = formatContextForPrompt(contextBundle, {
@@ -1912,7 +1911,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       const streamGenerator = getSonnetStreamingResponse({
         systemPrompt: prompt,
         messages: messagesWithContext,
-        tools: currentStage === 4 ? getToolsForStage(currentStage) : undefined,
+        tools: getToolsForStage(currentStage),
         maxTokens: 1536,
         sessionId,
         turnId,
@@ -2162,8 +2161,11 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             const toolMetadata = parseSessionStateToolInput(event.input);
             metadata = { ...metadata, ...toolMetadata };
             logger.info(`[sendMessageStream:${requestId}] [TOOL ${event.name}]:`, {
+              topicFrame: Boolean(toolMetadata.topicFrame),
               stage4ProposalCount: toolMetadata.stage4Proposals?.length ?? 0,
               stage4WalkthroughAction: toolMetadata.stage4WalkthroughAction?.action ?? null,
+              proposedNeed: Boolean(toolMetadata.proposedNeed),
+              needAction: toolMetadata.needAction?.type ?? null,
               offerFeelHeardCheck: toolMetadata.offerFeelHeardCheck,
               offerReadyToShare: toolMetadata.offerReadyToShare,
             });
@@ -2225,8 +2227,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       const parsed = parseMicroTagResponse(fullResponse);
 
       // Extract metadata from parsed response
-      metadata.offerFeelHeardCheck = parsed.offerFeelHeardCheck;
-      metadata.offerReadyToShare = parsed.offerReadyToShare;
+      if (metadata.offerFeelHeardCheck === undefined) {
+        metadata.offerFeelHeardCheck = parsed.offerFeelHeardCheck;
+      }
+      if (metadata.offerReadyToShare === undefined) {
+        metadata.offerReadyToShare = parsed.offerReadyToShare;
+      }
       if (parsed.proposedStrategies.length > 0) {
         metadata.proposedStrategies = parsed.proposedStrategies;
       }
@@ -2236,13 +2242,13 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       if (currentStage === 4 && parsed.stage4WalkthroughAction && !metadata.stage4WalkthroughAction) {
         metadata.stage4WalkthroughAction = parsed.stage4WalkthroughAction;
       }
-      if (currentStage === 3 && parsed.proposedNeeds.length > 0) {
+      if (currentStage === 3 && parsed.proposedNeeds.length > 0 && !metadata.proposedNeeds) {
         metadata.proposedNeeds = parsed.proposedNeeds;
       }
-      if (currentStage === 3 && parsed.proposedNeed) {
+      if (currentStage === 3 && parsed.proposedNeed && !metadata.proposedNeed) {
         metadata.proposedNeed = parsed.proposedNeed;
       }
-      if (currentStage === 3 && parsed.needAction) {
+      if (currentStage === 3 && parsed.needAction && !metadata.needAction) {
         metadata.needAction = parsed.needAction;
       }
       if (currentStage === 3 && parsed.needParseError) {
@@ -2251,10 +2257,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
       // Use draftContent captured during streaming (more reliable than re-parsing)
       const draft = draftContent || parsed.draft;
-      if (draft && currentStage === 2) {
+      if (draft && currentStage === 2 && !metadata.proposedEmpathyStatement) {
         // Draft is used for empathy statement (stage 2).
         metadata.proposedEmpathyStatement = draft;
-      } else if (draft && (currentStage === 0 || isInvitationPhase)) {
+      } else if (draft && (currentStage === 0 || isInvitationPhase) && !metadata.topicFrame) {
         // Stage 0: <draft> contains the proposed topic frame.
         metadata.topicFrame = draft.trim();
       }

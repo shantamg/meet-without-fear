@@ -14,7 +14,7 @@
  */
 
 import { logger } from '../lib/logger';
-import { getModelCompletion, BrainActivityCallType } from '../lib/bedrock';
+import { getModelCompletionWithTools, BrainActivityCallType } from '../lib/bedrock';
 import { prisma } from '../lib/prisma';
 import {
   determineMemoryIntent,
@@ -38,6 +38,7 @@ import { brainService } from '../services/brain-service';
 import { ActivityType } from '@prisma/client';
 import { parseMicroTagResponse } from '../utils/micro-tag-parser';
 import { handleDispatch, type DispatchContext } from './dispatch-handler';
+import { getToolsForStage, parseSessionStateToolInput, SESSION_STATE_TOOL_NAME } from './stage-tools';
 import {
   decideSurfacing,
   userAskedForPattern,
@@ -523,9 +524,10 @@ export async function orchestrateResponse(
   try {
     // Note: Extended thinking is not supported by Claude 3.5 Sonnet v2 on Bedrock
     // Disabling thinkingBudget for now to ensure real AI responses
-    modelResponse = await getModelCompletion(routingDecision.model, {
+    const completionOrText = await getModelCompletionWithTools(routingDecision.model, {
       systemPrompt,
       messages: messagesWithContext,
+      tools: getToolsForStage(context.stage),
       maxTokens: routingDecision.model === 'haiku' ? 1536 : 2048,
       sessionId: context.sessionId,
       operation: `orchestrator-response-${routingDecision.model}`,
@@ -533,6 +535,12 @@ export async function orchestrateResponse(
       callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
       // thinkingBudget: 1024, // Disabled - not supported on Bedrock Sonnet v2
     });
+    const completion = typeof completionOrText === 'string'
+      ? { text: completionOrText, toolInvocations: [] }
+      : completionOrText;
+    modelResponse = completion?.text ?? null;
+    const sessionStateTool = completion?.toolInvocations.find((tool) => tool.name === SESSION_STATE_TOOL_NAME);
+    const toolMetadata = sessionStateTool ? parseSessionStateToolInput(sessionStateTool.input) : {};
 
     const responseTime = Date.now() - responseStartTime;
     traceSteps.push({
@@ -655,17 +663,17 @@ export async function orchestrateResponse(
 
       // Normal response flow
       response = parsed.response;
-      offerFeelHeardCheck = parsed.offerFeelHeardCheck;
-      offerReadyToShare = parsed.offerReadyToShare;
+      offerFeelHeardCheck = toolMetadata.offerFeelHeardCheck ?? parsed.offerFeelHeardCheck;
+      offerReadyToShare = toolMetadata.offerReadyToShare ?? parsed.offerReadyToShare;
       if (context.stage === 1 && context.turnCount < MIN_STAGE1_TURNS_BEFORE_FEEL_HEARD_CHECK) {
         offerFeelHeardCheck = false;
       }
 
       // Draft is used for empathy (Stage 2) or topic frame (Stage 0).
       if (context.stage === 2) {
-        proposedEmpathyStatement = parsed.draft;
+        proposedEmpathyStatement = toolMetadata.proposedEmpathyStatement ?? parsed.draft;
       } else if (context.stage === 0 || context.isInvitationPhase) {
-        topicFrame = parsed.topicFrame;
+        topicFrame = toolMetadata.topicFrame ?? parsed.topicFrame;
       }
 
       analysis = parsed.thinking;

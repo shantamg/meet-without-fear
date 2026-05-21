@@ -116,12 +116,12 @@ jest.mock('../dispatch-handler', () => ({
 // ============================================================================
 
 import { orchestrateResponse, type OrchestratorContext } from '../ai-orchestrator';
-import { getModelCompletion } from '../../lib/bedrock';
+import { getModelCompletionWithTools } from '../../lib/bedrock';
 import { prisma } from '../../lib/prisma';
 import { publishContextUpdated } from '../realtime';
 import { handleDispatch } from '../dispatch-handler';
 
-const mockGetModelCompletion = getModelCompletion as jest.MockedFunction<typeof getModelCompletion>;
+const mockGetModelCompletion = getModelCompletionWithTools as jest.Mock;
 
 // ============================================================================
 // Fixtures

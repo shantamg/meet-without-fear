@@ -248,6 +248,8 @@ export interface CompletionOptions {
   turnId: string;
   /** Call type for dashboard display categorization */
   callType?: BrainActivityCallType;
+  /** Optional Claude tools for structured metadata delivery */
+  tools?: AnthropicToolDef[];
 }
 
 /**
@@ -281,6 +283,11 @@ export interface SonnetCompletionOptions extends CompletionOptions {
 }
 
 export type ModelType = 'haiku' | 'sonnet';
+
+export interface CompletionWithToolsResult {
+  text: string | null;
+  toolInvocations: Array<{ name: string; input: Record<string, unknown> }>;
+}
 
 // Re-export BrainActivityCallType for convenience
 export { BrainActivityCallType };
@@ -342,6 +349,19 @@ export async function getModelCompletion(
   model: ModelType,
   options: CompletionOptions
 ): Promise<string | null> {
+  const result = await getModelCompletionWithTools(model, options);
+  return result?.text ?? null;
+}
+
+/**
+ * Get completion from a specific model and expose separated tool invocations.
+ * Visible text and tool payloads are kept separate so structured metadata never
+ * has to be scraped from or appended to user-facing prose.
+ */
+export async function getModelCompletionWithTools(
+  model: ModelType,
+  options: CompletionOptions
+): Promise<CompletionWithToolsResult | null> {
   // E2E Mock Mode: Return null immediately to trigger mock response path
   if (isMockLLMEnabled()) {
     logger.info(`[Bedrock] MOCK_LLM enabled, skipping ${model} call`);
@@ -360,7 +380,7 @@ export async function getModelCompletion(
     return null;
   }
 
-  const { systemPrompt, messages, maxTokens = 2048 } = options;
+  const { systemPrompt, messages, tools, maxTokens = 2048 } = options;
   const modelId = model === 'haiku' ? BEDROCK_HAIKU_MODEL_ID : BEDROCK_SONNET_MODEL_ID;
   const operation = options.operation ?? `converse-${model}`;
   const startTime = Date.now();
@@ -402,7 +422,7 @@ export async function getModelCompletion(
     activityType: ActivityType.LLM_CALL,
     model: modelId,
     input: { operation, messageCount: messages.length, systemPromptLength: systemPromptText.length },
-    metadata: { maxTokens },
+    metadata: { maxTokens, toolCount: tools?.length ?? 0 },
     callType: options.callType,
   });
 
@@ -412,7 +432,8 @@ export async function getModelCompletion(
       max_tokens: maxTokens,
       system,
       messages: anthropicMessages,
-    });
+      ...(tools && tools.length > 0 ? { tools } : {}),
+    } as any);
 
     // Record success with circuit breaker (resets consecutive failure count)
     bedrockCircuitBreaker.recordSuccess();
@@ -434,8 +455,21 @@ export async function getModelCompletion(
       (outputTokens / 1000) * price.output;
 
     // Extract text
-    const textBlock = result.content.find((block) => block.type === 'text');
-    const responseText = textBlock && textBlock.type === 'text' ? textBlock.text : null;
+    const textBlocks = result.content.filter((block) => block.type === 'text');
+    const responseText = textBlocks.length > 0
+      ? textBlocks.map((block) => block.type === 'text' ? block.text : '').join('')
+      : null;
+    const toolInvocations = result.content
+      .filter((block) => block.type === 'tool_use')
+      .map((block) => {
+        const toolBlock = block as unknown as { name?: string; input?: unknown };
+        return {
+          name: toolBlock.name ?? 'unknown',
+          input: toolBlock.input && typeof toolBlock.input === 'object'
+            ? toolBlock.input as Record<string, unknown>
+            : {},
+        };
+      });
 
     const contextSizes = getContextSizesForTurn(options.turnId);
     await brainService.completeActivity(activity.id, {
@@ -447,6 +481,7 @@ export async function getModelCompletion(
       metadata: {
         cacheReadInputTokens: cacheReadTokens,
         cacheWriteInputTokens: cacheWriteTokens,
+        toolInvocations: toolInvocations.map((tool) => ({ name: tool.name })),
         ...(contextSizes ? { contextSizes } : {}),
       },
     });
@@ -462,11 +497,11 @@ export async function getModelCompletion(
     });
 
     if (!responseText) {
-      return null;
+      return { text: null, toolInvocations };
     }
 
     logResponseToFile(promptFilepath, responseText);
-    return responseText;
+    return { text: responseText, toolInvocations };
   } catch (error) {
     // Record failure with circuit breaker (may trip to OPEN state)
     bedrockCircuitBreaker.recordFailure(operation);
