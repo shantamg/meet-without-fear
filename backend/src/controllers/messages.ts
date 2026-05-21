@@ -177,6 +177,116 @@ async function getStage4WalkthroughPromptContext(
   }
 }
 
+function isStage4CompletionPrompt(content: string): boolean {
+  return /\b(feel complete|feels complete|anything else (?:you(?:'d| would) )?want to add|want to add|should we move|ready to move|move to (?:one of )?the other needs|one more option|mark (?:it|this|the current need) covered)\b/i.test(content);
+}
+
+function isStage4MoveForwardReply(content: string): boolean {
+  const text = content.trim().toLowerCase();
+  return (
+    /^(yes|yep|yeah|ok|okay|sure|done)\.?$/.test(text) ||
+    /\b(move on|next need|next one|that's good|that is good|looks good|sounds good|good enough|that's enough|that works|feels complete|feel complete|complete enough)\b/i.test(content)
+  );
+}
+
+async function applyStage4WalkthroughAdvanceFromChat(
+  sessionId: string,
+  userId: string,
+  latestUserContent: string,
+  history: Array<{ role: string; content: string }>
+): Promise<boolean> {
+  if (!isStage4MoveForwardReply(latestUserContent)) return false;
+
+  const previousAI = history
+    .slice(0, -1)
+    .reverse()
+    .find((message) => message.role === 'AI');
+  if (!previousAI || !isStage4CompletionPrompt(previousAI.content)) return false;
+
+  const before = await buildStage4State(sessionId, userId);
+  const currentNeed = before.walkthrough.currentNeed;
+  if (!currentNeed) return false;
+  if (before.walkthrough.phase !== 'MY_NEEDS' && before.walkthrough.phase !== 'PARTNER_NEEDS') {
+    return false;
+  }
+  if (currentNeed.status === 'covered' || currentNeed.status === 'skipped') return false;
+
+  const progress = await prisma.stageProgress.findUnique({
+    where: { sessionId_userId_stage: { sessionId, userId, stage: 4 } },
+    select: { gatesSatisfied: true },
+  });
+  const gates = (progress?.gatesSatisfied as Record<string, unknown> | null) ?? {};
+  const existing =
+    gates.stage4Walkthrough &&
+    typeof gates.stage4Walkthrough === 'object' &&
+    !Array.isArray(gates.stage4Walkthrough)
+      ? (gates.stage4Walkthrough as Record<string, unknown>)
+      : {};
+  const covered = new Set(
+    Array.isArray(existing.coveredNeedIds)
+      ? existing.coveredNeedIds.filter((id): id is string => typeof id === 'string')
+      : []
+  );
+  const skipped = new Set(
+    Array.isArray(existing.skippedNeedIds)
+      ? existing.skippedNeedIds.filter((id): id is string => typeof id === 'string')
+      : []
+  );
+  covered.add(currentNeed.id);
+  skipped.delete(currentNeed.id);
+
+  const remainingOwn = before.walkthrough.ownNeeds.find(
+    (need) => !covered.has(need.id) && !skipped.has(need.id)
+  );
+  const remainingPartner = before.walkthrough.partnerNeeds.find(
+    (need) => !covered.has(need.id) && !skipped.has(need.id)
+  );
+  const phase =
+    before.walkthrough.phase === 'MY_NEEDS' && remainingOwn
+      ? 'MY_NEEDS'
+      : before.walkthrough.phase === 'MY_NEEDS' && remainingPartner
+        ? 'PARTNER_NEEDS'
+        : before.walkthrough.phase === 'PARTNER_NEEDS' && remainingPartner
+          ? 'PARTNER_NEEDS'
+          : remainingOwn
+            ? 'MY_NEEDS'
+            : remainingPartner
+              ? 'PARTNER_NEEDS'
+              : 'QUALITY_REVIEW';
+  const currentNeedId =
+    phase === 'MY_NEEDS'
+      ? remainingOwn?.id ?? null
+      : phase === 'PARTNER_NEEDS'
+        ? remainingPartner?.id ?? null
+        : null;
+
+  await prisma.stageProgress.update({
+    where: { sessionId_userId_stage: { sessionId, userId, stage: 4 } },
+    data: {
+      gatesSatisfied: {
+        ...gates,
+        stage4Walkthrough: {
+          phase,
+          currentNeedId,
+          coveredNeedIds: [...covered],
+          skippedNeedIds: [...skipped],
+          updatedAt: new Date().toISOString(),
+          updatedFrom: 'chat_completion_signal',
+        },
+      } satisfies Prisma.InputJsonValue,
+    },
+  });
+
+  logger.info('[applyStage4WalkthroughAdvanceFromChat] Advanced Stage 4 walkthrough from chat', {
+    sessionId,
+    userId,
+    coveredNeedId: currentNeed.id,
+    nextPhase: phase,
+    nextNeedId: currentNeedId,
+  });
+  return true;
+}
+
 /**
  * Stage 4 Phase 6 — open needs (not declined, not yet willing-covered) with
  * their labels, so the AI can surface one at a time in main chat with the
@@ -1484,6 +1594,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       take: historyLimit,
     });
     const history = historyDesc.slice().reverse();
+
+    if (currentStage === 4) {
+      await applyStage4WalkthroughAdvanceFromChat(sessionId, user.id, content, history);
+    }
 
     // Count ALL user messages for this session (not just from the limited history window)
     // This prevents turn IDs from getting stuck when conversation exceeds 20 messages
