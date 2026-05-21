@@ -851,6 +851,18 @@ describe('Stage 4 API', () => {
           createdByUserId: mockPartnerId,
           updatedAt: new Date('2026-05-06T10:01:00.000Z'),
         },
+        {
+          id: mockStrategyIds[2],
+          description: 'Use a clear pause phrase before either person escalates',
+          needsAddressed: ['reliability around chores'],
+          duration: null,
+          measureOfSuccess: null,
+          source: 'AI_SUGGESTED',
+          kind: Stage4ProposalKind.SHARED_PROPOSAL,
+          status: Stage4ProposalStatus.ACTIVE,
+          createdByUserId: mockUser.id,
+          updatedAt: new Date('2026-05-06T10:02:00.000Z'),
+        },
       ]);
       (prisma.stage4ProposalSelection.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.stage4NeedCoverage.findMany as jest.Mock).mockResolvedValue([
@@ -860,7 +872,7 @@ describe('Stage 4 API', () => {
           needLabel: 'reliability around chores',
           sourceUserId: mockUser.id,
           coverageStatus: 'COVERED',
-          coveringProposalIds: [mockStrategyIds[0], mockStrategyIds[1]],
+          coveringProposalIds: [mockStrategyIds[0], mockStrategyIds[1], mockStrategyIds[2]],
           note: null,
           updatedAt: new Date('2026-05-06T10:03:00.000Z'),
         },
@@ -881,6 +893,7 @@ describe('Stage 4 API', () => {
       (prisma.strategyProposalNeed.findMany as jest.Mock).mockResolvedValue([
         { proposalId: mockStrategyIds[0], needId: 'need-own', need: { need: 'reliability around chores' } },
         { proposalId: mockStrategyIds[1], needId: 'need-own', need: { need: 'reliability around chores' } },
+        { proposalId: mockStrategyIds[2], needId: 'need-own', need: { need: 'reliability around chores' } },
       ]);
 
       await getStage4State(req as Request, res as Response);
@@ -893,6 +906,10 @@ describe('Stage 4 API', () => {
               phase: 'MY_NEEDS',
               currentNeed: expect.objectContaining({ id: 'need-own' }),
               proposalGroups: expect.arrayContaining([
+                expect.objectContaining({
+                  key: 'you_suggested',
+                  proposals: [expect.objectContaining({ sourceLabel: 'YOU' })],
+                }),
                 expect.objectContaining({
                   key: 'partner_suggested',
                   proposals: [expect.objectContaining({ sourceLabel: 'PARTNER' })],

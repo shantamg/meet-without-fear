@@ -141,9 +141,9 @@ function getProposalSourceLabel(
   userId: string,
   partnerUserId: string | null
 ): Stage4ProposalSourceLabel {
-  if (proposal.source === 'AI_SUGGESTED') return 'AI';
   if (proposal.createdByUserId === userId) return 'YOU';
   if (proposal.createdByUserId === partnerUserId) return 'PARTNER';
+  if (proposal.source === 'AI_SUGGESTED') return 'AI';
   return 'UNKNOWN';
 }
 
@@ -463,7 +463,7 @@ function buildWalkthrough(args: {
           ),
           group(
             'ai_suggested',
-            'AI-suggested options',
+            'MWF ideas',
             proposalsForCurrent.filter((proposal) => proposal.sourceLabel === 'AI')
           ),
         ];
