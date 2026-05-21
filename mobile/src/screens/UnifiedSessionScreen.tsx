@@ -3572,6 +3572,46 @@ export function UnifiedSessionScreen({
         // Stage 4, surface the proposal-review entry point above the input so
         // the user always has a way to open the Stage 4 drawer.
         if (hasRedesignedStage4 && stage4State) {
+          const walkthrough = stage4State.walkthrough;
+          const isWalkingNeeds =
+            !stage4State.outcome &&
+            (walkthrough.phase === 'MY_NEEDS' || walkthrough.phase === 'PARTNER_NEEDS') &&
+            Boolean(walkthrough.currentNeed);
+          if (isWalkingNeeds && walkthrough.currentNeed) {
+            const currentNeedProposalCount = walkthrough.proposalGroups.reduce(
+              (count, group) => count + group.proposals.length,
+              0
+            );
+            const phaseOwner =
+              walkthrough.phase === 'MY_NEEDS' ? 'Your need' : `${partnerName || 'Their'} need`;
+            const totalInPhase = Math.max(1, walkthrough.totalInPhase);
+            const subtitle =
+              currentNeedProposalCount === 0
+                ? 'Open this to gather options for the need in focus.'
+                : currentNeedProposalCount === 1
+                  ? 'Open this to refine the option for the need in focus.'
+                  : `Open this to refine ${currentNeedProposalCount} options for the need in focus.`;
+
+            return (
+              <GuidedActionPanel
+                tone="review"
+                title={`${phaseOwner} ${walkthrough.currentIndex + 1} of ${totalInPhase}`}
+                subtitle={subtitle}
+                compact
+                pressable
+                primaryAction={{
+                  label: 'Open Stage 4',
+                  onPress: () => {
+                    Keyboard.dismiss();
+                    setShowStage4Drawer(true);
+                  },
+                  testID: 'stage4-open-button',
+                }}
+                testID="stage4-open-panel"
+              />
+            );
+          }
+
           const allProposals = [
             ...stage4State.inventory.sharedProposals,
             ...stage4State.inventory.individualCommitments,
