@@ -5347,7 +5347,7 @@ const useStyles = () => {
       justifyContent: 'center',
     },
     primaryButtonText: {
-      color: '#0d0f12',
+      color: palette.textOnAccent,
       fontWeight: '700',
       fontSize: t.typography.fontSize.md,
     },
@@ -5386,7 +5386,7 @@ const useStyles = () => {
     },
     modalBackdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.6)',
+      backgroundColor: palette.scrim,
       justifyContent: 'center',
       padding: t.spacing.lg,
     },
@@ -5560,29 +5560,33 @@ const useStyles = () => {
       lineHeight: 24,
     },
     modalCard: {
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: palette.bgElev,
       borderRadius: t.radius.xl,
       padding: t.spacing.lg,
       gap: t.spacing.md,
+      borderWidth: 1,
+      borderColor: palette.border,
     },
     modalTitle: {
       fontSize: 20,
       fontWeight: '700',
-      color: t.colors.textPrimary,
+      color: palette.text,
     },
     modalSubtitle: {
       fontSize: 14,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       lineHeight: 20,
     },
     modalPreview: {
-      backgroundColor: t.colors.bgSecondary,
+      backgroundColor: palette.bgPane,
       borderRadius: t.radius.lg,
       padding: t.spacing.md,
+      borderWidth: 1,
+      borderColor: palette.border,
     },
     modalPreviewLabel: {
       fontSize: 12,
-      color: t.colors.textSecondary,
+      color: palette.textMuted,
       marginBottom: t.spacing.xs,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -5590,7 +5594,7 @@ const useStyles = () => {
     modalPreviewText: {
       fontSize: 15,
       lineHeight: 22,
-      color: t.colors.textPrimary,
+      color: palette.text,
     },
     needsRevealScroll: {
       maxHeight: 360,
