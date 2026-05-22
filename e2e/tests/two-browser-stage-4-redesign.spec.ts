@@ -158,6 +158,165 @@ test.describe('Stage 4 redesign: deterministic two-user coverage', () => {
     expect(sharedTending.agreementId).toBe(closeData.data.outcome.agreements[0].id);
   });
 
+  test('due shared Tending check-in persists structured outcomes and reopens strategy work', async ({ request }) => {
+    const seeded = await seedSession(request, 'STAGE4_REDESIGN_SHARED_SELECTIONS');
+    const apiA = apiFor(request, users.a.email, seeded.userAId);
+
+    const beforeClose = await readJson<any>(
+      await apiA.get(`/api/sessions/${seeded.sessionId}/stage4`),
+      'get mutual Stage 4 state before due Tending close'
+    );
+    const sharedProposal = beforeClose.data.inventory.sharedProposals.find((proposal: any) =>
+      proposal.description.includes('Sunday evening planning check-in')
+    );
+    expect(sharedProposal).toBeTruthy();
+
+    const dueDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    await readJson<any>(
+      await apiA.post(`/api/sessions/${seeded.sessionId}/stage4/close`, {
+        kind: 'SHARED_AGREEMENT',
+        followUpDatesByProposalId: { [sharedProposal.id]: dueDate },
+      }),
+      'close shared-agreement Stage 4 with due Tending'
+    );
+
+    const tendingData = await readJson<any>(
+      await apiA.get(`/api/sessions/${seeded.sessionId}/tending`),
+      'list open due Tending entries'
+    );
+    const sharedTending = tendingData.data.entries.find((entry: any) =>
+      entry.type === 'SCHEDULED_SHARED_AGREEMENT_CHECKIN'
+    );
+    expect(sharedTending).toBeTruthy();
+    expect(sharedTending.status).toBe('OPEN');
+
+    const checkinData = await readJson<any>(
+      await apiA.post(`/api/sessions/${seeded.sessionId}/tending/checkin`, {
+        orientations: {
+          whatWorked: {
+            reflection: 'We tried to plan, but it only happened once.',
+            perEntryNotes: {
+              [sharedTending.id]: 'The check-in did not become a routine.',
+            },
+          },
+          whereMoreSupport: {
+            reflection: 'We need a smaller commitment and clearer ownership.',
+            perEntryNotes: {
+              [sharedTending.id]: 'Partner follow-through was inconsistent.',
+            },
+          },
+          whatComesNext: {
+            continueChoice: 'ANOTHER_ROUND',
+            nextAction: 'REOPEN_STRATEGY_WORK',
+          },
+        },
+        entryOutcomes: [
+          {
+            tendingEntryId: sharedTending.id,
+            followThroughStatus: 'PARTLY_HAPPENED',
+            helpfulnessStatus: 'DID_NOT_HELP',
+            blockerCategories: ['PARTNER_DID_NOT_DO_PART', 'UNCLEAR'],
+            whatHappened: 'It happened once, then fell off.',
+            helpedNeed: 'The partnership need still feels open.',
+            stillWorthTrying: false,
+          },
+        ],
+        needOutcomes: [
+          {
+            needId: 'need-partnership',
+            needLabel: 'Partnership',
+            sourceUserId: seeded.userAId,
+            resolutionStatus: 'STILL_OPEN',
+            note: 'Planning is still not reliable.',
+            nextAction: 'REOPEN_STRATEGY_WORK',
+          },
+        ],
+        nextAction: 'REOPEN_STRATEGY_WORK',
+      }),
+      'submit structured Tending check-in'
+    );
+
+    expect(checkinData.data.continueChoice).toBe('ANOTHER_ROUND');
+    expect(checkinData.data.checkin.nextAction).toBe('REOPEN_STRATEGY_WORK');
+    expect(checkinData.data.checkin.needOutcomes[0]).toEqual(expect.objectContaining({
+      needLabel: 'Partnership',
+      resolutionStatus: 'STILL_OPEN',
+      nextAction: 'REOPEN_STRATEGY_WORK',
+    }));
+    const refreshedSharedEntry = checkinData.data.entries.find((entry: any) => entry.id === sharedTending.id);
+    expect(refreshedSharedEntry.status).toBe('COMPLETED');
+    expect(refreshedSharedEntry.latestOutcome).toEqual(expect.objectContaining({
+      followThroughStatus: 'PARTLY_HAPPENED',
+      helpfulnessStatus: 'DID_NOT_HELP',
+      blockerCategories: expect.arrayContaining(['PARTNER_DID_NOT_DO_PART', 'UNCLEAR']),
+      stillWorthTrying: false,
+    }));
+
+    const reopenedState = await readJson<any>(
+      await apiA.get(`/api/sessions/${seeded.sessionId}/stage4`),
+      'get reopened Stage 4 state after Tending'
+    );
+    expect(reopenedState.data.outcome).toBeNull();
+    expect(reopenedState.data.mySelectionStatus).toBe('NOT_STARTED');
+    expect(reopenedState.data.partnerSelections).toEqual([]);
+  });
+
+  test('due shared Tending check-in renders the rich mobile check-in flow', async ({ request, page }) => {
+    const seeded = await seedSession(request, 'STAGE4_REDESIGN_SHARED_SELECTIONS');
+    const apiA = apiFor(request, users.a.email, seeded.userAId);
+
+    const beforeClose = await readJson<any>(
+      await apiA.get(`/api/sessions/${seeded.sessionId}/stage4`),
+      'get mutual Stage 4 state before UI check-in'
+    );
+    const sharedProposal = beforeClose.data.inventory.sharedProposals.find((proposal: any) =>
+      proposal.description.includes('Sunday evening planning check-in')
+    );
+    expect(sharedProposal).toBeTruthy();
+
+    const dueDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    await readJson<any>(
+      await apiA.post(`/api/sessions/${seeded.sessionId}/stage4/close`, {
+        kind: 'SHARED_AGREEMENT',
+        followUpDatesByProposalId: { [sharedProposal.id]: dueDate },
+      }),
+      'close shared-agreement Stage 4 with due Tending for UI smoke'
+    );
+
+    const tendingData = await readJson<any>(
+      await apiA.get(`/api/sessions/${seeded.sessionId}/tending`),
+      'list open due Tending entries for UI smoke'
+    );
+    const sharedTending = tendingData.data.entries.find((entry: any) =>
+      entry.type === 'SCHEDULED_SHARED_AGREEMENT_CHECKIN'
+    );
+    expect(sharedTending).toBeTruthy();
+
+    const params = new URLSearchParams({
+      tendingEntryId: sharedTending.id,
+      'e2e-user-id': seeded.userAId,
+      'e2e-user-email': users.a.email,
+    });
+    await page.goto(`/session/${seeded.sessionId}/tending-checkin?${params.toString()}`);
+    await page.waitForLoadState('domcontentloaded');
+
+    await expect(page.getByTestId('tending-checkin-step-followThrough')).toBeVisible();
+    await expect(page.getByTestId(`tending-checkin-entry-${sharedTending.id}`)).toBeVisible();
+    await expect(page.getByTestId(`tending-follow-through-${sharedTending.id}-PARTLY_HAPPENED`)).toBeVisible();
+
+    await page.getByTestId('tending-checkin-next').click();
+    await expect(page.getByTestId(`tending-helpfulness-${sharedTending.id}-DID_NOT_HELP`)).toBeVisible();
+    await expect(page.getByTestId(`tending-blocker-${sharedTending.id}-PARTNER_DID_NOT_DO_PART`)).toBeVisible();
+
+    await page.getByTestId('tending-checkin-next').click();
+    await expect(page.getByTestId('tending-checkin-step-needsReview')).toBeVisible();
+    await expect(page.getByText('Appreciation')).toBeVisible();
+
+    await page.getByTestId('tending-checkin-next').click();
+    await expect(page.getByTestId('tending-checkin-choice-REOPEN_STRATEGY_WORK')).toBeVisible();
+    await expect(page.getByTestId('tending-reminder-controls')).toBeVisible();
+  });
+
   test('no shared agreement preserves individual Tending and supports passive re-entry', async ({ request }) => {
     const seeded = await seedSession(request, 'STAGE4_REDESIGN_NO_OVERLAP_SELECTIONS');
     const apiA = apiFor(request, users.a.email, seeded.userAId);

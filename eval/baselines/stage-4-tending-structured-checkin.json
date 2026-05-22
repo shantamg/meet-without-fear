@@ -1,0 +1,12 @@
+{
+  "dimensions": {
+    "checks_actual_follow_through": 4.2,
+    "routes_failed_support_to_adjust_or_reopen": 4.2,
+    "separates_agreement_from_resolution": 4.2
+  },
+  "moment_id": "stage-4-tending-structured-checkin",
+  "overall_score": 4.2,
+  "source": "full-tending-flow:initial-mock-baseline-20260522",
+  "updated_at": "2026-05-22T00:00:00.000000Z",
+  "verdict": "eval_pass"
+}

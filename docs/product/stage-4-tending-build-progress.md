@@ -171,6 +171,40 @@ Branch: `codex/full-tending-flow`
 - Known blockers: none.
 - Next step: Chunk 6 E2E/evaluation coverage and browser verification from a real Stage 4 snapshot.
 
+### 2026-05-22 — Chunk 6 E2E/Eval Coverage And Browser Verification
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `e2e/tests/two-browser-stage-4-redesign.spec.ts`
+  - `eval/moments/stage-4-tending-structured-checkin.yaml`
+  - `eval/baselines/stage-4-tending-structured-checkin.json`
+  - `eval/scorer/judge-prompts/stage-4-tending-structured-checkin.md`
+  - `scripts/mwf_moment_eval.py`
+  - `scripts/test_mwf_moment_eval.py`
+- Decisions made:
+  - Extended deterministic Stage 4 redesign E2E coverage with a due shared Tending check-in that submits structured entry outcomes, need outcomes, blocker categories, and `REOPEN_STRATEGY_WORK`.
+  - Added a real browser smoke in the same Playwright project that deep-links into the due Tending check-in route and walks through follow-through, helpfulness/blockers, needs review, and what-comes-next screens.
+  - Added a Tending moment-eval fixture anchored to the core protocol's Tending check-in section.
+  - Added deterministic hard invariants for "agreement is not resolution," failed support should not generically extend the same commitment, and private reminders staying private.
+  - Added a baseline and judge prompt for the new Tending moment.
+- Commands run:
+  - `npm run check --workspace e2e`
+  - `python3 scripts/test_mwf_moment_eval.py`
+  - `python3 scripts/mwf_moment_eval.py run --moment stage-4-tending-structured-checkin --max-iterations 1 --mock-response "..."`
+  - `npm --workspace e2e run e2e -- --project=two-browser-stage-4-redesign`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace mobile`
+  - `npm run check --workspace e2e`
+- Test results:
+  - E2E typecheck passed.
+  - Moment-eval unit suite passed: 76 tests.
+  - New Tending mock moment run produced a passing eval run artifact; generated raw run output was removed from the worktree after verification.
+  - Stage 4 redesign Playwright project passed: 6 tests, including the new structured Tending API test and browser route smoke.
+  - Final backend, shared, mobile, and e2e typechecks passed.
+- Known blockers: none.
+- Next step: commit this E2E/eval checkpoint, then push/open PR if this branch is ready for review.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.

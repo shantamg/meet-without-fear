@@ -1,0 +1,54 @@
+{
+  "id": "stage-4-tending-structured-checkin",
+  "stages": [4],
+  "description": "The Tending check-in reviews what happened, whether commitments helped underlying needs, and chooses a concrete next path without treating agreement as resolution.",
+  "seed": {
+    "session": {"status": "RESOLVED", "stage": 4, "scenario": "adam-eve"},
+    "participants": [
+      {"role": "invitor", "name": "Adam", "compactSigned": true, "stageGates": {"4": {"closed": true}}},
+      {"role": "invitee", "name": "Eve", "compactSigned": true, "stageGates": {"4": {"closed": true}}}
+    ],
+    "history_source": "docs/product/source-material/golden-transcripts/core-protocol-update.md:261-283",
+    "prior_history_summary": [
+      "Adam and Eve closed Stage 4 with a weekly walk and a weekly structured conversation.",
+      "The scheduled Tending check-in is now due; one shared commitment partly happened but did not resolve the partnership need."
+    ],
+    "proposals": [
+      {"id": "weekly-walk", "kind": "shared", "description": "Weekly walk", "selectedBy": {"Adam": "WILLING", "Eve": "WILLING"}},
+      {"id": "structured-conversation", "kind": "shared", "description": "Weekly structured conversation", "selectedBy": {"Adam": "WILLING", "Eve": "WILLING"}}
+    ],
+    "tending_entries": [
+      {"id": "walk-checkin", "scope": "shared", "status": "OPEN", "summary": "Check in on the weekly walk"},
+      {"id": "conversation-checkin", "scope": "shared", "status": "OPEN", "summary": "Check in on the structured conversation"}
+    ],
+    "open_needs": [
+      {"id": "need-partnership", "label": "Partnership"}
+    ]
+  },
+  "trigger": {
+    "type": "api_call",
+    "endpoint": "POST /sessions/:id/tending/checkin",
+    "actor": "Adam",
+    "body": {
+      "content": "The walk happened once, but the need still feels open. I think we need a smaller plan instead of pretending the agreement solved it."
+    }
+  },
+  "capture": ["tending_checkin", "entry_outcomes", "need_outcomes", "next_action", "stage_progress_diff"],
+  "rubric": {
+    "reference_transcript_lines": "docs/product/source-material/golden-transcripts/core-protocol-update.md:261-283",
+    "judge_prompt": "eval/scorer/judge-prompts/stage-4-tending-structured-checkin.md",
+    "dimensions": [
+      {"id": "checks_actual_follow_through", "description": "Asks or records what actually happened before deciding what worked.", "pass_threshold": 4, "mock_pass_keywords": ["what happened"]},
+      {"id": "separates_agreement_from_resolution", "description": "Does not treat making or attempting an agreement as proof that the underlying need is resolved.", "pass_threshold": 4, "mock_pass_keywords": ["need still feels open"]},
+      {"id": "routes_failed_support_to_adjust_or_reopen", "description": "When follow-through did not help, routes toward adjustment or reopened strategy work rather than generic extension.", "pass_threshold": 4, "mock_pass_keywords": ["reopen strategy"]}
+    ],
+    "overall_pass_threshold": 4.0,
+    "hard_invariants": [
+      {"id": "no_agreement_equals_resolution", "description": "The response must not say or imply that an agreement being made or attempted means the need is resolved."},
+      {"id": "no_generic_extension_after_failed_support", "description": "The response must not default to keeping the same commitment when the stated outcome says it did not help."},
+      {"id": "private_reminders_stay_private", "description": "Private reminders must not be described as partner notifications."}
+    ]
+  },
+  "expected_response": "Start with what happened: the walk happened once, and the partnership need still feels open. That means the agreement was not the same thing as resolution. Since this did not help enough, the next path is to adjust the commitment or reopen strategy work, not simply extend the same plan. Private reminders stay private unless you explicitly choose a shared reminder.",
+  "improver": {"candidate_owners": ["mwf_prompts", "product_code"], "default_owner": "mwf_prompts"}
+}

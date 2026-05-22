@@ -415,6 +415,29 @@ def evaluate_common_hard_invariant(invariant_id: str, response: str, moment: dic
     if invariant_id == "no_blame_or_pressure":
         pressure_terms = ["should have", "gave up", "must keep trying", "owe", "fault"]
         return not any(term in lower for term in pressure_terms)
+    if invariant_id == "no_agreement_equals_resolution":
+        agreement_resolution_claims = [
+            "because you agreed, the need is resolved",
+            "agreement means the need is resolved",
+            "the agreement resolved the need",
+            "trying it means this is resolved",
+        ]
+        return not any(term in lower for term in agreement_resolution_claims)
+    if invariant_id == "no_generic_extension_after_failed_support":
+        failure_markers = ["did not help", "didn't help", "still feels open", "still open"]
+        generic_extension_markers = ["just keep going", "simply extend", "same plan is fine", "keep the same commitment"]
+        negated_extension_markers = ["not simply extend", "not just keep going", "rather than generic extension"]
+        has_failed_support = any(term in lower for term in failure_markers)
+        has_generic_extension = any(term in lower for term in generic_extension_markers)
+        has_negated_extension = any(term in lower for term in negated_extension_markers)
+        return not (has_failed_support and has_generic_extension and not has_negated_extension)
+    if invariant_id == "private_reminders_stay_private":
+        private_markers = ["private reminder", "private reminders"]
+        partner_notify_markers = ["notify your partner", "tell your partner", "send to your partner"]
+        return not (
+            any(term in lower for term in private_markers)
+            and any(term in lower for term in partner_notify_markers)
+        )
     if invariant_id == "no_premature_needs_language":
         return not any(term in lower for term in ["what do you need", "your needs", "what matters underneath"])
     return True

@@ -44,6 +44,9 @@ TRAJECTORY_MOMENT_IDS = [
     "stage-3-trajectory-needs-flow",
     "stage-4-trajectory-willingness-to-close",
 ]
+TENDING_MOMENT_IDS = [
+    "stage-4-tending-structured-checkin",
+]
 
 
 class TestYamlParsing(unittest.TestCase):
@@ -89,6 +92,35 @@ class TestYamlParsing(unittest.TestCase):
         moment_ids = set(mme.list_moments())
         for moment_id in PHASE1_MOMENT_IDS:
             self.assertIn(moment_id, moment_ids)
+        for moment_id in TENDING_MOMENT_IDS:
+            self.assertIn(moment_id, moment_ids)
+
+    def test_tending_library_moments_are_authored_with_required_shape(self) -> None:
+        for moment_id in TENDING_MOMENT_IDS:
+            with self.subTest(moment_id=moment_id):
+                moment = mme.load_moment(moment_id)
+                self.assertEqual(moment["id"], moment_id)
+                self.assertEqual(moment["rubric"]["reference_transcript_lines"], "docs/product/source-material/golden-transcripts/core-protocol-update.md:261-283")
+                self.assertEqual(moment["rubric"]["judge_prompt"], "eval/scorer/judge-prompts/stage-4-tending-structured-checkin.md")
+                self.assertTrue((REPO_ROOT / moment["rubric"]["judge_prompt"]).exists())
+                self.assertTrue(
+                    {"no_agreement_equals_resolution", "no_generic_extension_after_failed_support", "private_reminders_stay_private"}.issubset(
+                        {item["id"] for item in moment["rubric"]["hard_invariants"]}
+                    )
+                )
+
+    def test_tending_mock_scoring_catches_bad_extension_and_partner_notification(self) -> None:
+        moment = mme.load_moment("stage-4-tending-structured-checkin")
+
+        score = mme.score_response(
+            moment,
+            "The agreement resolved the need. It did not help, but just keep going with the same plan. Your private reminder will notify your partner.",
+        )
+
+        failed = {item["id"] for item in score["hard_invariants"] if not item["pass"]}
+        self.assertTrue(
+            {"no_agreement_equals_resolution", "no_generic_extension_after_failed_support", "private_reminders_stay_private"}.issubset(failed)
+        )
 
     def test_gold_loop_scenarios_come_from_registry(self) -> None:
         self.assertEqual(gold_loop.SCENARIOS["adam-eve"], ("Adam", "Eve"))
