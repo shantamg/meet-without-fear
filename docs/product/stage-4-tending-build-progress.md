@@ -6,6 +6,34 @@ Branch: `codex/full-tending-flow`
 
 ## Full Tending Flow Progress
 
+### 2026-05-22 — Chunk 7 Live Tending Prompt Integration
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/stage4-prompts.ts`
+  - `backend/src/services/stage-prompts.ts`
+  - `backend/src/controllers/messages.ts`
+  - `backend/src/services/__tests__/stage4-prompts.test.ts`
+  - `backend/src/services/__tests__/stage-prompts.test.ts`
+  - `backend/src/routes/__tests__/messages.test.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Extended `buildTendingConversationPrompt` to include success criteria and selected between-period notes.
+  - Selected between-period notes are labeled as private unless explicit share consent is recorded.
+  - `buildStagePrompt` can now append a rendered Tending conversation prompt to the dynamic Stage 4 block.
+  - The streaming message route now permits `RESOLVED` sessions for private Tending/listen-first chat instead of rejecting them as inactive.
+  - Resolved-session message context loads Tending entries, Stage 4 needs, selected between-period notes for the current user only, and latest structured outcomes/adjustments.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/stage-prompts.test.ts src/services/__tests__/stage4-prompts.test.ts --runInBand`
+  - `npm test --workspace backend -- --runTestsByPath src/routes/__tests__/messages.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Stage prompt suites passed: 140 tests.
+  - Message route suite passed: 19 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Next step: implement Chunk 8 Tending history/read model and mobile summary surface.
+
 ### 2026-05-22 — Chunk 6 Private Note E2E Coverage
 
 - Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.

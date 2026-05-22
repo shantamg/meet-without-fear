@@ -10,6 +10,7 @@ import {
 } from '../../controllers/messages';
 import { prisma } from '../../lib/prisma';
 import { getSonnetStreamingResponse } from '../../lib/bedrock';
+import { buildStagePrompt } from '../../services/stage-prompts';
 import { interpretNeedEditRequest } from '../../services/needs-edit-interpreter.service';
 import { applyNeedEdits } from '../../services/needs-edit-applier.service';
 
@@ -267,6 +268,102 @@ describe('Messages API (Fire-and-Forget)', () => {
   });
 
   describe('POST /sessions/:id/messages/stream (sendMessageStream)', () => {
+    it('allows resolved-session Tending chat and injects private selected note context', async () => {
+      const stage4Progress = {
+        id: 'progress-4',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 4,
+        status: 'COMPLETED',
+        gatesSatisfied: {},
+      };
+      const session = {
+        id: mockSessionId,
+        status: 'RESOLVED',
+        topicFrame: 'Sunday planning',
+        topicFrameConfirmedAt: new Date('2026-05-20T00:00:00Z'),
+        relationship: {
+          members: [{ userId: mockUser.id }, { userId: 'partner-1' }],
+        },
+      };
+      const userMessage = {
+        id: 'msg-user-tending',
+        sessionId: mockSessionId,
+        senderId: mockUser.id,
+        role: 'USER',
+        content: 'I want to think about what happened before the check-in.',
+        stage: 4,
+        timestamp: new Date('2026-05-22T10:00:00Z'),
+      };
+      const aiMessage = {
+        id: 'msg-ai-tending',
+        sessionId: mockSessionId,
+        senderId: null,
+        forUserId: mockUser.id,
+        role: 'AI',
+        content: 'We can stay with what happened first.',
+        stage: 4,
+        timestamp: new Date('2026-05-22T10:00:01Z'),
+      };
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(session);
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue(session);
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(stage4Progress);
+      (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue(stage4Progress);
+      (prisma.message.create as jest.Mock).mockImplementation(async ({ data }) => (
+        data.role === 'USER' ? { ...userMessage, content: data.content } : { ...aiMessage, content: data.content, stage: data.stage }
+      ));
+      (prisma.message.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.message.count as jest.Mock).mockResolvedValue(1);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ name: 'Partner' });
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.stage4NeedCoverage.findMany as jest.Mock).mockResolvedValue([
+        { needId: 'need-1', needLabel: 'Partnership' },
+      ]);
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([{
+        id: 'entry-1',
+        summary: 'Weekly walk',
+        scope: 'SHARED',
+        agreement: { measureOfSuccess: 'Both feel less alone.' },
+      }]);
+      (prisma.tendingBetweenPeriodNote.findMany as jest.Mock).mockResolvedValue([{
+        id: 'note-1',
+        content: 'I felt myself bracing before the second walk.',
+        consentToShareWithPartner: false,
+      }]);
+      (prisma.tendingCheckin.findMany as jest.Mock).mockResolvedValue([]);
+
+      async function* llmStream() {
+        yield { type: 'text', text: 'Mode: STAGE4\n</thinking>\n' };
+        yield { type: 'text', text: aiMessage.content };
+        yield { type: 'done' };
+      }
+      (getSonnetStreamingResponse as jest.Mock).mockReturnValue(llmStream());
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: { content: userMessage.content },
+      });
+      const { res, endMock } = createMockResponse();
+
+      await sendMessageStream(req as Request, res as Response);
+
+      expect(buildStagePrompt).toHaveBeenCalledWith(
+        4,
+        expect.objectContaining({
+          stage4ListenFirstMode: true,
+          tendingConversationPrompt: expect.stringContaining('TENDING CONVERSATION PROMPT'),
+        }),
+        expect.any(Object)
+      );
+      const promptArg = (buildStagePrompt as jest.Mock).mock.calls.at(-1)?.[1];
+      expect(promptArg.tendingConversationPrompt).toContain('I felt myself bracing before the second walk.');
+      expect(promptArg.tendingConversationPrompt).toContain('private; do not relay');
+      expect(promptArg.tendingConversationPrompt).toContain('Weekly walk');
+      expect(endMock).toHaveBeenCalled();
+    });
+
     it('applies a fallback need edit when refinement chat produces no need-action tag', async () => {
       const stage3Progress = {
         id: 'progress-3',

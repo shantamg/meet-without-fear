@@ -133,11 +133,18 @@ describe('Tending conversation prompt support', () => {
       userName: 'Adam',
       partnerName: 'Eve',
       entries: [
-        { id: 'entry-1', summary: 'Weekly walk', scope: 'SHARED' },
+        { id: 'entry-1', summary: 'Weekly walk', scope: 'SHARED', successCriteria: 'Both feel less alone.' },
         { id: 'entry-2', summary: 'Saturday mornings', scope: 'INDIVIDUAL' },
       ],
       needs: [
         { id: 'need-1', label: 'not being alone on the inside' },
+      ],
+      selectedBetweenPeriodNotes: [
+        {
+          id: 'note-1',
+          content: 'I got tense before the second walk.',
+          consentToShareWithPartner: false,
+        },
       ],
       latestStructuredOutcomes: 'entry-1 happened and helped partly',
     });
@@ -146,8 +153,11 @@ describe('Tending conversation prompt support', () => {
     expect(prompt).toContain('Eve is not in this conversation');
     expect(prompt).toContain('Nothing crosses to Eve unless Adam explicitly chooses');
     expect(prompt).toContain('Weekly walk');
+    expect(prompt).toContain('Both feel less alone');
     expect(prompt).toContain('Saturday mornings');
     expect(prompt).toContain('not being alone on the inside');
+    expect(prompt).toContain('I got tense before the second walk');
+    expect(prompt).toContain('private; do not relay');
     expect(prompt).toContain('entry-1 happened and helped partly');
     expect(prompt).toContain('Ask one thing at a time');
   });

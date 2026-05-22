@@ -398,6 +398,20 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Only ask a follow-up when filling the missing detail would require a real leap');
     });
 
+    it('Stage 4 resolved prompt can include private Tending conversation context', () => {
+      const context = createContext({
+        stage4ListenFirstMode: true,
+        tendingConversationPrompt:
+          'TENDING CONVERSATION PROMPT\nSELECTED BETWEEN-PERIOD NOTES:\n- note-1: private note (private; do not relay)',
+      });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('LISTEN-FIRST MODE — SESSION ALREADY RESOLVED');
+      expect(prompt).toContain('TENDING CONVERSATION PROMPT');
+      expect(prompt).toContain('SELECTED BETWEEN-PERIOD NOTES');
+      expect(prompt).toContain('private; do not relay');
+    });
+
     it('returns topic-articulation prompt for stage 0 with isInvitationPhase', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };

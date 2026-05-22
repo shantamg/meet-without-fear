@@ -219,10 +219,16 @@ export interface TendingConversationPromptContext {
     id: string;
     summary: string | null;
     scope?: 'SHARED' | 'INDIVIDUAL' | string;
+    successCriteria?: string | null;
   }>;
   needs?: Array<{
     id?: string | null;
     label: string;
+  }>;
+  selectedBetweenPeriodNotes?: Array<{
+    id: string;
+    content: string;
+    consentToShareWithPartner?: boolean;
   }>;
   latestStructuredOutcomes?: string | null;
 }
@@ -230,13 +236,23 @@ export interface TendingConversationPromptContext {
 function formatTendingEntryList(entries: TendingConversationPromptContext['entries']): string {
   if (!entries || entries.length === 0) return '- No structured Tending entries were provided.';
   return entries
-    .map((entry) => `- ${entry.id}: ${entry.summary || 'Tending entry'}${entry.scope ? ` (${entry.scope})` : ''}`)
+    .map((entry) => [
+      `- ${entry.id}: ${entry.summary || 'Tending entry'}${entry.scope ? ` (${entry.scope})` : ''}`,
+      entry.successCriteria ? `success criteria: ${entry.successCriteria}` : null,
+    ].filter(Boolean).join('; '))
     .join('\n');
 }
 
 function formatTendingNeedList(needs: TendingConversationPromptContext['needs']): string {
   if (!needs || needs.length === 0) return '- No linked needs were provided.';
   return needs.map((need) => `- ${need.id ?? 'need'}: ${need.label}`).join('\n');
+}
+
+function formatTendingBetweenPeriodNotes(notes: TendingConversationPromptContext['selectedBetweenPeriodNotes']): string {
+  if (!notes || notes.length === 0) return '- No between-period notes were selected for this conversation.';
+  return notes.map((note) =>
+    `- ${note.id}: ${note.content}${note.consentToShareWithPartner ? ' (share consent recorded)' : ' (private; do not relay)'}`
+  ).join('\n');
 }
 
 export function buildTendingConversationPrompt(
@@ -265,6 +281,9 @@ export function buildTendingConversationPrompt(
     ``,
     `UNDERLYING NEEDS TO REVIEW:`,
     formatTendingNeedList(context.needs),
+    ``,
+    `SELECTED BETWEEN-PERIOD NOTES:`,
+    formatTendingBetweenPeriodNotes(context.selectedBetweenPeriodNotes),
     context.latestStructuredOutcomes
       ? `\nLATEST STRUCTURED OUTCOMES:\n${context.latestStructuredOutcomes}`
       : '',

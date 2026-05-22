@@ -18,6 +18,7 @@ import { type CategorizedFact } from './partner-session-classifier';
 import {
   RESOLVED_LISTEN_FIRST_CLAUSE,
   coverageReviewOpenNeedsClause,
+  type TendingConversationPromptContext,
 } from './stage4-prompts';
 
 // ============================================================================
@@ -489,6 +490,10 @@ export interface PromptContext {
   stage4OpenNeeds?: Array<{ needLabel: string }> | null;
   /** Stage 4 Phase 6 — when true, main-chat persona switches to listen-first reflection mode (session RESOLVED, no check-in yet, user hasn't asked for input) */
   stage4ListenFirstMode?: boolean;
+  /** Stage 5/Tending — resolved-session conversational prompt context for private Tending chat. */
+  tendingConversationContext?: TendingConversationPromptContext | null;
+  /** Stage 5/Tending — rendered private Tending prompt injected into resolved-session chat. */
+  tendingConversationPrompt?: string | null;
   /** Partner's progress status for transition messages */
   partnerStatus?: 'not_joined' | 'in_progress' | 'completed';
   /**
@@ -1897,6 +1902,9 @@ export function buildStagePrompt(stage: number, context: PromptContext, options?
     // block so it reads as a recent operational signal, not as framing.
     if (promptContext.invitedSessionNudge) {
       dynamicBlock = `${dynamicBlock}\n\nOPERATIONAL NUDGE:\n${promptContext.invitedSessionNudge}`;
+    }
+    if (promptContext.tendingConversationPrompt) {
+      dynamicBlock = `${dynamicBlock}\n\n${promptContext.tendingConversationPrompt}`;
     }
     // Append Slack formatting rules to the static block when the response will
     // render in a Slack DM. Keeping this in the static block preserves prompt

@@ -51,7 +51,11 @@ import { interpretNeedEditRequest } from '../services/needs-edit-interpreter.ser
 import { cleanVisibleAIText } from '../utils/visible-text';
 import { captureStage4Turn } from '../services/stage4-capture.service';
 import { applyStage4AutoClosureFromSignal } from '../services/stage4-auto-closure.service';
-import { isExplicitAskForInput } from '../services/stage4-prompts';
+import {
+  buildTendingConversationPrompt,
+  isExplicitAskForInput,
+  type TendingConversationPromptContext,
+} from '../services/stage4-prompts';
 import { getStage4State as buildStage4State, Stage4StateNotFoundError } from '../services/stage4-state';
 import type { ParsedStage4WalkthroughAction } from '../utils/micro-tag-parser';
 
@@ -365,6 +369,103 @@ async function isStage4ListenFirstMode(
     (m) => m.role === 'USER' && isExplicitAskForInput(m.content)
   );
   return !askedForInput;
+}
+
+async function getTendingConversationContextForPrompt(
+  sessionId: string,
+  userId: string
+): Promise<TendingConversationPromptContext | null> {
+  try {
+    const [entries, needs, selectedNotes, latestCheckins] = await Promise.all([
+      prisma.tendingEntry.findMany({
+        where: {
+          sessionId,
+          OR: [
+            { scope: 'SHARED' },
+            { scope: 'INDIVIDUAL', ownerUserId: userId },
+            { scope: 'INDIVIDUAL', optedInShared: true },
+          ],
+        },
+        orderBy: [{ scheduledFor: 'asc' }, { createdAt: 'asc' }],
+        take: 8,
+        select: {
+          id: true,
+          summary: true,
+          scope: true,
+          agreement: { select: { measureOfSuccess: true } },
+        },
+      }),
+      prisma.stage4NeedCoverage.findMany({
+        where: { sessionId },
+        orderBy: [{ updatedAt: 'desc' }],
+        take: 8,
+        select: { needId: true, needLabel: true },
+      }),
+      prisma.tendingBetweenPeriodNote.findMany({
+        where: {
+          sessionId,
+          userId,
+          carryForwardSelected: true,
+        },
+        orderBy: [{ createdAt: 'asc' }],
+        take: 8,
+        select: {
+          id: true,
+          content: true,
+          consentToShareWithPartner: true,
+        },
+      }),
+      prisma.tendingCheckin.findMany({
+        where: { sessionId, userId },
+        orderBy: [{ submittedAt: 'desc' }],
+        take: 3,
+        include: {
+          entryOutcomes: true,
+          needOutcomes: true,
+          adjustments: true,
+        },
+      }),
+    ]);
+
+    if (entries.length === 0 && selectedNotes.length === 0 && latestCheckins.length === 0) {
+      return null;
+    }
+
+    const latestStructuredOutcomes = latestCheckins.flatMap((checkin) => [
+      `Check-in ${checkin.id}: continueChoice=${checkin.continueChoice ?? 'none'} nextAction=${checkin.nextAction ?? 'none'}`,
+      ...checkin.entryOutcomes.map((outcome) =>
+        `Entry ${outcome.tendingEntryId}: followThrough=${outcome.followThroughStatus}; helpfulness=${outcome.helpfulnessStatus ?? 'none'}; blockers=${outcome.blockerCategories.join(', ') || 'none'}; stillWorthTrying=${outcome.stillWorthTrying ?? 'unknown'}`
+      ),
+      ...checkin.needOutcomes.map((outcome) =>
+        `Need ${outcome.needLabel}: ${outcome.resolutionStatus}${outcome.nextAction ? `; nextAction=${outcome.nextAction}` : ''}`
+      ),
+      ...checkin.adjustments.map((adjustment) =>
+        `Adjustment ${adjustment.tendingEntryId}: ${adjustment.revisedCommitmentText ?? 'no text'}${adjustment.revisedCadence ? `; cadence=${adjustment.revisedCadence}` : ''}${adjustment.revisedSuccessCriteria ? `; success=${adjustment.revisedSuccessCriteria}` : ''}`
+      ),
+    ]).join('\n');
+
+    return {
+      entries: entries.map((entry) => ({
+        id: entry.id,
+        summary: entry.summary,
+        scope: entry.scope,
+        successCriteria: entry.agreement?.measureOfSuccess ?? null,
+      })),
+      needs: needs.map((need) => ({
+        id: need.needId,
+        label: need.needLabel,
+      })),
+      selectedBetweenPeriodNotes: selectedNotes.map((note) => ({
+        id: note.id,
+        content: note.content,
+        consentToShareWithPartner: note.consentToShareWithPartner,
+      })),
+      latestStructuredOutcomes: latestStructuredOutcomes || null,
+    };
+  } catch (err) {
+    logger.warn('[getTendingConversationContextForPrompt] failed', { sessionId, userId, error: err });
+    return null;
+  }
 }
 
 /**
@@ -1467,7 +1568,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Check session allows messaging
+    // Check session allows messaging. RESOLVED remains open for private
+    // Tending/listen-first conversation after Stage 4 closes.
     if (session.status !== 'ACTIVE') {
       if (session.status === 'CREATED') {
         const isCreator = await isSessionCreator(sessionId, user.id);
@@ -1475,7 +1577,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           res.status(400).json({ error: 'Session is not active' });
           return;
         }
-      } else if (session.status !== 'INVITED') {
+      } else if (session.status !== 'INVITED' && session.status !== 'RESOLVED') {
         res.status(400).json({ error: 'Session is not active' });
         return;
       }
@@ -1812,6 +1914,16 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       session.status,
       history
     );
+    const tendingConversationContext = session.status === 'RESOLVED'
+      ? await getTendingConversationContextForPrompt(sessionId, user.id)
+      : null;
+    const tendingConversationPrompt = tendingConversationContext
+      ? buildTendingConversationPrompt('whatHappened', {
+          ...tendingConversationContext,
+          userName,
+          partnerName,
+        })
+      : null;
 
     const prompt = buildStagePrompt(effectiveStage, {
       userName,
@@ -1833,6 +1945,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       stage4WalkthroughContext,
       stage4OpenNeeds,
       stage4ListenFirstMode,
+      tendingConversationContext,
+      tendingConversationPrompt,
       topicFrame: session.topicFrameConfirmedAt ? session.topicFrame : undefined,
     }, { isInvitationPhase });
 
