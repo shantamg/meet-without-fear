@@ -5,6 +5,7 @@ import { ContinueChoice } from '@meet-without-fear/shared';
 import { TendingCheckinScreen, TendingCheckinPayload } from '@/src/screens/TendingCheckinScreen';
 import { useStage4State, useTendingEntries, useSubmitTendingCheckin } from '@/src/hooks';
 import { colors } from '@/src/theme';
+import { useAuth } from '@/src/hooks/useAuth';
 
 /**
  * Stage 4 Phase 5 — Tending check-in route.
@@ -18,6 +19,7 @@ export default function TendingCheckinRoute() {
   const entriesQuery = useTendingEntries(sessionId || undefined);
   const stage4Query = useStage4State(sessionId || undefined);
   const submit = useSubmitTendingCheckin();
+  const { user } = useAuth();
 
   const entries = useMemo(() => entriesQuery.data?.entries ?? [], [entriesQuery.data]);
   const needs = useMemo(() => {
@@ -107,6 +109,7 @@ export default function TendingCheckinRoute() {
       entries={entries}
       betweenPeriodNotes={entriesQuery.data?.betweenPeriodNotes ?? []}
       needs={needs}
+      currentUserId={user?.id ?? null}
       initialEntryId={typeof tendingEntryId === 'string' ? tendingEntryId : null}
       isSubmitting={submit.isPending}
       onSubmit={handleSubmit}

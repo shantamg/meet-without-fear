@@ -525,6 +525,69 @@ describe('Stage 3 API', () => {
       );
     });
 
+    it('rejects adjustments for needs outside the user vessel', async () => {
+      const mockStageProgress = {
+        id: 'progress-1',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 3,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      };
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+        id: mockSessionId,
+        status: 'ACTIVE',
+        relationship: {
+          members: [{ userId: mockUser.id }, { userId: mockPartnerId }],
+        },
+      });
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue({ id: mockVesselId });
+      (prisma.identifiedNeed.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: mockNeedId1,
+          vesselId: mockVesselId,
+          need: 'To feel emotionally connected',
+          category: 'CONNECTION',
+          evidence: [],
+          aiConfidence: 0.85,
+          confirmed: false,
+          createdAt: new Date(),
+        },
+      ]);
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: {
+          needIds: [mockNeedId1],
+          adjustments: [
+            {
+              needId: 'partner-need-1',
+              confirmed: true,
+              correction: 'Overwrite partner need',
+            },
+          ],
+        },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await confirmNeeds(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(400);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: 'VALIDATION_ERROR',
+          }),
+        })
+      );
+      expect(prisma.identifiedNeed.update).not.toHaveBeenCalled();
+      expect(prisma.identifiedNeed.updateMany).not.toHaveBeenCalled();
+    });
+
     it('requires authentication', async () => {
       const req = createMockRequest({
         params: { id: mockSessionId },

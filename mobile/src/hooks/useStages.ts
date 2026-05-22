@@ -2177,11 +2177,9 @@ export function useStage4State(
 }
 
 function refreshStage4Caches(queryClient: ReturnType<typeof useQueryClient>, sessionId: string) {
-  queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
   queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
   queryClient.refetchQueries({ queryKey: stageKeys.strategiesReveal(sessionId) });
   queryClient.refetchQueries({ queryKey: stageKeys.agreements(sessionId) });
-  queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
   queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
   queryClient.refetchQueries({ queryKey: sessionKeys.state(sessionId) });
 }
@@ -2596,9 +2594,7 @@ export function useSubmitTendingResponse(
           };
         }
       );
-      queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
       queryClient.refetchQueries({ queryKey: [...stageKeys.tending(sessionId), 'history'] });
-      queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
     },
     ...options,
   });

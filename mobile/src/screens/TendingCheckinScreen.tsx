@@ -115,13 +115,21 @@ export interface TendingCheckinScreenProps {
   entries: TendingEntryDTO[];
   betweenPeriodNotes?: TendingBetweenPeriodNoteDTO[];
   needs?: TendingCheckinNeed[];
+  currentUserId?: string | null;
   initialEntryId?: string | null;
   isSubmitting?: boolean;
   onSubmit: (payload: TendingCheckinPayload) => void;
   onCancel?: () => void;
 }
 
-function isRespondable(entry: TendingEntryDTO): boolean {
+function isRespondable(entry: TendingEntryDTO, currentUserId?: string): boolean {
+  if (
+    entry.scope === TendingEntryScope.INDIVIDUAL &&
+    entry.ownerUserId !== currentUserId
+  ) {
+    return false;
+  }
+
   return entry.status === TendingEntryStatus.OPEN || entry.status === TendingEntryStatus.PARTIAL;
 }
 
@@ -145,17 +153,18 @@ export function TendingCheckinScreen({
   entries,
   betweenPeriodNotes = [],
   needs = [],
+  currentUserId,
   initialEntryId,
   isSubmitting = false,
   onSubmit,
   onCancel,
 }: TendingCheckinScreenProps) {
   const respondable = useMemo(() => {
-    const open = entries.filter(isRespondable);
+    const open = entries.filter((entry) => isRespondable(entry, currentUserId ?? undefined));
     if (!initialEntryId) return open;
     const selected = open.find((entry) => entry.id === initialEntryId);
     return selected ? [selected, ...open.filter((entry) => entry.id !== initialEntryId)] : open;
-  }, [entries, initialEntryId]);
+  }, [entries, initialEntryId, currentUserId]);
   const reviewNeeds = needs.length > 0
     ? needs
     : respondable.map((entry) => ({ id: entry.agreementId, label: entryLabel(entry) }));

@@ -544,6 +544,17 @@ export async function confirmNeeds(req: Request, res: Response): Promise<void> {
 
     // Process adjustments if provided
     if (adjustments && adjustments.length > 0) {
+      const userNeedIds = new Set(userNeeds.map((need) => need.id));
+      if (adjustments.some((adj) => !userNeedIds.has(adj.needId))) {
+        errorResponse(
+          res,
+          'VALIDATION_ERROR',
+          'Some adjustment need IDs are invalid or do not belong to you',
+          400
+        );
+        return;
+      }
+
       for (const adj of adjustments) {
         if (adj.correction) {
           await prisma.identifiedNeed.update({
@@ -1063,12 +1074,12 @@ export async function addCustomNeed(req: Request, res: Response): Promise<void> 
     const { id: sessionId } = req.params;
     const { need, category, description } = req.body as {
       need?: string;
-      category?: import('@meet-without-fear/shared').NeedCategory;
+      category?: unknown;
       description?: string;
     };
 
-    if (!need || !category) {
-      errorResponse(res, 'VALIDATION_ERROR', 'need and category are required', 400);
+    if (!need || !isNeedCategory(category)) {
+      errorResponse(res, 'VALIDATION_ERROR', 'need and valid category are required', 400);
       return;
     }
 
@@ -1124,7 +1135,7 @@ export async function addCustomNeed(req: Request, res: Response): Promise<void> 
       data: {
         vesselId: userVessel.id,
         need,
-        category: category as import('@meet-without-fear/shared').NeedCategory,
+        category,
         evidence: [],
         aiConfidence: 1.0, // User-added needs are considered 100% confident
         confirmed: true, // User-added needs are auto-confirmed

@@ -35,6 +35,29 @@ const entry: TendingEntryDTO = {
 };
 
 describe('TendingCheckinScreen', () => {
+  it('hides individual entries owned by another user', () => {
+    const onSubmit = jest.fn();
+    const otherUserEntry: TendingEntryDTO = {
+      ...entry,
+      id: 'private-entry',
+      type: TendingEntryType.SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN,
+      scope: TendingEntryScope.INDIVIDUAL,
+      ownerUserId: 'other-user',
+      summary: 'Private partner-only commitment',
+    };
+
+    const { queryByText } = render(
+      <TendingCheckinScreen
+        entries={[entry, otherUserEntry]}
+        currentUserId="current-user"
+        onSubmit={onSubmit}
+      />
+    );
+
+    expect(queryByText('Check whether the shared next step helped.')).toBeTruthy();
+    expect(queryByText('Private partner-only commitment')).toBeNull();
+  });
+
   it('asks whether to carry private between-period notes into check-in', () => {
     const onSubmit = jest.fn();
     const { getByTestId } = render(
