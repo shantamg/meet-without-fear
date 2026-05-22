@@ -15,8 +15,8 @@ import { Request, Response } from 'express';
 import { Prisma, StageProgress } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { confirmNeedsRequestSchema, ConsentContentType, NeedCategory } from '@meet-without-fear/shared';
-import { notifyPartner, publishSessionEvent } from '../services/realtime';
+import { confirmNeedsRequestSchema, ConsentContentType, MessageRole, NeedCategory } from '@meet-without-fear/shared';
+import { notifyPartner, publishMessageAIResponse, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
 import { captureProposedNeedsForUser, toIdentifiedNeedDTO, withNeedReframingWarning } from '../services/needs';
@@ -807,6 +807,29 @@ export async function consentToShareNeeds(
       );
     }
 
+    if (!partnerShared) {
+      const guidanceMessage = await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: null,
+          forUserId: user.id,
+          role: 'AI',
+          content: 'Your needs have been shared. Once your partner shares theirs, you\'ll be able to review them side by side.',
+          stage: 3,
+        },
+      });
+
+      await publishMessageAIResponse(sessionId, user.id, {
+        id: guidanceMessage.id,
+        sessionId,
+        senderId: null,
+        content: guidanceMessage.content,
+        timestamp: guidanceMessage.timestamp.toISOString(),
+        role: MessageRole.AI,
+        stage: guidanceMessage.stage,
+      });
+    }
+
     successResponse(res, {
       consented: true,
       sharedAt: now.toISOString(),
@@ -984,6 +1007,33 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
           },
         });
       }
+    }
+
+    // Send AI guidance for the "not reviewed yet" path
+    if (!validated) {
+      const guidanceContent =
+        'No problem — take your time reviewing. You can chat about anything that doesn\'t feel right, and review the needs again when you\'re ready.';
+
+      const guidanceMessage = await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: null,
+          forUserId: user.id,
+          role: 'AI',
+          content: guidanceContent,
+          stage: 3,
+        },
+      });
+
+      await publishMessageAIResponse(sessionId, user.id, {
+        id: guidanceMessage.id,
+        sessionId,
+        senderId: null,
+        content: guidanceMessage.content,
+        timestamp: guidanceMessage.timestamp.toISOString(),
+        role: MessageRole.AI,
+        stage: guidanceMessage.stage,
+      });
     }
 
     successResponse(res, {

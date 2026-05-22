@@ -4,7 +4,7 @@ const createMockModel = () => ({
   findUnique: jest.fn(() => Promise.resolve(null)),
   findFirst: jest.fn(() => Promise.resolve(null)),
   findMany: jest.fn(() => Promise.resolve([])),
-  create: jest.fn((args: any) => Promise.resolve({ id: 'mock-id', ...args?.data })),
+  create: jest.fn((args: any) => Promise.resolve({ id: 'mock-id', timestamp: new Date(), createdAt: new Date(), updatedAt: new Date(), ...args?.data })),
   createMany: jest.fn(() => Promise.resolve({ count: 0 })),
   update: jest.fn((args: any) => Promise.resolve({ id: 'mock-id', ...args?.data })),
   updateMany: jest.fn(() => Promise.resolve({ count: 0 })),
