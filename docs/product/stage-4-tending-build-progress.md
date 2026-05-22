@@ -122,6 +122,28 @@ Branch: `codex/stage4-tending-focus`
 - Known blockers: none.
 - Next step: Chunk 4 Tending prompt and conversation support.
 
+### 2026-05-22 — Chunk 4 Tending Prompt Support
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/stage4-prompts.ts`
+  - `backend/src/services/__tests__/stage4-prompts.test.ts`
+- Decisions made:
+  - Kept `RESOLVED_LISTEN_FIRST_CLAUSE` intact for resolved-session pre-check-in chat.
+  - Updated the "what worked" Tending persona to ask what actually happened before asking what worked, and to state that agreement is not resolution.
+  - Updated the more-support persona with blocker categories and no-shame framing.
+  - Added `TENDING_NEEDS_REVIEW_PERSONA` for resolved/improving/still-open/changed/not-sure need review.
+  - Updated the what-comes-next persona so failed follow-through points to adjustment or strategy reopening rather than generic extension.
+  - Added `buildTendingConversationPrompt` for `whatHappened`, `whatWorked`, `whereMoreSupport`, `needsReview`, and `whatComesNext`, with private-by-default partner boundary language and one-at-a-time guidance.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/stage-prompts.test.ts src/services/__tests__/stage4-prompts.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Stage prompt and Stage 4 prompt suites passed: 2 suites, 139 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Next step: Chunk 5 mobile UI consolidation.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.
