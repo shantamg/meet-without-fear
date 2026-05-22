@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { logger } from '../lib/logger';
 import { successResponse, errorResponse } from '../utils/response';
 import {
+  createTendingBetweenPeriodNote,
   createPassiveReentry,
+  listTendingBetweenPeriodNotes,
   listTendingCoordinationCycles,
   listTendingEntries,
   setIndividualEntryShare,
@@ -89,6 +91,8 @@ const submitTendingCheckinSchema = z.object({
     reason: z.string().max(2000).optional(),
     blockerAddressed: z.array(z.nativeEnum(TendingBlockerCategory)).optional(),
   })).optional(),
+  includedBetweenPeriodNoteIds: z.array(z.string()).optional(),
+  shareBetweenPeriodNoteIds: z.array(z.string()).optional(),
   nextAction: z.nativeEnum(TendingNextAction).optional(),
   resolvedEnoughOverride: z.boolean().optional(),
   resolvedEnoughOverrideNote: z.string().max(1000).optional(),
@@ -96,6 +100,10 @@ const submitTendingCheckinSchema = z.object({
 
 const createTendingReentrySchema = z.object({
   intent: z.string().max(1000).optional(),
+});
+
+const createTendingBetweenPeriodNoteSchema = z.object({
+  content: z.string().trim().min(1).max(4000),
 });
 
 export async function getTendingEntries(req: Request, res: Response): Promise<void> {
@@ -106,11 +114,12 @@ export async function getTendingEntries(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const [entries, coordinationCycles] = await Promise.all([
+    const [entries, coordinationCycles, betweenPeriodNotes] = await Promise.all([
       listTendingEntries(req.params.id, user.id),
       listTendingCoordinationCycles(req.params.id, user.id),
+      listTendingBetweenPeriodNotes(req.params.id, user.id),
     ]);
-    successResponse(res, { entries, coordinationCycles });
+    successResponse(res, { entries, coordinationCycles, betweenPeriodNotes });
   } catch (error) {
     if (error instanceof TendingNotFoundError) {
       errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
@@ -217,6 +226,8 @@ export async function postTendingCheckin(req: Request, res: Response): Promise<v
       needOutcomes: parseResult.data.needOutcomes,
       reminders: parseResult.data.reminders,
       adjustments: parseResult.data.adjustments,
+      includedBetweenPeriodNoteIds: parseResult.data.includedBetweenPeriodNoteIds,
+      shareBetweenPeriodNoteIds: parseResult.data.shareBetweenPeriodNoteIds,
       nextAction: parseResult.data.nextAction,
       resolvedEnoughOverride: parseResult.data.resolvedEnoughOverride,
       resolvedEnoughOverrideNote: parseResult.data.resolvedEnoughOverrideNote,
@@ -240,6 +251,40 @@ export async function postTendingCheckin(req: Request, res: Response): Promise<v
     }
     logger.error('[postTendingCheckin] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to submit Tending check-in', 500);
+  }
+}
+
+export async function postTendingBetweenPeriodNote(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const parseResult = createTendingBetweenPeriodNoteSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.issues);
+      return;
+    }
+
+    const note = await createTendingBetweenPeriodNote({
+      sessionId: req.params.id,
+      userId: user.id,
+      content: parseResult.data.content,
+    });
+    successResponse(res, { note }, 201);
+  } catch (error) {
+    if (error instanceof TendingNotFoundError) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (error instanceof TendingInvalidStateError) {
+      errorResponse(res, 'VALIDATION_ERROR', error.message, 400);
+      return;
+    }
+    logger.error('[postTendingBetweenPeriodNote] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to create Tending between-period note', 500);
   }
 }
 

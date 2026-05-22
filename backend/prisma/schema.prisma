@@ -59,6 +59,7 @@ model User {
   tendingEntryOutcomes     TendingEntryOutcome[]
   tendingReminders         TendingReminder[]
   tendingAdjustments       TendingAdjustment[]
+  tendingBetweenPeriodNotes TendingBetweenPeriodNote[]
   exerciseCompletions      EmotionalExerciseCompletion[]
   invitationsSent          Invitation[]                  @relation("InvitedBy")
   innerWorkSessions        InnerWorkSession[]
@@ -154,6 +155,7 @@ model Session {
   tendingNeedOutcomes       TendingNeedOutcome[]
   tendingReminders          TendingReminder[]
   tendingAdjustments        TendingAdjustment[]
+  tendingBetweenPeriodNotes TendingBetweenPeriodNote[]
   consentRecords            ConsentRecord[]
   exerciseCompletions       EmotionalExerciseCompletion[]
   invitations               Invitation[]
@@ -1275,6 +1277,7 @@ model TendingCheckin {
   needOutcomes  TendingNeedOutcome[]
   reminders     TendingReminder[]
   adjustments   TendingAdjustment[]
+  betweenPeriodNotes TendingBetweenPeriodNote[]
 
   @@index([sessionId, submittedAt])
   @@index([userId, submittedAt])
@@ -1416,6 +1419,25 @@ model TendingAdjustment {
   @@index([checkinId])
   @@index([tendingEntryId])
   @@index([userId, createdAt])
+}
+
+model TendingBetweenPeriodNote {
+  id                        String          @id @default(cuid())
+  session                   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId                 String
+  user                      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                    String
+  content                   String          @db.Text
+  carryForwardSelected      Boolean         @default(false)
+  consentToShareWithPartner Boolean         @default(false)
+  shareConsentAt            DateTime?
+  selectedForCheckin        TendingCheckin? @relation(fields: [selectedForCheckinId], references: [id], onDelete: SetNull)
+  selectedForCheckinId      String?
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
+
+  @@index([sessionId, userId, createdAt])
+  @@index([selectedForCheckinId])
 }
 
 // Stage 4 Phase 5: ContinueChoice — five forward paths at the end of a Tending check-in.

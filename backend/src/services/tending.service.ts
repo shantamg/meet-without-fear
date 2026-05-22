@@ -8,6 +8,7 @@ import {
   TendingCheckinEntryOutcomeInput,
   TendingCheckinNeedOutcomeInput,
   TendingCheckinOrientations,
+  TendingBetweenPeriodNoteDTO,
   TendingCoordinationCycleDTO,
   TendingCoordinationStatus,
   TendingEntryDTO,
@@ -198,6 +199,32 @@ function toAdjustmentDTO(adjustment: {
   };
 }
 
+function toBetweenPeriodNoteDTO(note: {
+  id: string;
+  sessionId: string;
+  userId: string;
+  content: string;
+  carryForwardSelected: boolean;
+  consentToShareWithPartner: boolean;
+  shareConsentAt: Date | null;
+  selectedForCheckinId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): TendingBetweenPeriodNoteDTO {
+  return {
+    id: note.id,
+    sessionId: note.sessionId,
+    userId: note.userId,
+    content: note.content,
+    carryForwardSelected: note.carryForwardSelected,
+    consentToShareWithPartner: note.consentToShareWithPartner,
+    shareConsentAt: iso(note.shareConsentAt),
+    selectedForCheckinId: note.selectedForCheckinId,
+    createdAt: note.createdAt.toISOString(),
+    updatedAt: note.updatedAt.toISOString(),
+  };
+}
+
 function toEntryDTO(entry: TendingEntryWithResponses, userId: string): TendingEntryDTO {
   const myResponse = entry.responses.find((response) => response.userId === userId) ?? null;
   const latestOutcome = (entry.entryOutcomes ?? [])
@@ -356,6 +383,41 @@ export async function listTendingCoordinationCycles(
   });
 
   return cycles.map(toCoordinationCycleDTO);
+}
+
+export async function listTendingBetweenPeriodNotes(
+  sessionId: string,
+  userId: string
+): Promise<TendingBetweenPeriodNoteDTO[]> {
+  await assertSessionMember(sessionId, userId);
+
+  const notes = await prisma.tendingBetweenPeriodNote.findMany({
+    where: { sessionId, userId },
+    orderBy: [{ createdAt: 'asc' }],
+  });
+
+  return notes.map(toBetweenPeriodNoteDTO);
+}
+
+export async function createTendingBetweenPeriodNote(args: {
+  sessionId: string;
+  userId: string;
+  content: string;
+}): Promise<TendingBetweenPeriodNoteDTO> {
+  const session = await assertSessionMember(args.sessionId, args.userId);
+  if (session.status !== 'RESOLVED') {
+    throw new TendingInvalidStateError('Between-period Tending notes require a resolved session');
+  }
+
+  const note = await prisma.tendingBetweenPeriodNote.create({
+    data: {
+      sessionId: args.sessionId,
+      userId: args.userId,
+      content: args.content,
+    },
+  });
+
+  return toBetweenPeriodNoteDTO(note);
 }
 
 export async function setIndividualEntryShare(args: {
@@ -761,6 +823,8 @@ export async function submitTendingCheckin(args: {
   needOutcomes?: TendingCheckinNeedOutcomeInput[];
   reminders?: TendingReminderInput[];
   adjustments?: TendingAdjustmentInput[];
+  includedBetweenPeriodNoteIds?: string[];
+  shareBetweenPeriodNoteIds?: string[];
   nextAction?: TendingNextAction;
   resolvedEnoughOverride?: boolean;
   resolvedEnoughOverrideNote?: string;
@@ -801,6 +865,32 @@ export async function submitTendingCheckin(args: {
   const hasSharedEntry = sharedEntries.length > 0;
   const sharedEntryIds = sharedEntries.map((entry) => entry.id).sort();
   const participantUserIds = session.relationship.members.map((member) => member.userId).sort();
+  const includedBetweenPeriodNoteIds = Array.from(new Set(args.includedBetweenPeriodNoteIds ?? []));
+  const shareBetweenPeriodNoteIds = Array.from(new Set(args.shareBetweenPeriodNoteIds ?? []));
+  const shareWithoutCarryForward = shareBetweenPeriodNoteIds.filter(
+    (noteId) => !includedBetweenPeriodNoteIds.includes(noteId)
+  );
+  if (shareWithoutCarryForward.length > 0) {
+    throw new TendingInvalidStateError('Shared between-period notes must also be selected for carry-forward');
+  }
+  const referencedBetweenPeriodNoteIds = Array.from(new Set([
+    ...includedBetweenPeriodNoteIds,
+    ...shareBetweenPeriodNoteIds,
+  ]));
+  if (referencedBetweenPeriodNoteIds.length > 0) {
+    const notes = await prisma.tendingBetweenPeriodNote.findMany({
+      where: {
+        id: { in: referencedBetweenPeriodNoteIds },
+        sessionId: args.sessionId,
+        userId: args.userId,
+      },
+      select: { id: true },
+    });
+    const foundIds = new Set(notes.map((note) => note.id));
+    if (referencedBetweenPeriodNoteIds.some((noteId) => !foundIds.has(noteId))) {
+      throw new TendingInvalidStateError('Between-period note references a non-private or non-session note');
+    }
+  }
   for (const outcome of args.entryOutcomes ?? []) {
     if (!openEntryIds.has(outcome.tendingEntryId)) {
       throw new TendingInvalidStateError('Entry outcome references a non-open Tending entry');
@@ -1068,6 +1158,33 @@ export async function submitTendingCheckin(args: {
           blockerAddressed: adjustment.blockerAddressed ?? [],
         },
       }));
+    }
+
+    if (includedBetweenPeriodNoteIds.length > 0) {
+      await tx.tendingBetweenPeriodNote.updateMany({
+        where: {
+          id: { in: includedBetweenPeriodNoteIds },
+          sessionId: args.sessionId,
+          userId: args.userId,
+        },
+        data: {
+          carryForwardSelected: true,
+          selectedForCheckinId: createdCheckin.id,
+        },
+      });
+    }
+    if (shareBetweenPeriodNoteIds.length > 0) {
+      await tx.tendingBetweenPeriodNote.updateMany({
+        where: {
+          id: { in: shareBetweenPeriodNoteIds },
+          sessionId: args.sessionId,
+          userId: args.userId,
+        },
+        data: {
+          consentToShareWithPartner: true,
+          shareConsentAt: now,
+        },
+      });
     }
 
     checkinDTO = {

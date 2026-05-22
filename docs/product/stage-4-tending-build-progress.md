@@ -6,6 +6,40 @@ Branch: `codex/full-tending-flow`
 
 ## Full Tending Flow Progress
 
+### 2026-05-22 — Chunk 6 Backend Private Between-Period Notes
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260522113000_add_tending_between_period_notes/migration.sql`
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/controllers/tending.ts`
+  - `backend/src/routes/tending.ts`
+  - `backend/src/lib/__mocks__/prisma.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `shared/src/dto/strategy.ts`
+- Decisions made:
+  - Added `TendingBetweenPeriodNote` as a private, per-user note table for resolved sessions.
+  - Added `POST /sessions/:id/tending/notes` to create a note only when the session is `RESOLVED`.
+  - Added the caller's own `betweenPeriodNotes` to `GET /sessions/:id/tending`; the query filters by both `sessionId` and `userId`.
+  - Added `includedBetweenPeriodNoteIds` and `shareBetweenPeriodNoteIds` to check-in submission. Carry-forward selection and partner-share consent are recorded separately, and share consent is rejected unless the note is also selected for carry-forward.
+  - `submitTendingCheckin` validates referenced note IDs against the current user and session before writing, so partner notes cannot be selected or consented by the other participant.
+  - Creating a between-period note does not publish a partner-visible session event.
+- Commands run:
+  - `npx prisma@6.12.0 generate --schema backend/prisma/schema.prisma`
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/mwf npx prisma@6.12.0 validate --schema backend/prisma/schema.prisma`
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace backend`
+- Test results:
+  - Prisma client generation passed.
+  - Prisma schema validation passed.
+  - Tending service suite passed: 42 tests.
+  - Shared typecheck passed.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Next step: surface between-period notes in mobile before/during Tending check-in so Eve can add a private note, Adam cannot see it, and Eve is asked whether to factor it into check-in.
+
 ### 2026-05-22 — New Dedicated Worktree And Source Import
 
 - Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.

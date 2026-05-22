@@ -454,9 +454,23 @@ export interface TendingAdjustmentDTO {
   createdAt: string;
 }
 
+export interface TendingBetweenPeriodNoteDTO {
+  id: string;
+  sessionId: string;
+  userId: string;
+  content: string;
+  carryForwardSelected: boolean;
+  consentToShareWithPartner: boolean;
+  shareConsentAt: string | null;
+  selectedForCheckinId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GetTendingEntriesResponse {
   entries: TendingEntryDTO[];
   coordinationCycles?: TendingCoordinationCycleDTO[];
+  betweenPeriodNotes?: TendingBetweenPeriodNoteDTO[];
 }
 
 export interface SubmitTendingResponseRequest {
@@ -548,6 +562,8 @@ export interface SubmitTendingCheckinRequest {
   needOutcomes?: TendingCheckinNeedOutcomeInput[];
   reminders?: TendingReminderInput[];
   adjustments?: TendingAdjustmentInput[];
+  includedBetweenPeriodNoteIds?: string[];
+  shareBetweenPeriodNoteIds?: string[];
   nextAction?: TendingNextAction;
   resolvedEnoughOverride?: boolean;
   resolvedEnoughOverrideNote?: string;
@@ -568,6 +584,14 @@ export interface CreateTendingReentryRequest {
 
 export interface CreateTendingReentryResponse {
   entry: TendingEntryDTO;
+}
+
+export interface CreateTendingBetweenPeriodNoteRequest {
+  content: string;
+}
+
+export interface CreateTendingBetweenPeriodNoteResponse {
+  note: TendingBetweenPeriodNoteDTO;
 }
 
 export interface GetStage4StateResponse {

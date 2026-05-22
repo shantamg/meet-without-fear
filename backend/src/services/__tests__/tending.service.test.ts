@@ -1,7 +1,9 @@
 import { prisma } from '../../lib/prisma';
 import { publishSessionEvent, publishUserEvent } from '../realtime';
 import {
+  createTendingBetweenPeriodNote,
   createPassiveReentry,
+  listTendingBetweenPeriodNotes,
   listTendingEntries,
   listTendingCoordinationCycles,
   openDueTendingEntries,
@@ -542,6 +544,84 @@ describe('tending.service', () => {
     );
   });
 
+  it('lists only the current user\'s private between-period notes', async () => {
+    (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+      id: sessionId,
+      relationship: { members: [{ userId }, { userId: partnerId }] },
+    });
+    (prisma.tendingBetweenPeriodNote.findMany as jest.Mock).mockResolvedValue([{
+      id: 'note-1',
+      sessionId,
+      userId,
+      content: 'I am noticing the cleanup plan still feels tense.',
+      carryForwardSelected: false,
+      consentToShareWithPartner: false,
+      shareConsentAt: null,
+      selectedForCheckinId: null,
+      createdAt: new Date('2026-05-21T10:00:00.000Z'),
+      updatedAt: new Date('2026-05-21T10:00:00.000Z'),
+    }]);
+
+    const notes = await listTendingBetweenPeriodNotes(sessionId, userId);
+
+    expect(prisma.tendingBetweenPeriodNote.findMany).toHaveBeenCalledWith({
+      where: { sessionId, userId },
+      orderBy: [{ createdAt: 'asc' }],
+    });
+    expect(notes).toEqual([expect.objectContaining({
+      id: 'note-1',
+      userId,
+      content: 'I am noticing the cleanup plan still feels tense.',
+      consentToShareWithPartner: false,
+    })]);
+  });
+
+  it('creates a private between-period note only on a resolved session without notifying the partner', async () => {
+    (prisma.session.findFirst as jest.Mock).mockResolvedValueOnce({
+      id: sessionId,
+      status: 'RESOLVED',
+      relationship: { members: [{ userId }, { userId: partnerId }] },
+    });
+    (prisma.tendingBetweenPeriodNote.create as jest.Mock).mockResolvedValue({
+      id: 'note-1',
+      sessionId,
+      userId,
+      content: 'I want to remember how charged this felt.',
+      carryForwardSelected: false,
+      consentToShareWithPartner: false,
+      shareConsentAt: null,
+      selectedForCheckinId: null,
+      createdAt: new Date('2026-05-21T10:00:00.000Z'),
+      updatedAt: new Date('2026-05-21T10:00:00.000Z'),
+    });
+
+    const note = await createTendingBetweenPeriodNote({
+      sessionId,
+      userId,
+      content: 'I want to remember how charged this felt.',
+    });
+
+    expect(prisma.tendingBetweenPeriodNote.create).toHaveBeenCalledWith({
+      data: {
+        sessionId,
+        userId,
+        content: 'I want to remember how charged this felt.',
+      },
+    });
+    expect(note).toEqual(expect.objectContaining({ id: 'note-1', userId }));
+    expect(publishSessionEvent).not.toHaveBeenCalled();
+    expect(publishUserEvent).not.toHaveBeenCalled();
+
+    (prisma.session.findFirst as jest.Mock).mockResolvedValueOnce({
+      id: sessionId,
+      status: 'ACTIVE',
+      relationship: { members: [{ userId }, { userId: partnerId }] },
+    });
+    await expect(
+      createTendingBetweenPeriodNote({ sessionId, userId, content: 'Too early.' })
+    ).rejects.toBeInstanceOf(TendingInvalidStateError);
+  });
+
   it('owner can flip optedInShared via setIndividualEntryShare; non-owner is forbidden', async () => {
     const entryRow = {
       id: 'tending-ind-1',
@@ -938,6 +1018,74 @@ describe('tending.service', () => {
       ).rejects.toBeInstanceOf(TendingInvalidStateError);
 
       expect(prisma.tendingAdjustment.create).not.toHaveBeenCalled();
+    });
+
+    it('marks selected between-period notes for carry-forward with separate share consent', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock)
+        .mockResolvedValueOnce([openIndividualEntry('private-1')])
+        .mockResolvedValueOnce([openIndividualEntry('private-1')]);
+      (prisma.tendingBetweenPeriodNote.findMany as jest.Mock).mockResolvedValue([
+        { id: 'note-1' },
+      ]);
+      (prisma.tendingBetweenPeriodNote.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.EXTEND),
+        includedBetweenPeriodNoteIds: ['note-1'],
+        shareBetweenPeriodNoteIds: ['note-1'],
+        now: new Date('2026-05-20T10:00:00.000Z'),
+      });
+
+      expect(prisma.tendingBetweenPeriodNote.findMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: ['note-1'] },
+          sessionId,
+          userId,
+        },
+        select: { id: true },
+      });
+      expect(prisma.tendingBetweenPeriodNote.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: ['note-1'] },
+          sessionId,
+          userId,
+        },
+        data: {
+          carryForwardSelected: true,
+          selectedForCheckinId: 'checkin-1',
+        },
+      });
+      expect(prisma.tendingBetweenPeriodNote.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: ['note-1'] },
+          sessionId,
+          userId,
+        },
+        data: {
+          consentToShareWithPartner: true,
+          shareConsentAt: new Date('2026-05-20T10:00:00.000Z'),
+        },
+      });
+    });
+
+    it('rejects between-period notes that do not belong to the current user and session', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('private-1')]);
+      (prisma.tendingBetweenPeriodNote.findMany as jest.Mock).mockResolvedValue([]);
+
+      await expect(
+        submitTendingCheckin({
+          sessionId,
+          userId,
+          orientations: baseOrientations(ContinueChoice.EXTEND),
+          includedBetweenPeriodNoteIds: ['partner-note'],
+        })
+      ).rejects.toBeInstanceOf(TendingInvalidStateError);
+
+      expect(prisma.tendingBetweenPeriodNote.updateMany).not.toHaveBeenCalled();
     });
 
     it('private individual reminders do not notify the partner', async () => {
