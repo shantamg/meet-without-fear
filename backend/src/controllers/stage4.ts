@@ -2303,6 +2303,7 @@ export async function requestSuggestions(req: Request, res: Response): Promise<v
             id: needId,
             vessel: {
               sessionId,
+              userId: user.id,
             },
           },
         })

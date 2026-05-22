@@ -2229,6 +2229,15 @@ describe('Stage 4 API', () => {
 
       await requestSuggestions(req as Request, res as Response);
 
+      expect(prisma.identifiedNeed.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'need-1',
+          vessel: {
+            sessionId: mockSessionId,
+            userId: mockUser.id,
+          },
+        },
+      });
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(jsonMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2283,6 +2292,46 @@ describe('Stage 4 API', () => {
         expect.objectContaining({
           success: false,
           error: expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+        })
+      );
+      expect(prisma.strategyProposal.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects target needs outside the current user vessel', async () => {
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: {
+          needId: 'partner-need-1',
+          count: 1,
+        },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        stage: 4,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      });
+      (prisma.identifiedNeed.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await requestSuggestions(req as Request, res as Response);
+
+      expect(prisma.identifiedNeed.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'partner-need-1',
+          vessel: {
+            sessionId: mockSessionId,
+            userId: mockUser.id,
+          },
+        },
+      });
+      expect(statusMock).toHaveBeenCalledWith(404);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({ code: 'NOT_FOUND' }),
         })
       );
       expect(prisma.strategyProposal.create).not.toHaveBeenCalled();

@@ -1290,6 +1290,7 @@ model TendingCoordinationCycle {
   sessionId          String
   createdBy          User                      @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
   createdByUserId    String
+  coordinationKey    String?
   status             TendingCoordinationStatus @default(WAITING_FOR_PARTNER)
   entryIds           String[]
   participantUserIds String[]
@@ -1303,6 +1304,7 @@ model TendingCoordinationCycle {
   checkins TendingCheckin[]
 
   @@index([sessionId, status])
+  @@index([coordinationKey])
   @@index([responseDeadlineAt])
 }
 

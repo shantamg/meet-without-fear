@@ -1240,6 +1240,13 @@ describe('tending.service', () => {
           submittedUserIds: [userId],
         })
       );
+      expect(prisma.tendingCoordinationCycle.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          coordinationKey: `${sessionId}:t1`,
+          entryIds: ['t1'],
+          submittedUserIds: [userId],
+        }),
+      });
       expect(prisma.tendingCheckin.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ coordinationCycleId: 'coordination-1' }),
       });

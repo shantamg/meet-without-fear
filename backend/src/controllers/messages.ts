@@ -396,7 +396,7 @@ async function getTendingConversationContextForPrompt(
         },
       }),
       prisma.stage4NeedCoverage.findMany({
-        where: { sessionId },
+        where: { sessionId, sourceUserId: userId },
         orderBy: [{ updatedAt: 'desc' }],
         take: 8,
         select: { needId: true, needLabel: true },

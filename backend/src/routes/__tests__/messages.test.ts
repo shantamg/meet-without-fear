@@ -358,6 +358,11 @@ describe('Messages API (Fire-and-Forget)', () => {
         expect.any(Object)
       );
       const promptArg = (buildStagePrompt as jest.Mock).mock.calls.at(-1)?.[1];
+      expect(prisma.stage4NeedCoverage.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { sessionId: mockSessionId, sourceUserId: mockUser.id },
+        })
+      );
       expect(promptArg.tendingConversationPrompt).toContain('I felt myself bracing before the second walk.');
       expect(promptArg.tendingConversationPrompt).toContain('private; do not relay');
       expect(promptArg.tendingConversationPrompt).toContain('Weekly walk');

@@ -35,6 +35,14 @@ import { publishSessionEvent, publishUserEvent } from './realtime';
 
 type Tx = Prisma.TransactionClient;
 
+function buildTendingCoordinationKey(sessionId: string, entryIds: string[]): string {
+  return `${sessionId}:${[...entryIds].sort().join('|')}`;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
 type AgreementForScheduling = {
   id: string;
   description: string;
@@ -1033,49 +1041,61 @@ export async function submitTendingCheckin(args: {
     } | null = null;
 
     if (hasSharedEntry) {
-      const existingCycle = await tx.tendingCoordinationCycle.findFirst({
+      const coordinationKey = buildTendingCoordinationKey(args.sessionId, sharedEntryIds);
+      let existingCycle = await tx.tendingCoordinationCycle.findFirst({
         where: {
-          sessionId: args.sessionId,
+          coordinationKey,
           status: { in: [TendingCoordinationStatus.WAITING_FOR_PARTNER, TendingCoordinationStatus.READY_TO_RESOLVE] },
-          entryIds: { hasEvery: sharedEntryIds },
         },
         orderBy: { createdAt: 'desc' },
       });
+
+      if (!existingCycle) {
+        try {
+          existingCycle = await tx.tendingCoordinationCycle.create({
+            data: {
+              sessionId: args.sessionId,
+              createdByUserId: args.userId,
+              coordinationKey,
+              status: TendingCoordinationStatus.WAITING_FOR_PARTNER,
+              entryIds: sharedEntryIds,
+              participantUserIds,
+              submittedUserIds: [args.userId],
+              responseDeadlineAt: addDays(now, DEFAULT_SHARED_RESPONSE_DEADLINE_DAYS),
+              resultSummary: 'Shared Tending choices are being held privately until the partner submits or the response window expires.',
+            },
+          });
+        } catch (error) {
+          if (!isUniqueConstraintError(error)) throw error;
+          existingCycle = await tx.tendingCoordinationCycle.findFirst({
+            where: {
+              coordinationKey,
+              status: { in: [TendingCoordinationStatus.WAITING_FOR_PARTNER, TendingCoordinationStatus.READY_TO_RESOLVE] },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (!existingCycle) throw error;
+        }
+      }
+
       const submittedUserIds = Array.from(new Set([
         ...((existingCycle?.submittedUserIds as string[] | undefined) ?? []),
         args.userId,
       ])).sort();
       const allSubmitted = participantUserIds.every((id) => submittedUserIds.includes(id));
 
-      if (existingCycle) {
-        coordinationCycle = await tx.tendingCoordinationCycle.update({
-          where: { id: existingCycle.id },
-          data: {
-            submittedUserIds,
-            status: allSubmitted
-              ? TendingCoordinationStatus.READY_TO_RESOLVE
-              : TendingCoordinationStatus.WAITING_FOR_PARTNER,
-            resultSummary: allSubmitted
-              ? 'All participants have submitted; shared Tending choices are ready for coordinated resolution.'
-              : 'Shared Tending choices are being held privately until the partner submits or the response window expires.',
-          },
-        });
-      } else {
-        coordinationCycle = await tx.tendingCoordinationCycle.create({
-          data: {
-            sessionId: args.sessionId,
-            createdByUserId: args.userId,
-            status: allSubmitted
-              ? TendingCoordinationStatus.READY_TO_RESOLVE
-              : TendingCoordinationStatus.WAITING_FOR_PARTNER,
-            entryIds: sharedEntryIds,
-            participantUserIds,
-            submittedUserIds,
-            responseDeadlineAt: addDays(now, DEFAULT_SHARED_RESPONSE_DEADLINE_DAYS),
-            resultSummary: 'Shared Tending choices are being held privately until the partner submits or the response window expires.',
-          },
-        });
-      }
+      coordinationCycle = await tx.tendingCoordinationCycle.update({
+        where: { id: existingCycle.id },
+        data: {
+          submittedUserIds,
+          status: allSubmitted
+            ? TendingCoordinationStatus.READY_TO_RESOLVE
+            : TendingCoordinationStatus.WAITING_FOR_PARTNER,
+          resultSummary: allSubmitted
+            ? 'All participants have submitted; shared Tending choices are ready for coordinated resolution.'
+            : 'Shared Tending choices are being held privately until the partner submits or the response window expires.',
+        },
+      });
       coordinationCycleDTO = toCoordinationCycleDTO(coordinationCycle);
     }
 
