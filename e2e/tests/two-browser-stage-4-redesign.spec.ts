@@ -158,9 +158,10 @@ test.describe('Stage 4 redesign: deterministic two-user coverage', () => {
     expect(sharedTending.agreementId).toBe(closeData.data.outcome.agreements[0].id);
   });
 
-  test('due shared Tending check-in persists structured outcomes and reopens strategy work', async ({ request }) => {
+  test('due shared Tending check-in holds private choices until both partners submit', async ({ request }) => {
     const seeded = await seedSession(request, 'STAGE4_REDESIGN_SHARED_SELECTIONS');
     const apiA = apiFor(request, users.a.email, seeded.userAId);
+    const apiB = apiFor(request, users.b.email, seeded.userBId);
 
     const beforeClose = await readJson<any>(
       await apiA.get(`/api/sessions/${seeded.sessionId}/stage4`),
@@ -238,13 +239,18 @@ test.describe('Stage 4 redesign: deterministic two-user coverage', () => {
 
     expect(checkinData.data.continueChoice).toBe('ANOTHER_ROUND');
     expect(checkinData.data.checkin.nextAction).toBe('REOPEN_STRATEGY_WORK');
+    expect(checkinData.data.checkin.coordinationCycleId).toBeTruthy();
+    expect(checkinData.data.coordinationCycle).toEqual(expect.objectContaining({
+      status: 'WAITING_FOR_PARTNER',
+      submittedUserIds: [seeded.userAId],
+    }));
     expect(checkinData.data.checkin.needOutcomes[0]).toEqual(expect.objectContaining({
       needLabel: 'Partnership',
       resolutionStatus: 'STILL_OPEN',
       nextAction: 'REOPEN_STRATEGY_WORK',
     }));
     const refreshedSharedEntry = checkinData.data.entries.find((entry: any) => entry.id === sharedTending.id);
-    expect(refreshedSharedEntry.status).toBe('COMPLETED');
+    expect(refreshedSharedEntry.status).toBe('PARTIAL');
     expect(refreshedSharedEntry.latestOutcome).toEqual(expect.objectContaining({
       followThroughStatus: 'PARTLY_HAPPENED',
       helpfulnessStatus: 'DID_NOT_HELP',
@@ -252,13 +258,59 @@ test.describe('Stage 4 redesign: deterministic two-user coverage', () => {
       stillWorthTrying: false,
     }));
 
-    const reopenedState = await readJson<any>(
+    const heldState = await readJson<any>(
       await apiA.get(`/api/sessions/${seeded.sessionId}/stage4`),
-      'get reopened Stage 4 state after Tending'
+      'get held Stage 4 state after one-sided Tending'
     );
-    expect(reopenedState.data.outcome).toBeNull();
-    expect(reopenedState.data.mySelectionStatus).toBe('NOT_STARTED');
-    expect(reopenedState.data.partnerSelections).toEqual([]);
+    expect(heldState.data.outcome.kind).toBe('SHARED_AGREEMENT');
+
+    const heldTending = await readJson<any>(
+      await apiA.get(`/api/sessions/${seeded.sessionId}/tending`),
+      'list held Tending coordination after first submission'
+    );
+    expect(heldTending.data.coordinationCycles[0]).toEqual(expect.objectContaining({
+      status: 'WAITING_FOR_PARTNER',
+      submittedUserIds: [seeded.userAId],
+    }));
+
+    const partnerCheckin = await readJson<any>(
+      await apiB.post(`/api/sessions/${seeded.sessionId}/tending/checkin`, {
+        orientations: {
+          whatWorked: { reflection: 'I also think it needs another pass.' },
+          whereMoreSupport: { reflection: 'The agreement was too vague.' },
+          whatComesNext: {
+            continueChoice: 'ANOTHER_ROUND',
+            nextAction: 'REOPEN_STRATEGY_WORK',
+          },
+        },
+        entryOutcomes: [
+          {
+            tendingEntryId: sharedTending.id,
+            followThroughStatus: 'PARTLY_HAPPENED',
+            helpfulnessStatus: 'DID_NOT_HELP',
+            blockerCategories: ['UNCLEAR'],
+            whatHappened: 'It happened once but did not stick.',
+            stillWorthTrying: false,
+          },
+        ],
+        needOutcomes: [
+          {
+            needId: 'need-partnership',
+            needLabel: 'Partnership',
+            sourceUserId: seeded.userBId,
+            resolutionStatus: 'STILL_OPEN',
+            nextAction: 'REOPEN_STRATEGY_WORK',
+          },
+        ],
+        nextAction: 'REOPEN_STRATEGY_WORK',
+      }),
+      'submit partner structured Tending check-in'
+    );
+
+    expect(partnerCheckin.data.coordinationCycle).toEqual(expect.objectContaining({
+      status: 'READY_TO_RESOLVE',
+      submittedUserIds: expect.arrayContaining([seeded.userAId, seeded.userBId]),
+    }));
   });
 
   test('due shared Tending check-in renders the rich mobile check-in flow', async ({ request, page }) => {

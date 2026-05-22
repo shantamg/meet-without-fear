@@ -322,6 +322,30 @@ Branch: `codex/full-tending-flow`
   - Add browser/mobile verification for waiting and resolved coordination states.
 - Next step: move to E2E coverage for the held-choice reveal, then Chunk 3 adjustment persistence.
 
+### 2026-05-22 — Finish Tending Chunk 2 Held-Choice E2E
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `e2e/tests/two-browser-stage-4-redesign.spec.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Updated the deterministic due shared Tending test so one user's failed/still-open shared check-in no longer expects immediate Stage 4 reopening.
+  - The test now asserts the gold-aligned held-choice behavior: first submission persists structured outcomes, creates a coordination cycle, marks the shared entry `PARTIAL`, leaves the Stage 4 outcome intact, and returns `WAITING_FOR_PARTNER`.
+  - Added partner-side submission in the same E2E path and asserts the coordination cycle moves to `READY_TO_RESOLVE` with both users in `submittedUserIds`.
+  - Kept the existing rich mobile check-in browser smoke in the same Playwright project.
+- Commands run:
+  - `npm run check --workspace e2e`
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm --workspace e2e run e2e -- --project=two-browser-stage-4-redesign`
+- Test results:
+  - E2E typecheck passed.
+  - Backend Tending service suite passed: 33 tests.
+  - Targeted Playwright project passed: 6 tests.
+- Known blockers: none.
+- Remaining Chunk 2 work:
+  - Full browser verification of the resolved coordination summary on the resolved-session Tending panel after running the resolver.
+- Next step: Chunk 3 adjustment persistence and mobile adjustment form, unless finishing the resolved-summary browser state is cheaper first.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.
