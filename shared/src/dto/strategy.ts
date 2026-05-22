@@ -439,6 +439,7 @@ export interface TendingReminderDTO {
 
 export interface GetTendingEntriesResponse {
   entries: TendingEntryDTO[];
+  coordinationCycles?: TendingCoordinationCycleDTO[];
 }
 
 export interface SubmitTendingResponseRequest {

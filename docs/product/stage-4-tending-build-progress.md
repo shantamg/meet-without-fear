@@ -265,6 +265,39 @@ Branch: `codex/full-tending-flow`
   - Wire mobile waiting/resolved coordination states so users can see the held and combined outcomes.
 - Next step: either finish Chunk 2 UI/E2E coverage or start Chunk 3 real adjustment data/UI if backend coordination state is sufficient for parallel product work.
 
+### 2026-05-22 — Finish Tending Chunk 2 Read Model And Mobile State
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `shared/src/dto/strategy.ts`
+  - `backend/src/controllers/tending.ts`
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `mobile/src/components/TendingPanel.tsx`
+  - `mobile/src/components/__tests__/TendingPanel.test.tsx`
+  - `mobile/src/screens/UnifiedSessionScreen.tsx`
+- Decisions made:
+  - Extended `GET /sessions/:id/tending` to return recent `coordinationCycles` for cycles that include the current user.
+  - Added the coordination cycle list to shared Tending DTOs so mobile can render waiting/resolved coordination state from the same Tending read model as entries.
+  - Wired `UnifiedSessionScreen` to pass coordination cycles into `TendingPanel`.
+  - `TendingPanel` now shows held-private copy for `WAITING_FOR_PARTNER` cycles and resolved coordination summaries for completed cycles tied to the selected entry.
+  - The held-private copy explicitly says shared choices are saved and held until the partner completes their side or the response window closes.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/TendingPanel.test.tsx --runInBand --forceExit`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace mobile`
+- Test results:
+  - Backend Tending service suite passed: 31 tests.
+  - Mobile TendingPanel suite passed: 10 tests.
+  - Shared, backend, and mobile typechecks passed.
+- Known blockers: none.
+- Remaining Chunk 2 work:
+  - Add E2E coverage for an Adam/Eve-style held-choice reveal.
+  - Expand resolver coverage for partial-closure overlap and mixed extension/partial-closure choices.
+- Next step: finish the remaining Chunk 2 backend/E2E cases or start Chunk 3 adjustment persistence.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.

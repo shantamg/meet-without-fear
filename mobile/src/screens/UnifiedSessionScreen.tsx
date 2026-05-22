@@ -3830,6 +3830,7 @@ export function UnifiedSessionScreen({
   const tendingPanel = session?.status === SessionStatus.RESOLVED ? (
     <TendingPanel
       entries={tendingEntriesQuery.data?.entries ?? []}
+      coordinationCycles={tendingEntriesQuery.data?.coordinationCycles ?? []}
       agreements={stage4State?.outcome?.agreements ?? agreements}
       outcome={stage4State?.outcome}
       initialEntryId={initialTendingEntryId}

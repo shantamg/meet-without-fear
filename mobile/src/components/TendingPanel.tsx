@@ -4,6 +4,8 @@ import { CalendarClock, CheckCircle2, RotateCcw } from 'lucide-react-native';
 import {
   AgreementDTO,
   Stage4OutcomeDTO,
+  TendingCoordinationCycleDTO,
+  TendingCoordinationStatus,
   TendingEntryDTO,
   TendingEntryScope,
   TendingEntryStatus,
@@ -15,6 +17,7 @@ type Palette = ReturnType<typeof useAppAppearance>['palette'];
 
 interface TendingPanelProps {
   entries: TendingEntryDTO[];
+  coordinationCycles?: TendingCoordinationCycleDTO[];
   agreements?: AgreementDTO[];
   outcome?: Stage4OutcomeDTO | null;
   initialEntryId?: string | null;
@@ -115,6 +118,7 @@ function canRespond(entry: TendingEntryDTO): boolean {
 
 export function TendingPanel({
   entries,
+  coordinationCycles = [],
   agreements = [],
   outcome,
   initialEntryId,
@@ -145,6 +149,9 @@ export function TendingPanel({
   const selectedAgreement = agreements.find(
     (agreement) => agreement.id === selectedEntry?.agreementId
   );
+  const selectedCoordinationCycle = selectedEntry
+    ? coordinationCycles.find((cycle) => cycle.entryIds.includes(selectedEntry.id))
+    : undefined;
   const scheduledSharedEntries = entries.filter(
     (entry) => entry.type === TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN
   );
@@ -244,6 +251,21 @@ export function TendingPanel({
                 ))}
               </View>
             ))}
+
+          {selectedCoordinationCycle && (
+            <View style={styles.coordinationBox} testID="tending-coordination-status">
+              <Text style={styles.contextLabel}>
+                {selectedCoordinationCycle.status === TendingCoordinationStatus.WAITING_FOR_PARTNER
+                  ? 'Held privately'
+                  : 'Coordination'}
+              </Text>
+              <Text style={styles.contextText}>
+                {selectedCoordinationCycle.status === TendingCoordinationStatus.WAITING_FOR_PARTNER
+                  ? `Your check-in is saved. We'll hold shared choices privately until your partner completes their side or the response window closes on ${formatDate(selectedCoordinationCycle.responseDeadlineAt)}.`
+                  : selectedCoordinationCycle.resultSummary || 'The shared check-in has a coordination update.'}
+              </Text>
+            </View>
+          )}
 
           {canRespond(selectedEntry) ? (
             <View style={styles.responseArea}>
@@ -396,6 +418,14 @@ const createStyles = (palette: Palette) =>
       marginBottom: 12,
       borderWidth: 1,
       borderColor: palette.border,
+    },
+    coordinationBox: {
+      backgroundColor: palette.bgPane,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: palette.accent,
     },
     contextLabel: {
       fontSize: 12,

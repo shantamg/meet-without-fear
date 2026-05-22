@@ -8,6 +8,8 @@ import {
   Stage4OutcomeDTO,
   Stage4ProposalKind,
   Stage4ProposalStatus,
+  TendingCoordinationCycleDTO,
+  TendingCoordinationStatus,
   TendingEntryDTO,
   TendingEntryScope,
   TendingEntryStatus,
@@ -58,6 +60,20 @@ const agreement = {
   agreedByPartner: true,
   agreedAt: '2026-05-06T00:00:00.000Z',
   followUpDate: '2026-05-13T00:00:00.000Z',
+};
+
+const waitingCoordinationCycle: TendingCoordinationCycleDTO = {
+  id: 'coordination-1',
+  sessionId: 'session-1',
+  status: TendingCoordinationStatus.WAITING_FOR_PARTNER,
+  entryIds: ['tending-1'],
+  participantUserIds: ['user-1', 'user-2'],
+  submittedUserIds: ['user-1'],
+  responseDeadlineAt: '2026-05-27T00:00:00.000Z',
+  resolvedAt: null,
+  resultSummary: 'Held privately.',
+  createdAt: '2026-05-13T00:00:00.000Z',
+  updatedAt: '2026-05-13T00:00:00.000Z',
 };
 
 const noSharedOutcome: Stage4OutcomeDTO = {
@@ -118,6 +134,53 @@ describe('TendingPanel', () => {
 
     expect(defaultProps.onStartCheckin).toHaveBeenCalledWith('tending-1');
     expect(defaultProps.onSubmitResponse).not.toHaveBeenCalled();
+  });
+
+  it('shows held-private copy while waiting for partner coordination', () => {
+    render(
+      <TendingPanel
+        {...defaultProps}
+        entries={[{
+          ...openEntry,
+          status: TendingEntryStatus.PARTIAL,
+          myResponse: {
+            id: 'response-1',
+            tendingEntryId: 'tending-1',
+            userId: 'user-1',
+            checkinId: 'checkin-1',
+            status: 'CHECKIN',
+            reflection: null,
+            continueChoice: 'EXTEND',
+            submittedAt: '2026-05-13T00:00:00.000Z',
+          },
+          responseCount: 1,
+        }]}
+        coordinationCycles={[waitingCoordinationCycle]}
+      />
+    );
+
+    expect(screen.getByTestId('tending-coordination-status')).toBeTruthy();
+    expect(screen.getByText('Held privately')).toBeTruthy();
+    expect(screen.getByText(/We'll hold shared choices privately/)).toBeTruthy();
+    expect(screen.getByText('Your review is saved.')).toBeTruthy();
+  });
+
+  it('shows resolved coordination summary when both sides have submitted', () => {
+    render(
+      <TendingPanel
+        {...defaultProps}
+        coordinationCycles={[{
+          ...waitingCoordinationCycle,
+          status: TendingCoordinationStatus.RESOLVED,
+          submittedUserIds: ['user-1', 'user-2'],
+          resolvedAt: '2026-05-14T00:00:00.000Z',
+          resultSummary: 'Both participants chose extension. Shared Tending entries continue.',
+        }]}
+      />
+    );
+
+    expect(screen.getByText('Coordination')).toBeTruthy();
+    expect(screen.getByText('Both participants chose extension. Shared Tending entries continue.')).toBeTruthy();
   });
 
   it('opens passive re-entry for no-shared-agreement outcomes', () => {

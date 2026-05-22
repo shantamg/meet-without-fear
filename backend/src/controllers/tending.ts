@@ -4,6 +4,7 @@ import { logger } from '../lib/logger';
 import { successResponse, errorResponse } from '../utils/response';
 import {
   createPassiveReentry,
+  listTendingCoordinationCycles,
   listTendingEntries,
   setIndividualEntryShare,
   submitTendingCheckin,
@@ -95,8 +96,11 @@ export async function getTendingEntries(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const entries = await listTendingEntries(req.params.id, user.id);
-    successResponse(res, { entries });
+    const [entries, coordinationCycles] = await Promise.all([
+      listTendingEntries(req.params.id, user.id),
+      listTendingCoordinationCycles(req.params.id, user.id),
+    ]);
+    successResponse(res, { entries, coordinationCycles });
   } catch (error) {
     if (error instanceof TendingNotFoundError) {
       errorResponse(res, 'NOT_FOUND', 'Session not found', 404);

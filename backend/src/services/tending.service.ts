@@ -306,6 +306,24 @@ export async function listTendingEntries(sessionId: string, userId: string): Pro
   return entries.map((entry) => toEntryDTO(entry, userId));
 }
 
+export async function listTendingCoordinationCycles(
+  sessionId: string,
+  userId: string
+): Promise<TendingCoordinationCycleDTO[]> {
+  await assertSessionMember(sessionId, userId);
+
+  const cycles = await prisma.tendingCoordinationCycle.findMany({
+    where: {
+      sessionId,
+      participantUserIds: { has: userId },
+    },
+    orderBy: [{ createdAt: 'desc' }],
+    take: 10,
+  });
+
+  return cycles.map(toCoordinationCycleDTO);
+}
+
 export async function setIndividualEntryShare(args: {
   entryId: string;
   userId: string;

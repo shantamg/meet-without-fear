@@ -3,6 +3,7 @@ import { publishSessionEvent } from '../realtime';
 import {
   createPassiveReentry,
   listTendingEntries,
+  listTendingCoordinationCycles,
   openDueTendingEntries,
   publishPartnerInvolvingReentryChoice,
   recommendTendingNextAction,
@@ -393,6 +394,44 @@ describe('tending.service', () => {
             { scope: TendingEntryScope.INDIVIDUAL, optedInShared: true },
           ],
         }),
+      })
+    );
+  });
+
+  it('lists only coordination cycles that include the current user', async () => {
+    (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+      id: sessionId,
+      relationship: { members: [{ userId }, { userId: partnerId }] },
+    });
+    (prisma.tendingCoordinationCycle.findMany as jest.Mock).mockResolvedValue([{
+      id: 'coordination-1',
+      sessionId,
+      status: TendingCoordinationStatus.WAITING_FOR_PARTNER,
+      entryIds: ['tending-1'],
+      participantUserIds: [userId, partnerId],
+      submittedUserIds: [userId],
+      responseDeadlineAt: new Date('2026-05-27T00:00:00.000Z'),
+      resolvedAt: null,
+      resultSummary: 'Held privately.',
+      createdAt: new Date('2026-05-13T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-13T00:00:00.000Z'),
+    }]);
+
+    const cycles = await listTendingCoordinationCycles(sessionId, userId);
+
+    expect(prisma.tendingCoordinationCycle.findMany).toHaveBeenCalledWith({
+      where: {
+        sessionId,
+        participantUserIds: { has: userId },
+      },
+      orderBy: [{ createdAt: 'desc' }],
+      take: 10,
+    });
+    expect(cycles[0]).toEqual(
+      expect.objectContaining({
+        id: 'coordination-1',
+        status: TendingCoordinationStatus.WAITING_FOR_PARTNER,
+        submittedUserIds: [userId],
       })
     );
   });
