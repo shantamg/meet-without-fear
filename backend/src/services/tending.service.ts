@@ -5,6 +5,7 @@ import {
   TendingCheckinDTO,
   TendingAdjustmentDTO,
   TendingAdjustmentInput,
+  TendingBlockerCategory,
   TendingCheckinEntryOutcomeInput,
   TendingCheckinNeedOutcomeInput,
   TendingCheckinOrientations,
@@ -17,6 +18,8 @@ import {
   TendingEntryStatus,
   TendingEntryType,
   TendingFollowThroughStatus,
+  TendingHistoryCycleDTO,
+  TendingHistoryEntryReviewDTO,
   TendingHelpfulnessStatus,
   TendingNeedOutcomeDTO,
   TendingNeedResolutionStatus,
@@ -196,6 +199,29 @@ function toAdjustmentDTO(adjustment: {
     reason: adjustment.reason,
     blockerAddressed: adjustment.blockerAddressed,
     createdAt: adjustment.createdAt.toISOString(),
+  };
+}
+
+function toHistoryEntryReviewDTO(outcome: {
+  tendingEntryId: string;
+  tendingEntry?: { summary: string | null; scope: any } | null;
+  followThroughStatus: any;
+  helpfulnessStatus: any | null;
+  blockerCategories: any[];
+  whatHappened: string | null;
+  helpedNeed: string | null;
+  stillWorthTrying: boolean | null;
+}): TendingHistoryEntryReviewDTO {
+  return {
+    tendingEntryId: outcome.tendingEntryId,
+    summary: outcome.tendingEntry?.summary ?? null,
+    scope: outcome.tendingEntry?.scope as TendingEntryScope,
+    followThroughStatus: outcome.followThroughStatus as TendingFollowThroughStatus,
+    helpfulnessStatus: outcome.helpfulnessStatus as TendingHelpfulnessStatus | null,
+    blockerCategories: outcome.blockerCategories as TendingBlockerCategory[],
+    whatHappened: outcome.whatHappened,
+    helpedNeed: outcome.helpedNeed,
+    stillWorthTrying: outcome.stillWorthTrying,
   };
 }
 
@@ -418,6 +444,47 @@ export async function createTendingBetweenPeriodNote(args: {
   });
 
   return toBetweenPeriodNoteDTO(note);
+}
+
+export async function listTendingHistory(
+  sessionId: string,
+  userId: string
+): Promise<TendingHistoryCycleDTO[]> {
+  await assertSessionMember(sessionId, userId);
+
+  const checkins = await prisma.tendingCheckin.findMany({
+    where: { sessionId, userId },
+    orderBy: [{ submittedAt: 'desc' }],
+    take: 20,
+    include: {
+      coordinationCycle: true,
+      entryOutcomes: {
+        include: {
+          tendingEntry: { select: { summary: true, scope: true } },
+        },
+        orderBy: [{ createdAt: 'asc' }],
+      },
+      needOutcomes: { orderBy: [{ createdAt: 'asc' }] },
+      reminders: { orderBy: [{ remindAt: 'asc' }] },
+      adjustments: { orderBy: [{ createdAt: 'asc' }] },
+    },
+  });
+
+  return checkins.map((checkin) => ({
+    checkinId: checkin.id,
+    sessionId: checkin.sessionId,
+    userId: checkin.userId,
+    submittedAt: checkin.submittedAt.toISOString(),
+    continueChoice: checkin.continueChoice as ContinueChoice | null,
+    nextAction: checkin.nextAction as TendingNextAction | null,
+    reflectionSummary: checkin.reflectionSummary,
+    entryReviews: checkin.entryOutcomes.map(toHistoryEntryReviewDTO),
+    needOutcomes: checkin.needOutcomes.map(toNeedOutcomeDTO),
+    adjustments: checkin.adjustments.map(toAdjustmentDTO),
+    reminders: checkin.reminders.map(toReminderDTO),
+    coordinationStatus: checkin.coordinationCycle?.status as TendingCoordinationStatus | null | undefined,
+    coordinationSummary: checkin.coordinationCycle?.resultSummary ?? null,
+  }));
 }
 
 export async function setIndividualEntryShare(args: {

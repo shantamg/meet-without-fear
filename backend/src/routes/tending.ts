@@ -3,6 +3,7 @@ import { requireAuth, requireSessionAccess } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errors';
 import {
   getTendingEntries,
+  getTendingHistory,
   postTendingBetweenPeriodNote,
   postTendingCheckin,
   postTendingEntryShare,
@@ -18,6 +19,13 @@ router.get(
   requireAuth,
   requireSessionAccess,
   asyncHandler(getTendingEntries)
+);
+
+router.get(
+  '/sessions/:id/tending/history',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(getTendingHistory)
 );
 
 router.post(

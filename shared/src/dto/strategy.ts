@@ -467,10 +467,42 @@ export interface TendingBetweenPeriodNoteDTO {
   updatedAt: string;
 }
 
+export interface TendingHistoryEntryReviewDTO {
+  tendingEntryId: string;
+  summary: string | null;
+  scope: TendingEntryScope;
+  followThroughStatus: TendingFollowThroughStatus;
+  helpfulnessStatus: TendingHelpfulnessStatus | null;
+  blockerCategories: TendingBlockerCategory[];
+  whatHappened: string | null;
+  helpedNeed: string | null;
+  stillWorthTrying: boolean | null;
+}
+
+export interface TendingHistoryCycleDTO {
+  checkinId: string;
+  sessionId: string;
+  userId: string;
+  submittedAt: string;
+  continueChoice: ContinueChoice | null;
+  nextAction: TendingNextAction | null;
+  reflectionSummary: string | null;
+  entryReviews: TendingHistoryEntryReviewDTO[];
+  needOutcomes: TendingNeedOutcomeDTO[];
+  adjustments: TendingAdjustmentDTO[];
+  reminders: TendingReminderDTO[];
+  coordinationStatus?: TendingCoordinationStatus | null;
+  coordinationSummary?: string | null;
+}
+
 export interface GetTendingEntriesResponse {
   entries: TendingEntryDTO[];
   coordinationCycles?: TendingCoordinationCycleDTO[];
   betweenPeriodNotes?: TendingBetweenPeriodNoteDTO[];
+}
+
+export interface GetTendingHistoryResponse {
+  cycles: TendingHistoryCycleDTO[];
 }
 
 export interface SubmitTendingResponseRequest {

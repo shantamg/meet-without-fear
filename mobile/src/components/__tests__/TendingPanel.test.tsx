@@ -14,6 +14,10 @@ import {
   TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
+  TendingFollowThroughStatus,
+  TendingNeedResolutionStatus,
+  TendingNextAction,
+  ContinueChoice,
 } from '@meet-without-fear/shared';
 import { TendingPanel } from '../TendingPanel';
 
@@ -231,6 +235,55 @@ describe('TendingPanel', () => {
 
     expect(onCreateBetweenPeriodNote).toHaveBeenCalledWith('I want to remember this privately.');
     expect(defaultProps.onCreateReentry).not.toHaveBeenCalled();
+  });
+
+  it('renders the latest Tending history summary', () => {
+    render(
+      <TendingPanel
+        {...defaultProps}
+        historyCycles={[{
+          checkinId: 'checkin-1',
+          sessionId: 'session-1',
+          userId: 'user-1',
+          submittedAt: '2026-05-22T10:00:00.000Z',
+          continueChoice: ContinueChoice.EXTEND,
+          nextAction: TendingNextAction.ADJUST_COMMITMENT,
+          reflectionSummary: null,
+          entryReviews: [{
+            tendingEntryId: 'tending-1',
+            summary: 'Weekly walk',
+            scope: TendingEntryScope.SHARED,
+            followThroughStatus: TendingFollowThroughStatus.PARTLY_HAPPENED,
+            helpfulnessStatus: null,
+            blockerCategories: [],
+            whatHappened: null,
+            helpedNeed: null,
+            stillWorthTrying: true,
+          }],
+          needOutcomes: [{
+            id: 'need-outcome-1',
+            checkinId: 'checkin-1',
+            sessionId: 'session-1',
+            needId: 'need-1',
+            needLabel: 'Partnership',
+            sourceUserId: 'user-1',
+            resolutionStatus: TendingNeedResolutionStatus.IMPROVING,
+            note: null,
+            changedNeedLabel: null,
+            nextAction: TendingNextAction.ADJUST_COMMITMENT,
+            createdAt: '2026-05-22T10:01:00.000Z',
+          }],
+          adjustments: [],
+          reminders: [],
+          coordinationSummary: 'Both participants extended the shared walks.',
+        }]}
+      />
+    );
+
+    expect(screen.getByTestId('tending-history-summary')).toBeTruthy();
+    expect(screen.getByText(/Weekly walk: PARTLY_HAPPENED/)).toBeTruthy();
+    expect(screen.getByText(/Partnership IMPROVING/)).toBeTruthy();
+    expect(screen.getByText('Both participants extended the shared walks.')).toBeTruthy();
   });
 
   describe('parseSummaryLines rendering', () => {

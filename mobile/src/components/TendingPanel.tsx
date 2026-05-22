@@ -11,6 +11,7 @@ import {
   TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
+  TendingHistoryCycleDTO,
 } from '@meet-without-fear/shared';
 import { useAppAppearance } from '@/theme';
 
@@ -20,6 +21,7 @@ interface TendingPanelProps {
   entries: TendingEntryDTO[];
   coordinationCycles?: TendingCoordinationCycleDTO[];
   betweenPeriodNotes?: TendingBetweenPeriodNoteDTO[];
+  historyCycles?: TendingHistoryCycleDTO[];
   agreements?: AgreementDTO[];
   outcome?: Stage4OutcomeDTO | null;
   initialEntryId?: string | null;
@@ -124,6 +126,7 @@ export function TendingPanel({
   entries,
   coordinationCycles = [],
   betweenPeriodNotes = [],
+  historyCycles = [],
   agreements = [],
   outcome,
   initialEntryId,
@@ -167,6 +170,7 @@ export function TendingPanel({
     (entry) => entry.type === TendingEntryType.USER_INITIATED_REENTRY
   );
   const hasSharedAgreementCheckIn = scheduledSharedEntries.length > 0;
+  const latestHistory = historyCycles[0];
 
   const handleCreateReentry = () => {
     if (isCreatingReentry) return;
@@ -305,6 +309,50 @@ export function TendingPanel({
           )}
         </View>
       )}
+
+      <View style={styles.card}>
+        <View style={styles.entryHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Latest record</Text>
+            <Text style={styles.entryMeta}>
+              {latestHistory ? formatDate(latestHistory.submittedAt) : 'No check-in recorded yet'}
+            </Text>
+          </View>
+        </View>
+        {latestHistory ? (
+          <View style={styles.contextBox} testID="tending-history-summary">
+            <Text style={styles.contextText}>
+              {latestHistory.entryReviews.length > 0
+                ? latestHistory.entryReviews.map((review) =>
+                    `${review.summary ?? 'Tending entry'}: ${review.followThroughStatus}`
+                  ).join('\n')
+                : latestHistory.reflectionSummary ?? 'A Tending check-in was recorded.'}
+            </Text>
+            {latestHistory.needOutcomes.length > 0 && (
+              <Text style={styles.contextMeta}>
+                Needs: {latestHistory.needOutcomes.map((need) => `${need.needLabel} ${need.resolutionStatus}`).join('; ')}
+              </Text>
+            )}
+            {latestHistory.adjustments.length > 0 && (
+              <Text style={styles.contextMeta}>
+                Adjusted: {latestHistory.adjustments.map((adjustment) =>
+                  adjustment.revisedCommitmentText || adjustment.revisedCadence || 'commitment'
+                ).join('; ')}
+              </Text>
+            )}
+            {latestHistory.reminders.length > 0 && (
+              <Text style={styles.contextMeta}>
+                Next reminder: {formatDate(latestHistory.reminders[0].remindAt)}
+              </Text>
+            )}
+            {latestHistory.coordinationSummary && (
+              <Text style={styles.contextMeta}>{latestHistory.coordinationSummary}</Text>
+            )}
+          </View>
+        ) : (
+          <Text style={styles.mutedText}>Your completed check-ins will appear here.</Text>
+        )}
+      </View>
 
       <View style={styles.card}>
         <View style={styles.entryHeader}>

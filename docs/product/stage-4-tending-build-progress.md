@@ -6,6 +6,40 @@ Branch: `codex/full-tending-flow`
 
 ## Full Tending Flow Progress
 
+### 2026-05-22 — Chunk 8 Tending History Read Model
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `shared/src/dto/strategy.ts`
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/controllers/tending.ts`
+  - `backend/src/routes/tending.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `mobile/src/hooks/useStages.ts`
+  - `mobile/src/hooks/index.ts`
+  - `mobile/src/components/TendingPanel.tsx`
+  - `mobile/src/components/__tests__/TendingPanel.test.tsx`
+  - `mobile/src/screens/UnifiedSessionScreen.tsx`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Added `GET /sessions/:id/tending/history` returning current-user Tending cycles.
+  - History cycles serialize reviewed commitments, what happened/helpfulness/blockers, need outcomes, adjustments, reminders, and coordination status/summary.
+  - The read model is user-scoped through `sessionId + userId` check-ins and does not expose partner private check-in rows.
+  - Mobile now fetches Tending history for resolved sessions and shows the latest record in the Tending panel.
+  - Existing Tending mutations refetch the history cache after responses/check-ins.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/TendingPanel.test.tsx --runInBand`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace mobile`
+- Test results:
+  - Tending service suite passed: 43 tests.
+  - TendingPanel tests passed: 12 tests.
+  - Shared, backend, and mobile typechecks passed.
+- Known blockers: none.
+- Next step: Chunk 9 browser verification and final required validation sweep.
+
 ### 2026-05-22 — Chunk 7 Live Tending Prompt Integration
 
 - Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.

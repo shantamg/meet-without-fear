@@ -93,6 +93,7 @@ import {
   useSubmitStage4ProposalSelection,
   useSubmitTendingResponse,
   useTendingEntries,
+  useTendingHistory,
   useOpenStage4SubChat,
   useSendStage4SubChatMessage,
   useResolveStage4SubChat,
@@ -1742,6 +1743,9 @@ export function UnifiedSessionScreen({
     },
   });
   const tendingEntriesQuery = useTendingEntries(sessionId, {
+    enabled: !accessDenied && session?.status === SessionStatus.RESOLVED,
+  });
+  const tendingHistoryQuery = useTendingHistory(sessionId, {
     enabled: !accessDenied && session?.status === SessionStatus.RESOLVED,
   });
   const createTendingReentry = useCreateTendingReentry({
@@ -3838,6 +3842,7 @@ export function UnifiedSessionScreen({
       entries={tendingEntriesQuery.data?.entries ?? []}
       coordinationCycles={tendingEntriesQuery.data?.coordinationCycles ?? []}
       betweenPeriodNotes={tendingEntriesQuery.data?.betweenPeriodNotes ?? []}
+      historyCycles={tendingHistoryQuery.data?.cycles ?? []}
       agreements={stage4State?.outcome?.agreements ?? agreements}
       outcome={stage4State?.outcome}
       initialEntryId={initialTendingEntryId}

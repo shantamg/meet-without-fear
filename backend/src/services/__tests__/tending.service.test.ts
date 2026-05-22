@@ -6,6 +6,7 @@ import {
   listTendingBetweenPeriodNotes,
   listTendingEntries,
   listTendingCoordinationCycles,
+  listTendingHistory,
   openDueTendingEntries,
   processDueTendingReminders,
   publishPartnerInvolvingReentryChoice,
@@ -620,6 +621,109 @@ describe('tending.service', () => {
     await expect(
       createTendingBetweenPeriodNote({ sessionId, userId, content: 'Too early.' })
     ).rejects.toBeInstanceOf(TendingInvalidStateError);
+  });
+
+  it('serializes the current user\'s Tending history with outcomes, reminders, and coordination summary', async () => {
+    (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+      id: sessionId,
+      relationship: { members: [{ userId }, { userId: partnerId }] },
+    });
+    (prisma.tendingCheckin.findMany as jest.Mock).mockResolvedValue([{
+      id: 'checkin-1',
+      sessionId,
+      userId,
+      continueChoice: ContinueChoice.EXTEND,
+      nextAction: TendingNextAction.ADJUST_COMMITMENT,
+      reflectionSummary: 'What worked: some repair',
+      submittedAt: new Date('2026-05-22T10:00:00.000Z'),
+      coordinationCycle: {
+        status: TendingCoordinationStatus.RESOLVED,
+        resultSummary: 'Both participants extended the shared walks.',
+      },
+      entryOutcomes: [{
+        tendingEntryId: 'tending-1',
+        tendingEntry: { summary: 'Weekly walk', scope: TendingEntryScope.SHARED },
+        followThroughStatus: TendingFollowThroughStatus.PARTLY_HAPPENED,
+        helpfulnessStatus: TendingHelpfulnessStatus.PARTLY_HELPED,
+        blockerCategories: [TendingBlockerCategory.UNCLEAR],
+        whatHappened: 'We walked once.',
+        helpedNeed: 'It helped a little.',
+        stillWorthTrying: true,
+      }],
+      needOutcomes: [{
+        id: 'need-outcome-1',
+        checkinId: 'checkin-1',
+        sessionId,
+        needId: 'need-1',
+        needLabel: 'Partnership',
+        sourceUserId: userId,
+        resolutionStatus: TendingNeedResolutionStatus.IMPROVING,
+        note: 'Better but not done.',
+        changedNeedLabel: null,
+        nextAction: TendingNextAction.ADJUST_COMMITMENT,
+        createdAt: new Date('2026-05-22T10:01:00.000Z'),
+      }],
+      adjustments: [{
+        id: 'adjustment-1',
+        sessionId,
+        checkinId: 'checkin-1',
+        tendingEntryId: 'tending-1',
+        userId,
+        privacyScope: TendingReminderScope.SHARED,
+        revisedCommitmentText: 'Walk once a week.',
+        revisedCadence: 'Weekly',
+        revisedScope: null,
+        revisedSuccessCriteria: 'We return calmer.',
+        reason: 'Twice was too much.',
+        blockerAddressed: [TendingBlockerCategory.TOO_FREQUENT],
+        createdAt: new Date('2026-05-22T10:02:00.000Z'),
+      }],
+      reminders: [{
+        id: 'reminder-1',
+        sessionId,
+        checkinId: 'checkin-1',
+        tendingEntryId: 'tending-1',
+        userId,
+        scope: TendingReminderScope.PRIVATE,
+        remindAt: new Date('2026-05-29T10:00:00.000Z'),
+        cadence: 'WEEKLY',
+        note: 'Check in with myself',
+        status: 'SCHEDULED',
+        createdAt: new Date('2026-05-22T10:03:00.000Z'),
+        updatedAt: new Date('2026-05-22T10:03:00.000Z'),
+      }],
+    }]);
+
+    const cycles = await listTendingHistory(sessionId, userId);
+
+    expect(prisma.tendingCheckin.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { sessionId, userId },
+      orderBy: [{ submittedAt: 'desc' }],
+      take: 20,
+    }));
+    expect(cycles[0]).toEqual(expect.objectContaining({
+      checkinId: 'checkin-1',
+      continueChoice: ContinueChoice.EXTEND,
+      nextAction: TendingNextAction.ADJUST_COMMITMENT,
+      coordinationStatus: TendingCoordinationStatus.RESOLVED,
+      coordinationSummary: 'Both participants extended the shared walks.',
+    }));
+    expect(cycles[0].entryReviews[0]).toEqual(expect.objectContaining({
+      summary: 'Weekly walk',
+      followThroughStatus: TendingFollowThroughStatus.PARTLY_HAPPENED,
+    }));
+    expect(cycles[0].needOutcomes[0]).toEqual(expect.objectContaining({
+      needLabel: 'Partnership',
+      resolutionStatus: TendingNeedResolutionStatus.IMPROVING,
+    }));
+    expect(cycles[0].adjustments[0]).toEqual(expect.objectContaining({
+      revisedCommitmentText: 'Walk once a week.',
+      revisedCadence: 'Weekly',
+    }));
+    expect(cycles[0].reminders[0]).toEqual(expect.objectContaining({
+      scope: TendingReminderScope.PRIVATE,
+      cadence: 'WEEKLY',
+    }));
   });
 
   it('owner can flip optedInShared via setIndividualEntryShare; non-owner is forbidden', async () => {

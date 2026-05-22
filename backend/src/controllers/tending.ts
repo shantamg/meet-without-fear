@@ -8,6 +8,7 @@ import {
   listTendingBetweenPeriodNotes,
   listTendingCoordinationCycles,
   listTendingEntries,
+  listTendingHistory,
   setIndividualEntryShare,
   submitTendingCheckin,
   submitTendingResponse,
@@ -127,6 +128,26 @@ export async function getTendingEntries(req: Request, res: Response): Promise<vo
     }
     logger.error('[getTendingEntries] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get Tending entries', 500);
+  }
+}
+
+export async function getTendingHistory(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const cycles = await listTendingHistory(req.params.id, user.id);
+    successResponse(res, { cycles });
+  } catch (error) {
+    if (error instanceof TendingNotFoundError) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    logger.error('[getTendingHistory] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to get Tending history', 500);
   }
 }
 

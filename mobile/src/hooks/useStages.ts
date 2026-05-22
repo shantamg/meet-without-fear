@@ -63,6 +63,7 @@ import {
   CloseStage4Request,
   CloseStage4Response,
   GetTendingEntriesResponse,
+  GetTendingHistoryResponse,
   SubmitTendingResponseRequest,
   SubmitTendingResponseResponse,
   SubmitTendingCheckinRequest,
@@ -2516,6 +2517,25 @@ export function useTendingEntries(
   });
 }
 
+export function useTendingHistory(
+  sessionId: string | undefined,
+  options?: Omit<
+    UseQueryOptions<GetTendingHistoryResponse, ApiClientError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: [...stageKeys.tending(sessionId || ''), 'history'] as const,
+    queryFn: async () => {
+      if (!sessionId) throw new Error('Session ID is required');
+      return get<GetTendingHistoryResponse>(`/sessions/${sessionId}/tending/history`);
+    },
+    enabled: !!sessionId,
+    staleTime: 0,
+    ...options,
+  });
+}
+
 /**
  * Submit the current user's review for an open Tending entry.
  */
@@ -2552,6 +2572,7 @@ export function useSubmitTendingResponse(
         }
       );
       queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
+      queryClient.refetchQueries({ queryKey: [...stageKeys.tending(sessionId), 'history'] });
       queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
     },
     ...options,
@@ -2582,6 +2603,7 @@ export function useSubmitTendingCheckin(
     },
     onSuccess: (_data, { sessionId }) => {
       queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
+      queryClient.refetchQueries({ queryKey: [...stageKeys.tending(sessionId), 'history'] });
       queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
     },
     ...options,
