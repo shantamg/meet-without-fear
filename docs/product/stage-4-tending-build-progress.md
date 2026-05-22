@@ -6,6 +6,45 @@ Branch: `codex/full-tending-flow`
 
 ## Full Tending Flow Progress
 
+### 2026-05-22 — Final Validation And PR Update
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Ran the required final validation sweep from `docs/product/tending-finish-goal-prompt.md`.
+  - Updated PR #640 body with current summary, verification commands/counts, and remaining risk notes.
+  - Kept PR #640 as draft because it remains stacked on `codex/stages-3-4-rework`.
+- Commands run:
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/mwf npx prisma@6.12.0 validate --schema backend/prisma/schema.prisma`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace mobile`
+  - `npm run check --workspace e2e`
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts src/routes/__tests__/stage4.test.ts --runInBand`
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/stage-prompts.test.ts src/services/__tests__/stage4-prompts.test.ts --runInBand`
+  - `npm test --workspace backend -- --runTestsByPath src/routes/__tests__/messages.test.ts --runInBand`
+  - `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/TendingPanel.test.tsx src/screens/__tests__/TendingCheckinScreen.test.tsx src/hooks/__tests__/useStages.test.ts --runInBand --forceExit`
+  - `python3 scripts/test_mwf_moment_eval.py`
+  - `python3 scripts/mwf_moment_eval.py run --moment stage-4-tending-structured-checkin --max-iterations 1 --mock-response "What happened first matters. If the commitment did not happen, that is information for adjusting or reopening strategy work, not proof that either person failed."`
+  - `npm --workspace e2e run e2e -- --project=two-browser-stage-4-redesign`
+  - `gh pr view 640 --repo shantamg/meet-without-fear --json title,body,url,headRefName,baseRefName,isDraft`
+  - `gh pr edit 640 --repo shantamg/meet-without-fear --body-file -`
+- Test results:
+  - Prisma schema validation passed.
+  - Shared, backend, mobile, and e2e typechecks passed.
+  - Backend Tending + Stage 4 route suites passed: 87 tests.
+  - Backend prompt suites passed: 140 tests.
+  - Backend messages route suite passed: 19 tests.
+  - Mobile Tending + hooks suites passed: 58 tests.
+  - Moment evaluator Python unit suite passed: 76 tests; existing datetime deprecation warnings were emitted.
+  - Mock moment run completed: `eval/runs/moment-stage-4-tending-structured-checkin-20260522-174742-iter-01`.
+  - Stage 4 redesign Playwright target passed: 7 tests.
+- Known blockers: none.
+- Remaining risk notes:
+  - No separate manual browser screenshots were committed; browser coverage is via Playwright target and its report/traces.
+  - PR remains draft pending stacked review context.
+
 ### 2026-05-22 — Chunk 8 Tending History Read Model
 
 - Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
