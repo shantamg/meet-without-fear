@@ -5,6 +5,7 @@ import {
   listTendingEntries,
   openDueTendingEntries,
   publishPartnerInvolvingReentryChoice,
+  recommendTendingNextAction,
   scheduleIndividualCommitmentTendingEntries,
   scheduleSharedAgreementTendingEntries,
   setIndividualEntryShare,
@@ -584,7 +585,7 @@ describe('tending.service', () => {
         data: expect.objectContaining({
           sessionId,
           userId,
-          nextAction: TendingNextAction.EXTEND,
+          nextAction: TendingNextAction.ADJUST_COMMITMENT,
           continueChoice: ContinueChoice.EXTEND,
         }),
       });
@@ -785,6 +786,29 @@ describe('tending.service', () => {
       );
     });
 
+    it('EXTEND completes entries instead of rescheduling when submitted needs are resolved', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+
+      await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.EXTEND),
+        needOutcomes: [{
+          needId: 'need-1',
+          needLabel: 'predictability',
+          resolutionStatus: TendingNeedResolutionStatus.RESOLVED,
+        }],
+      });
+
+      expect(prisma.tendingEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 't1' },
+          data: expect.objectContaining({ status: TendingEntryStatus.COMPLETED }),
+        })
+      );
+    });
+
     it('FULL_CLOSURE marks every open entry COMPLETED and resolves the session', async () => {
       stubSession();
       (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
@@ -904,6 +928,19 @@ describe('tending.service', () => {
         sessionId,
         userId,
         orientations: baseOrientations(ContinueChoice.NEW_PROCESS),
+        entryOutcomes: [{
+          tendingEntryId: 't1',
+          followThroughStatus: TendingFollowThroughStatus.DID_NOT_HAPPEN,
+          helpfulnessStatus: TendingHelpfulnessStatus.DID_NOT_HELP,
+          blockerCategories: [TendingBlockerCategory.PARTNER_DID_NOT_DO_PART],
+          whatHappened: 'The behavior continued three times.',
+        }],
+        needOutcomes: [{
+          needId: 'need-clean-space',
+          needLabel: 'healthy, clean space',
+          resolutionStatus: TendingNeedResolutionStatus.STILL_OPEN,
+          note: 'The original issue still needs a different container.',
+        }],
       });
       expect(result.newSessionId).toBe('session-2');
       expect(prisma.session.create).toHaveBeenCalledWith(
@@ -912,15 +949,61 @@ describe('tending.service', () => {
             relationshipId: 'rel-1',
             previousSessionId: sessionId,
             status: 'CREATED',
+            topicFrame: 'Tending follow-up',
           }),
         })
       );
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId: 'session-2',
+          forUserId: userId,
+          role: 'SYSTEM',
+          content: expect.stringContaining('Prior Tending handoff'),
+          stage: 0,
+        }),
+      });
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          content: expect.stringContaining('healthy, clean space'),
+        }),
+      });
       expect(prisma.session.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: sessionId },
           data: expect.objectContaining({ status: 'RESOLVED' }),
         })
       );
+    });
+
+    it('recommends adjustment or strategy reopening when needs remain open and follow-through failed', () => {
+      expect(recommendTendingNextAction({
+        continueChoice: ContinueChoice.EXTEND,
+        entryOutcomes: [{
+          tendingEntryId: 't1',
+          followThroughStatus: TendingFollowThroughStatus.DID_NOT_HAPPEN,
+          helpfulnessStatus: TendingHelpfulnessStatus.DID_NOT_HELP,
+        }],
+        needOutcomes: [{
+          needId: 'need-1',
+          needLabel: 'clean space',
+          resolutionStatus: TendingNeedResolutionStatus.STILL_OPEN,
+        }],
+      })).toBe(TendingNextAction.REOPEN_STRATEGY_WORK);
+
+      expect(recommendTendingNextAction({
+        continueChoice: ContinueChoice.EXTEND,
+        entryOutcomes: [{
+          tendingEntryId: 't1',
+          followThroughStatus: TendingFollowThroughStatus.PARTLY_HAPPENED,
+          helpfulnessStatus: TendingHelpfulnessStatus.PARTLY_HELPED,
+          blockerCategories: [TendingBlockerCategory.TOO_FREQUENT],
+        }],
+        needOutcomes: [{
+          needId: 'need-1',
+          needLabel: 'predictability',
+          resolutionStatus: TendingNeedResolutionStatus.IMPROVING,
+        }],
+      })).toBe(TendingNextAction.ADJUST_COMMITMENT);
     });
 
     it('PARTIAL_CLOSURE closes RESOLVED entries and reschedules CONTINUING entries', async () => {

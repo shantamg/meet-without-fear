@@ -100,6 +100,28 @@ Branch: `codex/stage4-tending-focus`
 - Known blockers: none.
 - Next step: continue Chunk 3 by adding richer new-process context preservation/recommendation helper coverage, then move to Tending prompt/conversation support.
 
+### 2026-05-22 — Chunk 3 Backend Semantics Completed
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+- Decisions made:
+  - Added `recommendTendingNextAction` so structured outcomes influence the recorded next action: still-open needs plus failed follow-through recommend reopening strategy work; partial follow-through or blockers recommend adjustment.
+  - Extension now completes entries instead of rescheduling them when all submitted need outcomes are resolved.
+  - `NEW_PROCESS` now creates a linked fresh session with a system handoff message summarizing Tending reflection, entry outcomes, blockers, need outcomes, and what remains open.
+  - The legacy `continueChoice` remains preserved for compatibility while `nextAction` captures the structured recommendation.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts src/routes/__tests__/stage4.test.ts --runInBand`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace shared`
+- Test results:
+  - Tending service and Stage 4 route suites passed: 2 suites, 69 tests.
+  - Backend typecheck passed.
+  - Shared typecheck passed.
+- Known blockers: none.
+- Next step: Chunk 4 Tending prompt and conversation support.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.

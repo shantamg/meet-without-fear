@@ -11,6 +11,8 @@ import {
   TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
+  TendingFollowThroughStatus,
+  TendingHelpfulnessStatus,
   TendingNeedOutcomeDTO,
   TendingNeedResolutionStatus,
   TendingNextAction,
@@ -553,6 +555,41 @@ function nextActionFromChoice(choice: ContinueChoice): TendingNextAction {
   }
 }
 
+export function recommendTendingNextAction(args: {
+  continueChoice: ContinueChoice;
+  entryOutcomes?: TendingCheckinEntryOutcomeInput[];
+  needOutcomes?: TendingCheckinNeedOutcomeInput[];
+}): TendingNextAction {
+  const hasStillOpenNeed = (args.needOutcomes ?? []).some((outcome) =>
+    outcome.resolutionStatus === TendingNeedResolutionStatus.STILL_OPEN ||
+    outcome.resolutionStatus === TendingNeedResolutionStatus.CHANGED
+  );
+  const hasWeakFollowThrough = (args.entryOutcomes ?? []).some((outcome) =>
+    outcome.followThroughStatus === TendingFollowThroughStatus.DID_NOT_HAPPEN ||
+    outcome.helpfulnessStatus === TendingHelpfulnessStatus.DID_NOT_HELP ||
+    outcome.stillWorthTrying === false
+  );
+  const hasPartialFollowThrough = (args.entryOutcomes ?? []).some((outcome) =>
+    outcome.followThroughStatus === TendingFollowThroughStatus.PARTLY_HAPPENED ||
+    outcome.helpfulnessStatus === TendingHelpfulnessStatus.PARTLY_HELPED ||
+    (outcome.blockerCategories?.length ?? 0) > 0
+  );
+  const hasOnlyResolvedNeeds =
+    (args.needOutcomes?.length ?? 0) > 0 &&
+    args.needOutcomes!.every((outcome) => outcome.resolutionStatus === TendingNeedResolutionStatus.RESOLVED);
+
+  if (hasStillOpenNeed && hasWeakFollowThrough) {
+    return TendingNextAction.REOPEN_STRATEGY_WORK;
+  }
+  if (hasStillOpenNeed || hasPartialFollowThrough) {
+    return TendingNextAction.ADJUST_COMMITMENT;
+  }
+  if (hasOnlyResolvedNeeds && args.continueChoice === ContinueChoice.FULL_CLOSURE) {
+    return TendingNextAction.FULL_CLOSURE;
+  }
+  return nextActionFromChoice(args.continueChoice);
+}
+
 function buildEntryReflection(args: {
   baseReflection: string;
   entryId: string;
@@ -601,6 +638,37 @@ function toNeedOutcomeDTO(outcome: {
   };
 }
 
+function buildNewProcessHandoffSummary(args: {
+  reflection: string;
+  entryOutcomes?: TendingCheckinEntryOutcomeInput[];
+  needOutcomes?: TendingCheckinNeedOutcomeInput[];
+}): string {
+  const lines = [
+    'Prior Tending handoff for linked new process.',
+    args.reflection || null,
+  ];
+
+  for (const outcome of args.entryOutcomes ?? []) {
+    lines.push([
+      `Entry ${outcome.tendingEntryId}: ${outcome.followThroughStatus}`,
+      outcome.helpfulnessStatus ? `helpfulness=${outcome.helpfulnessStatus}` : null,
+      outcome.blockerCategories?.length ? `blockers=${outcome.blockerCategories.join(', ')}` : null,
+      outcome.whatHappened ? `what happened=${outcome.whatHappened}` : null,
+      outcome.helpedNeed ? `need impact=${outcome.helpedNeed}` : null,
+    ].filter(Boolean).join('; '));
+  }
+
+  for (const outcome of args.needOutcomes ?? []) {
+    lines.push([
+      `Need "${outcome.needLabel}": ${outcome.resolutionStatus}`,
+      outcome.changedNeedLabel ? `changed to "${outcome.changedNeedLabel}"` : null,
+      outcome.note ? `note=${outcome.note}` : null,
+    ].filter(Boolean).join('; '));
+  }
+
+  return lines.filter(Boolean).join('\n');
+}
+
 export async function submitTendingCheckin(args: {
   sessionId: string;
   userId: string;
@@ -635,7 +703,11 @@ export async function submitTendingCheckin(args: {
   const choice = args.orientations.whatComesNext.continueChoice;
   const nextAction = args.nextAction
     ?? args.orientations.whatComesNext.nextAction
-    ?? nextActionFromChoice(choice);
+    ?? recommendTendingNextAction({
+      continueChoice: choice,
+      entryOutcomes: args.entryOutcomes,
+      needOutcomes: args.needOutcomes,
+    });
   const entryOutcomeByEntryId = new Map(
     (args.entryOutcomes ?? []).map((outcome) => [outcome.tendingEntryId, outcome])
   );
@@ -879,9 +951,12 @@ export async function submitTendingCheckin(args: {
       }
       case ContinueChoice.EXTEND: {
         nextScheduledFor = addDays(now, DEFAULT_EXTENSION_DAYS);
+        const allNeedsResolved =
+          (args.needOutcomes?.length ?? 0) > 0 &&
+          args.needOutcomes!.every((outcome) => outcome.resolutionStatus === TendingNeedResolutionStatus.RESOLVED);
         for (const entry of openEntries) {
           const entryOutcome = entryOutcomeByEntryId.get(entry.id);
-          if (entryOutcome?.stillWorthTrying === false) {
+          if (entryOutcome?.stillWorthTrying === false || allNeedsResolved) {
             await tx.tendingEntry.update({
               where: { id: entry.id },
               data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
@@ -901,6 +976,11 @@ export async function submitTendingCheckin(args: {
         break;
       }
       case ContinueChoice.NEW_PROCESS: {
+        const handoffSummary = buildNewProcessHandoffSummary({
+          reflection,
+          entryOutcomes: args.entryOutcomes,
+          needOutcomes: args.needOutcomes,
+        });
         // Create a new Session linked back to this one. Both users start at Stage 0.
         const created = await tx.session.create({
           data: {
@@ -908,9 +988,21 @@ export async function submitTendingCheckin(args: {
             status: 'CREATED',
             type: session.type,
             previousSessionId: args.sessionId,
+            topicFrame: 'Tending follow-up',
           },
         });
         newSessionId = created.id;
+        await tx.message.create({
+          data: {
+            sessionId: created.id,
+            senderId: null,
+            forUserId: args.userId,
+            role: 'SYSTEM',
+            content: handoffSummary,
+            stage: 0,
+            timestamp: now,
+          },
+        });
         // Mark current entries COMPLETED and the current session RESOLVED.
         for (const entry of openEntries) {
           await tx.tendingEntry.update({
