@@ -302,7 +302,7 @@ type Stage4CoverageForClosure = {
 async function getMutableStage4Session(
   sessionId: string,
   userId: string
-): Promise<{ session: Stage4MutableSession; progress: { gatesSatisfied: Prisma.JsonValue | null } | null } | null> {
+): Promise<{ session: Stage4MutableSession; progress: { stage: number; gatesSatisfied: Prisma.JsonValue | null } | null } | null> {
   const session = (await prisma.session.findFirst({
     where: {
       id: sessionId,
@@ -332,10 +332,21 @@ async function getMutableStage4Session(
       status: 'IN_PROGRESS',
     },
     orderBy: { stage: 'desc' },
-    select: { gatesSatisfied: true },
+    select: { stage: true, gatesSatisfied: true },
   });
 
   return { session, progress };
+}
+
+async function stage4NeedExistsForSession(sessionId: string, needId: string): Promise<boolean> {
+  const need = await prisma.stage4NeedCoverage.findFirst({
+    where: {
+      sessionId,
+      OR: [{ id: needId }, { needId }],
+    },
+    select: { id: true },
+  });
+  return Boolean(need);
 }
 
 async function markStage4SelectionSubmitted(
@@ -1001,8 +1012,16 @@ export async function declineStage4Need(req: Request, res: Response): Promise<vo
       errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
       return;
     }
+    if (mutable.progress?.stage !== 4) {
+      errorResponse(res, 'VALIDATION_ERROR', `Cannot decline need: you are in stage ${mutable.progress?.stage ?? 0}, but stage 4 is required`, 400);
+      return;
+    }
     if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
       errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+    if (!(await stage4NeedExistsForSession(sessionId, needId))) {
+      errorResponse(res, 'NOT_FOUND', 'Need not found', 404);
       return;
     }
 
@@ -1042,8 +1061,16 @@ export async function undeclineStage4Need(req: Request, res: Response): Promise<
       errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
       return;
     }
+    if (mutable.progress?.stage !== 4) {
+      errorResponse(res, 'VALIDATION_ERROR', `Cannot undecline need: you are in stage ${mutable.progress?.stage ?? 0}, but stage 4 is required`, 400);
+      return;
+    }
     if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
       errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+    if (!(await stage4NeedExistsForSession(sessionId, needId))) {
+      errorResponse(res, 'NOT_FOUND', 'Need not found', 404);
       return;
     }
 

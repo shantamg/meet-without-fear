@@ -557,8 +557,8 @@ export async function confirmNeeds(req: Request, res: Response): Promise<void> {
 
       for (const adj of adjustments) {
         if (adj.correction) {
-          await prisma.identifiedNeed.update({
-            where: { id: adj.needId },
+          await prisma.identifiedNeed.updateMany({
+            where: { id: adj.needId, vesselId: userVessel.id },
             data: {
               need: adj.correction,
               confirmed: adj.confirmed,
