@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { render } from '../../utils/test-utils';
 import { ChatInterface } from '../ChatInterface';
@@ -341,6 +341,30 @@ describe('ChatBubble', () => {
 
     const bubble = screen.getByTestId('chat-bubble-1');
     expect(bubble).toBeTruthy();
+  });
+
+  it('constrains long AI messages to the visible chat row width', () => {
+    render(
+      <ChatBubble
+        message={{
+          id: 'wide-ai',
+          role: MessageRole.AI,
+          content: "I've captured a draft of what matters to you for your review. You can use the review button to confirm or adjust it.",
+          timestamp: new Date().toISOString(),
+          skipTypewriter: true,
+        }}
+      />
+    );
+
+    const row = screen.getByTestId('chat-bubble-wide-ai');
+    const bubble = row.children.find((child: any) => typeof child !== 'string');
+    const rowStyle = StyleSheet.flatten(row.props.style);
+    const bubbleStyle = StyleSheet.flatten(bubble?.props.style);
+
+    expect(rowStyle.width).toBeUndefined();
+    expect(rowStyle.alignSelf).toBe('stretch');
+    expect(bubbleStyle.width).toBe('100%');
+    expect(bubbleStyle.flexShrink).toBe(1);
   });
 
   it('hides queued live AI messages until their typewriter turn', () => {

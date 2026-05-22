@@ -9,7 +9,7 @@
  * - Both users complete Stage 0 (compact signing)
  * - Both users complete Stage 1 (witnessing + feel-heard)
  * - Both users complete Stage 2 (empathy drafting + sharing + reconciler)
- * - Both users complete Stage 3 (needs extraction + side-by-side validation)
+ * - Both users complete Stage 3 (needs extraction + mutual needs sharing)
  * - Both users complete Stage 4 (strategies + ranking + agreement)
  * - Session marked complete after agreement confirmation
  * - Test passes 3 consecutive runs without flakiness
@@ -31,7 +31,6 @@ import {
   navigateToShareFromSession,
   navigateBackToChat,
   confirmNeedsSummaryAndConsent,
-  confirmSideBySideRevealAndValidation,
   expectNeedsComparisonFromApi,
   expectNeedsSummaryFromApi,
   waitForNeedsReveal,
@@ -344,7 +343,7 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     // Wait for extraction to complete
     await harness.userAPage.waitForTimeout(2000);
 
-    // Reload both pages to show needs review UI
+    // Reload both pages to show the needs drawer CTA
     await Promise.all([
       harness.userAPage.reload(),
       harness.userBPage.reload(),
@@ -359,18 +358,16 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     await handleMoodCheck(harness.userAPage);
     await handleMoodCheck(harness.userBPage);
 
-    await expect(harness.userAPage.getByTestId('needs-review-button')).toBeVisible({ timeout: 30000 });
-    await expect(harness.userBPage.getByTestId('needs-review-button')).toBeVisible({ timeout: 30000 });
     await expectNeedsSummaryFromApi(apiA, API_BASE_URL, harness.sessionId, 'User A');
     await expectNeedsSummaryFromApi(apiB, API_BASE_URL, harness.sessionId, 'User B');
+    await expect(harness.userAPage.getByTestId('needs-drawer-open-button')).toBeVisible({ timeout: 30000 });
+    await expect(harness.userBPage.getByTestId('needs-drawer-open-button')).toBeVisible({ timeout: 30000 });
 
-    // Screenshot needs review state
-    // Note: maxDiffPixels 500 to allow for sub-pixel rendering variance between
-    // runs (observed 104px diff at needs-review, 314px diff at common-ground with 100px limit)
-    await expect(harness.userAPage).toHaveScreenshot('full-flow-03-needs-review-user-a.png', {
+    // Screenshot needs CTA state
+    await expect(harness.userAPage).toHaveScreenshot('full-flow-03-needs-cta-user-a.png', {
       maxDiffPixels: 500,
     });
-    await expect(harness.userBPage).toHaveScreenshot('full-flow-04-needs-review-user-b.png', {
+    await expect(harness.userBPage).toHaveScreenshot('full-flow-04-needs-cta-user-b.png', {
       maxDiffPixels: 500,
     });
 
@@ -393,8 +390,6 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     await handleMoodCheck(harness.userAPage);
     await handleMoodCheck(harness.userBPage);
 
-    await expect(harness.userAPage.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout: 10000 });
-    await expect(harness.userBPage.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout: 10000 });
     await expectNeedsComparisonFromApi(apiA, API_BASE_URL, harness.sessionId, 'User A');
     await expectNeedsComparisonFromApi(apiB, API_BASE_URL, harness.sessionId, 'User B');
 
@@ -409,11 +404,7 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     // ==========================================
     // === STAGE 3 → STAGE 4 TRANSITION ===
     // ==========================================
-    // CRITICAL: Both users must notice the side-by-side reveal and confirm
-    // the needs reveal. The backend creates Stage 4 after both validations.
-
-    await confirmSideBySideRevealAndValidation(harness.userAPage, harness.config.userB.name);
-    await confirmSideBySideRevealAndValidation(harness.userBPage, harness.config.userA.name);
+    // The backend creates Stage 4 as soon as both users send needs.
 
     await Promise.all([
       waitForStage(apiA, API_BASE_URL, harness.sessionId, 4, 'User A', 30000),

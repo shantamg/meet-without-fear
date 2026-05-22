@@ -20,6 +20,9 @@ import {
   validateNeeds,
   addCustomNeed,
   getNeedsComparison,
+  interpretNeedEdit,
+  applyNeedEditPlan,
+  removeNeed,
 } from '../controllers/stage3';
 
 const router = Router();
@@ -86,6 +89,27 @@ router.post(
   requireAuth,
   requireSessionAccess,
   asyncHandler(addCustomNeed)
+);
+
+router.post(
+  '/sessions/:id/needs/interpret-edit-request',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(interpretNeedEdit)
+);
+
+router.post(
+  '/sessions/:id/needs/apply-edits',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(applyNeedEditPlan)
+);
+
+router.delete(
+  '/sessions/:id/needs/:needId',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(removeNeed)
 );
 
 export default router;

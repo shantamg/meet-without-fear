@@ -4,8 +4,8 @@
  * Handles the topic frame lifecycle during Stage 0 (topic articulation):
  * - POST /sessions/:id/topic-frame/confirm - User confirms the AI-proposed topic
  *
- * The topic frame itself is proposed by the AI inline as a <draft>...</draft>
- * tag during normal Stage 0 chat (see ai-orchestrator.ts and session-processor.ts).
+ * The topic frame itself is proposed by the AI via update_session_state.topicFrame
+ * during normal Stage 0 chat (legacy <draft> parsing is retained as fallback).
  * The session row is the single source of truth for `topicFrame`. This endpoint
  * only flips `topicFrameConfirmedAt` to mark it confirmed.
  *

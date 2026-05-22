@@ -2,14 +2,14 @@ import { Stage } from '@meet-without-fear/shared';
 import { hasSubmittedOwnEmpathy, shouldFetchShareOffer } from '../shareOfferEligibility';
 
 describe('shareOfferEligibility', () => {
-  it('does not fetch a share offer before the user submits their own empathy attempt', () => {
+  it('fetches a share offer in Stage 2 even before the user submits their own empathy attempt', () => {
     expect(shouldFetchShareOffer({
       sessionId: 'session-1',
       accessDenied: false,
       currentStage: Stage.PERSPECTIVE_STRETCH,
       ownEmpathyAlreadyConsented: false,
       ownEmpathyAttempt: null,
-    })).toBe(false);
+    })).toBe(true);
   });
 
   it('fetches a share offer in Stage 2 after the user has consented to share empathy', () => {
@@ -53,4 +53,3 @@ describe('shareOfferEligibility', () => {
     })).toBe(false);
   });
 });
-

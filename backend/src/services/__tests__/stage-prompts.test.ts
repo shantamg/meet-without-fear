@@ -130,13 +130,15 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('what truly matters');
     });
 
-    it('Stage 3 prompt includes CONFIRMING mode', () => {
+    it('Stage 3 prompt includes one-at-a-time mode beats', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
-      expect(prompt).toContain('CONFIRMING');
-      expect(prompt).toContain('summary');
-      expect(prompt).toContain('FOUR MODES');
+      expect(prompt).toContain('SURFACE-ONE');
+      expect(prompt).toContain('REFINE');
+      expect(prompt).toContain('CONFIRM-AND-LOCK');
+      expect(prompt).toContain('BRIDGE-TO-NEXT');
+      expect(prompt).toContain('MODE BEATS');
     });
 
     it('Stage 3 prompt includes post-reveal phase guidance only when needsShared gate is satisfied', () => {
@@ -169,15 +171,15 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('That insight belongs to the users');
     });
 
-    it('Stage 3 prompt slows down compressed high-stakes needs before capture', () => {
+    it('Stage 3 prompt trusts clear compressed needs instead of forcing extra deepening', () => {
       const context = createContext({ userName: 'Catherine', partnerName: 'James' });
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
-      expect(prompt).toContain('COMPRESSED-NEEDS PACING');
-      expect(prompt).toContain('one dense answer that stacks multiple real needs');
-      expect(prompt).toContain('safety/accountability/autonomy/self-trust');
-      expect(prompt).toContain('care/belonging/recognition/heard');
-      expect(prompt).toContain('before NeedsReady:Y');
+      expect(prompt).not.toContain('COMPRESSED-NEEDS PACING');
+      expect(prompt).not.toContain('safety/accountability/autonomy/self-trust');
+      expect(prompt).not.toContain('care/belonging/recognition/heard');
+      expect(prompt).toContain('If one dense answer names several real needs, capture one clear need this turn');
+      expect(prompt).toContain('do not force extra exploration just because the answer was compressed');
     });
 
     it('Stage 3 prompt does not contain hardcoded user-facing opening phrase', () => {
@@ -188,13 +190,13 @@ describe('Stage Prompts Service', () => {
       expect(prompt).not.toContain('When you step back and look at all of this');
     });
 
-    it('Stage 3 prompt preserves existing REDIRECTING, SUGGESTING, DEEPENING modes', () => {
+    it('Stage 3 prompt preserves redirecting and clear-answer capture guidance', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
-      expect(prompt).toContain('REDIRECTING');
-      expect(prompt).toContain('SUGGESTING');
-      expect(prompt).toContain('DEEPENING');
+      expect(prompt).toContain('redirect gently to what matters to them');
+      expect(prompt).toContain('ask one concrete clarifying question only if you do not yet understand');
+      expect(prompt).toContain('Offer needs language as a suggestion');
     });
 
     it('returns Stage 4 prompt for stage 4', () => {
@@ -325,12 +327,13 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('desired-outcome fragments');
       expect(prompt).toContain('walk away knowing');
       expect(prompt).toContain('Do NOT write generic labels such as "User will..."');
-      expect(prompt).toContain('<stage4_proposals>');
-      expect(prompt).toContain('"action": "ADD|REVISE|REMOVE|IGNORE"');
-      expect(prompt).toContain('"classification": "PROPOSAL|REFLECTION|SUCCESS_MARKER|PROCESS"');
-      expect(prompt).toContain('Emit this block on every Stage 4 turn');
+      expect(prompt).toContain('update_session_state');
+      expect(prompt).toContain('stage4Proposals');
+      expect(prompt).toContain('ADD with classification PROPOSAL');
       expect(prompt).toContain('Only action ADD with classification PROPOSAL creates a proposal card');
       expect(prompt).toContain('guarded consent to continue talking');
+      expect(prompt).toContain('stage4WalkthroughAction');
+      expect(prompt).toContain('Do not emit Stage 4 XML or JSON in visible text');
       expect(prompt).toContain('I can talk about next steps');
       expect(prompt).toContain('one person');
       expect(prompt).toContain('as if it were a shared agreement');
@@ -367,7 +370,46 @@ describe('Stage Prompts Service', () => {
 
       expect(prompt).toContain('CURRENT STAGE 4 PROPOSAL INVENTORY');
       expect(prompt).toContain('id=proposal-1');
-      expect(prompt).toContain('emit action REVISE with targetProposalId instead of ADD');
+      expect(prompt).toContain('use action REVISE with targetProposalId instead of ADD');
+    });
+
+    it('Stage 4 prompt includes canonical walkthrough state and keeps focus on current need', () => {
+      const context = createContext({
+        stage4WalkthroughContext:
+          'phase=MY_NEEDS\ncurrentNeedId=need-1\ncurrentNeedLabel="To feel taken seriously"\ncurrentNeedStatus=in_progress',
+      });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('CANONICAL STAGE 4 WALKTHROUGH STATE');
+      expect(prompt).toContain('currentNeedLabel="To feel taken seriously"');
+      expect(prompt).toContain('source of truth for which need is being explored right now');
+      expect(prompt).toContain('Stay on currentNeed until it is marked covered/skipped');
+      expect(prompt).toContain('stage4WalkthroughAction.action=COVERED');
+      expect(prompt).toContain('use SKIP');
+      expect(prompt).toContain('Do not choose a different open need');
+    });
+
+    it('Stage 4 prompt tells the AI to infer missing proposal details when context supports it', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('infer a reasonable duration, success marker, or boundary condition');
+      expect(prompt).toContain('fill that detail in provisionally instead of asking another question');
+      expect(prompt).toContain('Only ask a follow-up when filling the missing detail would require a real leap');
+    });
+
+    it('Stage 4 resolved prompt can include private Tending conversation context', () => {
+      const context = createContext({
+        stage4ListenFirstMode: true,
+        tendingConversationPrompt:
+          'TENDING CONVERSATION PROMPT\nSELECTED BETWEEN-PERIOD NOTES:\n- note-1: private note (private; do not relay)',
+      });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).toContain('LISTEN-FIRST MODE — SESSION ALREADY RESOLVED');
+      expect(prompt).toContain('TENDING CONVERSATION PROMPT');
+      expect(prompt).toContain('SELECTED BETWEEN-PERIOD NOTES');
+      expect(prompt).toContain('private; do not relay');
     });
 
     it('returns topic-articulation prompt for stage 0 with isInvitationPhase', () => {
@@ -380,13 +422,13 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Partner');
     });
 
-    it('stage 0 prompt instructs the AI to emit a topic via <draft> tags', () => {
+    it('stage 0 prompt instructs the AI to emit a topic via update_session_state', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };
       const prompt = fullPrompt(buildStagePrompt(0, context, options));
 
-      // Stage 0 emits the TOPIC (not an invitation message) inline as <draft>
-      expect(prompt).toContain('<draft>');
+      // Stage 0 emits the TOPIC (not an invitation message) via tool state.
+      expect(prompt).toContain('update_session_state.topicFrame');
       // Must never bring back the invitation-message concept
       expect(prompt).not.toContain('invitationMessage');
     });
@@ -411,7 +453,7 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('personal attacks');
       expect(prompt).toContain('Do not flatten');
       expect(prompt).toContain('vague phrases like "conflict"');
-      expect(prompt).toContain('<draft>\ntopic text\n</draft>');
+      expect(prompt).toContain('update_session_state.topicFrame');
     });
   });
 
@@ -924,13 +966,13 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Do NOT invite more freeform chat unless the input remains visible');
     });
 
-    it('Stage 0 protocol instructs the AI to emit a topic via <draft> tags', () => {
+    it('Stage 0 protocol instructs the AI to emit a topic via update_session_state', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };
       const prompt = fullPrompt(buildStagePrompt(0, context, options));
 
-      // Stage 0 now emits the proposed TOPIC inline as <draft> (not an invitation message).
-      expect(prompt).toContain('<draft>');
+      // Stage 0 now emits the proposed TOPIC via tool state (not an invitation message).
+      expect(prompt).toContain('update_session_state.topicFrame');
       expect(prompt).toContain('without inviting freeform chat unless the input remains visible');
     });
 
@@ -946,19 +988,25 @@ describe('Stage Prompts Service', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
-      expect(prompt).toContain('The only XML-style tags you may use are exactly <thinking>, <draft>, <needs>, and <dispatch>.');
+      expect(prompt).toContain('The only XML-style tags you may use are exactly <thinking> and <dispatch>.');
       expect(prompt).toContain('Flags such as FeelHeardCheck, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>');
       expect(prompt).toContain('never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>');
-      expect(prompt).toContain('The <needs> tag is only for the structured Stage 3 needs JSON shown above');
+      expect(prompt).toContain('Never capture more than one proposedNeed or needAction per turn; if ambiguous, ask before calling update_session_state');
+      expect(prompt).toContain('SURFACE-ONE');
+      expect(prompt).toContain('CONFIRM-AND-LOCK');
     });
 
-    it('does NOT include old tool call instructions', () => {
+    it('includes tool call instructions for persisted state across stages', () => {
       const context = createContext();
-      const prompt = fullPrompt(buildStagePrompt(1, context));
+      const stage1Prompt = fullPrompt(buildStagePrompt(1, context));
+      const stage3Prompt = fullPrompt(buildStagePrompt(3, context));
+      const stage4Prompt = fullPrompt(buildStagePrompt(4, context));
 
-      // Should not have tool call instructions
-      expect(prompt).not.toContain('update_session_state');
-      expect(prompt).not.toContain('THIRD: Call');
+      expect(stage1Prompt).toContain('update_session_state');
+      expect(stage1Prompt).toContain('offerFeelHeardCheck=true');
+      expect(stage3Prompt).toContain('proposedNeed');
+      expect(stage1Prompt).not.toContain('THIRD: Call');
+      expect(stage4Prompt).toContain('update_session_state');
     });
   });
 
@@ -992,12 +1040,12 @@ describe('Stage Prompts Service', () => {
       expect(result.staticBlock).toContain('CLARIFYING');
     });
 
-    it('static block includes ReadyShare flag and draft tags', () => {
+    it('static block includes ReadyShare flag and tool draft guidance', () => {
       const context = createContext();
       const result = buildStagePrompt(21, context);
 
       expect(result.staticBlock).toContain('ReadyShare:Y');
-      expect(result.staticBlock).toContain('<draft>');
+      expect(result.staticBlock).toContain('update_session_state.proposedEmpathyStatement');
     });
 
     it('dynamic block includes abstract guidance when provided (no raw partner content)', () => {

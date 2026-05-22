@@ -45,13 +45,6 @@ export default function SessionLayout() {
         }}
       />
       <Stack.Screen
-        name="share"
-        options={{
-          headerShown: false,
-          animation: 'slide_from_right',
-        }}
-      />
-      <Stack.Screen
         name="tending-checkin"
         options={{
           title: 'Tending check-in',

@@ -17,7 +17,14 @@ export interface IdentifiedNeedDTO {
   description: string; // Specific description for this user
   evidence: string[]; // Quotes/references supporting this
   confirmed: boolean;
+  lockedAt?: string | null;
+  deletedAt?: string | null;
+  supersededByNeedId?: string | null;
+  status?: 'draft' | 'locked' | 'superseded' | 'deleted';
   aiConfidence: number; // 0-1
+  createdAt?: string;
+  needsReframing?: boolean;
+  reframingWarning?: string;
 }
 
 export interface GetNeedsResponse {
@@ -93,6 +100,8 @@ export interface CapturedNeedInput {
   evidence: string[];
 }
 
+export interface CapturedSingleNeedInput extends CapturedNeedInput {}
+
 export interface CaptureNeedsRequest {
   needs: CapturedNeedInput[];
 }
@@ -100,6 +109,25 @@ export interface CaptureNeedsRequest {
 export interface CaptureNeedsResponse {
   needs: IdentifiedNeedDTO[];
   capturedAt: string;
+}
+
+export type NeedActionType = 'refine' | 'delete' | 'lock';
+
+export interface ParsedNeedAction {
+  type: NeedActionType;
+  needId?: string;
+  supersedes?: string;
+  need?: string;
+  category?: NeedCategory;
+  description?: string;
+  evidence?: string[];
+}
+
+export interface ApplyNeedActionResponse {
+  action: NeedActionType;
+  oldNeed?: IdentifiedNeedDTO;
+  need?: IdentifiedNeedDTO;
+  needs: IdentifiedNeedDTO[];
 }
 
 // ============================================================================

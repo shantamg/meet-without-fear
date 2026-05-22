@@ -15,9 +15,16 @@ import {
   Stage4SelectionDecision,
   Stage4SubChatAnchor,
   Stage4SubChatStatus,
+  TendingBlockerCategory,
   TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
+  TendingFollowThroughStatus,
+  TendingHelpfulnessStatus,
+  TendingNeedResolutionStatus,
+  TendingNextAction,
+  TendingReminderScope,
+  TendingCoordinationStatus,
 } from '../enums';
 
 /** Maximum number of agreements allowed per session */
@@ -190,6 +197,14 @@ export enum Stage4Phase {
 }
 
 export type Stage4CoverageStatus = 'COVERED' | 'PARTIAL' | 'OPEN';
+export type Stage4ProposalSourceLabel = 'YOU' | 'PARTNER' | 'AI' | 'UNKNOWN';
+export type Stage4WalkthroughPhase = 'MY_NEEDS' | 'PARTNER_NEEDS' | 'QUALITY_REVIEW' | 'SUMMARY';
+export type Stage4NeedWalkthroughStatus =
+  | 'not_started'
+  | 'in_progress'
+  | 'covered'
+  | 'skipped'
+  | 'needs_options';
 
 export interface ProposalNeedCoverageDTO {
   id?: string;
@@ -201,6 +216,7 @@ export interface ProposalCardDTO {
   id: string;
   kind: Stage4ProposalKind;
   description: string;
+  sourceLabel?: Stage4ProposalSourceLabel;
   ownerLabel?: 'You' | 'Partner';
   needsAddressed: ProposalNeedCoverageDTO[];
   duration: string | null;
@@ -208,6 +224,45 @@ export interface ProposalCardDTO {
   status: Stage4ProposalStatus;
   myDecision?: Stage4SelectionDecision;
   partnerDecisionVisible?: Stage4SelectionDecision;
+}
+
+export interface Stage4WalkthroughNeedDTO {
+  id: string;
+  label: string;
+  source: 'YOU' | 'PARTNER' | 'UNKNOWN';
+  status: Stage4NeedWalkthroughStatus;
+}
+
+export interface Stage4WalkthroughProposalGroupDTO {
+  key:
+    | 'you_suggested'
+    | 'partner_suggested'
+    | 'ai_suggested'
+    | 'partner_may_do'
+    | 'shared_options'
+    | 'your_prior_suggestions';
+  title: string;
+  readOnly?: boolean;
+  proposals: ProposalCardDTO[];
+}
+
+export interface Stage4QualityWarningDTO {
+  proposalId: string;
+  description: string;
+  warning: string;
+  suggestedRevision?: string;
+}
+
+export interface Stage4WalkthroughDTO {
+  phase: Stage4WalkthroughPhase;
+  currentNeed: Stage4WalkthroughNeedDTO | null;
+  currentIndex: number;
+  totalInPhase: number;
+  ownNeeds: Stage4WalkthroughNeedDTO[];
+  partnerNeeds: Stage4WalkthroughNeedDTO[];
+  proposalGroups: Stage4WalkthroughProposalGroupDTO[];
+  qualityWarnings: Stage4QualityWarningDTO[];
+  defaultCheckInDate: string;
 }
 
 export interface UnaddressedNeedDTO {
@@ -293,26 +348,171 @@ export interface TendingEntryDTO {
   updatedAt: string;
   myResponse: TendingResponseDTO | null;
   responseCount: number;
+  latestOutcome?: TendingEntryOutcomeDTO | null;
+  reminders?: TendingReminderDTO[];
 }
 
 export interface TendingResponseDTO {
   id: string;
   tendingEntryId: string;
   userId: string;
-  status: string;
+  checkinId?: string | null;
+  status: TendingResponseStatus;
   reflection: string | null;
-  continueChoice: string | null;
+  continueChoice: ContinueChoice | null;
   submittedAt: string;
+}
+
+export type TendingResponseStatus = 'CHECKIN' | 'WORKED' | 'PARTLY' | 'DID_NOT_WORK' | 'DID_NOT_TRY' | 'OTHER';
+
+export interface TendingCheckinDTO {
+  id: string;
+  sessionId: string;
+  userId: string;
+  coordinationCycleId?: string | null;
+  nextAction: TendingNextAction | null;
+  continueChoice: ContinueChoice | null;
+  reflectionSummary: string | null;
+  submittedAt: string;
+  createdAt: string;
+  entryOutcomes?: TendingEntryOutcomeDTO[];
+  needOutcomes?: TendingNeedOutcomeDTO[];
+  reminders?: TendingReminderDTO[];
+  adjustments?: TendingAdjustmentDTO[];
+}
+
+export interface TendingCoordinationCycleDTO {
+  id: string;
+  sessionId: string;
+  status: TendingCoordinationStatus;
+  entryIds: string[];
+  participantUserIds: string[];
+  submittedUserIds: string[];
+  responseDeadlineAt: string;
+  resolvedAt: string | null;
+  resultSummary: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TendingEntryOutcomeDTO {
+  id: string;
+  checkinId: string;
+  tendingEntryId: string;
+  responseId: string | null;
+  userId: string;
+  followThroughStatus: TendingFollowThroughStatus;
+  helpfulnessStatus: TendingHelpfulnessStatus | null;
+  blockerCategories: TendingBlockerCategory[];
+  whatHappened: string | null;
+  helpedNeed: string | null;
+  blockerNote: string | null;
+  stillWorthTrying: boolean | null;
+  createdAt: string;
+}
+
+export interface TendingNeedOutcomeDTO {
+  id: string;
+  checkinId: string;
+  sessionId: string;
+  needId: string | null;
+  needLabel: string;
+  sourceUserId: string | null;
+  resolutionStatus: TendingNeedResolutionStatus;
+  note: string | null;
+  changedNeedLabel: string | null;
+  nextAction: TendingNextAction | null;
+  createdAt: string;
+}
+
+export interface TendingReminderDTO {
+  id: string;
+  sessionId: string;
+  checkinId: string | null;
+  tendingEntryId: string | null;
+  userId: string;
+  scope: TendingReminderScope;
+  remindAt: string;
+  cadence: string | null;
+  note: string | null;
+  status: TendingReminderStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TendingReminderStatus = 'SCHEDULED' | 'DELIVERED' | 'CANCELLED';
+
+export interface TendingAdjustmentDTO {
+  id: string;
+  sessionId: string;
+  checkinId: string;
+  tendingEntryId: string;
+  userId: string;
+  privacyScope: TendingReminderScope;
+  revisedCommitmentText: string | null;
+  revisedCadence: string | null;
+  revisedScope: string | null;
+  revisedSuccessCriteria: string | null;
+  reason: string | null;
+  blockerAddressed: TendingBlockerCategory[];
+  createdAt: string;
+}
+
+export interface TendingBetweenPeriodNoteDTO {
+  id: string;
+  sessionId: string;
+  userId: string;
+  content: string;
+  carryForwardSelected: boolean;
+  consentToShareWithPartner: boolean;
+  shareConsentAt: string | null;
+  selectedForCheckinId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TendingHistoryEntryReviewDTO {
+  tendingEntryId: string;
+  summary: string | null;
+  scope: TendingEntryScope;
+  followThroughStatus: TendingFollowThroughStatus;
+  helpfulnessStatus: TendingHelpfulnessStatus | null;
+  blockerCategories: TendingBlockerCategory[];
+  whatHappened: string | null;
+  helpedNeed: string | null;
+  stillWorthTrying: boolean | null;
+}
+
+export interface TendingHistoryCycleDTO {
+  checkinId: string;
+  sessionId: string;
+  userId: string;
+  submittedAt: string;
+  continueChoice: ContinueChoice | null;
+  nextAction: TendingNextAction | null;
+  reflectionSummary: string | null;
+  entryReviews: TendingHistoryEntryReviewDTO[];
+  needOutcomes: TendingNeedOutcomeDTO[];
+  adjustments: TendingAdjustmentDTO[];
+  reminders: TendingReminderDTO[];
+  coordinationStatus?: TendingCoordinationStatus | null;
+  coordinationSummary?: string | null;
 }
 
 export interface GetTendingEntriesResponse {
   entries: TendingEntryDTO[];
+  coordinationCycles?: TendingCoordinationCycleDTO[];
+  betweenPeriodNotes?: TendingBetweenPeriodNoteDTO[];
+}
+
+export interface GetTendingHistoryResponse {
+  cycles: TendingHistoryCycleDTO[];
 }
 
 export interface SubmitTendingResponseRequest {
-  status: string;
+  status: TendingResponseStatus;
   reflection?: string;
-  continueChoice?: string;
+  continueChoice?: ContinueChoice;
 }
 
 export interface SubmitTendingResponseResponse {
@@ -338,9 +538,52 @@ export interface TendingCheckinOrientationReflection {
   perEntryNotes?: Record<string, string>;
 }
 
+export interface TendingCheckinEntryOutcomeInput {
+  tendingEntryId: string;
+  followThroughStatus: TendingFollowThroughStatus;
+  helpfulnessStatus?: TendingHelpfulnessStatus;
+  blockerCategories?: TendingBlockerCategory[];
+  whatHappened?: string;
+  helpedNeed?: string;
+  blockerNote?: string;
+  stillWorthTrying?: boolean;
+  note?: string;
+}
+
+export interface TendingCheckinNeedOutcomeInput {
+  needId?: string;
+  needLabel: string;
+  sourceUserId?: string;
+  resolutionStatus: TendingNeedResolutionStatus;
+  note?: string;
+  changedNeedLabel?: string;
+  nextAction?: TendingNextAction;
+}
+
+export interface TendingReminderInput {
+  tendingEntryId?: string;
+  scope: TendingReminderScope;
+  remindAt: string;
+  cadence?: string;
+  note?: string;
+}
+
+export interface TendingAdjustmentInput {
+  tendingEntryId: string;
+  privacyScope?: TendingReminderScope;
+  revisedCommitmentText?: string;
+  revisedCadence?: string;
+  revisedScope?: string;
+  revisedSuccessCriteria?: string;
+  reason?: string;
+  blockerAddressed?: TendingBlockerCategory[];
+}
+
 export interface TendingCheckinWhatComesNext {
   continueChoice: ContinueChoice;
+  nextAction?: TendingNextAction;
   partialClosure?: Record<string, PartialClosureResolution>;
+  reminders?: TendingReminderInput[];
 }
 
 export interface TendingCheckinOrientations {
@@ -351,10 +594,21 @@ export interface TendingCheckinOrientations {
 
 export interface SubmitTendingCheckinRequest {
   orientations: TendingCheckinOrientations;
+  entryOutcomes?: TendingCheckinEntryOutcomeInput[];
+  needOutcomes?: TendingCheckinNeedOutcomeInput[];
+  reminders?: TendingReminderInput[];
+  adjustments?: TendingAdjustmentInput[];
+  includedBetweenPeriodNoteIds?: string[];
+  shareBetweenPeriodNoteIds?: string[];
+  nextAction?: TendingNextAction;
+  resolvedEnoughOverride?: boolean;
+  resolvedEnoughOverrideNote?: string;
 }
 
 export interface SubmitTendingCheckinResponse {
   entries: TendingEntryDTO[];
+  checkin?: TendingCheckinDTO;
+  coordinationCycle?: TendingCoordinationCycleDTO;
   newSessionId?: string;
   continueChoice: ContinueChoice;
   nextScheduledFor?: string | null;
@@ -368,8 +622,17 @@ export interface CreateTendingReentryResponse {
   entry: TendingEntryDTO;
 }
 
+export interface CreateTendingBetweenPeriodNoteRequest {
+  content: string;
+}
+
+export interface CreateTendingBetweenPeriodNoteResponse {
+  note: TendingBetweenPeriodNoteDTO;
+}
+
 export interface GetStage4StateResponse {
   phase: Stage4Phase;
+  walkthrough: Stage4WalkthroughDTO;
   inventory: ProposalInventoryDTO;
   coverageAudit: Stage4CoverageAuditDTO;
   mySelections: Stage4SelectionDTO[];
@@ -378,6 +641,10 @@ export interface GetStage4StateResponse {
   partnerSelectionStatus: 'NOT_STARTED' | 'SUBMITTED';
   outcome: Stage4OutcomeDTO | null;
   tendingPreview: TendingPreviewDTO | null;
+}
+
+export interface UpdateStage4WalkthroughNeedResponse {
+  state: GetStage4StateResponse;
 }
 
 export interface SubmitStage4SelectionRequest {

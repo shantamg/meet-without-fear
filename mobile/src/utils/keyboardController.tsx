@@ -30,6 +30,10 @@ type KeyboardControllerModule = {
 let keyboardControllerModule: KeyboardControllerModule | null | undefined;
 
 export function hasLinkedKeyboardController(): boolean {
+  if (__DEV__ && process.env.EXPO_PUBLIC_ENABLE_NATIVE_KEYBOARD_CONTROLLER !== 'true') {
+    return false;
+  }
+
   if (NativeModules.KeyboardController) {
     return true;
   }

@@ -3,8 +3,9 @@ import { Alert, View, Text, StyleSheet } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ContinueChoice } from '@meet-without-fear/shared';
 import { TendingCheckinScreen, TendingCheckinPayload } from '@/src/screens/TendingCheckinScreen';
-import { useTendingEntries, useSubmitTendingCheckin } from '@/src/hooks';
+import { useStage4State, useTendingEntries, useSubmitTendingCheckin } from '@/src/hooks';
 import { colors } from '@/src/theme';
+import { useAuth } from '@/src/hooks/useAuth';
 
 /**
  * Stage 4 Phase 5 — Tending check-in route.
@@ -13,18 +14,32 @@ import { colors } from '@/src/theme';
  * routing per the chosen forward path.
  */
 export default function TendingCheckinRoute() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tendingEntryId } = useLocalSearchParams<{ id: string; tendingEntryId?: string }>();
   const sessionId = typeof id === 'string' ? id : '';
   const entriesQuery = useTendingEntries(sessionId || undefined);
+  const stage4Query = useStage4State(sessionId || undefined);
   const submit = useSubmitTendingCheckin();
+  const { user } = useAuth();
 
   const entries = useMemo(() => entriesQuery.data?.entries ?? [], [entriesQuery.data]);
+  const needs = useMemo(() => {
+    const outcomeNeeds = stage4Query.data?.outcome?.openNeeds ?? [];
+    if (outcomeNeeds.length > 0) {
+      return outcomeNeeds.map((need) => ({ id: need.id ?? null, label: need.label }));
+    }
+    const coverage = stage4Query.data?.coverageAudit;
+    return [
+      ...(coverage?.open ?? []),
+      ...(coverage?.partial ?? []),
+      ...(coverage?.covered ?? []),
+    ].map((need) => ({ id: need.id ?? null, label: need.label }));
+  }, [stage4Query.data]);
 
   const handleSubmit = (payload: TendingCheckinPayload) => {
     submit.mutate(
       {
         sessionId,
-        orientations: payload,
+        ...payload,
       },
       {
         onSuccess: (data) => {
@@ -92,6 +107,10 @@ export default function TendingCheckinRoute() {
   return (
     <TendingCheckinScreen
       entries={entries}
+      betweenPeriodNotes={entriesQuery.data?.betweenPeriodNotes ?? []}
+      needs={needs}
+      currentUserId={user?.id ?? null}
+      initialEntryId={typeof tendingEntryId === 'string' ? tendingEntryId : null}
       isSubmitting={submit.isPending}
       onSubmit={handleSubmit}
       onCancel={() => router.back()}

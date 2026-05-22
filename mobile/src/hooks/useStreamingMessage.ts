@@ -16,6 +16,7 @@ import {
   GetMessagesResponse,
   Stage,
   CapturedNeedInput,
+  IdentifiedNeedDTO,
 } from '@meet-without-fear/shared';
 import { messageKeys, sessionKeys, stageKeys, timelineKeys } from './queryKeys';
 import { getPersistedMessageRefreshQueryKeys } from '../utils/realtimeInvalidation';
@@ -30,6 +31,7 @@ interface UserMessageEvent {
   id: string;
   content: string;
   timestamp: string;
+  refiningNeedId?: string | null;
 }
 
 interface ChunkEvent {
@@ -56,7 +58,19 @@ export interface StreamMetadata {
   proposedEmpathyStatement?: string | null;
   proposedStrategies?: string[];
   proposedNeeds?: CapturedNeedInput[];
+  proposedNeed?: CapturedNeedInput;
+  needAction?: {
+    type: 'refine' | 'delete' | 'lock';
+    needId?: string;
+    supersedes?: string;
+  };
+  needParseError?: string;
   needsCaptured?: boolean;
+  stage4WalkthroughAction?: {
+    action: 'COVERED' | 'SKIP' | 'NONE';
+    needId?: string;
+    reason?: string;
+  };
   topicFrame?: string | null;
   analysis?: string;
 }
@@ -73,6 +87,7 @@ export interface SendStreamingMessageParams {
   sessionId: string;
   content: string;
   currentStage?: Stage;
+  refiningNeedId?: string | null;
 }
 
 /** Options for the streaming hook */
@@ -431,8 +446,6 @@ export function useStreamingMessage(
         queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       }
       if (stage === Stage.NEED_MAPPING) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
@@ -479,8 +492,6 @@ export function useStreamingMessage(
         queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       }
       if (stage === Stage.NEED_MAPPING) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
@@ -544,7 +555,6 @@ export function useStreamingMessage(
       }
 
       if (metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
@@ -571,7 +581,7 @@ export function useStreamingMessage(
    */
   const sendMessage = useCallback(
     async (params: SendStreamingMessageParams) => {
-      const { sessionId, content, currentStage } = params;
+      const { sessionId, content, currentStage, refiningNeedId } = params;
 
       // Store params for retry
       lastParamsRef.current = params;
@@ -601,6 +611,7 @@ export function useStreamingMessage(
         content,
         stage: currentStage ?? Stage.ONBOARDING,
         timestamp: new Date().toISOString(),
+        refiningNeedId: refiningNeedId ?? null,
         status: 'sending',
       };
 
@@ -635,7 +646,7 @@ export function useStreamingMessage(
             'Content-Type': 'application/json',
             ...authHeaders,
           },
-          body: JSON.stringify({ content }),
+          body: JSON.stringify({ content, refiningNeedId: refiningNeedId ?? undefined }),
           pollingInterval: 0, // Disable polling, use SSE
         });
 
@@ -673,6 +684,7 @@ export function useStreamingMessage(
             content: '',
             stage: currentStage ?? Stage.ONBOARDING,
             timestamp: new Date().toISOString(),
+            refiningNeedId: refiningNeedId ?? null,
             status: 'streaming',
           };
           addMessageToCache(sessionId, placeholderAIMessage, currentStage);
@@ -691,6 +703,7 @@ export function useStreamingMessage(
               updateMessageInCache(sessionId, optimisticUserIdRef.current, {
                 timestamp: data.timestamp,
                 content: data.content, // In case server modified content
+                refiningNeedId: data.refiningNeedId ?? null,
               }, currentStage);
               optimisticUserIdRef.current = ''; // Clear after update
             } else {
@@ -703,6 +716,7 @@ export function useStreamingMessage(
                 content: data.content,
                 stage: currentStage ?? Stage.ONBOARDING,
                 timestamp: data.timestamp,
+                refiningNeedId: data.refiningNeedId ?? null,
               };
               addMessageToCache(sessionId, realUserMessage, currentStage);
             }
@@ -738,6 +752,7 @@ export function useStreamingMessage(
                 content: accumulatedTextRef.current,
                 stage: currentStage ?? Stage.ONBOARDING,
                 timestamp: new Date().toISOString(),
+                refiningNeedId: refiningNeedId ?? null,
                 status: 'streaming',
               };
               addMessageToCache(sessionId, updatedAIMessage, currentStage);
@@ -809,6 +824,7 @@ export function useStreamingMessage(
               content: accumulatedTextRef.current,
               stage: currentStage ?? Stage.ONBOARDING,
               timestamp: new Date().toISOString(),
+              refiningNeedId: refiningNeedId ?? null,
               status: 'sent',
             };
             addMessageToCache(sessionId, finalAIMessage, currentStage);
@@ -888,6 +904,7 @@ export function useStreamingMessage(
                   content: accumulatedTextRef.current,
                   stage: currentStage ?? Stage.ONBOARDING,
                   timestamp: new Date().toISOString(),
+                  refiningNeedId: refiningNeedId ?? null,
                   status: 'sent',
                 };
                 addMessageToCache(sessionId, finalAIMessage, currentStage);

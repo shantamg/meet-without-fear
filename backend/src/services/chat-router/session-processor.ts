@@ -304,7 +304,7 @@ export async function processSessionMessage(
   // NOTE: Memory detection is handled by ai-orchestrator.ts, not here.
   // The orchestrator runs detection + validation synchronously before generating the response.
 
-  // Stage 0: If AI emitted a <draft> with a proposed topic frame, persist it to the session
+  // Stage 0: If AI proposed a topic frame, persist it to the session
   // (only when topic is not yet confirmed — never overwrite a confirmed topic).
   if (
     orchestratorResult.topicFrame &&

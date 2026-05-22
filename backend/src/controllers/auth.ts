@@ -236,7 +236,8 @@ export const getAblyToken = asyncHandler(async (req: Request, res: Response): Pr
 
   // Add capabilities for specific sessions
   for (const session of sessions) {
-    capability[`meetwithoutfear:session:${session.id}`] = ['subscribe', 'publish', 'presence'];
+    capability[`meetwithoutfear:session:${session.id}`] = ['subscribe', 'publish'];
+    capability[`meetwithoutfear:presence:${session.id}`] = ['subscribe', 'presence'];
   }
 
   try {

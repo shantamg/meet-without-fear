@@ -18,6 +18,7 @@ import { type CategorizedFact } from './partner-session-classifier';
 import {
   RESOLVED_LISTEN_FIRST_CLAUSE,
   coverageReviewOpenNeedsClause,
+  type TendingConversationPromptContext,
 } from './stage4-prompts';
 
 // ============================================================================
@@ -26,7 +27,8 @@ import {
 
 /**
  * Build the response protocol instructions for a given stage.
- * Uses semantic tags instead of JSON for faster streaming and robustness.
+ * Uses semantic tags for visible-response routing. Stage 4 structured state is
+ * delivered through the update_session_state tool instead of hidden XML blocks.
  *
  * @param stage - The stage number (0-4)
  * @param options - Optional configuration for draft support
@@ -48,10 +50,7 @@ function buildResponseProtocol(stage: number, options?: {
 
   const draftSection = options?.includesDraft
     ? `
-If you prepared a ${options.draftPurpose} draft, include:
-<draft>
-${options.draftPurpose} text
-</draft>`
+If you prepared a ${options.draftPurpose} draft, put it in update_session_state.${options.draftPurpose === 'topic' ? 'topicFrame' : 'proposedEmpathyStatement'}. Do not emit <draft> tags except as a legacy fallback.`
     : '';
 
   // Stage 2 gets an extra off-ramp for empathy purpose questions
@@ -68,53 +67,57 @@ If StrategyProposed is Y, list each concrete user-endorsed proposal on its own l
 ProposedStrategy: 10-minute check-in after dinner each night for one week
 ProposedStrategy: Sunday evening phone call to plan the week ahead
 
-Prefer the typed hidden Stage 4 proposal block over ProposedStrategy lines. When the user's latest turn contains possible proposal material, emit a hidden JSON block immediately after </thinking>:
-<stage4_proposals>
-[
-  {
-    "action": "ADD|REVISE|REMOVE|IGNORE",
-    "targetProposalId": null,
-    "classification": "PROPOSAL|REFLECTION|SUCCESS_MARKER|PROCESS",
-    "description": "the exact user-endorsed proposal, reflection, success marker, or process statement",
-    "kind": "SHARED_PROPOSAL|INDIVIDUAL_COMMITMENT|null",
-    "ownerUserId": "current user's id for individual commitments, otherwise null",
-    "needsAddressed": [],
-    "duration": null,
-    "measureOfSuccess": null
-  }
-]
-</stage4_proposals>
-Emit this block on every Stage 4 turn. Only action ADD with classification PROPOSAL creates a proposal card. Use REVISE with targetProposalId when the user is sharpening or restating an existing proposal. Use IGNORE with REFLECTION for accountability acknowledgments or past-tense observations. Use IGNORE with SUCCESS_MARKER for desired outcomes or tests of whether something helped. Use IGNORE with PROCESS for questions about the app, waiting, reviewing, seeing what happens, or guarded consent to continue talking.`
+Stage 4 structured-state protocol:
+Use the update_session_state tool for proposal inventory changes and current-need walkthrough progress. Do not emit Stage 4 XML or JSON in visible text.
+When the user's latest turn contains possible proposal material, call update_session_state with stage4Proposals. Only action ADD with classification PROPOSAL creates a proposal card. Use REVISE with targetProposalId when the user is sharpening or restating an existing proposal. Use IGNORE with REFLECTION for accountability acknowledgments or past-tense observations. Use IGNORE with SUCCESS_MARKER for desired outcomes or tests of whether something helped. Use IGNORE with PROCESS for questions about the app, waiting, reviewing, seeing what happens, or guarded consent to continue talking.
+Also include exactly one stage4WalkthroughAction in update_session_state for every Stage 4 turn. Use COVERED when the user has accepted, completed, or clearly agreed to move on from the current need. Use SKIP when they explicitly want to leave the current need aside, skip it, or not work on it now. Use NONE when they are still brainstorming, refining, asking a question, or the signal is ambiguous.
+
+Execution protocol:
+1. Call update_session_state before visible conversational text whenever the current turn requires Stage 4 proposal capture or walkthrough progress.
+2. Then write only the user-facing response as plain prose. Do not include internal reasoning, XML tags, JSON, tool arguments, or state summaries in the conversational text.`
+    : '';
+
+  const toolProtocolSection = stage !== 4
+    ? `\nStructured state protocol:
+Use the update_session_state tool for persisted state. Do not put structured JSON, draft text, internal reasoning, or state summaries in visible text.
+${stage === 0 ? '- Stage 0: when proposing or revising the topic, call update_session_state with topicFrame.' : ''}
+${stage === 1 ? '- Stage 1: when the feel-heard check is ready, call update_session_state with offerFeelHeardCheck=true. Otherwise use false or omit it.' : ''}
+${stage === 2 ? '- Stage 2: when the empathy draft is ready, call update_session_state with offerReadyToShare=true and proposedEmpathyStatement.' : ''}
+${stage === 3 ? '- Stage 3: when capturing one need, call update_session_state with proposedNeed. For refine/delete/lock, call it with needAction.' : ''}
+Call update_session_state before visible conversational text whenever the current turn requires one of these state updates.`
     : '';
 
   const needsSection = stage === 3
     ? `
-When you are in CONFIRMING mode and present a reviewable needs summary, include a hidden structured payload immediately after </thinking>:
-<needs>
-[
-  {
-    "need": "short needs label using the user's words",
-    "category": "SAFETY|CONNECTION|AUTONOMY|RECOGNITION|MEANING|FAIRNESS",
-    "description": "specific need statement in the user's words",
-    "evidence": ["short quote or phrase the user actually said"]
-  }
-]
-</needs>
-Only include needs this user clearly named or accepted. Never include partner needs. Do not infer extra needs.`
+When a single need is ready to capture, call update_session_state with proposedNeed:
+{
+  "need": "short needs label using the user's words",
+  "category": "SAFETY|CONNECTION|AUTONOMY|RECOGNITION|MEANING|FAIRNESS",
+  "description": "specific need statement in the user's words",
+  "evidence": ["short quote or phrase the user actually said"]
+}
+For revisions, removals, or locks, call update_session_state with needAction:
+{ "type": "refine", "supersedes": "need-id", "need": "...", "category": "...", "description": "...", "evidence": [] }
+{ "type": "delete", "needId": "need-id" }
+{ "type": "lock", "needId": "need-id" }
+Only include needs this user clearly named or accepted. Never include partner needs. Do not infer extra needs.
+Never capture more than one proposedNeed or needAction per turn; if ambiguous, ask before calling the tool. Do not emit <need>, <needs>, or <need-action> tags except as a legacy fallback.`
     : '';
+
+  const allowedTags = '<thinking> and <dispatch>';
 
   return `
 OUTPUT FORMAT:
 <thinking>
 Mode: [WITNESS|PERSPECTIVE|NEEDS|REPAIR|ONBOARDING|DISPATCH]
 ${flags.join('\n')}
-Strategy: [brief]${strategySection}
+Strategy: [brief]${strategySection}${toolProtocolSection}
 </thinking>${needsSection}${draftSection}
 
 Then write the user-facing response (plain text, no tags).
-IMPORTANT: The only XML-style tags you may use are exactly <thinking>, <draft>, <needs>, and <dispatch>.
+IMPORTANT: The only XML-style tags you may use are exactly ${allowedTags}.
 Flags such as FeelHeardCheck, ReadyShare, NeedsReady, Mode, and Strategy must be plain lines inside <thinking>; never turn them into tags like <needs_ready>, <ready_share>, or <feel_heard_check>.
-The <needs> tag is only for the structured Stage 3 needs JSON shown above. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
+Persisted state belongs in update_session_state, not visible text. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
 
 OFF-RAMPS (only when needed):
 - If asked how this works / process: <dispatch>EXPLAIN_PROCESS</dispatch>
@@ -351,6 +354,8 @@ Tone: Warm and practical. Answer process questions without diving deep yet.
 const WHAT_MATTERS_APPROACH = `
 When they frame things in terms of the other person, redirect gently to what matters to them personally — what they need or what's missing.
 Offer needs language as a suggestion, not a correction. Let them find their own words.
+If you already understand what they mean concretely enough to capture it in their words, capture it. Do not keep asking what it looks like, what it gives them, or what changes when it is met just to deepen. Ask one clarifying question only when you do not yet understand the need well enough to write it down.
+Brief is not the same as guarded. A direct, clear answer can be complete.
 `;
 
 /**
@@ -434,6 +439,12 @@ export interface PromptContext {
   isFirstMessage?: boolean;
   /** Current empathy draft content for refinement in Stage 2 */
   empathyDraft?: string | null;
+  /** Stage 3 need currently being refined via reply-context mode */
+  refiningNeed?: {
+    id: string;
+    need: string;
+    category?: string;
+  } | null;
   /** Whether user is actively refining their empathy draft */
   isRefiningEmpathy?: boolean;
   /** Shared context from partner (when guesser is in REFINING status from reconciler flow) */
@@ -473,10 +484,16 @@ export interface PromptContext {
   previousEmpathyContent?: string | null;
   /** Stage 4: active proposal inventory with stable IDs for typed add/revise/remove decisions */
   stage4InventoryContext?: string | null;
+  /** Stage 4: canonical walkthrough phase/current need/proposals from the Stage 4 state service */
+  stage4WalkthroughContext?: string | null;
   /** Stage 4 Phase 6 — open (not declined, not yet willing-covered) needs surfaced for COVERAGE_REVIEW proactive raising */
   stage4OpenNeeds?: Array<{ needLabel: string }> | null;
   /** Stage 4 Phase 6 — when true, main-chat persona switches to listen-first reflection mode (session RESOLVED, no check-in yet, user hasn't asked for input) */
   stage4ListenFirstMode?: boolean;
+  /** Stage 5/Tending — resolved-session conversational prompt context for private Tending chat. */
+  tendingConversationContext?: TendingConversationPromptContext | null;
+  /** Stage 5/Tending — rendered private Tending prompt injected into resolved-session chat. */
+  tendingConversationPrompt?: string | null;
   /** Partner's progress status for transition messages */
   partnerStatus?: 'not_joined' | 'in_progress' | 'completed';
   /**
@@ -554,7 +571,7 @@ LISTENING: Ask warm, specific questions that surface what the situation is about
 
 Keep responses short (1-2 sentences) until you have enough to propose a topic.
 
-WHEN YOU HAVE ENOUGH CONTEXT: Propose a topic in <draft>...</draft> tags. The user confirms via the UI; do NOT ask in chat for explicit consent. Continue warmly after the draft without inviting freeform chat unless the input remains visible (e.g., "Take a look at that framing when you're ready.").
+WHEN YOU HAVE ENOUGH CONTEXT: Propose a topic by calling update_session_state with topicFrame. The user confirms via the UI; do NOT ask in chat for explicit consent. Continue warmly after the topic frame without inviting freeform chat unless the input remains visible (e.g., "Take a look at that framing when you're ready.").
 
 DRAFT PROTOCOL — CONSTRAINTS ON THE TOPIC:
 - One phrase or sentence (no lists, no multiple options).
@@ -565,7 +582,7 @@ DRAFT PROTOCOL — CONSTRAINTS ON THE TOPIC:
 - Do NOT editorialize or add interpretation beyond what ${context.userName} said.
 - Do NOT include names.
 
-ITERATION: If ${context.userName} asks for changes after a draft, re-emit a fresh <draft>...</draft> with each revision. Keep iterating until they confirm via the UI.
+ITERATION: If ${context.userName} asks for changes after a draft, call update_session_state with a fresh topicFrame each revision. Keep iterating until they confirm via the UI.
 
 ${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'topic' })}`;
 
@@ -691,14 +708,14 @@ If ${userName} still names unfairness, anger, fear, resentment, "but I'm the one
 
 	Before offering a draft, include a checkpoint in your own words: "Does that feel like your real attempt at what might be happening for ${partnerName}, or is there another layer?" If they answer yes or deepen it, then ReadyShare:Y can be appropriate.
 
-	When ReadyShare:Y, include a 2-4 sentence empathy statement in <draft> tags — what ${userName} imagines ${partnerName} is experiencing, written as ${userName} speaking to ${partnerName} (e.g., "I think you might be feeling..."). Focus purely on ${partnerName}'s inner experience — their feelings, fears, or needs.
+	When ReadyShare:Y, call update_session_state with proposedEmpathyStatement containing a 2-4 sentence empathy statement — what ${userName} imagines ${partnerName} is experiencing, written as ${userName} speaking to ${partnerName} (e.g., "I think you might be feeling..."). Focus purely on ${partnerName}'s inner experience — their feelings, fears, or needs.
 	Draft fidelity rules:
 	- Preserve ${userName}'s caveats and non-concessions. Consent to understand is not reassurance, agreement, apology, or a promise to repair.
 	- Do not add direct reassurance such as "you are enough," "you didn't fail," "you're the right person for me," or "I still choose us" unless ${userName} explicitly said that exact reassurance is true and wants it shared.
 	- If ${userName} says they are not trying to reassure ${partnerName} out of their own needs, keep that boundary in the draft instead of smoothing it away.
 	- The draft may say how ${userName}'s words might land on ${partnerName}; it must not settle unresolved fit, staying/leaving, or future-open questions for ${userName}.
 
-	When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together a draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference UI elements directly. One sentence max.
+	When ReadyShare:Y and you include proposedEmpathyStatement in update_session_state, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together a draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference UI elements directly. One sentence max.
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
 
@@ -728,7 +745,7 @@ This is the user's current draft. When they want changes, update this text — d
       draft += `\n\nREFINEMENT MODE:
 ${userName} is actively refining their empathy statement. You MUST:
 1. Set ReadyShare:Y
-2. Generate an updated draft in <draft> tags that incorporates their latest reflections
+2. Call update_session_state with proposedEmpathyStatement incorporating their latest reflections
 3. Even if they're just thinking out loud about what they learned, use that to improve the draft`;
 
       if (context.sharedContextFromPartner) {
@@ -789,9 +806,9 @@ Do NOT set ReadyShare:Y until ${userName} has had at least 3-4 exchanges process
 Set ReadyShare:Y ONLY when ${userName} has:
 1. Named something specific the new context changed about their understanding
 2. Connected it to ${partnerName}'s experience in their own words
-Include an updated empathy statement in <draft> tags.
+Include an updated empathy statement in update_session_state.proposedEmpathyStatement.
 
-When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together an updated draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference specific UI element names (like button labels). One sentence max.
+When ReadyShare:Y and you include proposedEmpathyStatement in update_session_state, end your response by letting ${userName} know you've prepared something for them to review. Example: "I've put together an updated draft for you to review when you're ready." Do NOT invite more freeform chat unless the input remains visible. Do NOT reference specific UI element names (like button labels). One sentence max.
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
 
@@ -872,11 +889,11 @@ ${FACILITATOR_RULES}
 YOUR OPENING (first turn only — after transition):
 Help ${context.userName} shift from what's wrong with the other person to what matters to them personally. Invite them to step back and reflect on what this situation is really about for them — framed around what they need or what's missing, not what the other person is doing wrong.
 
-FOUR MODES:
-- REDIRECTING: User is framing things in terms of the other person. Gently bring the focus back to the user — help them name what feels important or missing for them when that happens.
-- SUGGESTING: User is exploring but hasn't landed on needs language. Offer a need as a suggestion, not a correction — propose a word and check whether it resonates. Let them accept, reject, or refine.
-- DEEPENING: User has named something that matters. Help them explore what that need looks like in practice — what changes when it's met, what it means day-to-day.
-- CONFIRMING: User has articulated what feels like their core needs. Present a clean summary of what they've named so far and tell them it is ready for review in the app. Format as a simple list they can review. Do not ask a direct chat question like "Does that capture it?" when the app's next interaction is the review/confirm button. No hardcoded threshold for when to enter this mode — use your judgment based on conversational signals that they've landed. Do not enter CONFIRMING just because one compressed message names several needs; if the story is high-stakes or contains safety, accountability, autonomy, recognition, belonging, or self-trust, deepen at least one named cluster before capture.
+MODE BEATS:
+- SURFACE-ONE: Help the user name one need in their own words. Capture that one need when it is clear enough.
+- REFINE: If they are editing or clarifying a captured need, focus only on that need until it feels true enough.
+- CONFIRM-AND-LOCK: When the user clearly accepts one captured need, lock that need. Do not lock all needs at once.
+- BRIDGE-TO-NEXT: After one need is captured or locked, invite the next thing that matters without summarizing a whole list.
 
 UNIVERSAL NEEDS FRAMEWORK (internal lens — don't teach this explicitly):
 Safety, Connection, Autonomy, Recognition, Meaning, Fairness. Most positions map to one or two of these.
@@ -896,10 +913,9 @@ FORBIDDEN in Stage 3:
 No-hallucination guard: Use the user's exact words when reflecting needs. Never add context, feelings, or details they didn't provide.
 
 NEEDS CAPTURE:
-When ${context.userName} has clearly landed on their own needs and you present a clean summary for review, set NeedsReady:Y and include the hidden <needs> block. In visible text, say you have captured a draft of what matters to them for their review and that they can use the review button to confirm or adjust it. Do not ask "Does that capture it?" or invite an inline chat answer unless you are also keeping the chat interaction open. Do not say anything about sharing, partner readiness, or side-by-side reveal.
-
-COMPRESSED-NEEDS PACING:
-If ${context.userName} gives one dense answer that stacks multiple real needs, first reflect the clusters and ask one deepening question about the need that carries the most risk or consequence. For James/Catherine-like no-shared-agreement pressure, make sure safety/accountability/autonomy/self-trust and care/belonging/recognition/heard needs have enough user-owned texture before NeedsReady:Y. Capture after that texture exists, not at the first well-worded list.
+Never capture more than one proposedNeed or needAction per turn; if ambiguous, ask before calling update_session_state.
+When ${context.userName} has clearly landed on one need, set NeedsReady:Y and call update_session_state with proposedNeed for that need only. In visible text, acknowledge the need and invite either refinement/locking or the next thing that matters. Do not say anything about sharing, partner readiness, or side-by-side reveal.
+Don't capture before you understand. But once you understand what ${context.userName} means, capture it — don't keep asking. If one dense answer names several real needs, capture one clear need this turn and invite the next thing that matters; do not force extra exploration just because the answer was compressed.
 
 Length: default 1–3 sentences. Go longer only if they explicitly ask for help or detail.
 ${LATERAL_PROBING_GUIDANCE}
@@ -918,10 +934,16 @@ ${buildResponseProtocol(3)}`;
     dynamicParts.push('EARLY STAGE 3: User just arrived from empathy work. They may still be processing emotions — give them a breath before asking what matters.');
   }
 
+  if (context.refiningNeed) {
+    dynamicParts.push(`REFINING NEED CONTEXT:
+The user is refining need ${context.refiningNeed.id} currently reading: "${context.refiningNeed.need}".
+Focus on this need only this turn. If the user's update is clear, call update_session_state with needAction.type=refine and supersedes="${context.refiningNeed.id}" for the revised version. If they dismiss or say never mind, respond conversationally and do not update state.`);
+  }
+
   // Content-aware pacing (every turn): let what the user said drive the mode,
   // not a turn counter. A user who names three clear needs in one rich message
   // should be validated; a user still venting in positions should be excavated.
-  dynamicParts.push('PACING — LET CONTENT DRIVE THE MODE, NOT TURN COUNT: If the user has clearly named what matters to them (e.g., "partnership", "to feel safe", "to be heard"), move into DEEPENING and explore what that looks like — do not artificially hold back. If they are still framing things in terms of the other person, stay in REDIRECTING — bring it back to what matters to them. Do not rush users who are still exploring, and do not stall users who have already landed.');
+  dynamicParts.push('PACING — LET CONTENT DRIVE THE MODE, NOT TURN COUNT: If the user has clearly named what matters to them (e.g., "partnership", "to feel safe", "to be heard"), either capture it or ask one concrete clarifying question only if you do not yet understand what they mean. If they are still framing things in terms of the other person, redirect gently to what matters to them. Do not rush users who are still exploring, and do not stall users who have already landed.');
 
   if (context.emotionalIntensity >= 8) {
     dynamicParts.push('HIGH USER INTENSITY: The user is very activated/distressed. Slow down. Validate first, reframe gently. Your tone should be calm and grounding, not matching their intensity.');
@@ -990,6 +1012,8 @@ Not a proposal: guarded process consent or a boundary about the exercise ("I can
 Not a proposal yet: a desired outcome, test, or success marker ("I'd walk away knowing where I stand", "I could live with either answer", "I'd know whether this can change"). Reflect it as a success criterion, then ask what concrete action would produce that outcome.
 
 When a proposal is vague, help sharpen it by asking about ONE missing criterion at a time. Don't dump all four criteria at once.
+When the user has already provided enough context to infer a reasonable duration, success marker, or boundary condition, fill that detail in provisionally instead of asking another question. Say it as a draft/assumption ("I'm hearing this as...") and keep it revisable.
+Only ask a follow-up when filling the missing detail would require a real leap or could change the meaning of the proposal.
 
 AI IDEAS:
 Ask before contributing AI ideas. If ${context.userName} declines AI ideas, accept that and keep inviting their own options.
@@ -1032,11 +1056,20 @@ ${buildResponseProtocol(4)}`;
   const dynamicParts: string[] = [];
   const baseDynamic = buildBaseDynamicGuidance(context);
   if (baseDynamic) dynamicParts.push(baseDynamic);
+  if (context.stage4WalkthroughContext) {
+    dynamicParts.push(`CANONICAL STAGE 4 WALKTHROUGH STATE:
+${context.stage4WalkthroughContext}
+
+Use this as the source of truth for which need is being explored right now. Stay on currentNeed until it is marked covered/skipped in this state or the walkthrough phase is QUALITY_REVIEW.
+Do not choose a different open need from the broader coverage list while currentNeed is present.
+If the user clearly agrees to move on from currentNeed, call update_session_state with stage4WalkthroughAction.action=COVERED. If they explicitly want to leave the current need aside, use SKIP. Otherwise use NONE.
+If the user gives a concrete enough option for currentNeed, capture or revise the proposal and then either ask whether they want one more option for that same need or, if their latest turn already indicates completion, mark it COVERED. Do not require every detail before moving on when missing details can be inferred provisionally from context.`);
+  }
   if (context.stage4InventoryContext) {
     dynamicParts.push(`CURRENT STAGE 4 PROPOSAL INVENTORY:
 ${context.stage4InventoryContext}
 
-Use these IDs in <stage4_proposals>. If the latest user turn refines, narrows, adds timing to, or restates one of these cards, emit action REVISE with targetProposalId instead of ADD. Do not create duplicate ADD cards for the same practical experiment.`);
+Use these IDs in update_session_state.stage4Proposals. If the latest user turn refines, narrows, adds timing to, or restates one of these cards, use action REVISE with targetProposalId instead of ADD. Do not create duplicate ADD cards for the same practical experiment.`);
   }
 
   const earlyStage4 = context.turnCount <= 2;
@@ -1045,7 +1078,7 @@ Use these IDs in <stage4_proposals>. If the latest user turn refines, narrows, a
 - currentUserId: ${context.currentUserId}
 - partnerUserId: ${context.partnerUserId ?? 'unknown'}
 
-When emitting <stage4_proposals>, set ownerUserId to currentUserId for INDIVIDUAL_COMMITMENT proposals this user volunteers to do. For SHARED_PROPOSAL, set ownerUserId to null. If the text is a reflection, success marker, or process statement, classify it that way and set kind and ownerUserId to null.`);
+When calling update_session_state.stage4Proposals, set ownerUserId to currentUserId for INDIVIDUAL_COMMITMENT proposals this user volunteers to do. For SHARED_PROPOSAL, set ownerUserId to null. If the text is a reflection, success marker, or process statement, classify it that way and set kind and ownerUserId to null.`);
   }
   if (earlyStage4) {
     dynamicParts.push('EARLY STAGE 4: User may need help shifting from needs to action. Start in INVITING mode. Keep proposals provisional and reversible; the point is learning what is actually workable, not proving anything.');
@@ -1869,6 +1902,9 @@ export function buildStagePrompt(stage: number, context: PromptContext, options?
     // block so it reads as a recent operational signal, not as framing.
     if (promptContext.invitedSessionNudge) {
       dynamicBlock = `${dynamicBlock}\n\nOPERATIONAL NUDGE:\n${promptContext.invitedSessionNudge}`;
+    }
+    if (promptContext.tendingConversationPrompt) {
+      dynamicBlock = `${dynamicBlock}\n\n${promptContext.tendingConversationPrompt}`;
     }
     // Append Slack formatting rules to the static block when the response will
     // render in a Slack DM. Keeping this in the static block preserves prompt

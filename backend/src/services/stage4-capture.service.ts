@@ -36,6 +36,37 @@ function needLabelMatches(label: string, need: string): boolean {
   return denom > 0 && shared / denom >= 0.5;
 }
 
+async function getSessionMemberUserIds(sessionId: string): Promise<Set<string>> {
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: {
+      relationship: {
+        select: {
+          members: { select: { userId: true } },
+        },
+      },
+    },
+  });
+  return new Set(session?.relationship.members.map((member) => member.userId) ?? []);
+}
+
+function validateOperationOwnerUserId(
+  operation: Stage4InventoryOperation,
+  memberUserIds: Set<string>,
+  fallbackUserId: string
+): Stage4InventoryOperation {
+  if (!('ownerUserId' in operation) || !operation.ownerUserId) {
+    return operation;
+  }
+  if (memberUserIds.has(operation.ownerUserId)) {
+    return operation;
+  }
+  logger.warn('[stage4-capture] Ignoring non-member ownerUserId from AI output', {
+    ownerUserId: operation.ownerUserId,
+  });
+  return { ...operation, ownerUserId: fallbackUserId };
+}
+
 export async function linkProposalToIdentifiedNeeds(
   proposalId: string,
   sessionId: string,
@@ -826,11 +857,15 @@ export async function captureStage4Turn(input: Stage4CaptureInput): Promise<Stag
     orderBy: { updatedAt: 'desc' },
   })) as ProposalRow[];
 
-  const operations = extractAddOperations(input);
+  const rawOperations = extractAddOperations(input);
   const destructiveOrRevision = extractDestructiveOrRevisionOperation(input.userMessage, proposals);
   if (destructiveOrRevision.operation) {
-    operations.push(destructiveOrRevision.operation);
+    rawOperations.push(destructiveOrRevision.operation);
   }
+  const sessionMemberUserIds = await getSessionMemberUserIds(input.sessionId);
+  const operations = rawOperations.map((operation) =>
+    validateOperationOwnerUserId(operation, sessionMemberUserIds, input.userId)
+  );
 
   const selection = extractSelection(input.userMessage, input.userId, proposals);
   const confidence = operations.length > 0 || selection

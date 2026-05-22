@@ -15,6 +15,56 @@ I hear you. That sounds really difficult.`;
       expect(result.thinking).toContain('FeelHeardCheck:Y');
     });
 
+    it('parses one singular Stage 3 need tag', () => {
+      const raw = `<thinking>Mode: NEEDS</thinking>
+<need>{"need":"to feel taken seriously","category":"RECOGNITION","description":"I need to feel taken seriously when I raise concerns.","evidence":["taken seriously"]}</need>
+That feels important enough to hold onto.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.proposedNeed).toEqual({
+        need: 'to feel taken seriously',
+        category: 'RECOGNITION',
+        description: 'I need to feel taken seriously when I raise concerns.',
+        evidence: ['taken seriously'],
+      });
+      expect(result.proposedNeeds).toEqual([]);
+      expect(result.needParseError).toBeNull();
+      expect(result.response).toBe('That feels important enough to hold onto.');
+    });
+
+    it('parses one Stage 3 need-action refine tag', () => {
+      const raw = `<thinking>Mode: NEEDS</thinking>
+<need-action type="refine" supersedes="need-old">{"need":"to feel respected","category":"RECOGNITION","description":"I need to feel respected in hard conversations.","evidence":["respected"]}</need-action>
+That version is clearer.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.needAction).toEqual({
+        type: 'refine',
+        supersedes: 'need-old',
+        need: 'to feel respected',
+        category: 'RECOGNITION',
+        description: 'I need to feel respected in hard conversations.',
+        evidence: ['respected'],
+      });
+      expect(result.needParseError).toBeNull();
+      expect(result.response).toBe('That version is clearer.');
+    });
+
+    it('rejects multiple Stage 3 need tags in one turn', () => {
+      const raw = `<thinking>Mode: NEEDS</thinking>
+<need>{"need":"one","category":"SAFETY","description":"one","evidence":[]}</need>
+<need>{"need":"two","category":"CONNECTION","description":"two","evidence":[]}</need>
+I found two.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.proposedNeed).toBeNull();
+      expect(result.needAction).toBeNull();
+      expect(result.needParseError).toBe('Only one <need> or <need-action> tag is allowed per turn.');
+    });
+
     it('extracts clean response text without tags', () => {
       const raw = `<thinking>
 Mode:Witness | FeelHeardCheck:N
@@ -462,6 +512,23 @@ Response after multiple newlines.`;
       const result = parseMicroTagResponse(raw);
       expect(result.response).toBe('');
       expect(result.draft).toBe('A proposed empathy statement.');
+    });
+
+    it('extracts Stage 4 walkthrough action and strips it from visible response', () => {
+      const raw = `<thinking>Mode: REPAIR</thinking>
+<stage4_walkthrough>
+{ "action": "SKIP", "needId": "need-2", "reason": "User wants to leave this aside for now." }
+</stage4_walkthrough>
+Okay, we can leave that one for now.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.stage4WalkthroughAction).toEqual({
+        action: 'SKIP',
+        needId: 'need-2',
+        reason: 'User wants to leave this aside for now.',
+      });
+      expect(result.response).toBe('Okay, we can leave that one for now.');
     });
   });
 });

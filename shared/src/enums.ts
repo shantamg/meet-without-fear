@@ -200,6 +200,61 @@ export enum TendingEntryStatus {
   CANCELLED = 'CANCELLED',
 }
 
+export enum TendingFollowThroughStatus {
+  HAPPENED = 'HAPPENED',
+  PARTLY_HAPPENED = 'PARTLY_HAPPENED',
+  DID_NOT_HAPPEN = 'DID_NOT_HAPPEN',
+  NOT_SURE = 'NOT_SURE',
+}
+
+export enum TendingHelpfulnessStatus {
+  HELPED = 'HELPED',
+  PARTLY_HELPED = 'PARTLY_HELPED',
+  DID_NOT_HELP = 'DID_NOT_HELP',
+  NOT_SURE = 'NOT_SURE',
+}
+
+export enum TendingBlockerCategory {
+  FORGOT = 'FORGOT',
+  TOO_HARD = 'TOO_HARD',
+  TOO_FREQUENT = 'TOO_FREQUENT',
+  UNCLEAR = 'UNCLEAR',
+  PARTNER_DID_NOT_DO_PART = 'PARTNER_DID_NOT_DO_PART',
+  I_DID_NOT_DO_PART = 'I_DID_NOT_DO_PART',
+  CIRCUMSTANCES_CHANGED = 'CIRCUMSTANCES_CHANGED',
+  NO_LONGER_WANTED = 'NO_LONGER_WANTED',
+  OTHER = 'OTHER',
+}
+
+export enum TendingNeedResolutionStatus {
+  RESOLVED = 'RESOLVED',
+  IMPROVING = 'IMPROVING',
+  STILL_OPEN = 'STILL_OPEN',
+  CHANGED = 'CHANGED',
+  NOT_SURE = 'NOT_SURE',
+}
+
+export enum TendingNextAction {
+  FULL_CLOSURE = 'FULL_CLOSURE',
+  EXTEND = 'EXTEND',
+  ADJUST_COMMITMENT = 'ADJUST_COMMITMENT',
+  REOPEN_STRATEGY_WORK = 'REOPEN_STRATEGY_WORK',
+  NEW_PROCESS = 'NEW_PROCESS',
+  PARTIAL_CLOSURE = 'PARTIAL_CLOSURE',
+}
+
+export enum TendingReminderScope {
+  PRIVATE = 'PRIVATE',
+  SHARED = 'SHARED',
+}
+
+export enum TendingCoordinationStatus {
+  WAITING_FOR_PARTNER = 'WAITING_FOR_PARTNER',
+  READY_TO_RESOLVE = 'READY_TO_RESOLVE',
+  RESOLVED = 'RESOLVED',
+  TIMED_OUT = 'TIMED_OUT',
+}
+
 // ============================================================================
 // Global Library
 // ============================================================================

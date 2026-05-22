@@ -12,6 +12,7 @@ import {
   UseQueryOptions,
   UseMutationOptions,
   InfiniteData,
+  QueryClient,
 } from '@tanstack/react-query';
 import { get, post, del, ApiClientError } from '../lib/api';
 import { useAuth } from './useAuth';
@@ -37,6 +38,11 @@ import {
   ConfirmNeedsRequest,
   NeedAdjustment,
   ConfirmNeedsResponse,
+  InterpretNeedEditRequest,
+  InterpretNeedEditResponse,
+  ApplyNeedEditsRequest,
+  ApplyNeedEditsResponse,
+  DeleteNeedResponse,
   GetNeedsComparisonResponse,
   ValidateNeedsResponse,
   AddNeedRequest,
@@ -57,10 +63,13 @@ import {
   CloseStage4Request,
   CloseStage4Response,
   GetTendingEntriesResponse,
+  GetTendingHistoryResponse,
   SubmitTendingResponseRequest,
   SubmitTendingResponseResponse,
   SubmitTendingCheckinRequest,
   SubmitTendingCheckinResponse,
+  CreateTendingBetweenPeriodNoteRequest,
+  CreateTendingBetweenPeriodNoteResponse,
   CreateTendingReentryRequest,
   CreateTendingReentryResponse,
   AgreementDTO,
@@ -84,6 +93,7 @@ import {
   RefineValidationFeedbackRequest,
   RefineValidationFeedbackResponse,
   StrategyPhase,
+  IdentifiedNeedDTO,
 } from '@meet-without-fear/shared';
 
 // Import query keys from centralized file to avoid circular dependencies
@@ -143,6 +153,37 @@ function patchStage3Gates(
       };
     },
   );
+}
+
+export function patchNeedsCacheWithNeed(
+  queryClient: QueryClient,
+  sessionId: string,
+  need: IdentifiedNeedDTO,
+): void {
+  queryClient.setQueryData<GetNeedsResponse>(stageKeys.needs(sessionId), (old) => {
+    if (!old) {
+      return {
+        needs: [need],
+        synthesizedAt: need.createdAt ?? new Date().toISOString(),
+      };
+    }
+
+    const existingIndex = old.needs.findIndex((item) => item.id === need.id);
+    const needs =
+      existingIndex >= 0
+        ? old.needs.map((item) => (item.id === need.id ? need : item))
+        : [...old.needs, need];
+
+    return {
+      ...old,
+      needs: [...needs].sort((a, b) => {
+        const aTime = a.createdAt ? Date.parse(a.createdAt) : 0;
+        const bTime = b.createdAt ? Date.parse(b.createdAt) : 0;
+        return aTime - bTime;
+      }),
+      synthesizedAt: old.synthesizedAt ?? need.createdAt ?? new Date().toISOString(),
+    };
+  });
 }
 
 // ============================================================================
@@ -1483,7 +1524,7 @@ export function useNeeds(
       return get<GetNeedsResponse>(`/sessions/${sessionId}/needs`);
     },
     enabled: !!sessionId,
-    staleTime: 0, // Always treat as stale so Ably event invalidation triggers fresh fetch
+    staleTime: 30_000, // Ably need.* events keep this cache fresh with setQueryData.
     ...options,
   });
 }
@@ -1510,7 +1551,6 @@ export function useCaptureNeeds(
       });
     },
     onSuccess: (_, { sessionId }) => {
-      queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
@@ -1567,14 +1607,26 @@ export function useConfirmNeeds(
       }
     },
     onSuccess: (_, { sessionId }) => {
+      const confirmedAt = new Date().toISOString();
       patchStage3Gates(queryClient, sessionId, {
         needsConfirmed: true,
-        needsConfirmedAt: new Date().toISOString(),
+        needsConfirmedAt: confirmedAt,
       });
-      queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+      queryClient.setQueryData<GetNeedsResponse>(stageKeys.needs(sessionId), (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          needs: old.needs.map((need) =>
+            need.deletedAt || need.supersededByNeedId
+              ? need
+              : { ...need, confirmed: true, lockedAt: need.lockedAt ?? confirmedAt }
+          ),
+        };
+      });
       queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
     },
     ...options,
   });
@@ -1603,10 +1655,100 @@ export function useAddNeed(
         description,
       });
     },
-    onSuccess: (_, { sessionId }) => {
-      queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+    onSuccess: (data, { sessionId }) => {
+      patchNeedsCacheWithNeed(queryClient, sessionId, data.need);
     },
     ...options,
+  });
+}
+
+export function useInterpretNeedEdit(
+  options?: Omit<
+    UseMutationOptions<
+      InterpretNeedEditResponse,
+      ApiClientError,
+      { sessionId: string } & InterpretNeedEditRequest
+    >,
+    'mutationFn'
+  >
+) {
+  return useMutation({
+    mutationFn: async ({ sessionId, request, targetNeedId, conversationHistory }) => {
+      return post<InterpretNeedEditResponse>(`/sessions/${sessionId}/needs/interpret-edit-request`, {
+        request,
+        targetNeedId,
+        conversationHistory,
+      });
+    },
+    ...options,
+  });
+}
+
+export function useApplyNeedEdits(
+  options?: Omit<
+    UseMutationOptions<
+      ApplyNeedEditsResponse,
+      ApiClientError,
+      { sessionId: string } & ApplyNeedEditsRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+  const userOnSuccess = options?.onSuccess;
+
+  return useMutation({
+    mutationFn: async ({ sessionId, operations }) => {
+      return post<ApplyNeedEditsResponse>(`/sessions/${sessionId}/needs/apply-edits`, {
+        operations,
+      });
+    },
+    ...options,
+    onSuccess: (data, variables, context) => {
+      queryClient.setQueryData<GetNeedsResponse>(stageKeys.needs(variables.sessionId), (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          needs: data.needs,
+          synthesizedAt: old.synthesizedAt ?? new Date().toISOString(),
+        };
+      });
+      userOnSuccess?.(data, variables, context, undefined as never);
+    },
+  });
+}
+
+export function useRemoveNeed(
+  options?: Omit<
+    UseMutationOptions<
+      DeleteNeedResponse,
+      ApiClientError,
+      { sessionId: string; needId: string }
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+  const userOnSuccess = options?.onSuccess;
+
+  return useMutation({
+    mutationFn: async ({ sessionId, needId }) => {
+      return del<DeleteNeedResponse>(`/sessions/${sessionId}/needs/${needId}`);
+    },
+    ...options,
+    onSuccess: (data, variables, context) => {
+      queryClient.setQueryData<GetNeedsResponse>(stageKeys.needs(variables.sessionId), (old) => {
+        if (!old) return old;
+        if (data.need) {
+          return {
+            ...old,
+            needs: old.needs.map((need) => (need.id === data.needId ? data.need! : need)),
+          };
+        }
+        return old;
+      });
+      userOnSuccess?.(data, variables, context, undefined as never);
+    },
   });
 }
 
@@ -1636,7 +1778,6 @@ export function useConsentShareNeeds(
         needsShared: true,
         sharedAt: data.sharedAt,
       });
-      queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
@@ -1770,7 +1911,7 @@ export function useRequestStrategySuggestions(
     UseMutationOptions<
       { suggestions: StrategyDTO[]; source: 'AI_GENERATED' },
       ApiClientError,
-      { sessionId: string; count?: number; focusNeeds?: string[] }
+      { sessionId: string; count?: number; focusNeeds?: string[]; needId?: string }
     >,
     'mutationFn'
   >
@@ -1778,14 +1919,15 @@ export function useRequestStrategySuggestions(
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ sessionId, count, focusNeeds }) => {
+    mutationFn: async ({ sessionId, count, focusNeeds, needId }) => {
       return post<{ suggestions: StrategyDTO[]; source: 'AI_GENERATED' }>(
-        `/sessions/${sessionId}/strategies/suggestions`,
-        { count, focusNeeds }
+        `/sessions/${sessionId}/stage4/proposals/suggest`,
+        { count, focusNeeds, needId }
       );
     },
     onSuccess: (_, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.stage4(sessionId) });
     },
     ...options,
   });
@@ -2035,11 +2177,9 @@ export function useStage4State(
 }
 
 function refreshStage4Caches(queryClient: ReturnType<typeof useQueryClient>, sessionId: string) {
-  queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
   queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
   queryClient.refetchQueries({ queryKey: stageKeys.strategiesReveal(sessionId) });
   queryClient.refetchQueries({ queryKey: stageKeys.agreements(sessionId) });
-  queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
   queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
   queryClient.refetchQueries({ queryKey: sessionKeys.state(sessionId) });
 }
@@ -2132,6 +2272,36 @@ export function useSubmitStage4Selections(
       refreshStage4Caches(queryClient, sessionId);
     },
     ...options,
+  });
+}
+
+export function useUpdateStage4WalkthroughNeed() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { state: GetStage4StateResponse },
+    ApiClientError,
+    { sessionId: string; needId: string; action: 'covered' | 'skip' },
+    { previous: GetStage4StateResponse | undefined }
+  >({
+    mutationFn: async ({ sessionId, needId, action }) =>
+      post<{ state: GetStage4StateResponse }, { action: 'covered' | 'skip' }>(
+        `/sessions/${sessionId}/stage4/walkthrough/needs/${needId}`,
+        { action }
+      ),
+    onMutate: async ({ sessionId }) => {
+      const key = stageKeys.stage4(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      return { previous: queryClient.getQueryData<GetStage4StateResponse>(key) };
+    },
+    onError: (_err, { sessionId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(stageKeys.stage4(sessionId), context.previous);
+      }
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      refreshStage4Caches(queryClient, sessionId);
+    },
   });
 }
 
@@ -2370,6 +2540,25 @@ export function useTendingEntries(
   });
 }
 
+export function useTendingHistory(
+  sessionId: string | undefined,
+  options?: Omit<
+    UseQueryOptions<GetTendingHistoryResponse, ApiClientError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: [...stageKeys.tending(sessionId || ''), 'history'] as const,
+    queryFn: async () => {
+      if (!sessionId) throw new Error('Session ID is required');
+      return get<GetTendingHistoryResponse>(`/sessions/${sessionId}/tending/history`);
+    },
+    enabled: !!sessionId,
+    staleTime: 0,
+    ...options,
+  });
+}
+
 /**
  * Submit the current user's review for an open Tending entry.
  */
@@ -2398,11 +2587,14 @@ export function useSubmitTendingResponse(
         (old) => {
           const existing = old?.entries ?? [];
           const withoutUpdated = existing.filter((entry) => entry.id !== data.entry.id);
-          return { entries: [data.entry, ...withoutUpdated] };
+          return {
+            entries: [data.entry, ...withoutUpdated],
+            coordinationCycles: old?.coordinationCycles,
+            betweenPeriodNotes: old?.betweenPeriodNotes,
+          };
         }
       );
-      queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
-      queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
+      queryClient.refetchQueries({ queryKey: [...stageKeys.tending(sessionId), 'history'] });
     },
     ...options,
   });
@@ -2432,7 +2624,44 @@ export function useSubmitTendingCheckin(
     },
     onSuccess: (_data, { sessionId }) => {
       queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
+      queryClient.refetchQueries({ queryKey: [...stageKeys.tending(sessionId), 'history'] });
       queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Add a private between-period note that can optionally be carried into check-in later.
+ */
+export function useCreateTendingBetweenPeriodNote(
+  options?: Omit<
+    UseMutationOptions<
+      CreateTendingBetweenPeriodNoteResponse,
+      ApiClientError,
+      { sessionId: string } & CreateTendingBetweenPeriodNoteRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, ...request }) => {
+      return post<CreateTendingBetweenPeriodNoteResponse, CreateTendingBetweenPeriodNoteRequest>(
+        `/sessions/${sessionId}/tending/notes`,
+        request
+      );
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData<GetTendingEntriesResponse>(
+        stageKeys.tending(sessionId),
+        (old) => ({
+          entries: old?.entries ?? [],
+          coordinationCycles: old?.coordinationCycles,
+          betweenPeriodNotes: [...(old?.betweenPeriodNotes ?? []), data.note],
+        })
+      );
     },
     ...options,
   });
@@ -2468,7 +2697,11 @@ export function useSetTendingEntryShare(
           const next = existing.map((entry) =>
             entry.id === data.entry.id ? data.entry : entry
           );
-          return { entries: next };
+          return {
+            entries: next,
+            coordinationCycles: old?.coordinationCycles,
+            betweenPeriodNotes: old?.betweenPeriodNotes,
+          };
         }
       );
     },
@@ -2504,7 +2737,11 @@ export function useCreateTendingReentry(
         (old) => {
           const existing = old?.entries ?? [];
           const withoutCreated = existing.filter((entry) => entry.id !== data.entry.id);
-          return { entries: [data.entry, ...withoutCreated] };
+          return {
+            entries: [data.entry, ...withoutCreated],
+            coordinationCycles: old?.coordinationCycles,
+            betweenPeriodNotes: old?.betweenPeriodNotes,
+          };
         }
       );
       queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });

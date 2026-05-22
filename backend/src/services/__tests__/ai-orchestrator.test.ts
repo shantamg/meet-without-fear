@@ -116,12 +116,12 @@ jest.mock('../dispatch-handler', () => ({
 // ============================================================================
 
 import { orchestrateResponse, type OrchestratorContext } from '../ai-orchestrator';
-import { getModelCompletion } from '../../lib/bedrock';
+import { getModelCompletionWithTools } from '../../lib/bedrock';
 import { prisma } from '../../lib/prisma';
 import { publishContextUpdated } from '../realtime';
 import { handleDispatch } from '../dispatch-handler';
 
-const mockGetModelCompletion = getModelCompletion as jest.MockedFunction<typeof getModelCompletion>;
+const mockGetModelCompletion = getModelCompletionWithTools as jest.Mock;
 
 // ============================================================================
 // Fixtures
@@ -689,7 +689,7 @@ Normal response text here.`;
       expect(model).toBe('sonnet');
     });
 
-    it('uses correct maxTokens for sonnet', async () => {
+    it('uses compact maxTokens for the state-capture pass', async () => {
       mockGetModelCompletion.mockResolvedValue(MICRO_TAG_RESPONSE);
 
       await orchestrateResponse(buildContext());
@@ -697,11 +697,7 @@ Normal response text here.`;
       const callArgs = mockGetModelCompletion.mock.calls[0];
       const options = callArgs[1] as any;
 
-      if (callArgs[0] === 'sonnet') {
-        expect(options.maxTokens).toBe(2048);
-      } else {
-        expect(options.maxTokens).toBe(1536);
-      }
+      expect(options.maxTokens).toBe(1024);
     });
 
     it('includes callType ORCHESTRATED_RESPONSE', async () => {

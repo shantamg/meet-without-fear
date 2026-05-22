@@ -12,6 +12,7 @@ export const getAbly = jest.fn(() => ({
 })) as any;
 
 export const publishSessionEvent = jest.fn(() => Promise.resolve()) as any;
+export const publishUserEvent = jest.fn(() => Promise.resolve()) as any;
 export const isUserPresent = jest.fn(() => Promise.resolve(false)) as any;
 export const getSessionPresence = jest.fn(() => Promise.resolve([])) as any;
 export const publishPresenceUpdate = jest.fn(() => Promise.resolve()) as any;

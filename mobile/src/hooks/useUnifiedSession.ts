@@ -301,7 +301,9 @@ export function useUnifiedSession(
 
   // Derive needs state for gating the side-by-side reveal query.
   const needsForGating = needsData?.needs ?? [];
-  const allNeedsConfirmedForGating = needsForGating.length > 0 && needsForGating.every((n) => n.confirmed);
+  const liveNeedsForGating = needsForGating.filter((n) => !n.deletedAt && !n.supersededByNeedId);
+  const allNeedsConfirmedForGating =
+    liveNeedsForGating.length > 0 && liveNeedsForGating.every((n) => Boolean(n.confirmed));
   const myNeedsSharedForGating =
     (progressData?.myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true;
 
@@ -357,8 +359,8 @@ export function useUnifiedSession(
   const { mutate: resubmitEmpathy, isPending: isResubmittingEmpathy } = useResubmitEmpathy();
   const { mutate: skipRefinement } = useSkipRefinement();
   const { mutate: confirmNeeds, isPending: isConfirmingNeeds } = useConfirmNeeds();
-  const { mutate: consentShareNeeds } = useConsentShareNeeds();
-  const { mutate: validateNeedsMutation, isPending: isValidatingNeeds } = useValidateNeeds();
+  const { mutate: consentShareNeeds, isPending: isSharingNeeds } = useConsentShareNeeds();
+  const { mutate: validateNeedsMutation } = useValidateNeeds();
   const { mutate: proposeStrategy, isPending: isProposing } = useProposeStrategy();
   const { mutate: requestSuggestions, isPending: isGenerating } =
     useRequestStrategySuggestions();
@@ -390,9 +392,8 @@ export function useUnifiedSession(
       if (sessionId && metadata.proposedStrategies && metadata.proposedStrategies.length > 0) {
         queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
       }
-      // Invalidate needs cache when AI captures reviewable needs (Stage 3)
+      // Stage 3 need cards are updated by need.* Ably events with setQueryData.
       if (sessionId && metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
@@ -404,6 +405,11 @@ export function useUnifiedSession(
       }
       if (sessionId && metadata.needsCaptured) {
         queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      }
+      if (sessionId && metadata.stage4WalkthroughAction && metadata.stage4WalkthroughAction.action !== 'NONE') {
+        queryClient.invalidateQueries({ queryKey: stageKeys.stage4(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
@@ -510,6 +516,7 @@ export function useUnifiedSession(
   useEffect(() => {
     // Only mark viewed once per session load, when we have messages
     if (!sessionId || hasMarkedViewed.current || messages.length === 0) return;
+    if (session?.status === SessionStatus.CREATED) return;
 
     // Get the newest message ID (last in the chronologically sorted array)
     const newestMessageId = messages[messages.length - 1]?.id;
@@ -522,7 +529,7 @@ export function useUnifiedSession(
     // the "New" label and the new messages get typewriter animation.
     // The separator will naturally be gone when user returns to the session since
     // they will get a new lastSeenChatItemId from the server (updated by markViewed).
-  }, [sessionId, messages, markViewed]);
+  }, [sessionId, messages, markViewed, session?.status]);
 
   // Reset the flags when sessionId changes (user navigates to a different session)
   useEffect(() => {
@@ -570,7 +577,8 @@ export function useUnifiedSession(
 
   // Needs confirmation state
   const needs = useMemo(() => needsData?.needs ?? [], [needsData?.needs]);
-  const allNeedsConfirmed = needs.length > 0 && needs.every((n) => n.confirmed);
+  const liveNeeds = needs.filter((n) => !n.deletedAt && !n.supersededByNeedId);
+  const allNeedsConfirmed = liveNeeds.length > 0 && liveNeeds.every((n) => Boolean(n.confirmed));
   const needsRevealValidationItems = useMemo<LegacyNeedsRevealItem[]>(() => [], []);
   const needsRevealReady =
     (needsComparisonData?.myNeeds?.length ?? 0) > 0 &&
@@ -734,8 +742,8 @@ export function useUnifiedSession(
 
     // Stage 3: Need Mapping cards
     // Note: needs-summary and needs-reveal-preview inline cards removed.
-    // These are now shown in the NeedsDrawer bottom sheet, opened via
-    // the above-input buttons (needs-review, needs-reveal-validate).
+    // Needs render inline in the transcript; reveal validation still opens
+    // the side-by-side review surface.
 
     // Stage 4: Strategic Repair cards
     if (currentStage === Stage.STRATEGIC_REPAIR) {
@@ -825,7 +833,7 @@ export function useUnifiedSession(
   // -------------------------------------------------------------------------
 
   const handleSendMessage = useCallback(
-    (content: string) => {
+    (content: string, options?: { refiningNeedId?: string | null }) => {
       if (!sessionId) return;
 
       // Prevent duplicate submissions
@@ -839,7 +847,7 @@ export function useUnifiedSession(
 
       // Send message with SSE streaming for AI response
       // Metadata handling is done via onMetadata callback to the streaming hook
-      streamingSendMessage({ sessionId, content, currentStage });
+      streamingSendMessage({ sessionId, content, currentStage, refiningNeedId: options?.refiningNeedId ?? null });
     },
     [sessionId, currentStage, streamingSendMessage, isSending, isStreaming]
   );
@@ -1066,9 +1074,9 @@ export function useUnifiedSession(
 
   const handleConfirmAllNeeds = useCallback(
     (onSuccess?: () => void) => {
-      if (!sessionId || needs.length === 0) return;
+      if (!sessionId || liveNeeds.length === 0) return;
 
-      const needIds = needs.map((need) => need.id);
+      const needIds = liveNeeds.map((need) => need.id);
 
       confirmNeeds(
         { sessionId, needIds },
@@ -1077,14 +1085,14 @@ export function useUnifiedSession(
         }
       );
     },
-    [sessionId, needs, confirmNeeds]
+    [sessionId, liveNeeds, confirmNeeds]
   );
 
   const handleConsentToShareNeeds = useCallback(
     (onSuccess?: () => void) => {
-      if (!sessionId || needs.length === 0) return;
+      if (!sessionId || liveNeeds.length === 0) return;
 
-      const needIds = needs.map((need) => need.id);
+      const needIds = liveNeeds.map((need) => need.id);
 
       consentShareNeeds(
         { sessionId, needIds },
@@ -1095,7 +1103,7 @@ export function useUnifiedSession(
         }
       );
     },
-    [sessionId, needs, consentShareNeeds]
+    [sessionId, liveNeeds, consentShareNeeds]
   );
 
   const handleValidateNeedsReveal = useCallback(
@@ -1298,7 +1306,7 @@ export function useUnifiedSession(
     isRespondingToShareOffer,
     isProposing,
     isConfirmingNeeds,
-    isValidatingNeeds,
+    isSharingNeeds,
 
     // Actions
     sendMessage: handleSendMessage,

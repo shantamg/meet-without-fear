@@ -21,6 +21,7 @@ import { designFonts, useAppAppearance } from '../theme';
 function getSemanticCategory(type: ChatIndicatorType): 'informational' | 'success' | 'warning' {
   switch (type) {
     case 'empathy-validated': return 'success';
+    case 'partner-empathy-confirmed': return 'success';
     case 'reconciler-gaps-found':
     case 'strategies-ready':
       return 'warning';
@@ -54,6 +55,7 @@ export type ChatIndicatorType =
   | 'agreement-reached'
   // Semantic indicator types
   | 'empathy-validated'         // Partner confirmed your understanding (success)
+  | 'partner-empathy-confirmed' // You confirmed partner's understanding (success)
   | 'stage-chapter';            // Stage transition chapter marker (informational)
 
 interface ChatIndicatorProps {
@@ -158,7 +160,7 @@ export function ChatIndicator({
         return `${name} shared empathy • Awaiting review`;
       // Stage 3: Need Mapping
       case 'needs-identified':
-        return 'Needs identified';
+        return 'Need added';
       case 'common-ground-found':
         return 'Needs overlap ready to review';
       // Stage 4: Strategic Repair
@@ -172,23 +174,16 @@ export function ChatIndicator({
       case 'empathy-validated':
         const validatorName = metadata?.partnerName || 'Partner';
         return `${validatorName} confirmed your understanding`;
+      case 'partner-empathy-confirmed': {
+        const partner = metadata?.partnerName || 'Partner';
+        return `You confirmed ${partner}'s understanding`;
+      }
       case 'stage-chapter':
         return metadata?.stageName || 'New Chapter';
       default:
         return '';
     }
   };
-
-  // Whether this indicator links to another page (shows arrow)
-  const hasArrow = type === 'context-shared'
-    || type === 'empathy-shared'
-    || type === 'needs-identified'
-    || type === 'common-ground-found'
-    || type === 'strategies-ready'
-    || type === 'overlap-revealed'
-    || type === 'agreement-reached';
-  const hasLeadingArrow = (type === 'context-shared' || type === 'empathy-shared')
-    && metadata?.isFromMe === false;
 
   const getLineStyle = () => {
     switch (type) {
@@ -224,6 +219,7 @@ export function ChatIndicator({
         return styles.agreementReachedLine;
       // Semantic indicator types
       case 'empathy-validated':
+      case 'partner-empathy-confirmed':
       case 'stage-chapter': {
         const category = getSemanticCategory(type);
         return { backgroundColor: semanticColors[category].line };
@@ -267,6 +263,7 @@ export function ChatIndicator({
         return styles.agreementReachedText;
       // Semantic indicator types
       case 'empathy-validated':
+      case 'partner-empathy-confirmed':
       case 'stage-chapter': {
         const category = getSemanticCategory(type);
         return { color: semanticColors[category].text };
@@ -309,13 +306,7 @@ export function ChatIndicator({
     <View style={styles.lineContainer}>
       <View style={[styles.line, getLineStyle()]} />
       <View style={styles.textContainer}>
-        {hasArrow && hasLeadingArrow && (
-          <Text style={[styles.arrow, getTextStyle()]}>→</Text>
-        )}
         <Text style={[styles.text, getTextStyle()]}>{getIndicatorText()}</Text>
-        {hasArrow && !hasLeadingArrow && (
-          <Text style={[styles.arrow, getTextStyle()]}>→</Text>
-        )}
       </View>
       <View style={[styles.line, getLineStyle()]} />
     </View>
@@ -375,10 +366,6 @@ const useStyles = () => {
       textTransform: 'uppercase',
       letterSpacing: 1,
       fontWeight: '700',
-    },
-    arrow: {
-      fontSize: 16,
-      fontWeight: '600',
     },
     // Stage chapter bar — full-width sticky section header at stage transitions
     stageChapterBar: {

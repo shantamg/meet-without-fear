@@ -12,18 +12,72 @@
  */
 
 import { Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma, StageProgress } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { confirmNeedsRequestSchema, ConsentContentType, MessageRole, NeedCategory } from '@meet-without-fear/shared';
 import { notifyPartner, publishMessageAIResponse, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
-import { captureProposedNeedsForUser } from '../services/needs';
+import { captureProposedNeedsForUser, toIdentifiedNeedDTO, withNeedReframingWarning } from '../services/needs';
+import { interpretNeedEditRequest } from '../services/needs-edit-interpreter.service';
+import {
+  applyNeedEdits,
+  deleteNeed,
+  NeedEditForbiddenError,
+  NeedEditValidationError,
+} from '../services/needs-edit-applier.service';
 
 // ============================================================================
 // Helpers
 // ============================================================================
+
+function buildStage4TransitionContent(firstNeed?: string | null): string {
+  const needText = firstNeed?.trim();
+  const needLine = needText
+    ? `Let's start with one of yours: ${needText}.`
+    : "Let's start with one of yours.";
+
+  return [
+    'You have both sent your needs and can now see what each of you named.',
+    `${needLine} The work now is not to decide everything, just to put ideas on the table. What might help honor that need?`,
+  ].join('\n\n');
+}
+
+async function getFirstStage4NeedText(sessionId: string, userId: string): Promise<string | null> {
+  const vessel = await getOrCreateUserVessel(sessionId, userId);
+  const firstNeed = await prisma.identifiedNeed.findFirst({
+    where: {
+      vesselId: vessel.id,
+      confirmed: true,
+      deletedAt: null,
+      supersededByNeedId: null,
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { need: true },
+  });
+
+  return firstNeed?.need ?? null;
+}
+
+async function createStage4TransitionMessage(
+  sessionId: string,
+  forUserId: string
+): Promise<{ id: string; content: string; timestamp: Date; forUserId: string }> {
+  const firstNeed = await getFirstStage4NeedText(sessionId, forUserId);
+  const message = await prisma.message.create({
+    data: {
+      sessionId,
+      senderId: null,
+      forUserId,
+      role: 'AI',
+      content: buildStage4TransitionContent(firstNeed),
+      stage: 4,
+    },
+  });
+
+  return { id: message.id, content: message.content, timestamp: message.timestamp, forUserId };
+}
 
 /**
  * Get or create user vessel for a session
@@ -73,6 +127,81 @@ async function hasPartnerSharedNeeds(
   return gates?.needsShared === true;
 }
 
+async function completeStage3AfterMutualNeedsShare(
+  sessionId: string,
+  currentUserId: string,
+  partnerId: string,
+  now: Date,
+  currentProgress: Pick<StageProgress, 'gatesSatisfied'> | null | undefined,
+  partnerProgress: Pick<StageProgress, 'gatesSatisfied'> | null | undefined
+): Promise<void> {
+  const reviewedAt = now.toISOString();
+  const mergeGates = (progress: Pick<StageProgress, 'gatesSatisfied'> | null | undefined) => ({
+    ...((progress?.gatesSatisfied as Record<string, unknown> | null) || {}),
+    needsShared: true,
+    needsValidated: true,
+    needsValidatedAt: reviewedAt,
+    needsRevealReviewedAt: reviewedAt,
+  }) satisfies Prisma.InputJsonValue;
+
+  for (const uid of [currentUserId, partnerId]) {
+    const progress = uid === currentUserId ? currentProgress : partnerProgress;
+    await prisma.stageProgress.update({
+      where: {
+        sessionId_userId_stage: {
+          sessionId,
+          userId: uid,
+          stage: 3,
+        },
+      },
+      data: {
+        gatesSatisfied: mergeGates(progress),
+        status: 'COMPLETED',
+        completedAt: now,
+      },
+    });
+
+    await prisma.stageProgress.upsert({
+      where: {
+        sessionId_userId_stage: {
+          sessionId,
+          userId: uid,
+          stage: 4,
+        },
+      },
+      create: {
+        sessionId,
+        userId: uid,
+        stage: 4,
+        status: 'IN_PROGRESS',
+        startedAt: now,
+      },
+      update: {},
+    });
+  }
+
+  const transitionMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
+  for (const uid of [currentUserId, partnerId]) {
+    transitionMessages.push(await createStage4TransitionMessage(sessionId, uid));
+  }
+
+  for (const transitionMessage of transitionMessages) {
+    await publishSessionEvent(sessionId, 'partner.stage_completed', {
+      forUserId: transitionMessage.forUserId,
+      previousStage: 3,
+      currentStage: 4,
+      userId: currentUserId,
+      triggeredByUserId: currentUserId,
+      message: {
+        id: transitionMessage.id,
+        content: transitionMessage.content,
+        timestamp: transitionMessage.timestamp,
+        forUserId: transitionMessage.forUserId,
+      },
+    });
+  }
+}
+
 async function hasPartnerValidatedNeeds(
   sessionId: string,
   currentUserId: string
@@ -96,6 +225,18 @@ async function hasPartnerValidatedNeeds(
 
 function isNeedCategory(value: unknown): value is NeedCategory {
   return typeof value === 'string' && Object.values(NeedCategory).includes(value as NeedCategory);
+}
+
+function needEditErrorResponse(res: Response, error: unknown): boolean {
+  if (error instanceof NeedEditValidationError) {
+    errorResponse(res, 'VALIDATION_ERROR', error.message, error.statusCode);
+    return true;
+  }
+  if (error instanceof NeedEditForbiddenError) {
+    errorResponse(res, 'FORBIDDEN', error.message, error.statusCode);
+    return true;
+  }
+  return false;
 }
 
 // ============================================================================
@@ -175,15 +316,9 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
     });
 
     successResponse(res, {
-      needs: needs.map((n) => ({
-        id: n.id,
-        category: n.category,
-        need: n.need,
-        description: n.need, // Alias for compatibility
-        evidence: n.evidence,
-        aiConfidence: n.aiConfidence,
-        confirmed: n.confirmed,
-        createdAt: n.createdAt.toISOString(),
+      needs: needs.map((need) => toIdentifiedNeedDTO({
+        ...need,
+        category: need.category as NeedCategory,
       })),
       extracting: false,
       synthesizedAt: needs[0]?.createdAt.toISOString() ?? null,
@@ -218,6 +353,10 @@ export async function captureNeeds(req: Request, res: Response): Promise<void> {
 
     if (!Array.isArray(needs) || needs.length === 0) {
       errorResponse(res, 'VALIDATION_ERROR', 'needs array is required', 400);
+      return;
+    }
+    if (needs.length > 50) {
+      errorResponse(res, 'VALIDATION_ERROR', 'A maximum of 50 needs can be captured at once', 400);
       return;
     }
 
@@ -294,6 +433,8 @@ export async function captureNeeds(req: Request, res: Response): Promise<void> {
           evidence: n.evidence,
           confirmed: n.confirmed,
           aiConfidence: n.aiConfidence,
+          needsReframing: n.needsReframing,
+          reframingWarning: n.reframingWarning,
         })),
         capturedAt: capturedAt.toISOString(),
       },
@@ -378,6 +519,12 @@ export async function confirmNeeds(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    const gates = (progress?.gatesSatisfied as Record<string, unknown> | null) ?? {};
+    if (gates.needsShared === true) {
+      errorResponse(res, 'FORBIDDEN', 'Needs have already been shared and can no longer be edited', 403);
+      return;
+    }
+
     // Get user's vessel
     const userVessel = await getOrCreateUserVessel(sessionId, user.id);
 
@@ -401,10 +548,21 @@ export async function confirmNeeds(req: Request, res: Response): Promise<void> {
 
     // Process adjustments if provided
     if (adjustments && adjustments.length > 0) {
+      const userNeedIds = new Set(userNeeds.map((need) => need.id));
+      if (adjustments.some((adj) => !userNeedIds.has(adj.needId))) {
+        errorResponse(
+          res,
+          'VALIDATION_ERROR',
+          'Some adjustment need IDs are invalid or do not belong to you',
+          400
+        );
+        return;
+      }
+
       for (const adj of adjustments) {
         if (adj.correction) {
-          await prisma.identifiedNeed.update({
-            where: { id: adj.needId },
+          await prisma.identifiedNeed.updateMany({
+            where: { id: adj.needId, vesselId: userVessel.id },
             data: {
               need: adj.correction,
               confirmed: adj.confirmed,
@@ -415,16 +573,16 @@ export async function confirmNeeds(req: Request, res: Response): Promise<void> {
     }
 
     // Confirm all specified needs
+    const now = new Date();
     await prisma.identifiedNeed.updateMany({
       where: {
         id: { in: needIds },
         vesselId: userVessel.id,
       },
-      data: { confirmed: true },
+      data: { confirmed: true, lockedAt: now },
     });
 
     // Update stage progress with needsIdentifiedAt milestone
-    const now = new Date();
     const gatesSatisfied = {
       ...(progress?.gatesSatisfied as Record<string, unknown> || {}),
       needsConfirmed: true,
@@ -546,67 +704,100 @@ export async function consentToShareNeeds(
     // Get user's vessel
     const userVessel = await getOrCreateUserVessel(sessionId, user.id);
 
-    // Verify needs are confirmed
-    const confirmedNeeds = await prisma.identifiedNeed.findMany({
+    // Verify every shared need is a live confirmed need owned by this user.
+    const confirmedLiveNeeds = await prisma.identifiedNeed.findMany({
       where: {
         id: { in: needIds },
         vesselId: userVessel.id,
         confirmed: true,
+        deletedAt: null,
+        supersededByNeedId: null,
       },
     });
 
-    if (confirmedNeeds.length !== needIds.length) {
+    if (confirmedLiveNeeds.length !== needIds.length) {
       errorResponse(
         res,
         'VALIDATION_ERROR',
-        'All needs must be confirmed before sharing',
+        'All live needs must be confirmed before sharing',
         400
       );
       return;
     }
 
-    // Create consent records for each need
-    const now = new Date();
-    for (const needId of needIds) {
-      await prisma.consentRecord.create({
-        data: {
-          sessionId,
-          userId: user.id,
-          targetType: ConsentContentType.IDENTIFIED_NEED,
-          targetId: needId,
-          requestedByUserId: user.id, // Self-initiated consent
-          decision: 'GRANTED',
-          decidedAt: now,
-        },
-      });
+    const liveNeeds = await prisma.identifiedNeed.findMany({
+      where: {
+        vesselId: userVessel.id,
+        deletedAt: null,
+        supersededByNeedId: null,
+      },
+      select: { id: true },
+    });
+    const requestedNeedIds = new Set(needIds);
+    const allLiveNeedsRequested = liveNeeds.every((need) => requestedNeedIds.has(need.id));
+    if (liveNeeds.length !== needIds.length || !allLiveNeedsRequested) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Every live need must be shared together',
+        400
+      );
+      return;
     }
 
-    // Update stage progress
+    const now = new Date();
     const gatesSatisfied = {
       ...(progress?.gatesSatisfied as Record<string, unknown> || {}),
       needsShared: true,
       sharedAt: now.toISOString(),
     } satisfies Prisma.InputJsonValue;
 
-    await prisma.stageProgress.update({
-      where: {
-        sessionId_userId_stage: {
-          sessionId,
-          userId: user.id,
-          stage: 3,
-        },
-      },
-      data: {
-        gatesSatisfied,
-        status: 'GATE_PENDING',
-      },
-    });
+    await prisma.$transaction(async (tx) => {
+      for (const needId of needIds) {
+        await tx.consentRecord.create({
+          data: {
+            sessionId,
+            userId: user.id,
+            targetType: ConsentContentType.IDENTIFIED_NEED,
+            targetId: needId,
+            requestedByUserId: user.id,
+            decision: 'GRANTED',
+            decidedAt: now,
+          },
+        });
+      }
 
-    // Check if partner has also shared
-    const partnerShared = await hasPartnerSharedNeeds(sessionId, user.id);
+      await tx.stageProgress.update({
+        where: {
+          sessionId_userId_stage: {
+            sessionId,
+            userId: user.id,
+            stage: 3,
+          },
+        },
+        data: {
+          gatesSatisfied,
+          status: 'GATE_PENDING',
+        },
+      });
+    });
 
     // Notify partner via real-time
     const partnerId = await getPartnerUserId(sessionId, user.id);
+    const partnerProgress = partnerId
+      ? await prisma.stageProgress.findUnique({
+          where: {
+            sessionId_userId_stage: {
+              sessionId,
+              userId: partnerId,
+              stage: 3,
+            },
+          },
+        })
+      : null;
+    const partnerGates = partnerProgress?.gatesSatisfied as Record<string, unknown> | null;
+    const partnerShared = partnerGates?.needsShared === true;
+
     if (partnerId) {
       await notifyPartner(sessionId, partnerId, 'partner.needs_shared', {
         stage: 3,
@@ -621,39 +812,45 @@ export async function consentToShareNeeds(
         stage: 3,
         needsRevealReady: true,
       });
+      await completeStage3AfterMutualNeedsShare(
+        sessionId,
+        user.id,
+        partnerId,
+        now,
+        { gatesSatisfied },
+        partnerProgress
+      );
     }
 
-    // Generate AI guidance message after sharing
-    const guidanceContent = partnerShared
-      ? 'Both of you have shared your needs. You can now review them side by side and validate whether they feel accurate.'
-      : 'Your needs have been shared. Once your partner shares theirs, you\'ll be able to review them side by side.';
+    if (!partnerShared) {
+      const guidanceMessage = await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: null,
+          forUserId: user.id,
+          role: 'AI',
+          content: 'Your needs have been shared. Once your partner shares theirs, you\'ll be able to review them side by side.',
+          stage: 3,
+        },
+      });
 
-    const guidanceMessage = await prisma.message.create({
-      data: {
+      await publishMessageAIResponse(sessionId, user.id, {
+        id: guidanceMessage.id,
         sessionId,
         senderId: null,
-        forUserId: user.id,
-        role: 'AI',
-        content: guidanceContent,
-        stage: 3,
-      },
-    });
-
-    await publishMessageAIResponse(sessionId, user.id, {
-      id: guidanceMessage.id,
-      sessionId,
-      senderId: null,
-      content: guidanceMessage.content,
-      timestamp: guidanceMessage.timestamp.toISOString(),
-      role: MessageRole.AI,
-      stage: guidanceMessage.stage,
-    });
+        content: guidanceMessage.content,
+        timestamp: guidanceMessage.timestamp.toISOString(),
+        role: MessageRole.AI,
+        stage: guidanceMessage.stage,
+      });
+    }
 
     successResponse(res, {
       consented: true,
       sharedAt: now.toISOString(),
       waitingForPartner: !partnerShared,
       needsRevealReady: partnerShared,
+      advancedToStage4: partnerShared,
     });
   } catch (error) {
     logger.error('[consentToShareNeeds] Error:', error);
@@ -773,55 +970,62 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
 
     const canAdvance = validated && partnerValidated;
     if (canAdvance && partnerId) {
-      await prisma.stageProgress.updateMany({
-        where: {
-          sessionId,
-          stage: 3,
-          userId: { in: [user.id, partnerId] },
-        },
-        data: {
-          status: 'COMPLETED',
-          completedAt: now,
-        },
-      });
+      const transitionInputs = await Promise.all(
+        [user.id, partnerId].map(async (uid) => ({
+          uid,
+          firstNeed: await getFirstStage4NeedText(sessionId, uid),
+        }))
+      );
 
-      for (const uid of [user.id, partnerId]) {
-        await prisma.stageProgress.upsert({
+      const transitionMessages = await prisma.$transaction(async (tx) => {
+        await tx.stageProgress.updateMany({
           where: {
-            sessionId_userId_stage: {
+            sessionId,
+            stage: 3,
+            userId: { in: [user.id, partnerId] },
+          },
+          data: {
+            status: 'COMPLETED',
+            completedAt: now,
+          },
+        });
+
+        for (const uid of [user.id, partnerId]) {
+          await tx.stageProgress.upsert({
+            where: {
+              sessionId_userId_stage: {
+                sessionId,
+                userId: uid,
+                stage: 4,
+              },
+            },
+            create: {
               sessionId,
               userId: uid,
               stage: 4,
+              status: 'IN_PROGRESS',
+              startedAt: now,
             },
-          },
-          create: {
-            sessionId,
-            userId: uid,
-            stage: 4,
-            status: 'IN_PROGRESS',
-            startedAt: now,
-          },
-          update: {},
-        });
-      }
+            update: {},
+          });
+        }
 
-      const transitionContent =
-        'You have both checked the needs lists and marked them valid. Now move to strategies that can honor what each of you needs.';
-
-      const transitionMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
-      for (const uid of [user.id, partnerId]) {
-        const message = await prisma.message.create({
-          data: {
-            sessionId,
-            senderId: null,
-            forUserId: uid,
-            role: 'AI',
-            content: transitionContent,
-            stage: 4,
-          },
-        });
-        transitionMessages.push({ id: message.id, content: message.content, timestamp: message.timestamp, forUserId: uid });
-      }
+        const createdMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
+        for (const input of transitionInputs) {
+          const message = await tx.message.create({
+            data: {
+              sessionId,
+              senderId: null,
+              forUserId: input.uid,
+              role: 'AI',
+              content: buildStage4TransitionContent(input.firstNeed),
+              stage: 4,
+            },
+          });
+          createdMessages.push({ id: message.id, content: message.content, timestamp: message.timestamp, forUserId: input.uid });
+        }
+        return createdMessages;
+      });
 
       for (const transitionMessage of transitionMessages) {
         await publishSessionEvent(sessionId, 'partner.stage_completed', {
@@ -894,12 +1098,12 @@ export async function addCustomNeed(req: Request, res: Response): Promise<void> 
     const { id: sessionId } = req.params;
     const { need, category, description } = req.body as {
       need?: string;
-      category?: import('@meet-without-fear/shared').NeedCategory;
+      category?: unknown;
       description?: string;
     };
 
-    if (!need || !category) {
-      errorResponse(res, 'VALIDATION_ERROR', 'need and category are required', 400);
+    if (!need || !isNeedCategory(category)) {
+      errorResponse(res, 'VALIDATION_ERROR', 'need and valid category are required', 400);
       return;
     }
 
@@ -955,12 +1159,14 @@ export async function addCustomNeed(req: Request, res: Response): Promise<void> 
       data: {
         vesselId: userVessel.id,
         need,
-        category: category as import('@meet-without-fear/shared').NeedCategory,
+        category,
         evidence: [],
         aiConfidence: 1.0, // User-added needs are considered 100% confident
         confirmed: true, // User-added needs are auto-confirmed
       },
     });
+
+    const warning = withNeedReframingWarning({ need: customNeed.need });
 
     successResponse(res, {
       need: {
@@ -971,11 +1177,114 @@ export async function addCustomNeed(req: Request, res: Response): Promise<void> 
         evidence: customNeed.evidence,
         aiConfidence: customNeed.aiConfidence,
         confirmed: customNeed.confirmed,
+        needsReframing: warning.needsReframing,
+        reframingWarning: warning.reframingWarning,
       },
     }, 201);
   } catch (error) {
     logger.error('[addCustomNeed] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to add custom need', 500);
+  }
+}
+
+/**
+ * Interpret a natural-language edit request without mutating needs.
+ * POST /sessions/:id/needs/interpret-edit-request
+ */
+export async function interpretNeedEdit(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const { request, targetNeedId, conversationHistory } = req.body as {
+      request?: string;
+      targetNeedId?: string;
+      conversationHistory?: unknown;
+    };
+
+    if (!request || typeof request !== 'string') {
+      errorResponse(res, 'VALIDATION_ERROR', 'request is required', 400);
+      return;
+    }
+
+    const result = await interpretNeedEditRequest(sessionId, user.id, {
+      request,
+      targetNeedId,
+      conversationHistory: Array.isArray(conversationHistory) ? conversationHistory as any : undefined,
+    });
+    successResponse(res, result);
+  } catch (error) {
+    if (needEditErrorResponse(res, error)) return;
+    logger.error('[interpretNeedEdit] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to interpret need edit request', 500);
+  }
+}
+
+/**
+ * Apply a previously previewed need edit plan.
+ * POST /sessions/:id/needs/apply-edits
+ */
+export async function applyNeedEditPlan(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const { operations } = req.body as { operations?: unknown };
+
+    if (!Array.isArray(operations)) {
+      errorResponse(res, 'VALIDATION_ERROR', 'operations array is required', 400);
+      return;
+    }
+
+    const result = await applyNeedEdits(sessionId, user.id, operations as any);
+    successResponse(res, result);
+  } catch (error) {
+    if (needEditErrorResponse(res, error)) return;
+    logger.error('[applyNeedEditPlan] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to apply need edits', 500);
+  }
+}
+
+/**
+ * Remove a need before it has been shared.
+ * DELETE /sessions/:id/needs/:needId
+ */
+export async function removeNeed(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId, needId } = req.params;
+    if (!needId) {
+      errorResponse(res, 'VALIDATION_ERROR', 'needId is required', 400);
+      return;
+    }
+
+    const need = await deleteNeed(sessionId, user.id, needId);
+    await publishSessionEvent(sessionId, 'need.deleted', {
+      forUserId: user.id,
+      userId: user.id,
+      oldId: need.id,
+      need,
+    }).catch((err) =>
+      logger.warn('[removeNeed] Failed to publish need.deleted:', err)
+    );
+    successResponse(res, { deleted: true, needId, need });
+  } catch (error) {
+    if (needEditErrorResponse(res, error)) return;
+    logger.error('[removeNeed] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to remove need', 500);
   }
 }
 

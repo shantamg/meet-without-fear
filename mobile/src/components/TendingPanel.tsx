@@ -4,54 +4,46 @@ import { CalendarClock, CheckCircle2, RotateCcw } from 'lucide-react-native';
 import {
   AgreementDTO,
   Stage4OutcomeDTO,
+  TendingBetweenPeriodNoteDTO,
+  TendingCoordinationCycleDTO,
+  TendingCoordinationStatus,
   TendingEntryDTO,
   TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
+  TendingHistoryCycleDTO,
 } from '@meet-without-fear/shared';
 import { useAppAppearance } from '@/theme';
 
 type Palette = ReturnType<typeof useAppAppearance>['palette'];
 
-type TendingStatusChoice = 'WORKED' | 'PARTLY' | 'DID_NOT_WORK' | 'DID_NOT_TRY' | 'OTHER';
-type TendingContinueChoice = 'CONTINUE' | 'ADJUST' | 'CLOSE' | 'NEW_PROCESS' | 'OTHER_TRACK';
-
 interface TendingPanelProps {
   entries: TendingEntryDTO[];
+  coordinationCycles?: TendingCoordinationCycleDTO[];
+  betweenPeriodNotes?: TendingBetweenPeriodNoteDTO[];
+  historyCycles?: TendingHistoryCycleDTO[];
   agreements?: AgreementDTO[];
   outcome?: Stage4OutcomeDTO | null;
   initialEntryId?: string | null;
   isCreatingReentry?: boolean;
+  isCreatingBetweenPeriodNote?: boolean;
   isSubmittingResponse?: boolean;
   currentUserId?: string;
   isUpdatingShare?: boolean;
   onCreateReentry: (intent?: string) => void;
-  onSubmitResponse: (
+  onCreateBetweenPeriodNote?: (content: string) => void;
+  onStartCheckin?: (entryId?: string) => void;
+  /** @deprecated Legacy one-entry review path is kept only for compatibility during mobile cutover. */
+  onSubmitResponse?: (
     entryId: string,
     response: {
-      status: TendingStatusChoice;
+      status: string;
       reflection?: string;
-      continueChoice: TendingContinueChoice;
+      continueChoice: string;
     }
   ) => void;
   onToggleShare?: (entryId: string, nextOptedInShared: boolean) => void;
 }
-
-const responseLabels: Record<TendingStatusChoice, string> = {
-  WORKED: 'Worked',
-  PARTLY: 'Partly',
-  DID_NOT_WORK: 'Did not work',
-  DID_NOT_TRY: 'Did not try',
-  OTHER: 'Other',
-};
-
-const continueLabels: Record<TendingContinueChoice, string> = {
-  CONTINUE: 'Continue',
-  ADJUST: 'Adjust',
-  CLOSE: 'Close',
-  NEW_PROCESS: 'New process',
-  OTHER_TRACK: 'Other support',
-};
 
 function formatDate(value: string | null): string {
   if (!value) return 'Available now';
@@ -132,23 +124,26 @@ function canRespond(entry: TendingEntryDTO): boolean {
 
 export function TendingPanel({
   entries,
+  coordinationCycles = [],
+  betweenPeriodNotes = [],
+  historyCycles = [],
   agreements = [],
   outcome,
   initialEntryId,
   isCreatingReentry = false,
+  isCreatingBetweenPeriodNote = false,
   isSubmittingResponse = false,
   currentUserId,
   isUpdatingShare = false,
   onCreateReentry,
-  onSubmitResponse,
+  onCreateBetweenPeriodNote,
+  onStartCheckin,
   onToggleShare,
 }: TendingPanelProps) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => createStyles(palette), [palette]);
   const [intent, setIntent] = useState('');
-  const [reflection, setReflection] = useState('');
-  const [statusChoice, setStatusChoice] = useState<TendingStatusChoice>('PARTLY');
-  const [continueChoice, setContinueChoice] = useState<TendingContinueChoice>('ADJUST');
+  const [betweenPeriodNote, setBetweenPeriodNote] = useState('');
 
   const selectedEntry = useMemo(() => {
     const byId = initialEntryId
@@ -165,6 +160,9 @@ export function TendingPanel({
   const selectedAgreement = agreements.find(
     (agreement) => agreement.id === selectedEntry?.agreementId
   );
+  const selectedCoordinationCycle = selectedEntry
+    ? coordinationCycles.find((cycle) => cycle.entryIds.includes(selectedEntry.id))
+    : undefined;
   const scheduledSharedEntries = entries.filter(
     (entry) => entry.type === TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN
   );
@@ -172,20 +170,18 @@ export function TendingPanel({
     (entry) => entry.type === TendingEntryType.USER_INITIATED_REENTRY
   );
   const hasSharedAgreementCheckIn = scheduledSharedEntries.length > 0;
-
-  const handleSubmit = () => {
-    if (!selectedEntry || !canRespond(selectedEntry) || isSubmittingResponse) return;
-    onSubmitResponse(selectedEntry.id, {
-      status: statusChoice,
-      reflection: reflection.trim() || undefined,
-      continueChoice,
-    });
-  };
+  const latestHistory = historyCycles[0];
 
   const handleCreateReentry = () => {
     if (isCreatingReentry) return;
     onCreateReentry(intent.trim() || undefined);
     setIntent('');
+  };
+  const handleCreateBetweenPeriodNote = () => {
+    const content = betweenPeriodNote.trim();
+    if (!content || isCreatingBetweenPeriodNote) return;
+    onCreateBetweenPeriodNote?.(content);
+    setBetweenPeriodNote('');
   };
 
   return (
@@ -274,68 +270,33 @@ export function TendingPanel({
               </View>
             ))}
 
+          {selectedCoordinationCycle && (
+            <View style={styles.coordinationBox} testID="tending-coordination-status">
+              <Text style={styles.contextLabel}>
+                {selectedCoordinationCycle.status === TendingCoordinationStatus.WAITING_FOR_PARTNER
+                  ? 'Held privately'
+                  : 'Coordination'}
+              </Text>
+              <Text style={styles.contextText}>
+                {selectedCoordinationCycle.status === TendingCoordinationStatus.WAITING_FOR_PARTNER
+                  ? `Your check-in is saved. We'll hold shared choices privately until your partner completes their side or the response window closes on ${formatDate(selectedCoordinationCycle.responseDeadlineAt)}.`
+                  : selectedCoordinationCycle.resultSummary || 'The shared check-in has a coordination update.'}
+              </Text>
+            </View>
+          )}
+
           {canRespond(selectedEntry) ? (
             <View style={styles.responseArea}>
-              <Text style={styles.fieldLabel}>How did this go?</Text>
-              <View style={styles.choiceWrap}>
-                {(Object.keys(responseLabels) as TendingStatusChoice[]).map((choice) => {
-                  const selected = choice === statusChoice;
-                  return (
-                    <TouchableOpacity
-                      key={choice}
-                      style={[styles.choiceButton, selected && styles.choiceButtonSelected]}
-                      onPress={() => setStatusChoice(choice)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                    >
-                      <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>
-                        {responseLabels[choice]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <Text style={styles.fieldLabel}>What should happen next?</Text>
-              <View style={styles.choiceWrap}>
-                {(Object.keys(continueLabels) as TendingContinueChoice[]).map((choice) => {
-                  const selected = choice === continueChoice;
-                  return (
-                    <TouchableOpacity
-                      key={choice}
-                      style={[styles.choiceButton, selected && styles.choiceButtonSelected]}
-                      onPress={() => setContinueChoice(choice)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                    >
-                      <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>
-                        {continueLabels[choice]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <TextInput
-                value={reflection}
-                onChangeText={setReflection}
-                placeholder="Add a short reflection"
-                placeholderTextColor={palette.textFaint}
-                multiline
-                style={styles.textInput}
-                accessibilityLabel="Tending reflection"
-              />
-
               <TouchableOpacity
                 style={[styles.primaryButton, isSubmittingResponse && styles.disabledButton]}
-                onPress={handleSubmit}
+                onPress={() => onStartCheckin?.(selectedEntry.id)}
                 disabled={isSubmittingResponse}
                 accessibilityRole="button"
-                accessibilityLabel="Submit Tending review"
-                testID="submit-tending-response"
+                accessibilityLabel="Start Tending check-in"
+                testID="start-tending-checkin"
               >
                 <Text style={styles.primaryButtonText}>
-                  {isSubmittingResponse ? 'Saving...' : 'Save review'}
+                  {isSubmittingResponse ? 'Opening...' : 'Start check-in'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -348,6 +309,100 @@ export function TendingPanel({
           )}
         </View>
       )}
+
+      <View style={styles.card}>
+        <View style={styles.entryHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Latest record</Text>
+            <Text style={styles.entryMeta}>
+              {latestHistory ? formatDate(latestHistory.submittedAt) : 'No check-in recorded yet'}
+            </Text>
+          </View>
+        </View>
+        {latestHistory ? (
+          <View style={styles.contextBox} testID="tending-history-summary">
+            <Text style={styles.contextText}>
+              {latestHistory.entryReviews.length > 0
+                ? latestHistory.entryReviews.map((review) =>
+                    `${review.summary ?? 'Tending entry'}: ${review.followThroughStatus}`
+                  ).join('\n')
+                : latestHistory.reflectionSummary ?? 'A Tending check-in was recorded.'}
+            </Text>
+            {latestHistory.needOutcomes.length > 0 && (
+              <Text style={styles.contextMeta}>
+                Needs: {latestHistory.needOutcomes.map((need) => `${need.needLabel} ${need.resolutionStatus}`).join('; ')}
+              </Text>
+            )}
+            {latestHistory.adjustments.length > 0 && (
+              <Text style={styles.contextMeta}>
+                Adjusted: {latestHistory.adjustments.map((adjustment) =>
+                  adjustment.revisedCommitmentText || adjustment.revisedCadence || 'commitment'
+                ).join('; ')}
+              </Text>
+            )}
+            {latestHistory.reminders.length > 0 && (
+              <Text style={styles.contextMeta}>
+                Next reminder: {formatDate(latestHistory.reminders[0].remindAt)}
+              </Text>
+            )}
+            {latestHistory.coordinationSummary && (
+              <Text style={styles.contextMeta}>{latestHistory.coordinationSummary}</Text>
+            )}
+          </View>
+        ) : (
+          <Text style={styles.mutedText}>Your completed check-ins will appear here.</Text>
+        )}
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.entryHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Private notes</Text>
+            <Text style={styles.entryMeta}>
+              {betweenPeriodNotes.length > 0
+                ? `${betweenPeriodNotes.length} saved for you`
+                : 'Saved only for your check-in context'}
+            </Text>
+          </View>
+        </View>
+        {betweenPeriodNotes.slice(-3).map((note) => (
+          <View key={note.id} style={styles.contextBox} testID={`tending-between-note-${note.id}`}>
+            <Text style={styles.contextText}>{note.content}</Text>
+            {note.carryForwardSelected && (
+              <Text style={styles.contextMeta}>Selected for check-in</Text>
+            )}
+          </View>
+        ))}
+        {onCreateBetweenPeriodNote && (
+          <>
+            <TextInput
+              value={betweenPeriodNote}
+              onChangeText={setBetweenPeriodNote}
+              placeholder="Private note for your future check-in"
+              placeholderTextColor={palette.textFaint}
+              multiline
+              style={styles.textInput}
+              accessibilityLabel="Private Tending note"
+              testID="tending-between-note-input"
+            />
+            <TouchableOpacity
+              style={[
+                styles.secondaryButton,
+                (!betweenPeriodNote.trim() || isCreatingBetweenPeriodNote) && styles.disabledButton,
+              ]}
+              onPress={handleCreateBetweenPeriodNote}
+              disabled={!betweenPeriodNote.trim() || isCreatingBetweenPeriodNote}
+              accessibilityRole="button"
+              accessibilityLabel="Save private Tending note"
+              testID="create-tending-between-note"
+            >
+              <Text style={styles.secondaryButtonText}>
+                {isCreatingBetweenPeriodNote ? 'Saving...' : 'Save private note'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
 
       <View style={styles.card}>
         <View style={styles.entryHeader}>
@@ -475,6 +530,14 @@ const createStyles = (palette: Palette) =>
       marginBottom: 12,
       borderWidth: 1,
       borderColor: palette.border,
+    },
+    coordinationBox: {
+      backgroundColor: palette.bgPane,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: palette.accent,
     },
     contextLabel: {
       fontSize: 12,

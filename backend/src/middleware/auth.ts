@@ -213,10 +213,20 @@ async function handleClerkAuth(
         data: { clerkId: clerkUserId, email, name, firstName, lastName },
       });
     } catch (error) {
-      // Concurrent create race: another request inserted first
+      // Concurrent create race, or a local account already exists for this
+      // Clerk email. Resolve by identity first, then by email.
       if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
-        user = await prisma.user.findUnique({ where: { clerkId: clerkUserId } });
+        user =
+          (await prisma.user.findUnique({ where: { clerkId: clerkUserId } })) ||
+          (await prisma.user.findUnique({ where: { email } }));
         if (!user) throw error;
+
+        if (user.clerkId !== clerkUserId) {
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: { clerkId: clerkUserId, email, name, firstName, lastName },
+          });
+        }
       } else {
         throw error;
       }

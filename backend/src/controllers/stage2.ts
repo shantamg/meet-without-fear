@@ -953,6 +953,7 @@ export async function getPartnerEmpathy(
           consentRecordId: partnerAttempt.consentRecordId ?? '',
           status: partnerAttempt.status,
           revealedAt: partnerAttempt.revealedAt?.toISOString() ?? null,
+          validatedAt: validation?.validated ? validation.validatedAt?.toISOString() ?? null : null,
           revisionCount: partnerAttempt.revisionCount,
           statusVersion: partnerAttempt.statusVersion,
         }

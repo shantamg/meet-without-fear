@@ -126,6 +126,7 @@ import {
   hasContextAlreadyBeenShared,
   getFallbackContinuation,
   generatePostShareContinuation,
+  generateContextReceivedReflection,
   generateValidationFeedbackReflection,
   generateShareSuggestionForDirection,
   checkAndRevealBothIfReady,
@@ -551,6 +552,17 @@ describe('Reconciler Service', () => {
 
       expect(result).toContain('If your own empathy draft asks for review');
       expect(result).toContain("don't need to do anything more on their behalf");
+    });
+  });
+
+  describe('generateContextReceivedReflection', () => {
+    it('frames shared context for the receiver without thanking the sharer', async () => {
+      const result = await generateContextReceivedReflection('session-1', 'Shantam', 'Blair');
+
+      expect(result).toContain('Blair shared this because');
+      expect(result).toContain('what stands out');
+      expect(result).not.toContain('Thank you for sharing');
+      expect(result).not.toContain('Jason');
     });
   });
 

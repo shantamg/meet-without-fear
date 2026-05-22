@@ -25,11 +25,14 @@ interface Stage4RedesignPanelProps {
   onSelectProposal: (proposalId: string, decision: Stage4SelectionDecision) => void;
   onShareSelections?: () => void;
   onReviseSelections?: () => void;
+  onSuggestOptions?: (needLabel: string, needId: string) => void;
   onBrainstormNeed?: (needLabel: string, needId: string) => void;
   onRefineProposal?: (proposalId: string, description: string) => void;
   onKeepRefiningNoOverlap?: () => void;
   onDeclineNeed?: (needId: string) => void;
   onUndeclineNeed?: (needId: string) => void;
+  onMarkNeedCovered?: (needId: string) => void;
+  onSkipNeed?: (needId: string) => void;
   onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason, checkInDate: string) => void;
 }
 
@@ -50,12 +53,13 @@ interface Stage4RedesignFooterProps {
  * marked WILLING or explicitly declined ("leave for now") by the user.
  */
 function allOpenNeedsAddressedOrDeclined(state: GetStage4StateResponse): boolean {
+  const safeState = withStage4Defaults(state);
   const willingProposalIds = new Set(
-    [...state.inventory.sharedProposals, ...state.inventory.individualCommitments]
+    [...safeState.inventory.sharedProposals, ...safeState.inventory.individualCommitments]
       .filter((p) => p.myDecision === Stage4SelectionDecision.WILLING)
       .map((p) => p.id),
   );
-  const rows = [...state.coverageAudit.open, ...state.coverageAudit.partial];
+  const rows = [...safeState.coverageAudit.open, ...safeState.coverageAudit.partial];
   return rows.every((row) => {
     if (row.userDeclinedToAddress) return true;
     return row.coveringProposalIds.some((pid) => willingProposalIds.has(pid));
@@ -96,8 +100,73 @@ function proposalKindLabel(kind: Stage4ProposalKind): string {
 
 function defaultCheckInDate(): string {
   const date = new Date();
-  date.setDate(date.getDate() + 28);
+  date.setDate(date.getDate() + 10);
   return date.toISOString().slice(0, 10);
+}
+
+function withStage4Defaults(state: GetStage4StateResponse): GetStage4StateResponse {
+  const partial = state as Partial<GetStage4StateResponse>;
+  const inventory = partial.inventory ?? {
+    sharedProposals: [],
+    individualCommitments: [],
+    unaddressedNeeds: [],
+    removedProposalCount: 0,
+    updatedAt: new Date().toISOString(),
+  };
+  const coverageAudit = partial.coverageAudit ?? {
+    covered: [],
+    partial: [],
+    open: [],
+    updatedAt: null,
+  };
+  const walkthrough = partial.walkthrough ?? {
+    phase: 'SUMMARY' as const,
+    currentNeed: null,
+    currentIndex: 0,
+    totalInPhase: 0,
+    ownNeeds: [],
+    partnerNeeds: [],
+    proposalGroups: [],
+    qualityWarnings: [],
+    defaultCheckInDate: defaultCheckInDate(),
+  };
+
+  return {
+    ...state,
+    phase: partial.phase ?? Stage4Phase.INVENTORY_BUILDING,
+    inventory: {
+      ...inventory,
+      sharedProposals: inventory.sharedProposals ?? [],
+      individualCommitments: inventory.individualCommitments ?? [],
+      unaddressedNeeds: inventory.unaddressedNeeds ?? [],
+      removedProposalCount: inventory.removedProposalCount ?? 0,
+      updatedAt: inventory.updatedAt ?? new Date().toISOString(),
+    },
+    coverageAudit: {
+      ...coverageAudit,
+      covered: coverageAudit.covered ?? [],
+      partial: coverageAudit.partial ?? [],
+      open: coverageAudit.open ?? [],
+      updatedAt: coverageAudit.updatedAt ?? null,
+    },
+    mySelections: partial.mySelections ?? [],
+    partnerSelections: partial.partnerSelections ?? [],
+    mySelectionStatus: partial.mySelectionStatus ?? 'NOT_STARTED',
+    partnerSelectionStatus: partial.partnerSelectionStatus ?? 'NOT_STARTED',
+    outcome: partial.outcome ?? null,
+    tendingPreview: partial.tendingPreview ?? null,
+    walkthrough: {
+      ...walkthrough,
+      currentNeed: walkthrough.currentNeed ?? null,
+      currentIndex: walkthrough.currentIndex ?? 0,
+      totalInPhase: walkthrough.totalInPhase ?? 0,
+      ownNeeds: walkthrough.ownNeeds ?? [],
+      partnerNeeds: walkthrough.partnerNeeds ?? [],
+      proposalGroups: walkthrough.proposalGroups ?? [],
+      qualityWarnings: walkthrough.qualityWarnings ?? [],
+      defaultCheckInDate: walkthrough.defaultCheckInDate ?? defaultCheckInDate(),
+    },
+  };
 }
 
 const DATE_INPUT_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -276,6 +345,7 @@ function ProposalCard({
   partnerName,
   isSelecting,
   readOnly,
+  showStance = true,
   onSelectProposal,
   onRefineProposal,
 }: {
@@ -283,6 +353,7 @@ function ProposalCard({
   partnerName: string;
   isSelecting?: boolean;
   readOnly?: boolean;
+  showStance?: boolean;
   onSelectProposal: (proposalId: string, decision: Stage4SelectionDecision) => void;
   onRefineProposal?: (proposalId: string, description: string) => void;
 }) {
@@ -330,44 +401,48 @@ function ProposalCard({
         </Text>
       ))}
 
-      <Text style={styles.stanceLabel}>Your stance</Text>
-      <View style={styles.segmentedControl}>
-        {[
-          Stage4SelectionDecision.WILLING,
-          Stage4SelectionDecision.NOT_WILLING,
-        ].map((decision) => {
-          const selected = proposal.myDecision === decision;
-          const disabled = Boolean(isSelecting || readOnly);
-          return (
-            <TouchableOpacity
-              key={decision}
-              style={[
-                styles.segment,
-                selected && styles.segmentSelected,
-                disabled && !selected && styles.segmentDisabled,
-              ]}
-              onPress={() => onSelectProposal(proposal.id, decision)}
-              disabled={disabled}
-              accessibilityRole="button"
-              accessibilityLabel={`${decisionLabels[decision]} for proposal`}
-              accessibilityState={{ selected, disabled }}
-            >
-              <Text
-                style={[
-                  styles.segmentText,
-                  selected && styles.segmentTextSelected,
-                ]}
-              >
-                {decisionLabels[decision]}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      {showStance && (
+        <>
+          <Text style={styles.stanceLabel}>Your stance</Text>
+          <View style={styles.segmentedControl}>
+            {[
+              Stage4SelectionDecision.WILLING,
+              Stage4SelectionDecision.NOT_WILLING,
+            ].map((decision) => {
+              const selected = proposal.myDecision === decision;
+              const disabled = Boolean(isSelecting || readOnly);
+              return (
+                <TouchableOpacity
+                  key={decision}
+                  style={[
+                    styles.segment,
+                    selected && styles.segmentSelected,
+                    disabled && !selected && styles.segmentDisabled,
+                  ]}
+                  onPress={() => onSelectProposal(proposal.id, decision)}
+                  disabled={disabled}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${decisionLabels[decision]} for proposal`}
+                  accessibilityState={{ selected, disabled }}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      selected && styles.segmentTextSelected,
+                    ]}
+                  >
+                    {decisionLabels[decision]}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-      <Text style={styles.partnerState}>
-        {partnerStateLabel(partnerName, proposal.partnerDecisionVisible)}
-      </Text>
+          <Text style={styles.partnerState}>
+            {partnerStateLabel(partnerName, proposal.partnerDecisionVisible)}
+          </Text>
+        </>
+      )}
     </View>
   );
 }
@@ -451,7 +526,7 @@ function NeedRows({
 }
 
 export function Stage4RedesignFooter({
-  state,
+  state: rawState,
   partnerName,
   isClosing = false,
   isSharing = false,
@@ -463,6 +538,7 @@ export function Stage4RedesignFooter({
 }: Stage4RedesignFooterProps) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => makeStyles(palette), [palette]);
+  const state = withStage4Defaults(rawState);
   const allProposals = [
     ...state.inventory.sharedProposals,
     ...state.inventory.individualCommitments,
@@ -490,8 +566,12 @@ export function Stage4RedesignFooter({
     state.inventory.sharedProposals.every((p) => Boolean(p.myDecision));
   const needsGated = allOpenNeedsAddressedOrDeclined(state);
   const who = partnerName || 'They';
+  const isWalkingNeeds =
+    state.walkthrough.phase === 'MY_NEEDS' ||
+    state.walkthrough.phase === 'PARTNER_NEEDS';
 
   if (state.outcome) return null;
+  if (isWalkingNeeds) return null;
 
   if (allProposals.length === 0) {
     return (
@@ -586,7 +666,7 @@ export function Stage4RedesignFooter({
 }
 
 export function Stage4RedesignPanel({
-  state,
+  state: rawState,
   partnerName,
   isSelecting = false,
   isClosing = false,
@@ -596,15 +676,19 @@ export function Stage4RedesignPanel({
   onSelectProposal,
   onShareSelections,
   onReviseSelections,
+  onSuggestOptions,
   onBrainstormNeed,
   onRefineProposal,
   onKeepRefiningNoOverlap,
   onDeclineNeed,
   onUndeclineNeed,
+  onMarkNeedCovered,
+  onSkipNeed,
   onCloseStage4,
 }: Stage4RedesignPanelProps) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => makeStyles(palette), [palette]);
+  const state = withStage4Defaults(rawState);
   const partnerLabel = partnerName || 'Partner';
   const allProposals = [
     ...state.inventory.sharedProposals,
@@ -637,6 +721,160 @@ export function Stage4RedesignPanel({
     state.coverageAudit.covered.length > 0 ||
     state.coverageAudit.partial.length > 0 ||
     state.coverageAudit.open.length > 0;
+
+  const walkthrough = state.walkthrough;
+  const currentNeed = walkthrough.currentNeed;
+
+  if (!state.outcome && (walkthrough.phase === 'MY_NEEDS' || walkthrough.phase === 'PARTNER_NEEDS') && currentNeed) {
+    const phaseLabel =
+      walkthrough.phase === 'MY_NEEDS'
+        ? `Your needs: ${walkthrough.currentIndex + 1} of ${Math.max(1, walkthrough.totalInPhase)}`
+        : `Their needs: ${walkthrough.currentIndex + 1} of ${Math.max(1, walkthrough.totalInPhase)}`;
+    const hasProposal = walkthrough.proposalGroups.some((group) => group.proposals.length > 0);
+    const phaseNeeds = walkthrough.phase === 'MY_NEEDS' ? walkthrough.ownNeeds : walkthrough.partnerNeeds;
+    const previousNeeds = phaseNeeds.filter(
+      (need) => need.id !== currentNeed.id && (need.status === 'covered' || need.status === 'skipped')
+    );
+
+    return (
+      <View style={styles.container} testID="stage4-redesign-panel">
+        <View style={styles.walkthroughHeader}>
+          <View>
+            <Text style={styles.walkthroughTitle}>Working toward agreements</Text>
+            <Text style={styles.walkthroughProgress}>{phaseLabel}</Text>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>
+            {walkthrough.phase === 'MY_NEEDS' ? 'Need' : `${partnerLabel}'s need`}
+          </Text>
+          <Text style={styles.focusNeedText}>{currentNeed.label}</Text>
+          <Text style={styles.emptyText}>
+            {walkthrough.phase === 'MY_NEEDS'
+              ? "Let's look at options for this need."
+              : "Here's what might be relevant for you."}
+          </Text>
+        </View>
+
+        {walkthrough.proposalGroups.map((group) => (
+          <View key={group.key} style={styles.card}>
+            <Text style={styles.sectionTitle}>{group.title}</Text>
+            {group.proposals.length === 0 ? (
+              <Text style={styles.emptyText}>No options in this group yet.</Text>
+            ) : (
+              group.proposals.map((proposal) => (
+                <ProposalCard
+                  key={proposal.id}
+                  proposal={proposal}
+                  partnerName={partnerLabel}
+                  isSelecting={isSelecting}
+                  readOnly={proposalSelectionsReadOnly || Boolean(group.readOnly)}
+                  showStance={false}
+                  onSelectProposal={onSelectProposal}
+                  onRefineProposal={group.readOnly ? undefined : onRefineProposal}
+                />
+              ))
+            )}
+          </View>
+        ))}
+
+        <View style={styles.actions}>
+          {!hasProposal ? (
+            <View style={styles.statusBlock} testID="stage4-current-need-chat-guidance">
+              <Text style={styles.statusText}>
+                Keep brainstorming in the chat. When something feels workable, it will appear here.
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => onMarkNeedCovered?.(currentNeed.id)}
+              accessibilityRole="button"
+              testID="stage4-current-need-covered"
+            >
+              <Text style={styles.primaryButtonText}>
+                {walkthrough.phase === 'MY_NEEDS' ? 'This need feels covered' : 'Continue'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.tertiaryButton}
+            onPress={() => onSkipNeed?.(currentNeed.id)}
+            accessibilityRole="button"
+            testID="stage4-current-need-skip"
+          >
+            <Text style={styles.tertiaryButtonText}>Skip this need for now</Text>
+          </TouchableOpacity>
+        </View>
+
+        {previousNeeds.length > 0 && (
+          <View style={styles.referenceBlock} testID="stage4-previous-needs">
+            <Text style={styles.referenceTitle}>Already reviewed</Text>
+            {previousNeeds.map((need) => (
+              <View key={need.id} style={styles.referenceRow}>
+                <Text style={styles.referenceText}>{need.label}</Text>
+                <Text style={styles.referenceStatus}>
+                  {need.status === 'covered' ? 'Covered' : 'Skipped'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  if (!state.outcome && walkthrough.phase === 'QUALITY_REVIEW') {
+    return (
+      <View style={styles.container} testID="stage4-redesign-panel">
+        <View style={styles.walkthroughHeader}>
+          <View>
+            <Text style={styles.walkthroughTitle}>Review agreements</Text>
+            <Text style={styles.walkthroughProgress}>Check whether these are concrete enough to try.</Text>
+          </View>
+        </View>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Options to consider</Text>
+          {allProposals.length === 0 ? (
+            <Text style={styles.emptyText}>No proposals captured yet.</Text>
+          ) : (
+            allProposals.map((proposal) => {
+              const warning = walkthrough.qualityWarnings.find((item) => item.proposalId === proposal.id);
+              return (
+                <View key={proposal.id}>
+                  <ProposalCard
+                    proposal={proposal}
+                    partnerName={partnerLabel}
+                    isSelecting={isSelecting}
+                    readOnly={proposalSelectionsReadOnly}
+                    onSelectProposal={onSelectProposal}
+                    onRefineProposal={onRefineProposal}
+                  />
+                  {warning && (
+                    <Text style={styles.actionHint}>{warning.warning} {warning.suggestedRevision}</Text>
+                  )}
+                </View>
+              );
+            })
+          )}
+        </View>
+        {!hideFooter && (
+          <Stage4RedesignFooter
+            state={state}
+            partnerName={partnerName}
+            isClosing={isClosing}
+            isSharing={isSharing}
+            isRevising={isRevising}
+            onShareSelections={onShareSelections}
+            onReviseSelections={onReviseSelections}
+            onCloseStage4={onCloseStage4}
+            onKeepRefiningNoOverlap={onKeepRefiningNoOverlap}
+          />
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container} testID="stage4-redesign-panel">
@@ -835,6 +1073,31 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     paddingHorizontal: 4,
+  },
+  walkthroughHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 4,
+  },
+  walkthroughTitle: {
+    color: palette.text,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  walkthroughProgress: {
+    color: palette.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  focusNeedText: {
+    color: palette.text,
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: '600',
+    marginBottom: 8,
   },
   card: {
     backgroundColor: palette.bgElev,
@@ -1102,6 +1365,45 @@ const makeStyles = (palette: Palette) => StyleSheet.create({
   secondaryButtonText: {
     color: palette.text,
     fontSize: 15,
+    fontWeight: '600',
+  },
+  tertiaryButton: {
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  tertiaryButtonText: {
+    color: palette.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  referenceBlock: {
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    gap: 8,
+  },
+  referenceTitle: {
+    color: palette.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  referenceRow: {
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+    paddingTop: 8,
+    gap: 3,
+  },
+  referenceText: {
+    color: palette.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  referenceStatus: {
+    color: palette.textFaint,
+    fontSize: 12,
     fontWeight: '600',
   },
   disabledButtonText: {

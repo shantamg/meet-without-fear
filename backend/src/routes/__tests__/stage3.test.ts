@@ -442,7 +442,7 @@ describe('Stage 3 API', () => {
             id: { in: [mockNeedId1] },
             vesselId: mockVesselId,
           },
-          data: { confirmed: true },
+          data: { confirmed: true, lockedAt: expect.any(Date) },
         })
       );
     });
@@ -514,15 +514,78 @@ describe('Stage 3 API', () => {
       await confirmNeeds(req as Request, res as Response);
 
       expect(statusMock).toHaveBeenCalledWith(200);
-      expect(prisma.identifiedNeed.update).toHaveBeenCalledWith(
+      expect(prisma.identifiedNeed.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: mockNeedId1 },
+          where: { id: mockNeedId1, vesselId: mockVesselId },
           data: expect.objectContaining({
             need: 'To feel deeply heard and understood',
             confirmed: true,
           }),
         })
       );
+    });
+
+    it('rejects adjustments for needs outside the user vessel', async () => {
+      const mockStageProgress = {
+        id: 'progress-1',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 3,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      };
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+        id: mockSessionId,
+        status: 'ACTIVE',
+        relationship: {
+          members: [{ userId: mockUser.id }, { userId: mockPartnerId }],
+        },
+      });
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue({ id: mockVesselId });
+      (prisma.identifiedNeed.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: mockNeedId1,
+          vesselId: mockVesselId,
+          need: 'To feel emotionally connected',
+          category: 'CONNECTION',
+          evidence: [],
+          aiConfidence: 0.85,
+          confirmed: false,
+          createdAt: new Date(),
+        },
+      ]);
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: {
+          needIds: [mockNeedId1],
+          adjustments: [
+            {
+              needId: 'partner-need-1',
+              confirmed: true,
+              correction: 'Overwrite partner need',
+            },
+          ],
+        },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await confirmNeeds(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(400);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: 'VALIDATION_ERROR',
+          }),
+        })
+      );
+      expect(prisma.identifiedNeed.update).not.toHaveBeenCalled();
+      expect(prisma.identifiedNeed.updateMany).not.toHaveBeenCalled();
     });
 
     it('requires authentication', async () => {
@@ -638,6 +701,18 @@ describe('Stage 3 API', () => {
         ...mockStageProgress,
         gatesSatisfied: { needsConfirmed: true, needsShared: true },
       });
+      (prisma.stageProgress.upsert as jest.Mock).mockResolvedValue({
+        id: 'progress-stage-4',
+        sessionId: mockSessionId,
+        stage: 4,
+        status: 'IN_PROGRESS',
+      });
+      (prisma.message.create as jest.Mock).mockImplementation(({ data }) => ({
+        id: `msg-${data.forUserId}`,
+        content: data.content,
+        timestamp: new Date(),
+        forUserId: data.forUserId,
+      }));
 
       (prisma.message.create as jest.Mock).mockResolvedValue({
         id: 'msg-guidance-1',
@@ -703,6 +778,9 @@ describe('Stage 3 API', () => {
       (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
       (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue(partnerProgress);
       (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue({ id: mockVesselId });
+      (prisma.identifiedNeed.findFirst as jest.Mock).mockResolvedValue({
+        need: 'to be able to speak freely',
+      });
       (prisma.identifiedNeed.findMany as jest.Mock).mockResolvedValue([
         { id: mockNeedId1, vesselId: mockVesselId, confirmed: true },
       ]);
@@ -747,6 +825,25 @@ describe('Stage 3 API', () => {
             consented: true,
             waitingForPartner: false,
             needsRevealReady: true,
+            advancedToStage4: true,
+          }),
+        })
+      );
+      expect(prisma.stageProgress.upsert).toHaveBeenCalledTimes(2);
+      expect(prisma.message.create).toHaveBeenCalledTimes(2);
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            stage: 4,
+            content: expect.stringContaining('What might help honor that need?'),
+          }),
+        })
+      );
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            stage: 4,
+            content: expect.stringContaining('to be able to speak freely'),
           }),
         })
       );
@@ -810,6 +907,10 @@ describe('Stage 3 API', () => {
       (prisma.stageProgress.findUnique as jest.Mock)
         .mockResolvedValueOnce(partnerProgress)
         .mockResolvedValueOnce(partnerProgress);
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue({ id: mockVesselId });
+      (prisma.identifiedNeed.findFirst as jest.Mock).mockResolvedValue({
+        need: 'to be able to speak freely',
+      });
       (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
         ...mockStageProgress,
         status: 'GATE_PENDING',
@@ -833,6 +934,22 @@ describe('Stage 3 API', () => {
       );
       expect(prisma.stageProgress.upsert).toHaveBeenCalledTimes(2);
       expect(prisma.message.create).toHaveBeenCalledTimes(2);
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            stage: 4,
+            content: expect.stringContaining('What might help honor that need?'),
+          }),
+        })
+      );
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            stage: 4,
+            content: expect.stringContaining('to be able to speak freely'),
+          }),
+        })
+      );
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(jsonMock).toHaveBeenCalledWith(
         expect.objectContaining({

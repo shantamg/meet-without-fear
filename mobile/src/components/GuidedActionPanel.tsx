@@ -41,6 +41,7 @@ export interface GuidedActionPanelProps {
   primaryAction?: GuidedActionButton;
   secondaryAction?: GuidedActionButton;
   compact?: boolean;
+  compactActionLayout?: 'auto' | 'inline' | 'stacked';
   pressable?: boolean;
   testID?: string;
 }
@@ -75,6 +76,7 @@ export function GuidedActionPanel({
   primaryAction,
   secondaryAction,
   compact = false,
+  compactActionLayout = 'auto',
   pressable = false,
   testID,
 }: GuidedActionPanelProps) {
@@ -84,7 +86,12 @@ export function GuidedActionPanel({
   const [panelWidth, setPanelWidth] = useState(0);
   const showPressableRow = pressable && !!primaryAction && !secondaryAction;
   const centerSingleLinePressable = showPressableRow && compact && !eyebrow && !subtitle;
-  const compactInlineActions = !showPressableRow && compact && actions.length > 0 && panelWidth >= 390;
+  const compactInlineActions =
+    !showPressableRow &&
+    compact &&
+    actions.length > 0 &&
+    compactActionLayout !== 'stacked' &&
+    (compactActionLayout === 'inline' || panelWidth >= 390);
   const containerStyle: ViewStyle[] = [
     styles.container,
     ...(compact ? [styles.containerCompact] : []),
@@ -197,7 +204,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: PANEL_BORDER_ACCENT_WIDTH,
   },
   containerCompact: {
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
   },
   iconWrap: {
     paddingTop: PANEL_ICON_TOP_ALIGNMENT_OFFSET,

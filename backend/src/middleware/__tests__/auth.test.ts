@@ -227,6 +227,58 @@ describe('Auth Middleware', () => {
       expect(req.user).toEqual(raceUser);
     });
 
+    it('links an existing user by email when create hits the email unique constraint', async () => {
+      const { PrismaClientKnownRequestError } = jest.requireActual('@prisma/client/runtime/library');
+      mockVerifyToken.mockResolvedValue({ sub: 'clerk-new-local-user' });
+      mockGetUser.mockResolvedValue({
+        firstName: 'Local',
+        lastName: 'User',
+        emailAddresses: [{ emailAddress: 'local@example.com' }],
+      });
+      const existingUser = {
+        ...mockUser,
+        id: 'user-local',
+        clerkId: null,
+        email: 'local@example.com',
+        name: 'Local User',
+      };
+      const linkedUser = { ...existingUser, clerkId: 'clerk-new-local-user' };
+      (prisma.user.findUnique as jest.Mock)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(existingUser);
+      const p2002Error = new PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: '5.0.0' });
+      (prisma.user.create as jest.Mock).mockRejectedValue(p2002Error);
+      (prisma.user.update as jest.Mock).mockResolvedValue(linkedUser);
+
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer valid-clerk-token' },
+      });
+      const { res } = createMockResponse();
+      const next = jest.fn();
+
+      await requireAuth(req as Request, res as Response, next);
+
+      expect(prisma.user.findUnique).toHaveBeenNthCalledWith(2, {
+        where: { clerkId: 'clerk-new-local-user' },
+      });
+      expect(prisma.user.findUnique).toHaveBeenNthCalledWith(3, {
+        where: { email: 'local@example.com' },
+      });
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-local' },
+        data: {
+          clerkId: 'clerk-new-local-user',
+          email: 'local@example.com',
+          name: 'Local User',
+          firstName: 'Local',
+          lastName: 'User',
+        },
+      });
+      expect(next).toHaveBeenCalled();
+      expect(req.user).toEqual(linkedUser);
+    });
+
     it('uses an existing local user when Clerk profile lookup fails', async () => {
       mockVerifyToken.mockResolvedValue({ sub: 'clerk-user-123' });
       mockGetUser.mockRejectedValue(new Error('Clerk unavailable'));

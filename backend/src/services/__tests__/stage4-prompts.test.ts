@@ -1,10 +1,15 @@
 import {
+  buildTendingConversationPrompt,
   isExplicitAskForInput,
   needsBrainstormPersona,
   proposalRefinementPersona,
   noOverlapPersona,
   coverageReviewOpenNeedsClause,
   stage4HandoffBridgeMessage,
+  TENDING_MORE_SUPPORT_PERSONA,
+  TENDING_NEEDS_REVIEW_PERSONA,
+  TENDING_WHAT_COMES_NEXT_PERSONA,
+  TENDING_WHAT_WORKED_PERSONA,
 } from '../stage4-prompts';
 
 describe('isExplicitAskForInput', () => {
@@ -92,5 +97,68 @@ describe('stage4HandoffBridgeMessage', () => {
   it('falls back to a generic partner phrase when name is missing', () => {
     expect(stage4HandoffBridgeMessage(null)).toContain('your partner');
     expect(stage4HandoffBridgeMessage('')).toContain('your partner');
+  });
+});
+
+describe('Tending conversation prompt support', () => {
+  it('what-worked posture asks what actually happened before treating anything as working', () => {
+    expect(TENDING_WHAT_WORKED_PERSONA).toContain('what actually happened');
+    expect(TENDING_WHAT_WORKED_PERSONA).toContain('Did it happen, partly happen, or not happen');
+    expect(TENDING_WHAT_WORKED_PERSONA).toContain('never treated as resolution');
+  });
+
+  it('more-support posture treats failed follow-through as information and includes blocker categories', () => {
+    expect(TENDING_MORE_SUPPORT_PERSONA).toContain('information, not failure');
+    expect(TENDING_MORE_SUPPORT_PERSONA).toContain('forgot');
+    expect(TENDING_MORE_SUPPORT_PERSONA).toContain('partner did not do part');
+    expect(TENDING_MORE_SUPPORT_PERSONA).toContain('I did not do part');
+    expect(TENDING_MORE_SUPPORT_PERSONA).toContain('circumstances changed');
+  });
+
+  it('needs-review posture checks underlying need resolution separately from commitment follow-through', () => {
+    expect(TENDING_NEEDS_REVIEW_PERSONA).toContain('resolved, improving, still open, changed, or not sure');
+    expect(TENDING_NEEDS_REVIEW_PERSONA).toContain('A commitment can happen and the need can still be open');
+    expect(TENDING_NEEDS_REVIEW_PERSONA).toContain('not a failure');
+  });
+
+  it('what-comes-next routes failed follow-through toward adjustment or strategy reopening, not generic extension', () => {
+    expect(TENDING_WHAT_COMES_NEXT_PERSONA).toContain('adjust the commitment');
+    expect(TENDING_WHAT_COMES_NEXT_PERSONA).toContain('reopen strategy work');
+    expect(TENDING_WHAT_COMES_NEXT_PERSONA).toContain('rather than generic extension');
+    expect(TENDING_WHAT_COMES_NEXT_PERSONA).toContain('Private reminders do not notify the partner');
+  });
+
+  it('builds a phase-specific Tending prompt with private partner boundary and inspectable list context', () => {
+    const prompt = buildTendingConversationPrompt('needsReview', {
+      userName: 'Adam',
+      partnerName: 'Eve',
+      entries: [
+        { id: 'entry-1', summary: 'Weekly walk', scope: 'SHARED', successCriteria: 'Both feel less alone.' },
+        { id: 'entry-2', summary: 'Saturday mornings', scope: 'INDIVIDUAL' },
+      ],
+      needs: [
+        { id: 'need-1', label: 'not being alone on the inside' },
+      ],
+      selectedBetweenPeriodNotes: [
+        {
+          id: 'note-1',
+          content: 'I got tense before the second walk.',
+          consentToShareWithPartner: false,
+        },
+      ],
+      latestStructuredOutcomes: 'entry-1 happened and helped partly',
+    });
+
+    expect(prompt).toContain('speaking privately with Adam');
+    expect(prompt).toContain('Eve is not in this conversation');
+    expect(prompt).toContain('Nothing crosses to Eve unless Adam explicitly chooses');
+    expect(prompt).toContain('Weekly walk');
+    expect(prompt).toContain('Both feel less alone');
+    expect(prompt).toContain('Saturday mornings');
+    expect(prompt).toContain('not being alone on the inside');
+    expect(prompt).toContain('I got tense before the second walk');
+    expect(prompt).toContain('private; do not relay');
+    expect(prompt).toContain('entry-1 happened and helped partly');
+    expect(prompt).toContain('Ask one thing at a time');
   });
 });

@@ -3,7 +3,6 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import {
   deriveChapterMarkers,
   getEmpathyValidationCardStatus,
-  getNeedsDrawerModeForNeedsStatus,
   isLocalEmpathyValidationCurrent,
   NeedsIdentifiedChatCard,
 } from '../UnifiedSessionScreen';
@@ -47,12 +46,6 @@ describe('NeedsIdentifiedChatCard', () => {
 
     fireEvent.press(action);
     expect(onReview).toHaveBeenCalledTimes(1);
-  });
-
-  it('routes shared needs to the side-by-side reveal drawer mode', () => {
-    expect(getNeedsDrawerModeForNeedsStatus('ready')).toBe('needs');
-    expect(getNeedsDrawerModeForNeedsStatus('confirmed')).toBe('needs');
-    expect(getNeedsDrawerModeForNeedsStatus('shared')).toBe('reveal');
   });
 
   it('keeps validation feedback distinct from positive empathy confirmation', () => {
