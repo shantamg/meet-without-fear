@@ -349,6 +349,38 @@ describe('tending.service', () => {
     );
   });
 
+  it('opens due individual entries privately for the owner only', async () => {
+    (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([
+      {
+        id: 'tending-individual-1',
+        sessionId,
+        scope: TendingEntryScope.INDIVIDUAL,
+        ownerUserId: userId,
+        type: TendingEntryType.SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN,
+      },
+    ]);
+    (prisma.tendingEntry.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+    const result = await openDueTendingEntries(new Date('2026-05-13T10:00:00.000Z'));
+
+    expect(result).toEqual({ opened: 1, entryIds: ['tending-individual-1'] });
+    expect(publishUserEvent).toHaveBeenCalledWith(
+      userId,
+      'session.updated',
+      expect.objectContaining({
+        sessionId,
+        kind: 'tending_checkin_opened',
+        tendingEntryId: 'tending-individual-1',
+        scope: TendingEntryScope.INDIVIDUAL,
+      })
+    );
+    expect(publishSessionEvent).not.toHaveBeenCalledWith(
+      sessionId,
+      'notification.pending_action',
+      expect.objectContaining({ tendingEntryId: 'tending-individual-1' })
+    );
+  });
+
   it('delivers private due reminders only to the requesting user', async () => {
     (prisma.tendingReminder.findMany as jest.Mock).mockResolvedValue([{
       id: 'reminder-private',

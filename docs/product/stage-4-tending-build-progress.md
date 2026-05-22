@@ -436,6 +436,30 @@ Branch: `codex/full-tending-flow`
   - Browser UX smoke for the reminder preset controls.
 - Next step: Chunk 5 due opener coverage for individual entries, or E2E/API reminder delivery tests.
 
+### 2026-05-22 — Finish Tending Chunk 5 Individual Due Opener
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - `openDueTendingEntries` now opens both due shared agreement check-ins and due individual commitment check-ins.
+  - Shared due entries still publish a session-level pending action.
+  - Individual due entries publish only to the owner via the private user channel and do not notify the partner.
+  - The existing cron/script entrypoint already calls `openDueTendingEntries`, so it now covers individual entries too.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Backend Tending service suite passed: 38 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Remaining Chunk 5 work:
+  - E2E/API coverage for individual scheduled check-in opening privately.
+  - Response deadline/status metadata exposure in the mobile read model beyond the coordination-cycle deadline.
+- Next step: between-period holding space or E2E/API coverage for reminder/due-entry privacy.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.

@@ -1308,11 +1308,16 @@ export async function submitTendingCheckin(args: {
 export async function openDueTendingEntries(now = new Date()): Promise<{ opened: number; entryIds: string[] }> {
   const dueEntries = await prisma.tendingEntry.findMany({
     where: {
-      type: TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
       status: TendingEntryStatus.SCHEDULED,
       scheduledFor: { lte: now },
+      type: {
+        in: [
+          TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
+          TendingEntryType.SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN,
+        ],
+      },
     },
-    select: { id: true, sessionId: true },
+    select: { id: true, sessionId: true, scope: true, ownerUserId: true, type: true },
   });
 
   const entryIds: string[] = [];
@@ -1325,10 +1330,20 @@ export async function openDueTendingEntries(now = new Date()): Promise<{ opened:
     entryIds.push(entry.id);
 
     try {
-      await publishSessionEvent(entry.sessionId, 'notification.pending_action', {
-        kind: 'tending_checkin_opened',
-        tendingEntryId: entry.id,
-      });
+      if (entry.scope === TendingEntryScope.INDIVIDUAL && entry.ownerUserId) {
+        await publishUserEvent(entry.ownerUserId, 'session.updated', {
+          sessionId: entry.sessionId,
+          kind: 'tending_checkin_opened',
+          tendingEntryId: entry.id,
+          scope: entry.scope,
+        });
+      } else {
+        await publishSessionEvent(entry.sessionId, 'notification.pending_action', {
+          kind: 'tending_checkin_opened',
+          tendingEntryId: entry.id,
+          scope: entry.scope,
+        });
+      }
     } catch (error) {
       logger.warn('[tending] Failed to publish opened check-in event', { entryId: entry.id, error });
     }
