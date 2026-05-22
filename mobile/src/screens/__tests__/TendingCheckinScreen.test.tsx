@@ -101,6 +101,38 @@ describe('TendingCheckinScreen', () => {
     );
   });
 
+  it('submits adjustment details when choosing adjust commitment', () => {
+    const onSubmit = jest.fn();
+    const { getByTestId } = render(
+      <TendingCheckinScreen entries={[entry]} onSubmit={onSubmit} />
+    );
+
+    fireEvent.press(getByTestId('tending-checkin-next'));
+    fireEvent.press(getByTestId(`tending-blocker-tending-1-${TendingBlockerCategory.TOO_FREQUENT}`));
+    fireEvent.press(getByTestId('tending-checkin-next'));
+    fireEvent.press(getByTestId('tending-checkin-next'));
+    fireEvent.press(getByTestId(`tending-checkin-choice-${TendingNextAction.ADJUST_COMMITMENT}`));
+
+    expect(getByTestId('tending-adjustment-controls')).toBeTruthy();
+    fireEvent.changeText(getByTestId('tending-adjustment-text'), 'Try one planning check-in a month.');
+    fireEvent.changeText(getByTestId('tending-adjustment-cadence'), 'Monthly');
+    fireEvent.changeText(getByTestId('tending-adjustment-success'), 'It happens without anyone bracing.');
+    fireEvent.changeText(getByTestId('tending-adjustment-reason'), 'Weekly was too frequent.');
+    fireEvent.press(getByTestId('tending-checkin-submit'));
+
+    const payload = onSubmit.mock.calls[0][0];
+    expect(payload.nextAction).toBe(TendingNextAction.ADJUST_COMMITMENT);
+    expect(payload.adjustments[0]).toEqual(expect.objectContaining({
+      tendingEntryId: 'tending-1',
+      privacyScope: TendingReminderScope.SHARED,
+      revisedCommitmentText: 'Try one planning check-in a month.',
+      revisedCadence: 'Monthly',
+      revisedSuccessCriteria: 'It happens without anyone bracing.',
+      reason: 'Weekly was too frequent.',
+      blockerAddressed: [TendingBlockerCategory.TOO_FREQUENT],
+    }));
+  });
+
   it('expands partial closure into per-entry RESOLVED/CONTINUING toggles', () => {
     const onSubmit = jest.fn();
     const { getByTestId, queryByTestId } = render(

@@ -578,6 +578,19 @@ describe('tending.service', () => {
           updatedAt: new Date('2026-05-20T10:03:00.000Z'),
         })
       );
+      (prisma.tendingAdjustment.create as jest.Mock).mockImplementation((args: any) =>
+        Promise.resolve({
+          id: `adjustment-${args.data.tendingEntryId}`,
+          ...args.data,
+          revisedCommitmentText: args.data.revisedCommitmentText ?? null,
+          revisedCadence: args.data.revisedCadence ?? null,
+          revisedScope: args.data.revisedScope ?? null,
+          revisedSuccessCriteria: args.data.revisedSuccessCriteria ?? null,
+          reason: args.data.reason ?? null,
+          blockerAddressed: args.data.blockerAddressed ?? [],
+          createdAt: new Date('2026-05-20T10:04:00.000Z'),
+        })
+      );
       (prisma.tendingCoordinationCycle.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.tendingCoordinationCycle.create as jest.Mock).mockImplementation((args: any) =>
         Promise.resolve({
@@ -758,6 +771,67 @@ describe('tending.service', () => {
           }],
         })
       ).rejects.toBeInstanceOf(TendingInvalidStateError);
+    });
+
+    it('persists adjustment details as revision history on the check-in', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('private-1')]);
+
+      const result = await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.EXTEND),
+        nextAction: TendingNextAction.ADJUST_COMMITMENT,
+        adjustments: [{
+          tendingEntryId: 'private-1',
+          privacyScope: TendingReminderScope.PRIVATE,
+          revisedCommitmentText: 'Take a 10-minute walk once a week.',
+          revisedCadence: 'Weekly',
+          revisedScope: 'One short walk instead of two longer ones.',
+          revisedSuccessCriteria: 'I come back less flooded.',
+          reason: 'Twice a week was too hard to maintain.',
+          blockerAddressed: [TendingBlockerCategory.TOO_FREQUENT],
+        }],
+      });
+
+      expect(prisma.tendingAdjustment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId,
+          checkinId: 'checkin-1',
+          tendingEntryId: 'private-1',
+          userId,
+          privacyScope: TendingReminderScope.PRIVATE,
+          revisedCommitmentText: 'Take a 10-minute walk once a week.',
+          revisedCadence: 'Weekly',
+          revisedSuccessCriteria: 'I come back less flooded.',
+          blockerAddressed: [TendingBlockerCategory.TOO_FREQUENT],
+        }),
+      });
+      expect(result.checkin?.adjustments?.[0]).toEqual(expect.objectContaining({
+        tendingEntryId: 'private-1',
+        revisedCadence: 'Weekly',
+        blockerAddressed: [TendingBlockerCategory.TOO_FREQUENT],
+      }));
+    });
+
+    it('rejects adjustments for entries the user cannot respond to', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('private-1')]);
+
+      await expect(
+        submitTendingCheckin({
+          sessionId,
+          userId,
+          orientations: baseOrientations(ContinueChoice.EXTEND),
+          nextAction: TendingNextAction.ADJUST_COMMITMENT,
+          adjustments: [{
+            tendingEntryId: 'missing-entry',
+            revisedCommitmentText: 'Change something else.',
+          }],
+        })
+      ).rejects.toBeInstanceOf(TendingInvalidStateError);
+
+      expect(prisma.tendingAdjustment.create).not.toHaveBeenCalled();
     });
 
     it('private individual reminders do not notify the partner', async () => {

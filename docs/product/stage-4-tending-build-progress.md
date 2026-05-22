@@ -346,6 +346,44 @@ Branch: `codex/full-tending-flow`
   - Full browser verification of the resolved coordination summary on the resolved-session Tending panel after running the resolver.
 - Next step: Chunk 3 adjustment persistence and mobile adjustment form, unless finishing the resolved-summary browser state is cheaper first.
 
+### 2026-05-22 — Finish Tending Chunk 3 Adjustment Persistence
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260522103000_add_tending_adjustments/migration.sql`
+  - `shared/src/dto/strategy.ts`
+  - `backend/src/controllers/tending.ts`
+  - `backend/src/lib/__mocks__/prisma.ts`
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `mobile/src/screens/TendingCheckinScreen.tsx`
+  - `mobile/src/screens/__tests__/TendingCheckinScreen.test.tsx`
+- Decisions made:
+  - Added `TendingAdjustment` as an append-only revision/history table tied to session, check-in, entry, and user.
+  - Adjustment payload now captures revised commitment text, cadence/frequency, scope, success criteria, reason, blocker addressed, and private/shared scope.
+  - `/sessions/:id/tending/checkin` accepts `adjustments` and persists them with the same check-in batch as outcomes/reminders.
+  - Adjustment references are validated against currently open/respondable entries, and individual adjustments remain owner-only.
+  - Mobile `TendingCheckinScreen` now shows adjustment inputs when the user chooses `ADJUST_COMMITMENT` and submits them in the structured payload.
+- Commands run:
+  - `npx prisma@6.12.0 generate --schema backend/prisma/schema.prisma`
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/mwf npx prisma@6.12.0 validate --schema backend/prisma/schema.prisma`
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm test --workspace mobile -- --runTestsByPath src/screens/__tests__/TendingCheckinScreen.test.tsx --runInBand --forceExit`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace mobile`
+- Test results:
+  - Prisma schema validation passed.
+  - Backend Tending service suite passed: 35 tests.
+  - Mobile TendingCheckinScreen suite passed: 4 tests.
+  - Shared, backend, and mobile typechecks passed.
+- Known blockers: none.
+- Remaining Chunk 3 work:
+  - Browser test for changing cadence, e.g. "twice a month" to "once a month", with a reminder.
+  - Richer mobile controls for presets/frequency rather than plain text fields.
+- Next step: Chunk 4 reminder delivery processor and preset controls, or add the Chunk 3 browser scenario first.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.

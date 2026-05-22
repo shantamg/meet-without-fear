@@ -57,6 +57,7 @@ export const prisma = {
   tendingEntryOutcome: createMockModel(),
   tendingNeedOutcome: createMockModel(),
   tendingReminder: createMockModel(),
+  tendingAdjustment: createMockModel(),
   tendingResponsePartialClosure: createMockModel(),
   strategyProposalNeed: createMockModel(),
   emotionalExerciseCompletion: createMockModel(),

@@ -138,6 +138,10 @@ export function TendingCheckinScreen({
   const [partialClosure, setPartialClosure] = useState<Record<string, PartialClosureResolution>>({});
   const [privateReminder, setPrivateReminder] = useState(false);
   const [sharedReminder, setSharedReminder] = useState(false);
+  const [adjustmentText, setAdjustmentText] = useState('');
+  const [adjustmentCadence, setAdjustmentCadence] = useState('');
+  const [adjustmentSuccessCriteria, setAdjustmentSuccessCriteria] = useState('');
+  const [adjustmentReason, setAdjustmentReason] = useState('');
 
   const stepIndex = STEP_ORDER.indexOf(step);
   const isLast = stepIndex === STEP_ORDER.length - 1;
@@ -188,6 +192,21 @@ export function TendingCheckinScreen({
           }
         : null,
     ].filter(Boolean) as NonNullable<SubmitTendingCheckinRequest['reminders']>;
+    const adjustmentEntry = respondable[0];
+    const adjustments =
+      nextAction === TendingNextAction.ADJUST_COMMITMENT && adjustmentEntry
+        ? [{
+            tendingEntryId: adjustmentEntry.id,
+            privacyScope: adjustmentEntry.scope === TendingEntryScope.SHARED
+              ? TendingReminderScope.SHARED
+              : TendingReminderScope.PRIVATE,
+            revisedCommitmentText: adjustmentText.trim() || undefined,
+            revisedCadence: adjustmentCadence.trim() || undefined,
+            revisedSuccessCriteria: adjustmentSuccessCriteria.trim() || undefined,
+            reason: adjustmentReason.trim() || undefined,
+            blockerAddressed: blockers[adjustmentEntry.id] ?? [],
+          }]
+        : undefined;
 
     onSubmit({
       orientations: {
@@ -208,6 +227,7 @@ export function TendingCheckinScreen({
       entryOutcomes,
       needOutcomes,
       reminders,
+      adjustments,
       nextAction,
     });
   };
@@ -394,6 +414,47 @@ export function TendingCheckinScreen({
             </View>
           )}
 
+          {nextAction === TendingNextAction.ADJUST_COMMITMENT && (
+            <View style={styles.adjustmentBlock} testID="tending-adjustment-controls">
+              <Text style={styles.fieldLabel}>Adjustment</Text>
+              <TextInput
+                value={adjustmentText}
+                onChangeText={setAdjustmentText}
+                placeholder="What would make this commitment more doable?"
+                placeholderTextColor={colors.textMuted}
+                style={styles.textInput}
+                multiline
+                testID="tending-adjustment-text"
+              />
+              <TextInput
+                value={adjustmentCadence}
+                onChangeText={setAdjustmentCadence}
+                placeholder="Cadence or frequency"
+                placeholderTextColor={colors.textMuted}
+                style={styles.textInput}
+                testID="tending-adjustment-cadence"
+              />
+              <TextInput
+                value={adjustmentSuccessCriteria}
+                onChangeText={setAdjustmentSuccessCriteria}
+                placeholder="How will you know it helped?"
+                placeholderTextColor={colors.textMuted}
+                style={styles.textInput}
+                multiline
+                testID="tending-adjustment-success"
+              />
+              <TextInput
+                value={adjustmentReason}
+                onChangeText={setAdjustmentReason}
+                placeholder="What blocker does this address?"
+                placeholderTextColor={colors.textMuted}
+                style={styles.textInput}
+                multiline
+                testID="tending-adjustment-reason"
+              />
+            </View>
+          )}
+
           {choice === ContinueChoice.PARTIAL_CLOSURE && (
             <View style={styles.partialClosureBlock} testID="tending-checkin-partial-closure">
               <Text style={styles.fieldLabel}>For each commitment</Text>
@@ -485,6 +546,7 @@ const styles = StyleSheet.create({
   choiceLabel: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
   choiceLabelSelected: { color: colors.accent },
   reminderBlock: { marginTop: 16, gap: 8 },
+  adjustmentBlock: { marginTop: 16, gap: 8 },
   partialClosureBlock: { marginTop: 16, gap: 12 },
   partialClosureRow: { gap: 6 },
   navRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 16 },

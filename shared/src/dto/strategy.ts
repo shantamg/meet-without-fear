@@ -376,6 +376,7 @@ export interface TendingCheckinDTO {
   entryOutcomes?: TendingEntryOutcomeDTO[];
   needOutcomes?: TendingNeedOutcomeDTO[];
   reminders?: TendingReminderDTO[];
+  adjustments?: TendingAdjustmentDTO[];
 }
 
 export interface TendingCoordinationCycleDTO {
@@ -435,6 +436,22 @@ export interface TendingReminderDTO {
   status: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TendingAdjustmentDTO {
+  id: string;
+  sessionId: string;
+  checkinId: string;
+  tendingEntryId: string;
+  userId: string;
+  privacyScope: TendingReminderScope;
+  revisedCommitmentText: string | null;
+  revisedCadence: string | null;
+  revisedScope: string | null;
+  revisedSuccessCriteria: string | null;
+  reason: string | null;
+  blockerAddressed: TendingBlockerCategory[];
+  createdAt: string;
 }
 
 export interface GetTendingEntriesResponse {
@@ -501,6 +518,17 @@ export interface TendingReminderInput {
   note?: string;
 }
 
+export interface TendingAdjustmentInput {
+  tendingEntryId: string;
+  privacyScope?: TendingReminderScope;
+  revisedCommitmentText?: string;
+  revisedCadence?: string;
+  revisedScope?: string;
+  revisedSuccessCriteria?: string;
+  reason?: string;
+  blockerAddressed?: TendingBlockerCategory[];
+}
+
 export interface TendingCheckinWhatComesNext {
   continueChoice: ContinueChoice;
   nextAction?: TendingNextAction;
@@ -519,6 +547,7 @@ export interface SubmitTendingCheckinRequest {
   entryOutcomes?: TendingCheckinEntryOutcomeInput[];
   needOutcomes?: TendingCheckinNeedOutcomeInput[];
   reminders?: TendingReminderInput[];
+  adjustments?: TendingAdjustmentInput[];
   nextAction?: TendingNextAction;
   resolvedEnoughOverride?: boolean;
   resolvedEnoughOverrideNote?: string;

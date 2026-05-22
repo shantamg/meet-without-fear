@@ -58,6 +58,7 @@ model User {
   tendingCoordinationCycles TendingCoordinationCycle[]
   tendingEntryOutcomes     TendingEntryOutcome[]
   tendingReminders         TendingReminder[]
+  tendingAdjustments       TendingAdjustment[]
   exerciseCompletions      EmotionalExerciseCompletion[]
   invitationsSent          Invitation[]                  @relation("InvitedBy")
   innerWorkSessions        InnerWorkSession[]
@@ -152,6 +153,7 @@ model Session {
   tendingCoordinationCycles TendingCoordinationCycle[]
   tendingNeedOutcomes       TendingNeedOutcome[]
   tendingReminders          TendingReminder[]
+  tendingAdjustments        TendingAdjustment[]
   consentRecords            ConsentRecord[]
   exerciseCompletions       EmotionalExerciseCompletion[]
   invitations               Invitation[]
@@ -1246,6 +1248,7 @@ model TendingEntry {
   partialClosures  TendingResponsePartialClosure[]
   entryOutcomes    TendingEntryOutcome[]
   reminders        TendingReminder[]
+  adjustments      TendingAdjustment[]
 
   @@index([sessionId, status])
   @@index([agreementId])
@@ -1271,6 +1274,7 @@ model TendingCheckin {
   entryOutcomes TendingEntryOutcome[]
   needOutcomes  TendingNeedOutcome[]
   reminders     TendingReminder[]
+  adjustments   TendingAdjustment[]
 
   @@index([sessionId, submittedAt])
   @@index([userId, submittedAt])
@@ -1387,6 +1391,31 @@ model TendingReminder {
   @@index([userId, remindAt])
   @@index([checkinId])
   @@index([tendingEntryId])
+}
+
+model TendingAdjustment {
+  id                     String               @id @default(cuid())
+  session                Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId              String
+  checkin                TendingCheckin       @relation(fields: [checkinId], references: [id], onDelete: Cascade)
+  checkinId              String
+  tendingEntry           TendingEntry         @relation(fields: [tendingEntryId], references: [id], onDelete: Cascade)
+  tendingEntryId         String
+  user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                 String
+  privacyScope           TendingReminderScope @default(PRIVATE)
+  revisedCommitmentText  String?              @db.Text
+  revisedCadence         String?
+  revisedScope           String?              @db.Text
+  revisedSuccessCriteria String?              @db.Text
+  reason                 String?              @db.Text
+  blockerAddressed       TendingBlockerCategory[]
+  createdAt              DateTime             @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([checkinId])
+  @@index([tendingEntryId])
+  @@index([userId, createdAt])
 }
 
 // Stage 4 Phase 5: ContinueChoice — five forward paths at the end of a Tending check-in.

@@ -3,6 +3,8 @@ import {
   ContinueChoice,
   PartialClosureResolution,
   TendingCheckinDTO,
+  TendingAdjustmentDTO,
+  TendingAdjustmentInput,
   TendingCheckinEntryOutcomeInput,
   TendingCheckinNeedOutcomeInput,
   TendingCheckinOrientations,
@@ -161,6 +163,38 @@ function toReminderDTO(reminder: NonNullable<TendingEntryWithResponses['reminder
     status: reminder.status,
     createdAt: reminder.createdAt.toISOString(),
     updatedAt: reminder.updatedAt.toISOString(),
+  };
+}
+
+function toAdjustmentDTO(adjustment: {
+  id: string;
+  sessionId: string;
+  checkinId: string;
+  tendingEntryId: string;
+  userId: string;
+  privacyScope: any;
+  revisedCommitmentText: string | null;
+  revisedCadence: string | null;
+  revisedScope: string | null;
+  revisedSuccessCriteria: string | null;
+  reason: string | null;
+  blockerAddressed: any[];
+  createdAt: Date;
+}): TendingAdjustmentDTO {
+  return {
+    id: adjustment.id,
+    sessionId: adjustment.sessionId,
+    checkinId: adjustment.checkinId,
+    tendingEntryId: adjustment.tendingEntryId,
+    userId: adjustment.userId,
+    privacyScope: adjustment.privacyScope as TendingReminderScope,
+    revisedCommitmentText: adjustment.revisedCommitmentText,
+    revisedCadence: adjustment.revisedCadence,
+    revisedScope: adjustment.revisedScope,
+    revisedSuccessCriteria: adjustment.revisedSuccessCriteria,
+    reason: adjustment.reason,
+    blockerAddressed: adjustment.blockerAddressed,
+    createdAt: adjustment.createdAt.toISOString(),
   };
 }
 
@@ -726,6 +760,7 @@ export async function submitTendingCheckin(args: {
   entryOutcomes?: TendingCheckinEntryOutcomeInput[];
   needOutcomes?: TendingCheckinNeedOutcomeInput[];
   reminders?: TendingReminderInput[];
+  adjustments?: TendingAdjustmentInput[];
   nextAction?: TendingNextAction;
   resolvedEnoughOverride?: boolean;
   resolvedEnoughOverrideNote?: string;
@@ -785,6 +820,15 @@ export async function submitTendingCheckin(args: {
       if (!linkedEntry || linkedEntry.scope !== TendingEntryScope.SHARED) {
         throw new TendingInvalidStateError('Shared reminders require a shared Tending entry');
       }
+    }
+  }
+  for (const adjustment of args.adjustments ?? []) {
+    if (!openEntryIds.has(adjustment.tendingEntryId)) {
+      throw new TendingInvalidStateError('Adjustment references a non-open Tending entry');
+    }
+    const linkedEntry = openEntries.find((entry) => entry.id === adjustment.tendingEntryId);
+    if (linkedEntry?.scope === TendingEntryScope.INDIVIDUAL && linkedEntry.ownerUserId !== args.userId) {
+      throw new TendingForbiddenError();
     }
   }
   if (choice === ContinueChoice.FULL_CLOSURE && !args.resolvedEnoughOverride) {
@@ -1007,6 +1051,25 @@ export async function submitTendingCheckin(args: {
       }));
     }
 
+    const createdAdjustments = [];
+    for (const adjustment of args.adjustments ?? []) {
+      createdAdjustments.push(await tx.tendingAdjustment.create({
+        data: {
+          sessionId: args.sessionId,
+          checkinId: createdCheckin.id,
+          tendingEntryId: adjustment.tendingEntryId,
+          userId: args.userId,
+          privacyScope: adjustment.privacyScope ?? TendingReminderScope.PRIVATE,
+          revisedCommitmentText: adjustment.revisedCommitmentText,
+          revisedCadence: adjustment.revisedCadence,
+          revisedScope: adjustment.revisedScope,
+          revisedSuccessCriteria: adjustment.revisedSuccessCriteria,
+          reason: adjustment.reason,
+          blockerAddressed: adjustment.blockerAddressed ?? [],
+        },
+      }));
+    }
+
     checkinDTO = {
       id: createdCheckin.id,
       sessionId: createdCheckin.sessionId,
@@ -1019,6 +1082,7 @@ export async function submitTendingCheckin(args: {
       createdAt: createdCheckin.createdAt.toISOString(),
       needOutcomes: createdNeedOutcomes.map(toNeedOutcomeDTO),
       reminders: createdReminders.map(toReminderDTO),
+      adjustments: createdAdjustments.map(toAdjustmentDTO),
     };
 
     if (hasSharedEntry) {
