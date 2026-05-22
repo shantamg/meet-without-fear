@@ -5,12 +5,15 @@
  *   npx tsx src/scripts/open-due-tending-entries.ts
  */
 
-import { openDueTendingEntries } from '../services/tending.service';
+import { openDueTendingEntries, processDueTendingReminders } from '../services/tending.service';
 
 async function main(): Promise<void> {
-  const result = await openDueTendingEntries();
+  const [entries, reminders] = await Promise.all([
+    openDueTendingEntries(),
+    processDueTendingReminders(),
+  ]);
   // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ ok: true, ...result }, null, 2));
+  console.log(JSON.stringify({ ok: true, entries, reminders }, null, 2));
 }
 
 main()

@@ -27,7 +27,7 @@ import {
 } from '@meet-without-fear/shared';
 import { prisma } from '../lib/prisma';
 import { logger } from '../lib/logger';
-import { publishSessionEvent } from './realtime';
+import { publishSessionEvent, publishUserEvent } from './realtime';
 
 type Tx = Prisma.TransactionClient;
 
@@ -1335,6 +1335,84 @@ export async function openDueTendingEntries(now = new Date()): Promise<{ opened:
   }
 
   return { opened: entryIds.length, entryIds };
+}
+
+function nextReminderDate(remindAt: Date, cadence: string | null): Date | null {
+  const normalized = cadence?.trim().toUpperCase().replace(/[\s-]+/g, '_') ?? 'ONCE';
+  const next = new Date(remindAt.getTime());
+  switch (normalized) {
+    case 'WEEKLY':
+      next.setUTCDate(next.getUTCDate() + 7);
+      return next;
+    case 'MONTHLY':
+      next.setUTCMonth(next.getUTCMonth() + 1);
+      return next;
+    case 'EVERY_COUPLE_MONTHS':
+    case 'EVERY_TWO_MONTHS':
+    case 'BIMONTHLY':
+      next.setUTCMonth(next.getUTCMonth() + 2);
+      return next;
+    case 'ONCE':
+    case 'ONE_TIME':
+    default:
+      return null;
+  }
+}
+
+export async function processDueTendingReminders(
+  now = new Date()
+): Promise<{ delivered: number; reminderIds: string[] }> {
+  const dueReminders = await prisma.tendingReminder.findMany({
+    where: {
+      status: 'SCHEDULED',
+      remindAt: { lte: now },
+    },
+    orderBy: [{ remindAt: 'asc' }],
+  });
+
+  const reminderIds: string[] = [];
+  for (const reminder of dueReminders) {
+    const nextDate = nextReminderDate(reminder.remindAt, reminder.cadence);
+    if (nextDate) {
+      await prisma.tendingReminder.update({
+        where: { id: reminder.id },
+        data: {
+          remindAt: nextDate,
+          status: 'SCHEDULED',
+        },
+      });
+    } else {
+      await prisma.tendingReminder.update({
+        where: { id: reminder.id },
+        data: { status: 'DELIVERED' },
+      });
+    }
+    reminderIds.push(reminder.id);
+
+    const payload = {
+      kind: 'tending_reminder_due',
+      reminderId: reminder.id,
+      tendingEntryId: reminder.tendingEntryId,
+      scope: reminder.scope,
+      note: reminder.note,
+      userId: reminder.userId,
+    };
+
+    try {
+      if (reminder.scope === TendingReminderScope.PRIVATE) {
+        await publishUserEvent(reminder.userId, 'session.updated', {
+          sessionId: reminder.sessionId,
+          ...payload,
+        });
+      } else {
+        await publishSessionEvent(reminder.sessionId, 'notification.pending_action', payload);
+      }
+    } catch (error) {
+      logger.warn('[tending] Failed to publish reminder due event', { reminderId: reminder.id, error });
+    }
+  }
+
+  return { delivered: reminderIds.length, reminderIds };
 }
 
 export async function resolveTimedOutTendingCoordinationCycles(

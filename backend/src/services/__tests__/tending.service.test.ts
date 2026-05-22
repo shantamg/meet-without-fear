@@ -1,10 +1,11 @@
 import { prisma } from '../../lib/prisma';
-import { publishSessionEvent } from '../realtime';
+import { publishSessionEvent, publishUserEvent } from '../realtime';
 import {
   createPassiveReentry,
   listTendingEntries,
   listTendingCoordinationCycles,
   openDueTendingEntries,
+  processDueTendingReminders,
   publishPartnerInvolvingReentryChoice,
   recommendTendingNextAction,
   resolveReadyTendingCoordinationCycles,
@@ -345,6 +346,79 @@ describe('tending.service', () => {
       sessionId,
       'notification.pending_action',
       expect.objectContaining({ kind: 'tending_checkin_opened' })
+    );
+  });
+
+  it('delivers private due reminders only to the requesting user', async () => {
+    (prisma.tendingReminder.findMany as jest.Mock).mockResolvedValue([{
+      id: 'reminder-private',
+      sessionId,
+      checkinId: 'checkin-1',
+      tendingEntryId: 'tending-1',
+      userId,
+      scope: TendingReminderScope.PRIVATE,
+      remindAt: new Date('2026-05-20T10:00:00.000Z'),
+      cadence: null,
+      note: 'Only remind me',
+      status: 'SCHEDULED',
+    }]);
+
+    const result = await processDueTendingReminders(new Date('2026-05-20T11:00:00.000Z'));
+
+    expect(result).toEqual({ delivered: 1, reminderIds: ['reminder-private'] });
+    expect(prisma.tendingReminder.update).toHaveBeenCalledWith({
+      where: { id: 'reminder-private' },
+      data: { status: 'DELIVERED' },
+    });
+    expect(publishUserEvent).toHaveBeenCalledWith(
+      userId,
+      'session.updated',
+      expect.objectContaining({
+        sessionId,
+        kind: 'tending_reminder_due',
+        reminderId: 'reminder-private',
+        scope: TendingReminderScope.PRIVATE,
+      })
+    );
+    expect(publishSessionEvent).not.toHaveBeenCalledWith(
+      sessionId,
+      'notification.pending_action',
+      expect.objectContaining({ reminderId: 'reminder-private' })
+    );
+  });
+
+  it('advances recurring shared due reminders and publishes shared pending action', async () => {
+    (prisma.tendingReminder.findMany as jest.Mock).mockResolvedValue([{
+      id: 'reminder-shared',
+      sessionId,
+      checkinId: 'checkin-1',
+      tendingEntryId: 'tending-1',
+      userId,
+      scope: TendingReminderScope.SHARED,
+      remindAt: new Date('2026-05-20T10:00:00.000Z'),
+      cadence: 'WEEKLY',
+      note: 'Shared nudge',
+      status: 'SCHEDULED',
+    }]);
+
+    const result = await processDueTendingReminders(new Date('2026-05-20T11:00:00.000Z'));
+
+    expect(result).toEqual({ delivered: 1, reminderIds: ['reminder-shared'] });
+    expect(prisma.tendingReminder.update).toHaveBeenCalledWith({
+      where: { id: 'reminder-shared' },
+      data: {
+        remindAt: new Date('2026-05-27T10:00:00.000Z'),
+        status: 'SCHEDULED',
+      },
+    });
+    expect(publishSessionEvent).toHaveBeenCalledWith(
+      sessionId,
+      'notification.pending_action',
+      expect.objectContaining({
+        kind: 'tending_reminder_due',
+        reminderId: 'reminder-shared',
+        scope: TendingReminderScope.SHARED,
+      })
     );
   });
 

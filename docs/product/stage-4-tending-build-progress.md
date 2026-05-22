@@ -384,6 +384,34 @@ Branch: `codex/full-tending-flow`
   - Richer mobile controls for presets/frequency rather than plain text fields.
 - Next step: Chunk 4 reminder delivery processor and preset controls, or add the Chunk 3 browser scenario first.
 
+### 2026-05-22 — Finish Tending Chunk 4 Reminder Delivery Processor
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `backend/src/services/__mocks__/realtime.ts`
+  - `backend/src/scripts/open-due-tending-entries.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Added `processDueTendingReminders` to deliver scheduled reminders due at or before `now`.
+  - One-time reminders are marked `DELIVERED`.
+  - Recurring reminders advance their `remindAt` according to cadence (`WEEKLY`, `MONTHLY`, and every-couple-months aliases) and stay `SCHEDULED`.
+  - Private reminders publish only to the requesting user's private realtime channel via `publishUserEvent(..., 'session.updated', ...)`, avoiding partner-visible session events.
+  - Shared reminders publish a `notification.pending_action` session event.
+  - Updated `open-due-tending-entries.ts` so the scheduled/cron entrypoint opens due Tending entries and processes due reminders together.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Backend Tending service suite passed: 37 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Remaining Chunk 4 work:
+  - Mobile preset/custom date controls beyond the current fixed two-week reminder toggle.
+  - E2E/API tests for private versus shared reminder delivery beyond unit coverage.
+- Next step: mobile reminder preset controls and payload tests.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.
