@@ -1296,3 +1296,104 @@ export async function resolveTimedOutTendingCoordinationCycles(
 
   return { resolved: cycleIds.length, cycleIds };
 }
+
+export async function resolveReadyTendingCoordinationCycles(
+  now = new Date()
+): Promise<{ resolved: number; cycleIds: string[] }> {
+  const readyCycles = await prisma.tendingCoordinationCycle.findMany({
+    where: { status: TendingCoordinationStatus.READY_TO_RESOLVE },
+    include: {
+      checkins: {
+        include: {
+          entryOutcomes: true,
+          needOutcomes: true,
+        },
+      },
+    },
+  });
+
+  const cycleIds: string[] = [];
+  for (const cycle of readyCycles) {
+    const choices = cycle.checkins
+      .map((checkin) => checkin.continueChoice)
+      .filter(Boolean);
+    const allExtend = choices.length > 0 && choices.every((choice) => choice === ContinueChoice.EXTEND);
+    const allFullClosure = choices.length > 0 && choices.every((choice) => choice === ContinueChoice.FULL_CLOSURE);
+    const anyNewProcess = choices.some((choice) => choice === ContinueChoice.NEW_PROCESS);
+    const anyReopen = choices.some((choice) => choice === ContinueChoice.ANOTHER_ROUND);
+    const anyFailedFollowThrough = cycle.checkins.some((checkin) =>
+      checkin.entryOutcomes.some((outcome) =>
+        outcome.followThroughStatus === TendingFollowThroughStatus.DID_NOT_HAPPEN ||
+        outcome.helpfulnessStatus === TendingHelpfulnessStatus.DID_NOT_HELP ||
+        outcome.stillWorthTrying === false
+      )
+    );
+    const anyStillOpenNeed = cycle.checkins.some((checkin) =>
+      checkin.needOutcomes.some((outcome) =>
+        outcome.resolutionStatus === TendingNeedResolutionStatus.STILL_OPEN ||
+        outcome.resolutionStatus === TendingNeedResolutionStatus.CHANGED ||
+        outcome.resolutionStatus === TendingNeedResolutionStatus.NOT_SURE
+      )
+    );
+
+    let resultSummary = '';
+    let nextScheduledFor: Date | null = null;
+    let nextScheduledForIso: string | null = null;
+
+    await prisma.$transaction(async (tx) => {
+      if (allExtend && !(anyFailedFollowThrough && anyStillOpenNeed)) {
+        nextScheduledFor = addDays(now, DEFAULT_EXTENSION_DAYS);
+        nextScheduledForIso = nextScheduledFor.toISOString();
+        await tx.tendingEntry.updateMany({
+          where: { id: { in: cycle.entryIds } },
+          data: {
+            status: TendingEntryStatus.SCHEDULED,
+            scheduledFor: nextScheduledFor,
+            openedAt: null,
+            completedAt: null,
+          },
+        });
+        resultSummary = `Both participants chose extension. Shared Tending entries continue until ${nextScheduledForIso}.`;
+      } else if (allFullClosure && !anyStillOpenNeed) {
+        await tx.tendingEntry.updateMany({
+          where: { id: { in: cycle.entryIds } },
+          data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
+        });
+        await tx.session.update({
+          where: { id: cycle.sessionId },
+          data: { status: 'RESOLVED', resolvedAt: now },
+        });
+        resultSummary = 'Both participants chose full closure and no submitted need remains open. Shared Tending entries are complete.';
+      } else if (anyNewProcess) {
+        resultSummary = 'At least one participant chose a new process. Partner-involving consent and mediated coordination are required before creating a linked shared session.';
+      } else if (anyReopen || (anyFailedFollowThrough && anyStillOpenNeed)) {
+        resultSummary = 'At least one participant reported failed follow-through or a still-open need. Shared Tending should move to adjustment or strategy reopening instead of blind extension.';
+      } else {
+        resultSummary = 'Participants submitted mixed Tending choices. Shared entries remain held for a mediated next-step prompt.';
+      }
+
+      await tx.tendingCoordinationCycle.update({
+        where: { id: cycle.id },
+        data: {
+          status: TendingCoordinationStatus.RESOLVED,
+          resolvedAt: now,
+          resultSummary,
+        },
+      });
+    });
+
+    cycleIds.push(cycle.id);
+    try {
+      await publishSessionEvent(cycle.sessionId, 'notification.pending_action', {
+        kind: 'tending_coordination_resolved',
+        coordinationCycleId: cycle.id,
+        resultSummary,
+        nextScheduledFor: nextScheduledForIso,
+      });
+    } catch (error) {
+      logger.warn('[tending] Failed to publish coordination resolved event', { cycleId: cycle.id, error });
+    }
+  }
+
+  return { resolved: cycleIds.length, cycleIds };
+}

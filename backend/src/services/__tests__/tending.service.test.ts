@@ -6,6 +6,7 @@ import {
   openDueTendingEntries,
   publishPartnerInvolvingReentryChoice,
   recommendTendingNextAction,
+  resolveReadyTendingCoordinationCycles,
   resolveTimedOutTendingCoordinationCycles,
   scheduleIndividualCommitmentTendingEntries,
   scheduleSharedAgreementTendingEntries,
@@ -856,6 +857,89 @@ describe('tending.service', () => {
           missingUserIds: [partnerId],
         })
       );
+    });
+
+    it('resolves overlapping shared extension after both partners submit', async () => {
+      (prisma.tendingCoordinationCycle.findMany as jest.Mock).mockResolvedValue([{
+        id: 'coordination-1',
+        sessionId,
+        status: TendingCoordinationStatus.READY_TO_RESOLVE,
+        entryIds: ['t1', 't2'],
+        participantUserIds: [userId, partnerId],
+        submittedUserIds: [userId, partnerId],
+        responseDeadlineAt: new Date('2026-06-03T10:00:00.000Z'),
+        checkins: [
+          { continueChoice: ContinueChoice.EXTEND, entryOutcomes: [], needOutcomes: [] },
+          { continueChoice: ContinueChoice.EXTEND, entryOutcomes: [], needOutcomes: [] },
+        ],
+      }]);
+
+      const result = await resolveReadyTendingCoordinationCycles(
+        new Date('2026-05-21T10:00:00.000Z')
+      );
+
+      expect(result).toEqual({ resolved: 1, cycleIds: ['coordination-1'] });
+      expect(prisma.tendingEntry.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['t1', 't2'] } },
+        data: expect.objectContaining({
+          status: TendingEntryStatus.SCHEDULED,
+          openedAt: null,
+          completedAt: null,
+        }),
+      });
+      expect(prisma.tendingCoordinationCycle.update).toHaveBeenCalledWith({
+        where: { id: 'coordination-1' },
+        data: expect.objectContaining({
+          status: TendingCoordinationStatus.RESOLVED,
+          resultSummary: expect.stringContaining('Both participants chose extension'),
+        }),
+      });
+      expect(publishSessionEvent).toHaveBeenCalledWith(
+        sessionId,
+        'notification.pending_action',
+        expect.objectContaining({ kind: 'tending_coordination_resolved' })
+      );
+    });
+
+    it('does not blindly extend when shared follow-through failed and a need remains open', async () => {
+      (prisma.tendingCoordinationCycle.findMany as jest.Mock).mockResolvedValue([{
+        id: 'coordination-1',
+        sessionId,
+        status: TendingCoordinationStatus.READY_TO_RESOLVE,
+        entryIds: ['t1'],
+        participantUserIds: [userId, partnerId],
+        submittedUserIds: [userId, partnerId],
+        responseDeadlineAt: new Date('2026-06-03T10:00:00.000Z'),
+        checkins: [
+          {
+            continueChoice: ContinueChoice.EXTEND,
+            entryOutcomes: [{
+              followThroughStatus: TendingFollowThroughStatus.DID_NOT_HAPPEN,
+              helpfulnessStatus: TendingHelpfulnessStatus.DID_NOT_HELP,
+              stillWorthTrying: false,
+            }],
+            needOutcomes: [{
+              resolutionStatus: TendingNeedResolutionStatus.STILL_OPEN,
+            }],
+          },
+          { continueChoice: ContinueChoice.EXTEND, entryOutcomes: [], needOutcomes: [] },
+        ],
+      }]);
+
+      await resolveReadyTendingCoordinationCycles(new Date('2026-05-21T10:00:00.000Z'));
+
+      expect(prisma.tendingEntry.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: TendingEntryStatus.SCHEDULED }),
+        })
+      );
+      expect(prisma.tendingCoordinationCycle.update).toHaveBeenCalledWith({
+        where: { id: 'coordination-1' },
+        data: expect.objectContaining({
+          status: TendingCoordinationStatus.RESOLVED,
+          resultSummary: expect.stringContaining('failed follow-through'),
+        }),
+      });
     });
 
     it('EXTEND reschedules every open entry and keeps the session active', async () => {

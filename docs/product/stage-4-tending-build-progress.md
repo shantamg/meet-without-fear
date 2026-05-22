@@ -239,6 +239,32 @@ Branch: `codex/full-tending-flow`
 - Known blockers: none.
 - Next step: Finish Tending Chunk 2, implement overlap/coordination resolution for shared cycles and E2E coverage for the Adam/Eve-style held-choice reveal.
 
+### 2026-05-22 — Finish Tending Chunk 2 Backend Resolver Slice
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Added `resolveReadyTendingCoordinationCycles` as the first deterministic backend resolver for shared coordination cycles that are ready after both partners submit.
+  - If both participants choose `EXTEND` and there is no failed-follow-through plus still-open-need signal, shared entries are rescheduled together for the default 28-day extension.
+  - If both participants choose `FULL_CLOSURE` and no submitted need remains open/changed/unclear, shared entries complete and the session remains/resolves terminally.
+  - If either participant requests a new process, reopens strategy work, reports failed follow-through with a still-open need, or submits mixed choices, the resolver records a mediated summary instead of blindly mutating shared commitments.
+  - Partner-visible notification is published only after the coordination cycle resolves, not on the first private submission.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Backend Tending service suite passed: 30 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Remaining Chunk 2 work:
+  - Persist/display richer coordination summaries in the Tending read model.
+  - Add E2E coverage for an Adam/Eve-style held-choice reveal.
+  - Wire mobile waiting/resolved coordination states so users can see the held and combined outcomes.
+- Next step: either finish Chunk 2 UI/E2E coverage or start Chunk 3 real adjustment data/UI if backend coordination state is sufficient for parallel product work.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.
