@@ -981,6 +981,105 @@ describe('tending.service', () => {
       });
     });
 
+    it('closes only mutually resolved entries for shared partial closure overlap', async () => {
+      (prisma.tendingCoordinationCycle.findMany as jest.Mock).mockResolvedValue([{
+        id: 'coordination-1',
+        sessionId,
+        status: TendingCoordinationStatus.READY_TO_RESOLVE,
+        entryIds: ['t1', 't2'],
+        participantUserIds: [userId, partnerId],
+        submittedUserIds: [userId, partnerId],
+        responseDeadlineAt: new Date('2026-06-03T10:00:00.000Z'),
+        checkins: [
+          {
+            continueChoice: ContinueChoice.PARTIAL_CLOSURE,
+            responses: [{
+              partialClosures: [
+                { tendingEntryId: 't1', resolution: PartialClosureResolution.RESOLVED },
+                { tendingEntryId: 't2', resolution: PartialClosureResolution.CONTINUING },
+              ],
+            }],
+            entryOutcomes: [],
+            needOutcomes: [],
+          },
+          {
+            continueChoice: ContinueChoice.PARTIAL_CLOSURE,
+            responses: [{
+              partialClosures: [
+                { tendingEntryId: 't1', resolution: PartialClosureResolution.RESOLVED },
+                { tendingEntryId: 't2', resolution: PartialClosureResolution.CONTINUING },
+              ],
+            }],
+            entryOutcomes: [],
+            needOutcomes: [],
+          },
+        ],
+      }]);
+
+      await resolveReadyTendingCoordinationCycles(new Date('2026-05-21T10:00:00.000Z'));
+
+      expect(prisma.tendingEntry.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['t1'] } },
+        data: { status: TendingEntryStatus.COMPLETED, completedAt: new Date('2026-05-21T10:00:00.000Z') },
+      });
+      expect(prisma.tendingEntry.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['t2'] } },
+        data: expect.objectContaining({
+          status: TendingEntryStatus.SCHEDULED,
+          openedAt: null,
+          completedAt: null,
+        }),
+      });
+      expect(prisma.tendingCoordinationCycle.update).toHaveBeenCalledWith({
+        where: { id: 'coordination-1' },
+        data: expect.objectContaining({
+          resultSummary: expect.stringContaining('Both participants chose partial closure'),
+        }),
+      });
+    });
+
+    it('continues unresolved shared entries for mixed extension and partial closure', async () => {
+      (prisma.tendingCoordinationCycle.findMany as jest.Mock).mockResolvedValue([{
+        id: 'coordination-1',
+        sessionId,
+        status: TendingCoordinationStatus.READY_TO_RESOLVE,
+        entryIds: ['t1'],
+        participantUserIds: [userId, partnerId],
+        submittedUserIds: [userId, partnerId],
+        responseDeadlineAt: new Date('2026-06-03T10:00:00.000Z'),
+        checkins: [
+          { continueChoice: ContinueChoice.EXTEND, responses: [], entryOutcomes: [], needOutcomes: [] },
+          {
+            continueChoice: ContinueChoice.PARTIAL_CLOSURE,
+            responses: [{
+              partialClosures: [
+                { tendingEntryId: 't1', resolution: PartialClosureResolution.RESOLVED },
+              ],
+            }],
+            entryOutcomes: [],
+            needOutcomes: [],
+          },
+        ],
+      }]);
+
+      await resolveReadyTendingCoordinationCycles(new Date('2026-05-21T10:00:00.000Z'));
+
+      expect(prisma.tendingEntry.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['t1'] } },
+        data: expect.objectContaining({
+          status: TendingEntryStatus.SCHEDULED,
+          openedAt: null,
+          completedAt: null,
+        }),
+      });
+      expect(prisma.tendingCoordinationCycle.update).toHaveBeenCalledWith({
+        where: { id: 'coordination-1' },
+        data: expect.objectContaining({
+          resultSummary: expect.stringContaining('One participant chose extension and one chose partial closure'),
+        }),
+      });
+    });
+
     it('EXTEND reschedules every open entry and keeps the session active', async () => {
       stubSession();
       (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('t1')]);

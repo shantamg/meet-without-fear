@@ -298,6 +298,30 @@ Branch: `codex/full-tending-flow`
   - Expand resolver coverage for partial-closure overlap and mixed extension/partial-closure choices.
 - Next step: finish the remaining Chunk 2 backend/E2E cases or start Chunk 3 adjustment persistence.
 
+### 2026-05-22 — Finish Tending Chunk 2 Partial-Closure Resolver
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Coordination resolution now loads per-check-in `TendingResponsePartialClosure` rows through each check-in's responses.
+  - If both users choose `PARTIAL_CLOSURE`, only shared entries explicitly marked `RESOLVED` by every participant are completed.
+  - Shared entries not mutually closed are rescheduled for the default 28-day continuation window.
+  - Mixed `EXTEND` + `PARTIAL_CLOSURE` choices continue unresolved shared entries and record a mediated summary instead of treating one user's closure as binding on the partner.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Backend Tending service suite passed: 33 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Remaining Chunk 2 work:
+  - Add E2E coverage for an Adam/Eve-style held-choice reveal.
+  - Add browser/mobile verification for waiting and resolved coordination states.
+- Next step: move to E2E coverage for the held-choice reveal, then Chunk 3 adjustment persistence.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.

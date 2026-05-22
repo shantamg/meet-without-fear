@@ -1323,6 +1323,9 @@ export async function resolveReadyTendingCoordinationCycles(
     include: {
       checkins: {
         include: {
+          responses: {
+            include: { partialClosures: true },
+          },
           entryOutcomes: true,
           needOutcomes: true,
         },
@@ -1337,17 +1340,36 @@ export async function resolveReadyTendingCoordinationCycles(
       .filter(Boolean);
     const allExtend = choices.length > 0 && choices.every((choice) => choice === ContinueChoice.EXTEND);
     const allFullClosure = choices.length > 0 && choices.every((choice) => choice === ContinueChoice.FULL_CLOSURE);
+    const allPartialClosure = choices.length > 0 && choices.every((choice) => choice === ContinueChoice.PARTIAL_CLOSURE);
     const anyNewProcess = choices.some((choice) => choice === ContinueChoice.NEW_PROCESS);
     const anyReopen = choices.some((choice) => choice === ContinueChoice.ANOTHER_ROUND);
+    const partialClosureByEntryId = new Map<string, PartialClosureResolution[]>();
+    for (const checkin of cycle.checkins) {
+      for (const response of checkin.responses ?? []) {
+        for (const partialClosure of response.partialClosures ?? []) {
+          const current = partialClosureByEntryId.get(partialClosure.tendingEntryId) ?? [];
+          current.push(partialClosure.resolution as PartialClosureResolution);
+          partialClosureByEntryId.set(partialClosure.tendingEntryId, current);
+        }
+      }
+    }
+    const entryIdsBothClosed = cycle.entryIds.filter((entryId) => {
+      const resolutions = partialClosureByEntryId.get(entryId) ?? [];
+      return (
+        resolutions.length >= cycle.participantUserIds.length &&
+        resolutions.every((resolution) => resolution === PartialClosureResolution.RESOLVED)
+      );
+    });
+    const entryIdsContinuing = cycle.entryIds.filter((entryId) => !entryIdsBothClosed.includes(entryId));
     const anyFailedFollowThrough = cycle.checkins.some((checkin) =>
-      checkin.entryOutcomes.some((outcome) =>
+      (checkin.entryOutcomes ?? []).some((outcome) =>
         outcome.followThroughStatus === TendingFollowThroughStatus.DID_NOT_HAPPEN ||
         outcome.helpfulnessStatus === TendingHelpfulnessStatus.DID_NOT_HELP ||
         outcome.stillWorthTrying === false
       )
     );
     const anyStillOpenNeed = cycle.checkins.some((checkin) =>
-      checkin.needOutcomes.some((outcome) =>
+      (checkin.needOutcomes ?? []).some((outcome) =>
         outcome.resolutionStatus === TendingNeedResolutionStatus.STILL_OPEN ||
         outcome.resolutionStatus === TendingNeedResolutionStatus.CHANGED ||
         outcome.resolutionStatus === TendingNeedResolutionStatus.NOT_SURE
@@ -1382,8 +1404,52 @@ export async function resolveReadyTendingCoordinationCycles(
           data: { status: 'RESOLVED', resolvedAt: now },
         });
         resultSummary = 'Both participants chose full closure and no submitted need remains open. Shared Tending entries are complete.';
+      } else if (allPartialClosure) {
+        nextScheduledFor = entryIdsContinuing.length > 0 ? addDays(now, DEFAULT_EXTENSION_DAYS) : null;
+        nextScheduledForIso = nextScheduledFor?.toISOString() ?? null;
+        if (entryIdsBothClosed.length > 0) {
+          await tx.tendingEntry.updateMany({
+            where: { id: { in: entryIdsBothClosed } },
+            data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
+          });
+        }
+        if (entryIdsContinuing.length > 0) {
+          await tx.tendingEntry.updateMany({
+            where: { id: { in: entryIdsContinuing } },
+            data: {
+              status: TendingEntryStatus.SCHEDULED,
+              scheduledFor: nextScheduledFor,
+              openedAt: null,
+              completedAt: null,
+            },
+          });
+        }
+        resultSummary = entryIdsBothClosed.length > 0
+          ? `Both participants chose partial closure. Closed ${entryIdsBothClosed.length} shared entr${entryIdsBothClosed.length === 1 ? 'y' : 'ies'} and continued ${entryIdsContinuing.length}.`
+          : 'Both participants chose partial closure, but no shared entry had explicit closure from both sides. Shared entries continue for another check-in.';
       } else if (anyNewProcess) {
         resultSummary = 'At least one participant chose a new process. Partner-involving consent and mediated coordination are required before creating a linked shared session.';
+      } else if (choices.includes(ContinueChoice.EXTEND) && choices.includes(ContinueChoice.PARTIAL_CLOSURE)) {
+        nextScheduledFor = entryIdsContinuing.length > 0 ? addDays(now, DEFAULT_EXTENSION_DAYS) : null;
+        nextScheduledForIso = nextScheduledFor?.toISOString() ?? null;
+        if (entryIdsContinuing.length > 0) {
+          await tx.tendingEntry.updateMany({
+            where: { id: { in: entryIdsContinuing } },
+            data: {
+              status: TendingEntryStatus.SCHEDULED,
+              scheduledFor: nextScheduledFor,
+              openedAt: null,
+              completedAt: null,
+            },
+          });
+        }
+        if (entryIdsBothClosed.length > 0) {
+          await tx.tendingEntry.updateMany({
+            where: { id: { in: entryIdsBothClosed } },
+            data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
+          });
+        }
+        resultSummary = 'One participant chose extension and one chose partial closure. Entries only close where both explicitly closed them; unresolved shared entries continue for a mediated next-step prompt.';
       } else if (anyReopen || (anyFailedFollowThrough && anyStillOpenNeed)) {
         resultSummary = 'At least one participant reported failed follow-through or a still-open need. Shared Tending should move to adjustment or strategy reopening instead of blind extension.';
       } else {
