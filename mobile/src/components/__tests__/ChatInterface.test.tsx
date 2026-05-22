@@ -178,6 +178,17 @@ describe('ChatInterface', () => {
       expect(mockOnSendMessage).toHaveBeenCalledWith('Hello World');
     });
 
+    it('caps input corner radius when the text wraps onto multiple lines', () => {
+      render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} />);
+
+      fireEvent(screen.getByTestId('chat-input'), 'contentSizeChange', {
+        nativeEvent: { contentSize: { width: 300, height: 72 } },
+      });
+
+      const inputWrapperStyle = StyleSheet.flatten(screen.getByTestId('chat-input-wrapper').props.style);
+      expect(inputWrapperStyle.borderRadius).toBe(24);
+    });
+
     it('disables input when disabled prop is true', () => {
       render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} disabled />);
 
