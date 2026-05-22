@@ -3836,7 +3836,10 @@ export function UnifiedSessionScreen({
       isCreatingReentry={createTendingReentry.isPending}
       isSubmittingResponse={submitTendingResponse.isPending}
       onCreateReentry={handleCreateTendingReentry}
-      onSubmitResponse={handleSubmitTendingResponse}
+      onStartCheckin={(entryId) => {
+        const suffix = entryId ? `?tendingEntryId=${encodeURIComponent(entryId)}` : '';
+        router.push(`/session/${sessionId}/tending-checkin${suffix}`);
+      }}
       currentUserId={user?.id}
       isUpdatingShare={setTendingEntryShare.isPending}
       onToggleShare={(entryId, optedInShared) => {

@@ -13,9 +13,6 @@ import { useAppAppearance } from '@/theme';
 
 type Palette = ReturnType<typeof useAppAppearance>['palette'];
 
-type TendingStatusChoice = 'WORKED' | 'PARTLY' | 'DID_NOT_WORK' | 'DID_NOT_TRY' | 'OTHER';
-type TendingContinueChoice = 'CONTINUE' | 'ADJUST' | 'CLOSE' | 'NEW_PROCESS' | 'OTHER_TRACK';
-
 interface TendingPanelProps {
   entries: TendingEntryDTO[];
   agreements?: AgreementDTO[];
@@ -26,32 +23,18 @@ interface TendingPanelProps {
   currentUserId?: string;
   isUpdatingShare?: boolean;
   onCreateReentry: (intent?: string) => void;
-  onSubmitResponse: (
+  onStartCheckin?: (entryId?: string) => void;
+  /** @deprecated Legacy one-entry review path is kept only for compatibility during mobile cutover. */
+  onSubmitResponse?: (
     entryId: string,
     response: {
-      status: TendingStatusChoice;
+      status: string;
       reflection?: string;
-      continueChoice: TendingContinueChoice;
+      continueChoice: string;
     }
   ) => void;
   onToggleShare?: (entryId: string, nextOptedInShared: boolean) => void;
 }
-
-const responseLabels: Record<TendingStatusChoice, string> = {
-  WORKED: 'Worked',
-  PARTLY: 'Partly',
-  DID_NOT_WORK: 'Did not work',
-  DID_NOT_TRY: 'Did not try',
-  OTHER: 'Other',
-};
-
-const continueLabels: Record<TendingContinueChoice, string> = {
-  CONTINUE: 'Continue',
-  ADJUST: 'Adjust',
-  CLOSE: 'Close',
-  NEW_PROCESS: 'New process',
-  OTHER_TRACK: 'Other support',
-};
 
 function formatDate(value: string | null): string {
   if (!value) return 'Available now';
@@ -140,15 +123,12 @@ export function TendingPanel({
   currentUserId,
   isUpdatingShare = false,
   onCreateReentry,
-  onSubmitResponse,
+  onStartCheckin,
   onToggleShare,
 }: TendingPanelProps) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => createStyles(palette), [palette]);
   const [intent, setIntent] = useState('');
-  const [reflection, setReflection] = useState('');
-  const [statusChoice, setStatusChoice] = useState<TendingStatusChoice>('PARTLY');
-  const [continueChoice, setContinueChoice] = useState<TendingContinueChoice>('ADJUST');
 
   const selectedEntry = useMemo(() => {
     const byId = initialEntryId
@@ -172,15 +152,6 @@ export function TendingPanel({
     (entry) => entry.type === TendingEntryType.USER_INITIATED_REENTRY
   );
   const hasSharedAgreementCheckIn = scheduledSharedEntries.length > 0;
-
-  const handleSubmit = () => {
-    if (!selectedEntry || !canRespond(selectedEntry) || isSubmittingResponse) return;
-    onSubmitResponse(selectedEntry.id, {
-      status: statusChoice,
-      reflection: reflection.trim() || undefined,
-      continueChoice,
-    });
-  };
 
   const handleCreateReentry = () => {
     if (isCreatingReentry) return;
@@ -276,66 +247,16 @@ export function TendingPanel({
 
           {canRespond(selectedEntry) ? (
             <View style={styles.responseArea}>
-              <Text style={styles.fieldLabel}>How did this go?</Text>
-              <View style={styles.choiceWrap}>
-                {(Object.keys(responseLabels) as TendingStatusChoice[]).map((choice) => {
-                  const selected = choice === statusChoice;
-                  return (
-                    <TouchableOpacity
-                      key={choice}
-                      style={[styles.choiceButton, selected && styles.choiceButtonSelected]}
-                      onPress={() => setStatusChoice(choice)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                    >
-                      <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>
-                        {responseLabels[choice]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <Text style={styles.fieldLabel}>What should happen next?</Text>
-              <View style={styles.choiceWrap}>
-                {(Object.keys(continueLabels) as TendingContinueChoice[]).map((choice) => {
-                  const selected = choice === continueChoice;
-                  return (
-                    <TouchableOpacity
-                      key={choice}
-                      style={[styles.choiceButton, selected && styles.choiceButtonSelected]}
-                      onPress={() => setContinueChoice(choice)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                    >
-                      <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>
-                        {continueLabels[choice]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <TextInput
-                value={reflection}
-                onChangeText={setReflection}
-                placeholder="Add a short reflection"
-                placeholderTextColor={palette.textFaint}
-                multiline
-                style={styles.textInput}
-                accessibilityLabel="Tending reflection"
-              />
-
               <TouchableOpacity
                 style={[styles.primaryButton, isSubmittingResponse && styles.disabledButton]}
-                onPress={handleSubmit}
+                onPress={() => onStartCheckin?.(selectedEntry.id)}
                 disabled={isSubmittingResponse}
                 accessibilityRole="button"
-                accessibilityLabel="Submit Tending review"
-                testID="submit-tending-response"
+                accessibilityLabel="Start Tending check-in"
+                testID="start-tending-checkin"
               >
                 <Text style={styles.primaryButtonText}>
-                  {isSubmittingResponse ? 'Saving...' : 'Save review'}
+                  {isSubmittingResponse ? 'Opening...' : 'Start check-in'}
                 </Text>
               </TouchableOpacity>
             </View>

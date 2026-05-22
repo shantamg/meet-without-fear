@@ -9,6 +9,7 @@ import {
   Stage4ProposalKind,
   Stage4ProposalStatus,
   TendingEntryDTO,
+  TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
 } from '@meet-without-fear/shared';
@@ -31,6 +32,9 @@ const openEntry: TendingEntryDTO = {
   sessionId: 'session-1',
   agreementId: 'agreement-1',
   type: TendingEntryType.SCHEDULED_SHARED_AGREEMENT_CHECKIN,
+  scope: TendingEntryScope.SHARED,
+  ownerUserId: null,
+  optedInShared: false,
   status: TendingEntryStatus.OPEN,
   scheduledFor: '2026-05-13T00:00:00.000Z',
   openedAt: '2026-05-13T00:00:00.000Z',
@@ -91,6 +95,7 @@ describe('TendingPanel', () => {
     outcome: null,
     onCreateReentry: jest.fn(),
     onSubmitResponse: jest.fn(),
+    onStartCheckin: jest.fn(),
   };
 
   beforeEach(() => {
@@ -106,19 +111,13 @@ describe('TendingPanel', () => {
     expect(screen.getByText('Success: Both people can finish hard talks calmer.')).toBeTruthy();
   });
 
-  it('submits a check-in review with status and continuation choice', () => {
+  it('launches the rich check-in route instead of submitting the legacy review', () => {
     render(<TendingPanel {...defaultProps} />);
 
-    fireEvent.press(screen.getByText('Worked'));
-    fireEvent.press(screen.getByText('Continue'));
-    fireEvent.changeText(screen.getByLabelText('Tending reflection'), 'This helped this week.');
-    fireEvent.press(screen.getByTestId('submit-tending-response'));
+    fireEvent.press(screen.getByTestId('start-tending-checkin'));
 
-    expect(defaultProps.onSubmitResponse).toHaveBeenCalledWith('tending-1', {
-      status: 'WORKED',
-      reflection: 'This helped this week.',
-      continueChoice: 'CONTINUE',
-    });
+    expect(defaultProps.onStartCheckin).toHaveBeenCalledWith('tending-1');
+    expect(defaultProps.onSubmitResponse).not.toHaveBeenCalled();
   });
 
   it('opens passive re-entry for no-shared-agreement outcomes', () => {

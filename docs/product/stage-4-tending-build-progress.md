@@ -1,8 +1,8 @@
 # Stage 4/Tending Build Progress
 
-Last updated: 2026-05-06
-Worktree: `/Users/shantam/Software/meet-without-fear-stage4-tending`
-Branch: `codex/stage4-tending-focus`
+Last updated: 2026-05-22
+Worktree: `/Users/shantam/Software/meet-without-fear-full-tending`
+Branch: `codex/full-tending-flow`
 
 ## Full Tending Flow Progress
 
@@ -144,13 +144,40 @@ Branch: `codex/stage4-tending-focus`
 - Known blockers: none.
 - Next step: Chunk 5 mobile UI consolidation.
 
+### 2026-05-22 — Chunk 5 Mobile UI Consolidation
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `mobile/app/(auth)/session/[id]/tending-checkin.tsx`
+  - `mobile/src/components/TendingPanel.tsx`
+  - `mobile/src/components/__tests__/TendingPanel.test.tsx`
+  - `mobile/src/screens/TendingCheckinScreen.tsx`
+  - `mobile/src/screens/UnifiedSessionScreen.tsx`
+  - `mobile/src/screens/__tests__/TendingCheckinScreen.test.tsx`
+- Decisions made:
+  - Resolved-session Tending now launches the rich check-in route for open/respondable entries instead of saving the legacy one-entry review inline.
+  - The check-in route accepts `tendingEntryId`, loads current Stage 4 needs, and submits the structured `SubmitTendingCheckinRequest` payload directly.
+  - The mobile check-in screen now walks through four concrete review steps: follow-through, helpfulness/blockers, needs review, and what comes next.
+  - Entry outcomes capture follow-through status, helpfulness status, blocker categories, what happened, and whether the entry is still worth trying.
+  - Need outcomes capture resolved/improving/still-open/changed/not-sure status plus notes.
+  - Next-action choices map to structured `TendingNextAction` values, including extension, adjustment, strategy reopening, new process, partial closure, and full closure.
+  - Reminder controls support private and shared reminders, with shared reminders shown only when a shared entry is in the check-in set.
+- Commands run:
+  - `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/TendingPanel.test.tsx src/screens/__tests__/TendingCheckinScreen.test.tsx src/hooks/__tests__/useStages.test.ts --runInBand --forceExit`
+  - `npm run check --workspace mobile`
+- Test results:
+  - Targeted mobile suites passed: 3 suites, 52 tests.
+  - Mobile typecheck passed.
+- Known blockers: none.
+- Next step: Chunk 6 E2E/evaluation coverage and browser verification from a real Stage 4 snapshot.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.
 
-All Stage 4/Tending implementation must happen in dedicated git worktrees only. The current Stage 4 worktree is:
+All Stage 4/Tending implementation must happen in dedicated git worktrees only. The current full Tending worktree is:
 
-`/Users/shantam/Software/meet-without-fear-stage4-tending`
+`/Users/shantam/Software/meet-without-fear-full-tending`
 
 If a future session needs a different branch or separate parallel track, create another sibling worktree under `/Users/shantam/Software/` and record it here before editing files.
 
