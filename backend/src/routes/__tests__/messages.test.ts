@@ -9,7 +9,7 @@ import {
   isReadyForStage3RevealText,
 } from '../../controllers/messages';
 import { prisma } from '../../lib/prisma';
-import { getSonnetStreamingResponse } from '../../lib/bedrock';
+import { getModelCompletionWithTools, getSonnetStreamingResponse } from '../../lib/bedrock';
 import { buildStagePrompt } from '../../services/stage-prompts';
 import { interpretNeedEditRequest } from '../../services/needs-edit-interpreter.service';
 import { applyNeedEdits } from '../../services/needs-edit-applier.service';
@@ -24,6 +24,7 @@ jest.mock('../../services/realtime', () => ({
   notifySessionMembers: jest.fn().mockResolvedValue(undefined),
   publishMessageAIResponse: jest.fn().mockResolvedValue(undefined),
   publishMessageError: jest.fn().mockResolvedValue(undefined),
+  publishTopicFrameUpdated: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock partner session classifier (fire-and-forget memory detection)
@@ -106,6 +107,20 @@ jest.mock('../../services/needs-edit-interpreter.service', () => ({
 jest.mock('../../services/needs-edit-applier.service', () => ({
   applyNeedAction: jest.fn(),
   applyNeedEdits: jest.fn(),
+}));
+
+jest.mock('../../services/stage4-capture.service', () => ({
+  captureStage4Turn: jest.fn().mockResolvedValue({
+    appliedOperationCount: 0,
+    skippedOperationCount: 0,
+    selection: null,
+    closureSignal: null,
+    confidence: 0,
+  }),
+}));
+
+jest.mock('../../services/stage4-auto-closure.service', () => ({
+  applyStage4AutoClosureFromSignal: jest.fn().mockResolvedValue({ closed: false }),
 }));
 
 // Mock request context
@@ -605,6 +620,195 @@ describe('Messages API (Fire-and-Forget)', () => {
       const sseOutput = writeMock.mock.calls.map(([chunk]) => String(chunk)).join('');
       expect(sseOutput).not.toContain('"advancedToStage":2');
       expect(endMock).toHaveBeenCalled();
+    });
+
+    it('does not stream or persist long hidden reasoning before the closing thinking tag', async () => {
+      const stage4Progress = {
+        id: 'progress-4',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 4,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      };
+      const session = {
+        id: mockSessionId,
+        status: 'ACTIVE',
+        relationship: {
+          members: [{ userId: mockUser.id }, { userId: 'partner-1' }],
+        },
+      };
+      const userMessage = {
+        id: 'msg-user-stage4',
+        sessionId: mockSessionId,
+        senderId: mockUser.id,
+        role: 'USER',
+        content: 'no thanks',
+        stage: 4,
+        timestamp: new Date('2026-05-22T03:35:16Z'),
+      };
+      const visibleResponse = 'Okay, we can leave that need aside and keep going.';
+      const leakedReasoning = [
+        "at the walkthrough state, we're already supposed to be in PARTNER_NEEDS phase working on Shantam's need.",
+        '',
+        'Let me check the ownNeeds in the walkthrough state:',
+        '- cmperm4sf000mpxlkkexdlcze: "To feel connected to Shantam through shared lightness and laughter" - status=covered',
+        '',
+        'So both of Jason\'s needs are already marked as covered in the walkthrough state.',
+        'The need ID for "To feel connected to Shantam through shared lightness and laughter" is cmperm4sf000mpxlkkexdlcze.',
+        'update_session_state with stage4WalkthroughAction SKIP.',
+      ].join('\n').padEnd(2400, ' hidden reasoning.');
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(session);
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue(session);
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(stage4Progress);
+      (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue(stage4Progress);
+      (prisma.message.create as jest.Mock).mockImplementation(async ({ data }) => (
+        data.role === 'USER'
+          ? { ...userMessage, content: data.content }
+          : {
+              id: 'msg-ai-stage4',
+              sessionId: mockSessionId,
+              senderId: null,
+              forUserId: mockUser.id,
+              role: 'AI',
+              content: data.content,
+              stage: data.stage,
+              timestamp: new Date('2026-05-22T03:35:46Z'),
+            }
+      ));
+      (prisma.message.findMany as jest.Mock).mockResolvedValue([userMessage]);
+      (prisma.message.count as jest.Mock).mockResolvedValue(1);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ name: 'Partner' });
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue(null);
+
+      async function* llmStream() {
+        yield { type: 'text', text: leakedReasoning };
+        yield { type: 'text', text: '</thinking>\n' };
+        yield { type: 'text', text: visibleResponse };
+        yield { type: 'done' };
+      }
+      (getSonnetStreamingResponse as jest.Mock).mockReturnValue(llmStream());
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: { content: userMessage.content },
+      });
+      const { res, writeMock } = createMockResponse();
+
+      await sendMessageStream(req as Request, res as Response);
+
+      const aiCreateCall = (prisma.message.create as jest.Mock).mock.calls.find(([arg]) => arg.data.role === 'AI');
+      expect(aiCreateCall[0].data.content).toBe(visibleResponse);
+      const sseOutput = writeMock.mock.calls.map(([chunk]) => String(chunk)).join('');
+      expect(sseOutput).toContain(visibleResponse);
+      expect(sseOutput).not.toContain('PARTNER_NEEDS');
+      expect(sseOutput).not.toContain('update_session_state');
+    });
+
+    it('does not mark a Stage 4 need covered when the visible response asks for clarification', async () => {
+      const stage4Progress = {
+        id: 'progress-4',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 4,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      };
+      const session = {
+        id: mockSessionId,
+        status: 'ACTIVE',
+        relationship: {
+          members: [{ userId: mockUser.id }, { userId: 'partner-1' }],
+        },
+      };
+      const userMessage = {
+        id: 'msg-user-stage4-clarify',
+        sessionId: mockSessionId,
+        senderId: mockUser.id,
+        role: 'USER',
+        content: 'I will promise to let him speak and not talk back',
+        stage: 4,
+        timestamp: new Date('2026-05-22T04:10:00Z'),
+      };
+      const aiContent = 'When you say "not talk back" - do you mean you will not interrupt him, or that you will not dismiss what he is saying, or something else?';
+
+      (getModelCompletionWithTools as jest.Mock).mockResolvedValueOnce({
+        text: null,
+        toolInvocations: [{
+          name: 'update_session_state',
+          input: {
+            stage4Proposals: [{
+              action: 'ADD',
+              classification: 'PROPOSAL',
+              description: 'Promise to let him speak without talking back',
+              kind: 'INDIVIDUAL_COMMITMENT',
+              ownerUserId: mockUser.id,
+              needsAddressed: ['need-current'],
+            }],
+            stage4WalkthroughAction: {
+              action: 'COVERED',
+              needId: 'need-current',
+              reason: 'User named a possible commitment.',
+            },
+          },
+        }],
+      });
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(session);
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue(session);
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(stage4Progress);
+      (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue(stage4Progress);
+      (prisma.message.create as jest.Mock).mockImplementation(async ({ data }) => (
+        data.role === 'USER'
+          ? { ...userMessage, content: data.content }
+          : {
+              id: 'msg-ai-stage4-clarify',
+              sessionId: mockSessionId,
+              senderId: null,
+              forUserId: mockUser.id,
+              role: 'AI',
+              content: data.content,
+              stage: data.stage,
+              timestamp: new Date('2026-05-22T04:10:20Z'),
+            }
+      ));
+      (prisma.message.findMany as jest.Mock).mockResolvedValue([userMessage]);
+      (prisma.message.count as jest.Mock).mockResolvedValue(1);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ name: 'Partner' });
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue(null);
+
+      async function* llmStream() {
+        yield { type: 'text', text: 'Mode: STRATEGIC_REPAIR\n</thinking>\n' };
+        yield { type: 'text', text: aiContent };
+        yield { type: 'done' };
+      }
+      (getSonnetStreamingResponse as jest.Mock).mockReturnValue(llmStream());
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: { content: userMessage.content },
+      });
+      const { res, writeMock } = createMockResponse();
+
+      await sendMessageStream(req as Request, res as Response);
+
+      const sseOutput = writeMock.mock.calls.map(([chunk]) => String(chunk)).join('');
+      expect(sseOutput).toContain('When you say');
+      expect(sseOutput).toContain('not talk back');
+      expect(sseOutput).toContain('"stage4WalkthroughAction":{"action":"NONE"');
+      expect(sseOutput).toContain('visible_response_requested_clarification');
+      expect(sseOutput).not.toContain('stage4Proposals');
+      expect(prisma.stageProgress.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            gatesSatisfied: expect.objectContaining({
+              stage4Walkthrough: expect.anything(),
+            }),
+          }),
+        })
+      );
     });
   });
 

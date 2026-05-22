@@ -585,6 +585,13 @@ export function isReadyForStage3RevealText(content: string): boolean {
     /(list|lists|needs|side by side|reveal|see them|see it|show)/.test(normalized);
 }
 
+function isClarifyingStage4Response(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed.endsWith('?')) return false;
+
+  return /\b(?:do you mean|what do you mean|which|or something else|clarify|more specific|can you say more|are you saying)\b/i.test(trimmed);
+}
+
 async function getStage3GateResponse(sessionId: string, userId: string): Promise<string | null> {
   const partnerId = await getPartnerUserId(sessionId, userId);
   const progress = await prisma.stageProgress.findUnique({
@@ -2230,12 +2237,11 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
               tagTrapBuffer = thinkingBuffer.substring(closingTagIndex + 11); // 11 = '</thinking>'.length
               thinkingBuffer = '';
             }
-            // Safety: If buffer grows without a closing tag, drop it rather
-            // than risk streaming hidden reasoning to the client.
+            // Safety: if the hidden preamble is long, keep waiting for the
+            // closing tag. Flushing here can expose chain-of-thought or tool
+            // planning to the user and persist it as a real AI message.
             else if (thinkingBuffer.length > 2000) {
-              logger.warn(`[sendMessageStream:${requestId}] Thinking buffer exceeded 2000 chars without closing tag; discarding hidden buffer`);
-              isInsideThinking = false;
-              thinkingBuffer = '';
+              logger.warn(`[sendMessageStream:${requestId}] Thinking buffer exceeded 2000 chars without closing tag; continuing to trap hidden text`);
             }
           }
           // PHASE 2: TAG TRAP - Buffer to catch hidden semantic tags before streaming
@@ -2357,15 +2363,13 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
       }
 
       // =========================================================================
-      // SAFETY FLUSH: Handle AI responses that don't follow expected format
-      // If stream ends while still waiting for </thinking>, discard the buffer
-      // rather than risk leaking hidden reasoning. Still parse semantic tags so
-      // dispatch-only responses can be handled without streaming raw content.
+      // SAFETY FLUSH: If the stream ends while still waiting for </thinking>,
+      // keep that content hidden. It is more important to avoid leaking
+      // internal reasoning/tool planning than to salvage malformed output.
       // =========================================================================
       if (isInsideThinking && thinkingBuffer.length > 0) {
-        logger.warn(`[sendMessageStream:${requestId}] Stream ended while still in thinking trap. Buffer has ${thinkingBuffer.length} chars. Discarding hidden buffer.`);
+        logger.warn(`[sendMessageStream:${requestId}] Stream ended while still in thinking trap. Buffer has ${thinkingBuffer.length} chars. Keeping it hidden.`);
         processTagTrapBuffer(thinkingBuffer);
-        // Store the raw buffer as "thinking" for downstream parsing to find dispatch tags
         thinkingContent = thinkingBuffer;
         thinkingBuffer = '';
         isInsideThinking = false;
@@ -2451,6 +2455,24 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
       // Clean accumulated text (strip <draft> and <dispatch> tags if they leaked through)
       const scrubbedResponse = scrubVisibleAIText(parsed.response);
       accumulatedText = scrubbedResponse.text;
+      if (
+        currentStage === 4 &&
+        metadata.stage4WalkthroughAction &&
+        metadata.stage4WalkthroughAction.action !== 'NONE' &&
+        isClarifyingStage4Response(accumulatedText)
+      ) {
+        logger.warn(`[sendMessageStream:${requestId}] Ignoring Stage 4 state capture because visible response asks for clarification`, {
+          action: metadata.stage4WalkthroughAction.action,
+          needId: metadata.stage4WalkthroughAction.needId ?? null,
+          stage4ProposalCount: metadata.stage4Proposals?.length ?? 0,
+        });
+        metadata.stage4WalkthroughAction = {
+          ...metadata.stage4WalkthroughAction,
+          action: 'NONE',
+          reason: 'visible_response_requested_clarification',
+        };
+        metadata.stage4Proposals = undefined;
+      }
 
       // =========================================================================
       // DISPATCH HANDLING: If dispatch tag detected, get and stream dispatched response
