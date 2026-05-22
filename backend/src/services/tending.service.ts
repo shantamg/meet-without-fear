@@ -6,6 +6,8 @@ import {
   TendingCheckinEntryOutcomeInput,
   TendingCheckinNeedOutcomeInput,
   TendingCheckinOrientations,
+  TendingCoordinationCycleDTO,
+  TendingCoordinationStatus,
   TendingEntryDTO,
   TendingEntryOutcomeDTO,
   TendingEntryScope,
@@ -525,6 +527,7 @@ export async function publishPartnerInvolvingReentryChoice(args: {
  * rather than Agreement so individual commitments can be partially closed too.
  */
 const DEFAULT_EXTENSION_DAYS = 28;
+const DEFAULT_SHARED_RESPONSE_DEADLINE_DAYS = 14;
 
 function addDays(date: Date, days: number): Date {
   const next = new Date(date.getTime());
@@ -535,10 +538,39 @@ function addDays(date: Date, days: number): Date {
 export type SubmitTendingCheckinResult = {
   entries: TendingEntryDTO[];
   checkin?: TendingCheckinDTO;
+  coordinationCycle?: TendingCoordinationCycleDTO;
   newSessionId?: string;
   continueChoice: ContinueChoice;
   nextScheduledFor?: Date | null;
 };
+
+function toCoordinationCycleDTO(cycle: {
+  id: string;
+  sessionId: string;
+  status: any;
+  entryIds: string[];
+  participantUserIds: string[];
+  submittedUserIds: string[];
+  responseDeadlineAt: Date;
+  resolvedAt: Date | null;
+  resultSummary: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): TendingCoordinationCycleDTO {
+  return {
+    id: cycle.id,
+    sessionId: cycle.sessionId,
+    status: cycle.status as TendingCoordinationStatus,
+    entryIds: cycle.entryIds,
+    participantUserIds: cycle.participantUserIds,
+    submittedUserIds: cycle.submittedUserIds,
+    responseDeadlineAt: cycle.responseDeadlineAt.toISOString(),
+    resolvedAt: iso(cycle.resolvedAt),
+    resultSummary: cycle.resultSummary,
+    createdAt: cycle.createdAt.toISOString(),
+    updatedAt: cycle.updatedAt.toISOString(),
+  };
+}
 
 function nextActionFromChoice(choice: ContinueChoice): TendingNextAction {
   switch (choice) {
@@ -712,6 +744,10 @@ export async function submitTendingCheckin(args: {
     (args.entryOutcomes ?? []).map((outcome) => [outcome.tendingEntryId, outcome])
   );
   const openEntryIds = new Set(openEntries.map((entry) => entry.id));
+  const sharedEntries = openEntries.filter((entry) => entry.scope === TendingEntryScope.SHARED);
+  const hasSharedEntry = sharedEntries.length > 0;
+  const sharedEntryIds = sharedEntries.map((entry) => entry.id).sort();
+  const participantUserIds = session.relationship.members.map((member) => member.userId).sort();
   for (const outcome of args.entryOutcomes ?? []) {
     if (!openEntryIds.has(outcome.tendingEntryId)) {
       throw new TendingInvalidStateError('Entry outcome references a non-open Tending entry');
@@ -760,12 +796,75 @@ export async function submitTendingCheckin(args: {
   let nextScheduledFor: Date | null = null;
   let newSessionId: string | undefined;
   let checkinDTO: TendingCheckinDTO | undefined;
+  let coordinationCycleDTO: TendingCoordinationCycleDTO | undefined;
 
   await prisma.$transaction(async (tx) => {
+    let coordinationCycle: {
+      id: string;
+      sessionId: string;
+      status: any;
+      entryIds: string[];
+      participantUserIds: string[];
+      submittedUserIds: string[];
+      responseDeadlineAt: Date;
+      resolvedAt: Date | null;
+      resultSummary: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    } | null = null;
+
+    if (hasSharedEntry) {
+      const existingCycle = await tx.tendingCoordinationCycle.findFirst({
+        where: {
+          sessionId: args.sessionId,
+          status: { in: [TendingCoordinationStatus.WAITING_FOR_PARTNER, TendingCoordinationStatus.READY_TO_RESOLVE] },
+          entryIds: { hasEvery: sharedEntryIds },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      const submittedUserIds = Array.from(new Set([
+        ...((existingCycle?.submittedUserIds as string[] | undefined) ?? []),
+        args.userId,
+      ])).sort();
+      const allSubmitted = participantUserIds.every((id) => submittedUserIds.includes(id));
+
+      if (existingCycle) {
+        coordinationCycle = await tx.tendingCoordinationCycle.update({
+          where: { id: existingCycle.id },
+          data: {
+            submittedUserIds,
+            status: allSubmitted
+              ? TendingCoordinationStatus.READY_TO_RESOLVE
+              : TendingCoordinationStatus.WAITING_FOR_PARTNER,
+            resultSummary: allSubmitted
+              ? 'All participants have submitted; shared Tending choices are ready for coordinated resolution.'
+              : 'Shared Tending choices are being held privately until the partner submits or the response window expires.',
+          },
+        });
+      } else {
+        coordinationCycle = await tx.tendingCoordinationCycle.create({
+          data: {
+            sessionId: args.sessionId,
+            createdByUserId: args.userId,
+            status: allSubmitted
+              ? TendingCoordinationStatus.READY_TO_RESOLVE
+              : TendingCoordinationStatus.WAITING_FOR_PARTNER,
+            entryIds: sharedEntryIds,
+            participantUserIds,
+            submittedUserIds,
+            responseDeadlineAt: addDays(now, DEFAULT_SHARED_RESPONSE_DEADLINE_DAYS),
+            resultSummary: 'Shared Tending choices are being held privately until the partner submits or the response window expires.',
+          },
+        });
+      }
+      coordinationCycleDTO = toCoordinationCycleDTO(coordinationCycle);
+    }
+
     const createdCheckin = await tx.tendingCheckin.create({
       data: {
         sessionId: args.sessionId,
         userId: args.userId,
+        coordinationCycleId: coordinationCycle?.id,
         nextAction,
         continueChoice: choice,
         reflectionSummary: reflection || null,
@@ -894,6 +993,7 @@ export async function submitTendingCheckin(args: {
       id: createdCheckin.id,
       sessionId: createdCheckin.sessionId,
       userId: createdCheckin.userId,
+      coordinationCycleId: createdCheckin.coordinationCycleId ?? null,
       nextAction: createdCheckin.nextAction as TendingNextAction | null,
       continueChoice: createdCheckin.continueChoice as ContinueChoice | null,
       reflectionSummary: createdCheckin.reflectionSummary,
@@ -903,9 +1003,24 @@ export async function submitTendingCheckin(args: {
       reminders: createdReminders.map(toReminderDTO),
     };
 
-    // 2) Apply path-specific state transitions.
+    if (hasSharedEntry) {
+      for (const entry of sharedEntries) {
+        await tx.tendingEntry.update({
+          where: { id: entry.id },
+          data: { status: TendingEntryStatus.PARTIAL },
+        });
+      }
+    }
+
+    const entriesToTransition = hasSharedEntry
+      ? openEntries.filter((entry) => entry.scope === TendingEntryScope.INDIVIDUAL)
+      : openEntries;
+
+    // 2) Apply path-specific state transitions. Shared entries are held for the
+    // coordination resolver; individual entries still advance immediately.
     switch (choice) {
       case ContinueChoice.ANOTHER_ROUND: {
+        if (entriesToTransition.length === 0) break;
         // Reopen Stage 4 strategy work. Keep coverage/declination history as
         // context; clear only terminal closure/selection gates that block a new
         // Stage 4 pass.
@@ -937,7 +1052,7 @@ export async function submitTendingCheckin(args: {
           });
         }
         // Close out current Tending entries so a fresh inventory cycle can run.
-        for (const entry of openEntries) {
+        for (const entry of entriesToTransition) {
           await tx.tendingEntry.update({
             where: { id: entry.id },
             data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
@@ -950,11 +1065,12 @@ export async function submitTendingCheckin(args: {
         break;
       }
       case ContinueChoice.EXTEND: {
+        if (entriesToTransition.length === 0) break;
         nextScheduledFor = addDays(now, DEFAULT_EXTENSION_DAYS);
         const allNeedsResolved =
           (args.needOutcomes?.length ?? 0) > 0 &&
           args.needOutcomes!.every((outcome) => outcome.resolutionStatus === TendingNeedResolutionStatus.RESOLVED);
-        for (const entry of openEntries) {
+        for (const entry of entriesToTransition) {
           const entryOutcome = entryOutcomeByEntryId.get(entry.id);
           if (entryOutcome?.stillWorthTrying === false || allNeedsResolved) {
             await tx.tendingEntry.update({
@@ -976,6 +1092,7 @@ export async function submitTendingCheckin(args: {
         break;
       }
       case ContinueChoice.NEW_PROCESS: {
+        if (entriesToTransition.length === 0) break;
         const handoffSummary = buildNewProcessHandoffSummary({
           reflection,
           entryOutcomes: args.entryOutcomes,
@@ -1004,7 +1121,7 @@ export async function submitTendingCheckin(args: {
           },
         });
         // Mark current entries COMPLETED and the current session RESOLVED.
-        for (const entry of openEntries) {
+        for (const entry of entriesToTransition) {
           await tx.tendingEntry.update({
             where: { id: entry.id },
             data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
@@ -1017,9 +1134,10 @@ export async function submitTendingCheckin(args: {
         break;
       }
       case ContinueChoice.PARTIAL_CLOSURE: {
+        if (entriesToTransition.length === 0) break;
         const resolutions = args.orientations.whatComesNext.partialClosure ?? {};
         nextScheduledFor = addDays(now, DEFAULT_EXTENSION_DAYS);
-        for (const entry of openEntries) {
+        for (const entry of entriesToTransition) {
           const resolution = resolutions[entry.id] ?? PartialClosureResolution.CONTINUING;
           const responseId = responseIds[entry.id];
           if (responseId) {
@@ -1058,7 +1176,8 @@ export async function submitTendingCheckin(args: {
         break;
       }
       case ContinueChoice.FULL_CLOSURE: {
-        for (const entry of openEntries) {
+        if (entriesToTransition.length === 0) break;
+        for (const entry of entriesToTransition) {
           await tx.tendingEntry.update({
             where: { id: entry.id },
             data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
@@ -1075,7 +1194,6 @@ export async function submitTendingCheckin(args: {
     }
   });
 
-  const hasSharedEntry = openEntries.some((entry) => entry.scope === TendingEntryScope.SHARED);
   if (hasSharedEntry) {
     try {
       await publishSessionEvent(args.sessionId, 'notification.pending_action', {
@@ -1098,6 +1216,7 @@ export async function submitTendingCheckin(args: {
   return {
     entries: refreshed.map((entry) => toEntryDTO(entry, args.userId)),
     checkin: checkinDTO,
+    coordinationCycle: coordinationCycleDTO,
     newSessionId,
     continueChoice: choice,
     nextScheduledFor,
@@ -1134,4 +1253,46 @@ export async function openDueTendingEntries(now = new Date()): Promise<{ opened:
   }
 
   return { opened: entryIds.length, entryIds };
+}
+
+export async function resolveTimedOutTendingCoordinationCycles(
+  now = new Date()
+): Promise<{ resolved: number; cycleIds: string[] }> {
+  const timedOutCycles = await prisma.tendingCoordinationCycle.findMany({
+    where: {
+      status: TendingCoordinationStatus.WAITING_FOR_PARTNER,
+      responseDeadlineAt: { lte: now },
+    },
+  });
+
+  const cycleIds: string[] = [];
+  for (const cycle of timedOutCycles) {
+    const missingUserIds = cycle.participantUserIds.filter(
+      (userId) => !cycle.submittedUserIds.includes(userId)
+    );
+    const updated = await prisma.tendingCoordinationCycle.update({
+      where: { id: cycle.id },
+      data: {
+        status: TendingCoordinationStatus.TIMED_OUT,
+        resolvedAt: now,
+        resultSummary: missingUserIds.length
+          ? `Tending proceeded with submitted responses after timeout. Missing participant(s): ${missingUserIds.join(', ')}.`
+          : 'Tending proceeded after timeout with all available submitted responses.',
+      },
+    });
+    cycleIds.push(updated.id);
+
+    try {
+      await publishSessionEvent(cycle.sessionId, 'notification.pending_action', {
+        kind: 'tending_coordination_timed_out',
+        coordinationCycleId: cycle.id,
+        submittedUserIds: cycle.submittedUserIds,
+        missingUserIds,
+      });
+    } catch (error) {
+      logger.warn('[tending] Failed to publish coordination timeout event', { cycleId: cycle.id, error });
+    }
+  }
+
+  return { resolved: cycleIds.length, cycleIds };
 }

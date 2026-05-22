@@ -209,6 +209,7 @@ export async function postTendingCheckin(req: Request, res: Response): Promise<v
     successResponse(res, {
       entries: result.entries,
       checkin: result.checkin,
+      coordinationCycle: result.coordinationCycle,
       newSessionId: result.newSessionId,
       continueChoice: result.continueChoice,
       nextScheduledFor: result.nextScheduledFor ? result.nextScheduledFor.toISOString() : null,

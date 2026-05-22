@@ -248,6 +248,13 @@ export enum TendingReminderScope {
   SHARED = 'SHARED',
 }
 
+export enum TendingCoordinationStatus {
+  WAITING_FOR_PARTNER = 'WAITING_FOR_PARTNER',
+  READY_TO_RESOLVE = 'READY_TO_RESOLVE',
+  RESOLVED = 'RESOLVED',
+  TIMED_OUT = 'TIMED_OUT',
+}
+
 // ============================================================================
 // Global Library
 // ============================================================================

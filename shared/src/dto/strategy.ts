@@ -24,6 +24,7 @@ import {
   TendingNeedResolutionStatus,
   TendingNextAction,
   TendingReminderScope,
+  TendingCoordinationStatus,
 } from '../enums';
 
 /** Maximum number of agreements allowed per session */
@@ -366,6 +367,7 @@ export interface TendingCheckinDTO {
   id: string;
   sessionId: string;
   userId: string;
+  coordinationCycleId?: string | null;
   nextAction: TendingNextAction | null;
   continueChoice: ContinueChoice | null;
   reflectionSummary: string | null;
@@ -374,6 +376,20 @@ export interface TendingCheckinDTO {
   entryOutcomes?: TendingEntryOutcomeDTO[];
   needOutcomes?: TendingNeedOutcomeDTO[];
   reminders?: TendingReminderDTO[];
+}
+
+export interface TendingCoordinationCycleDTO {
+  id: string;
+  sessionId: string;
+  status: TendingCoordinationStatus;
+  entryIds: string[];
+  participantUserIds: string[];
+  submittedUserIds: string[];
+  responseDeadlineAt: string;
+  resolvedAt: string | null;
+  resultSummary: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TendingEntryOutcomeDTO {
@@ -510,6 +526,7 @@ export interface SubmitTendingCheckinRequest {
 export interface SubmitTendingCheckinResponse {
   entries: TendingEntryDTO[];
   checkin?: TendingCheckinDTO;
+  coordinationCycle?: TendingCoordinationCycleDTO;
   newSessionId?: string;
   continueChoice: ContinueChoice;
   nextScheduledFor?: string | null;

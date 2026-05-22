@@ -55,6 +55,7 @@ model User {
   stage4SubChats           Stage4SubChat[]
   tendingResponses         TendingResponse[]
   tendingCheckins          TendingCheckin[]
+  tendingCoordinationCycles TendingCoordinationCycle[]
   tendingEntryOutcomes     TendingEntryOutcome[]
   tendingReminders         TendingReminder[]
   exerciseCompletions      EmotionalExerciseCompletion[]
@@ -148,6 +149,7 @@ model Session {
   stage4SubChats            Stage4SubChat[]
   tendingEntries            TendingEntry[]
   tendingCheckins           TendingCheckin[]
+  tendingCoordinationCycles TendingCoordinationCycle[]
   tendingNeedOutcomes       TendingNeedOutcome[]
   tendingReminders          TendingReminder[]
   consentRecords            ConsentRecord[]
@@ -1085,6 +1087,13 @@ enum TendingReminderScope {
   SHARED
 }
 
+enum TendingCoordinationStatus {
+  WAITING_FOR_PARTNER
+  READY_TO_RESOLVE
+  RESOLVED
+  TIMED_OUT
+}
+
 model StrategyProposalNeed {
   proposalId String
   needId     String
@@ -1250,6 +1259,8 @@ model TendingCheckin {
   sessionId         String
   user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId            String
+  coordinationCycle TendingCoordinationCycle? @relation(fields: [coordinationCycleId], references: [id], onDelete: SetNull)
+  coordinationCycleId String?
   nextAction        TendingNextAction?
   continueChoice    ContinueChoice?
   reflectionSummary String?             @db.Text
@@ -1263,6 +1274,29 @@ model TendingCheckin {
 
   @@index([sessionId, submittedAt])
   @@index([userId, submittedAt])
+  @@index([coordinationCycleId])
+}
+
+model TendingCoordinationCycle {
+  id                 String                    @id @default(cuid())
+  session            Session                   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId          String
+  createdBy          User                      @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  createdByUserId    String
+  status             TendingCoordinationStatus @default(WAITING_FOR_PARTNER)
+  entryIds           String[]
+  participantUserIds String[]
+  submittedUserIds   String[]
+  responseDeadlineAt DateTime
+  resolvedAt         DateTime?
+  resultSummary      String?                   @db.Text
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  checkins TendingCheckin[]
+
+  @@index([sessionId, status])
+  @@index([responseDeadlineAt])
 }
 
 model TendingResponse {

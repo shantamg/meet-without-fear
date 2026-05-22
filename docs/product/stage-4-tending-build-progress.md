@@ -206,6 +206,39 @@ Branch: `codex/full-tending-flow`
 - Known blockers: none.
 - Next step: review PR #640 and address CI/review feedback.
 
+### 2026-05-22 — Finish Tending Chunk 1 Coordination Hold
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Finish prompt: `docs/product/tending-finish-goal-prompt.md`.
+- Files changed:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260522093000_add_tending_coordination_cycles/migration.sql`
+  - `shared/src/enums.ts`
+  - `shared/src/dto/strategy.ts`
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/controllers/tending.ts`
+  - `backend/src/lib/__mocks__/prisma.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+- Decisions made:
+  - Added `TendingCoordinationCycle` and `TendingCoordinationStatus` so shared Tending check-ins have a durable coordination window instead of immediately applying one user's shared choice.
+  - Linked `TendingCheckin` to an optional coordination cycle.
+  - Shared entries now persist the submitting user's private check-in/outcomes and move to `PARTIAL`, while path transitions such as extend, reopen Stage 4, new process, partial closure, and full closure are held for the later coordination resolver.
+  - Individual entries still use immediate one-user path semantics.
+  - Added a timeout resolver entry point, `resolveTimedOutTendingCoordinationCycles`, which marks overdue shared cycles `TIMED_OUT`, records missing participants, and publishes a coordination-timeout event. It does not yet perform full overlap resolution; that remains the next finish chunk.
+- Commands run:
+  - `npx prisma@6.12.0 generate --schema backend/prisma/schema.prisma`
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/mwf npx prisma@6.12.0 validate --schema backend/prisma/schema.prisma`
+  - `npm run check --workspace shared`
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Prisma schema validation passed.
+  - Shared typecheck passed.
+  - Backend Tending service suite passed: 28 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Next step: Finish Tending Chunk 2, implement overlap/coordination resolution for shared cycles and E2E coverage for the Adam/Eve-style held-choice reveal.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.

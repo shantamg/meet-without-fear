@@ -6,6 +6,7 @@ import {
   openDueTendingEntries,
   publishPartnerInvolvingReentryChoice,
   recommendTendingNextAction,
+  resolveTimedOutTendingCoordinationCycles,
   scheduleIndividualCommitmentTendingEntries,
   scheduleSharedAgreementTendingEntries,
   setIndividualEntryShare,
@@ -18,6 +19,7 @@ import {
   ContinueChoice,
   PartialClosureResolution,
   TendingBlockerCategory,
+  TendingCoordinationStatus,
   TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
@@ -536,6 +538,32 @@ describe('tending.service', () => {
           updatedAt: new Date('2026-05-20T10:03:00.000Z'),
         })
       );
+      (prisma.tendingCoordinationCycle.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.tendingCoordinationCycle.create as jest.Mock).mockImplementation((args: any) =>
+        Promise.resolve({
+          id: 'coordination-1',
+          ...args.data,
+          resolvedAt: null,
+          createdAt: new Date('2026-05-20T10:00:00.000Z'),
+          updatedAt: new Date('2026-05-20T10:00:00.000Z'),
+        })
+      );
+      (prisma.tendingCoordinationCycle.update as jest.Mock).mockImplementation((args: any) =>
+        Promise.resolve({
+          id: args.where.id,
+          sessionId,
+          createdByUserId: userId,
+          entryIds: ['t1'],
+          participantUserIds: [userId, partnerId],
+          submittedUserIds: args.data.submittedUserIds ?? [userId],
+          responseDeadlineAt: new Date('2026-06-03T10:00:00.000Z'),
+          resolvedAt: args.data.resolvedAt ?? null,
+          resultSummary: args.data.resultSummary ?? null,
+          status: args.data.status,
+          createdAt: new Date('2026-05-20T10:00:00.000Z'),
+          updatedAt: new Date('2026-05-20T10:00:00.000Z'),
+        })
+      );
     });
 
     it('rejects when there are no open entries', async () => {
@@ -722,9 +750,117 @@ describe('tending.service', () => {
       );
     });
 
-    it('EXTEND reschedules every open entry and keeps the session active', async () => {
+    it('holds shared check-in choices after one partner submits', async () => {
       stubSession();
       (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+
+      const result = await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.EXTEND),
+        now: new Date('2026-05-20T10:00:00.000Z'),
+      });
+
+      expect(result.coordinationCycle).toEqual(
+        expect.objectContaining({
+          id: 'coordination-1',
+          status: TendingCoordinationStatus.WAITING_FOR_PARTNER,
+          submittedUserIds: [userId],
+        })
+      );
+      expect(prisma.tendingCheckin.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ coordinationCycleId: 'coordination-1' }),
+      });
+      expect(prisma.tendingEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 't1' },
+          data: { status: TendingEntryStatus.PARTIAL },
+        })
+      );
+      expect(prisma.tendingEntry.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 't1' },
+          data: expect.objectContaining({ status: TendingEntryStatus.SCHEDULED }),
+        })
+      );
+    });
+
+    it('marks shared coordination ready after both partners submit', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+      (prisma.tendingCoordinationCycle.findFirst as jest.Mock).mockResolvedValue({
+        id: 'coordination-1',
+        sessionId,
+        createdByUserId: partnerId,
+        status: TendingCoordinationStatus.WAITING_FOR_PARTNER,
+        entryIds: ['t1'],
+        participantUserIds: [userId, partnerId],
+        submittedUserIds: [partnerId],
+        responseDeadlineAt: new Date('2026-06-03T10:00:00.000Z'),
+        resolvedAt: null,
+        resultSummary: null,
+        createdAt: new Date('2026-05-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-05-20T10:00:00.000Z'),
+      });
+
+      const result = await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.EXTEND),
+      });
+
+      expect(prisma.tendingCoordinationCycle.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'coordination-1' },
+          data: expect.objectContaining({
+            submittedUserIds: [partnerId, userId].sort(),
+            status: TendingCoordinationStatus.READY_TO_RESOLVE,
+          }),
+        })
+      );
+      expect(result.coordinationCycle?.status).toBe(TendingCoordinationStatus.READY_TO_RESOLVE);
+    });
+
+    it('records timed-out shared coordination when the partner misses the response window', async () => {
+      (prisma.tendingCoordinationCycle.findMany as jest.Mock).mockResolvedValue([{
+        id: 'coordination-1',
+        sessionId,
+        status: TendingCoordinationStatus.WAITING_FOR_PARTNER,
+        entryIds: ['t1'],
+        participantUserIds: [userId, partnerId],
+        submittedUserIds: [userId],
+        responseDeadlineAt: new Date('2026-06-03T10:00:00.000Z'),
+      }]);
+      (prisma.tendingCoordinationCycle.update as jest.Mock).mockResolvedValue({
+        id: 'coordination-1',
+        status: TendingCoordinationStatus.TIMED_OUT,
+      });
+
+      const result = await resolveTimedOutTendingCoordinationCycles(
+        new Date('2026-06-04T10:00:00.000Z')
+      );
+
+      expect(result).toEqual({ resolved: 1, cycleIds: ['coordination-1'] });
+      expect(prisma.tendingCoordinationCycle.update).toHaveBeenCalledWith({
+        where: { id: 'coordination-1' },
+        data: expect.objectContaining({
+          status: TendingCoordinationStatus.TIMED_OUT,
+          resultSummary: expect.stringContaining(partnerId),
+        }),
+      });
+      expect(publishSessionEvent).toHaveBeenCalledWith(
+        sessionId,
+        'notification.pending_action',
+        expect.objectContaining({
+          kind: 'tending_coordination_timed_out',
+          missingUserIds: [partnerId],
+        })
+      );
+    });
+
+    it('EXTEND reschedules every open entry and keeps the session active', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('t1')]);
       const result = await submitTendingCheckin({
         sessionId,
         userId,
@@ -747,8 +883,8 @@ describe('tending.service', () => {
     it('EXTEND completes entries that are no longer worth trying instead of rescheduling them', async () => {
       stubSession();
       (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([
-        openSharedEntry('t1'),
-        openSharedEntry('t2'),
+        openIndividualEntry('t1'),
+        openIndividualEntry('t2'),
       ]);
 
       await submitTendingCheckin({
@@ -788,7 +924,7 @@ describe('tending.service', () => {
 
     it('EXTEND completes entries instead of rescheduling when submitted needs are resolved', async () => {
       stubSession();
-      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('t1')]);
 
       await submitTendingCheckin({
         sessionId,
@@ -811,7 +947,7 @@ describe('tending.service', () => {
 
     it('FULL_CLOSURE marks every open entry COMPLETED and resolves the session', async () => {
       stubSession();
-      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('t1')]);
       await submitTendingCheckin({
         sessionId,
         userId,
@@ -858,7 +994,7 @@ describe('tending.service', () => {
 
     it('FULL_CLOSURE records override context instead of blocking indefinitely', async () => {
       stubSession();
-      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('t1')]);
 
       await submitTendingCheckin({
         sessionId,
@@ -887,7 +1023,7 @@ describe('tending.service', () => {
 
     it('ANOTHER_ROUND reopens Stage 4 around still-open needs without deleting coverage history', async () => {
       stubSession();
-      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('t1')]);
       (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
         { id: 'sp-1', gatesSatisfied: { selectionSubmitted: true } },
       ]);
@@ -922,7 +1058,7 @@ describe('tending.service', () => {
 
     it('NEW_PROCESS creates a fresh session linked back to the current one and resolves it', async () => {
       stubSession();
-      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('t1')]);
       (prisma.session.create as jest.Mock).mockResolvedValue({ id: 'session-2' });
       const result = await submitTendingCheckin({
         sessionId,
@@ -1009,8 +1145,8 @@ describe('tending.service', () => {
     it('PARTIAL_CLOSURE closes RESOLVED entries and reschedules CONTINUING entries', async () => {
       stubSession();
       (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([
-        openSharedEntry('t1'),
-        openSharedEntry('t2'),
+        openIndividualEntry('t1'),
+        openIndividualEntry('t2'),
       ]);
       const result = await submitTendingCheckin({
         sessionId,
