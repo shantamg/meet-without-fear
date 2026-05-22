@@ -174,6 +174,7 @@ Branch: `codex/full-tending-flow`
 ### 2026-05-22 — Chunk 6 E2E/Eval Coverage And Browser Verification
 
 - Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Draft PR: [#640 - Build full Tending check-in flow](https://github.com/shantamg/meet-without-fear/pull/640), targeting `codex/stages-3-4-rework`.
 - Files changed:
   - `e2e/tests/two-browser-stage-4-redesign.spec.ts`
   - `eval/moments/stage-4-tending-structured-checkin.yaml`
@@ -203,7 +204,7 @@ Branch: `codex/full-tending-flow`
   - Stage 4 redesign Playwright project passed: 6 tests, including the new structured Tending API test and browser route smoke.
   - Final backend, shared, mobile, and e2e typechecks passed.
 - Known blockers: none.
-- Next step: commit this E2E/eval checkpoint, then push/open PR if this branch is ready for review.
+- Next step: review PR #640 and address CI/review feedback.
 
 ## Worktree Rule
 
