@@ -82,6 +82,22 @@ const NEXT_CHOICES = [
   [ContinueChoice.PARTIAL_CLOSURE, TendingNextAction.PARTIAL_CLOSURE, 'Partial closure'],
 ] as const;
 
+const REMINDER_PRESETS = [
+  ['TOMORROW', 'Tomorrow'],
+  ['HALFWAY', 'Halfway'],
+  ['ONE_WEEK', 'One week'],
+  ['TWO_WEEKS', 'Two weeks'],
+  ['ONE_MONTH', 'One month'],
+  ['CUSTOM', 'Custom'],
+] as const;
+
+const REMINDER_CADENCES = [
+  ['ONCE', 'One-time'],
+  ['WEEKLY', 'Weekly'],
+  ['MONTHLY', 'Monthly'],
+  ['EVERY_COUPLE_MONTHS', 'Every couple months'],
+] as const;
+
 export interface TendingCheckinNeed {
   id?: string | null;
   label: string;
@@ -105,6 +121,18 @@ function isRespondable(entry: TendingEntryDTO): boolean {
 
 function entryLabel(entry: TendingEntryDTO): string {
   return entry.summary ?? (entry.scope === TendingEntryScope.INDIVIDUAL ? 'Individual commitment' : 'Shared agreement');
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date.getTime());
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function addMonths(date: Date, months: number): Date {
+  const next = new Date(date.getTime());
+  next.setMonth(next.getMonth() + months);
+  return next;
 }
 
 export function TendingCheckinScreen({
@@ -138,6 +166,9 @@ export function TendingCheckinScreen({
   const [partialClosure, setPartialClosure] = useState<Record<string, PartialClosureResolution>>({});
   const [privateReminder, setPrivateReminder] = useState(false);
   const [sharedReminder, setSharedReminder] = useState(false);
+  const [reminderPreset, setReminderPreset] = useState<(typeof REMINDER_PRESETS)[number][0]>('TWO_WEEKS');
+  const [reminderCadence, setReminderCadence] = useState<(typeof REMINDER_CADENCES)[number][0]>('ONCE');
+  const [customReminderAt, setCustomReminderAt] = useState('');
   const [adjustmentText, setAdjustmentText] = useState('');
   const [adjustmentCadence, setAdjustmentCadence] = useState('');
   const [adjustmentSuccessCriteria, setAdjustmentSuccessCriteria] = useState('');
@@ -173,13 +204,26 @@ export function TendingCheckinScreen({
       };
     });
     const reminderEntry = respondable[0];
-    const reminderDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    const now = new Date();
+    const reminderDate =
+      reminderPreset === 'CUSTOM' && customReminderAt.trim()
+        ? customReminderAt.trim()
+        : reminderPreset === 'TOMORROW'
+          ? addDays(now, 1).toISOString()
+          : reminderPreset === 'HALFWAY'
+            ? addDays(now, 14).toISOString()
+            : reminderPreset === 'ONE_WEEK'
+              ? addDays(now, 7).toISOString()
+              : reminderPreset === 'ONE_MONTH'
+                ? addMonths(now, 1).toISOString()
+                : addDays(now, 14).toISOString();
     const reminders = [
       privateReminder && reminderEntry
         ? {
             tendingEntryId: reminderEntry.id,
             scope: TendingReminderScope.PRIVATE,
             remindAt: reminderDate,
+            cadence: reminderCadence,
             note: 'Private Tending reminder',
           }
         : null,
@@ -188,6 +232,7 @@ export function TendingCheckinScreen({
             tendingEntryId: reminderEntry.id,
             scope: TendingReminderScope.SHARED,
             remindAt: reminderDate,
+            cadence: reminderCadence,
             note: 'Shared Tending reminder',
           }
         : null,
@@ -395,6 +440,38 @@ export function TendingCheckinScreen({
           {(nextAction === TendingNextAction.EXTEND || nextAction === TendingNextAction.ADJUST_COMMITMENT) && (
             <View style={styles.reminderBlock} testID="tending-reminder-controls">
               <Text style={styles.fieldLabel}>Reminder</Text>
+              <View style={styles.toggleRow}>
+                {REMINDER_PRESETS.map(([value, label]) =>
+                  renderChoice(
+                    'tending-reminder-preset',
+                    value,
+                    label,
+                    reminderPreset === value,
+                    () => setReminderPreset(value)
+                  )
+                )}
+              </View>
+              {reminderPreset === 'CUSTOM' && (
+                <TextInput
+                  value={customReminderAt}
+                  onChangeText={setCustomReminderAt}
+                  placeholder="YYYY-MM-DDTHH:mm:ss.sssZ"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.textInput}
+                  testID="tending-reminder-custom-at"
+                />
+              )}
+              <View style={styles.toggleRow}>
+                {REMINDER_CADENCES.map(([value, label]) =>
+                  renderChoice(
+                    'tending-reminder-cadence',
+                    value,
+                    label,
+                    reminderCadence === value,
+                    () => setReminderCadence(value)
+                  )
+                )}
+              </View>
               <TouchableOpacity
                 style={[styles.toggleButton, privateReminder && styles.toggleButtonSelected]}
                 onPress={() => setPrivateReminder(!privateReminder)}

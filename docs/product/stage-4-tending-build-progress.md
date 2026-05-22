@@ -412,6 +412,30 @@ Branch: `codex/full-tending-flow`
   - E2E/API tests for private versus shared reminder delivery beyond unit coverage.
 - Next step: mobile reminder preset controls and payload tests.
 
+### 2026-05-22 — Finish Tending Chunk 4 Mobile Reminder Controls
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `mobile/src/screens/TendingCheckinScreen.tsx`
+  - `mobile/src/screens/__tests__/TendingCheckinScreen.test.tsx`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Replaced the hardcoded two-week reminder payload with selectable reminder timing.
+  - Added presets: tomorrow, halfway, one week, two weeks, one month, and custom ISO date/time.
+  - Added cadence controls: one-time, weekly, monthly, every couple months.
+  - Reminder payload now includes the selected `remindAt` and `cadence` for private and shared reminders.
+- Commands run:
+  - `npm test --workspace mobile -- --runTestsByPath src/screens/__tests__/TendingCheckinScreen.test.tsx --runInBand --forceExit`
+  - `npm run check --workspace mobile`
+- Test results:
+  - Mobile TendingCheckinScreen suite passed: 4 tests.
+  - Mobile typecheck passed.
+- Known blockers: none.
+- Remaining Chunk 4 work:
+  - E2E/API tests for private versus shared reminder delivery beyond unit coverage.
+  - Browser UX smoke for the reminder preset controls.
+- Next step: Chunk 5 due opener coverage for individual entries, or E2E/API reminder delivery tests.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.

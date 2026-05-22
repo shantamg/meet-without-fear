@@ -88,6 +88,8 @@ describe('TendingCheckinScreen', () => {
     fireEvent.press(getByTestId('tending-checkin-next'));
     fireEvent.press(getByTestId('tending-checkin-next'));
     expect(getByTestId('tending-reminder-controls')).toBeTruthy();
+    fireEvent.press(getByTestId('tending-reminder-preset-ONE_MONTH'));
+    fireEvent.press(getByTestId('tending-reminder-cadence-WEEKLY'));
     fireEvent.press(getByTestId('tending-private-reminder'));
     fireEvent.press(getByTestId('tending-shared-reminder'));
     fireEvent.press(getByTestId('tending-checkin-submit'));
@@ -99,6 +101,8 @@ describe('TendingCheckinScreen', () => {
         expect.objectContaining({ scope: TendingReminderScope.SHARED }),
       ])
     );
+    expect(payload.reminders[0].cadence).toBe('WEEKLY');
+    expect(payload.reminders[0].remindAt).toMatch(/T/);
   });
 
   it('submits adjustment details when choosing adjust commitment', () => {
