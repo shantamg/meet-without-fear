@@ -35,6 +35,41 @@ const entry: TendingEntryDTO = {
 };
 
 describe('TendingCheckinScreen', () => {
+  it('asks whether to carry private between-period notes into check-in', () => {
+    const onSubmit = jest.fn();
+    const { getByTestId } = render(
+      <TendingCheckinScreen
+        entries={[entry]}
+        betweenPeriodNotes={[{
+          id: 'note-1',
+          sessionId: 'session-1',
+          userId: 'user-1',
+          content: 'I felt anxious after the agreement was set.',
+          carryForwardSelected: false,
+          consentToShareWithPartner: false,
+          shareConsentAt: null,
+          selectedForCheckinId: null,
+          createdAt: '2026-05-21T00:00:00.000Z',
+          updatedAt: '2026-05-21T00:00:00.000Z',
+        }]}
+        onSubmit={onSubmit}
+      />
+    );
+
+    expect(getByTestId('tending-checkin-step-privateNotes')).toBeTruthy();
+    fireEvent.press(getByTestId('tending-include-note-note-1-include'));
+    fireEvent.press(getByTestId('tending-share-note-note-1-share'));
+    fireEvent.press(getByTestId('tending-checkin-next'));
+    fireEvent.press(getByTestId('tending-checkin-next'));
+    fireEvent.press(getByTestId('tending-checkin-next'));
+    fireEvent.press(getByTestId('tending-checkin-next'));
+    fireEvent.press(getByTestId('tending-checkin-submit'));
+
+    const payload = onSubmit.mock.calls[0][0];
+    expect(payload.includedBetweenPeriodNoteIds).toEqual(['note-1']);
+    expect(payload.shareBetweenPeriodNoteIds).toEqual(['note-1']);
+  });
+
   it('submits structured entry and need outcomes', () => {
     const onSubmit = jest.fn();
     const { getByTestId } = render(

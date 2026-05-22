@@ -145,6 +145,7 @@ export {
   useTendingEntries,
   useSubmitTendingResponse,
   useSubmitTendingCheckin,
+  useCreateTendingBetweenPeriodNote,
   useCreateTendingReentry,
   // Agreements
   useAgreements,

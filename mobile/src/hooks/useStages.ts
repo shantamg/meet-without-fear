@@ -67,6 +67,8 @@ import {
   SubmitTendingResponseResponse,
   SubmitTendingCheckinRequest,
   SubmitTendingCheckinResponse,
+  CreateTendingBetweenPeriodNoteRequest,
+  CreateTendingBetweenPeriodNoteResponse,
   CreateTendingReentryRequest,
   CreateTendingReentryResponse,
   AgreementDTO,
@@ -2542,7 +2544,11 @@ export function useSubmitTendingResponse(
         (old) => {
           const existing = old?.entries ?? [];
           const withoutUpdated = existing.filter((entry) => entry.id !== data.entry.id);
-          return { entries: [data.entry, ...withoutUpdated] };
+          return {
+            entries: [data.entry, ...withoutUpdated],
+            coordinationCycles: old?.coordinationCycles,
+            betweenPeriodNotes: old?.betweenPeriodNotes,
+          };
         }
       );
       queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });
@@ -2583,6 +2589,42 @@ export function useSubmitTendingCheckin(
 }
 
 /**
+ * Add a private between-period note that can optionally be carried into check-in later.
+ */
+export function useCreateTendingBetweenPeriodNote(
+  options?: Omit<
+    UseMutationOptions<
+      CreateTendingBetweenPeriodNoteResponse,
+      ApiClientError,
+      { sessionId: string } & CreateTendingBetweenPeriodNoteRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, ...request }) => {
+      return post<CreateTendingBetweenPeriodNoteResponse, CreateTendingBetweenPeriodNoteRequest>(
+        `/sessions/${sessionId}/tending/notes`,
+        request
+      );
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData<GetTendingEntriesResponse>(
+        stageKeys.tending(sessionId),
+        (old) => ({
+          entries: old?.entries ?? [],
+          coordinationCycles: old?.coordinationCycles,
+          betweenPeriodNotes: [...(old?.betweenPeriodNotes ?? []), data.note],
+        })
+      );
+    },
+    ...options,
+  });
+}
+
+/**
  * Toggle an INDIVIDUAL Tending entry's opt-in share with the partner.
  */
 export function useSetTendingEntryShare(
@@ -2612,7 +2654,11 @@ export function useSetTendingEntryShare(
           const next = existing.map((entry) =>
             entry.id === data.entry.id ? data.entry : entry
           );
-          return { entries: next };
+          return {
+            entries: next,
+            coordinationCycles: old?.coordinationCycles,
+            betweenPeriodNotes: old?.betweenPeriodNotes,
+          };
         }
       );
     },
@@ -2648,7 +2694,11 @@ export function useCreateTendingReentry(
         (old) => {
           const existing = old?.entries ?? [];
           const withoutCreated = existing.filter((entry) => entry.id !== data.entry.id);
-          return { entries: [data.entry, ...withoutCreated] };
+          return {
+            entries: [data.entry, ...withoutCreated],
+            coordinationCycles: old?.coordinationCycles,
+            betweenPeriodNotes: old?.betweenPeriodNotes,
+          };
         }
       );
       queryClient.refetchQueries({ queryKey: stageKeys.tending(sessionId) });

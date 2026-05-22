@@ -4,6 +4,7 @@ import {
   ContinueChoice,
   PartialClosureResolution,
   SubmitTendingCheckinRequest,
+  TendingBetweenPeriodNoteDTO,
   TendingBlockerCategory,
   TendingEntryDTO,
   TendingEntryScope,
@@ -16,11 +17,15 @@ import {
 } from '@meet-without-fear/shared';
 import { colors } from '@/theme';
 
-type Step = 'followThrough' | 'helpfulness' | 'needsReview' | 'whatComesNext';
+type Step = 'privateNotes' | 'followThrough' | 'helpfulness' | 'needsReview' | 'whatComesNext';
 
-const STEP_ORDER: Step[] = ['followThrough', 'helpfulness', 'needsReview', 'whatComesNext'];
+const DEFAULT_STEP_ORDER: Step[] = ['followThrough', 'helpfulness', 'needsReview', 'whatComesNext'];
 
 const STEP_COPY: Record<Step, { title: string; subtitle: string }> = {
+  privateNotes: {
+    title: 'Private notes',
+    subtitle: 'Choose whether your saved notes should shape this check-in.',
+  },
   followThrough: {
     title: 'What happened',
     subtitle: 'Check each commitment against what actually happened.',
@@ -108,6 +113,7 @@ export type TendingCheckinPayload = SubmitTendingCheckinRequest;
 
 export interface TendingCheckinScreenProps {
   entries: TendingEntryDTO[];
+  betweenPeriodNotes?: TendingBetweenPeriodNoteDTO[];
   needs?: TendingCheckinNeed[];
   initialEntryId?: string | null;
   isSubmitting?: boolean;
@@ -137,6 +143,7 @@ function addMonths(date: Date, months: number): Date {
 
 export function TendingCheckinScreen({
   entries,
+  betweenPeriodNotes = [],
   needs = [],
   initialEntryId,
   isSubmitting = false,
@@ -153,7 +160,7 @@ export function TendingCheckinScreen({
     ? needs
     : respondable.map((entry) => ({ id: entry.agreementId, label: entryLabel(entry) }));
 
-  const [step, setStep] = useState<Step>('followThrough');
+  const [step, setStep] = useState<Step>('privateNotes');
   const [followThrough, setFollowThrough] = useState<Record<string, TendingFollowThroughStatus>>({});
   const [whatHappened, setWhatHappened] = useState<Record<string, string>>({});
   const [helpfulness, setHelpfulness] = useState<Record<string, TendingHelpfulnessStatus>>({});
@@ -173,13 +180,20 @@ export function TendingCheckinScreen({
   const [adjustmentCadence, setAdjustmentCadence] = useState('');
   const [adjustmentSuccessCriteria, setAdjustmentSuccessCriteria] = useState('');
   const [adjustmentReason, setAdjustmentReason] = useState('');
+  const [includedNoteIds, setIncludedNoteIds] = useState<string[]>([]);
+  const [shareNoteIds, setShareNoteIds] = useState<string[]>([]);
 
-  const stepIndex = STEP_ORDER.indexOf(step);
-  const isLast = stepIndex === STEP_ORDER.length - 1;
+  const stepOrder = useMemo(
+    () => (betweenPeriodNotes.length > 0 ? ['privateNotes', ...DEFAULT_STEP_ORDER] as Step[] : DEFAULT_STEP_ORDER),
+    [betweenPeriodNotes.length]
+  );
+  const activeStep = stepOrder.includes(step) ? step : stepOrder[0];
+  const stepIndex = stepOrder.indexOf(activeStep);
+  const isLast = stepIndex === stepOrder.length - 1;
 
   const goNext = () => {
     if (!isLast) {
-      setStep(STEP_ORDER[stepIndex + 1]);
+      setStep(stepOrder[stepIndex + 1]);
       return;
     }
 
@@ -273,6 +287,8 @@ export function TendingCheckinScreen({
       needOutcomes,
       reminders,
       adjustments,
+      includedBetweenPeriodNoteIds: includedNoteIds,
+      shareBetweenPeriodNoteIds: shareNoteIds.filter((noteId) => includedNoteIds.includes(noteId)),
       nextAction,
     });
   };
@@ -282,7 +298,7 @@ export function TendingCheckinScreen({
       onCancel?.();
       return;
     }
-    setStep(STEP_ORDER[stepIndex - 1]);
+    setStep(stepOrder[stepIndex - 1]);
   };
 
   const toggleBlocker = (entryId: string, blocker: TendingBlockerCategory) => {
@@ -293,6 +309,25 @@ export function TendingCheckinScreen({
         ? current.filter((item) => item !== blocker)
         : [...current, blocker],
     });
+  };
+
+  const toggleIncludedNote = (noteId: string) => {
+    const nextIncluded = includedNoteIds.includes(noteId)
+      ? includedNoteIds.filter((id) => id !== noteId)
+      : [...includedNoteIds, noteId];
+    setIncludedNoteIds(nextIncluded);
+    if (!nextIncluded.includes(noteId)) {
+      setShareNoteIds(shareNoteIds.filter((id) => id !== noteId));
+    }
+  };
+
+  const toggleShareNote = (noteId: string) => {
+    if (!includedNoteIds.includes(noteId)) return;
+    setShareNoteIds(
+      shareNoteIds.includes(noteId)
+        ? shareNoteIds.filter((id) => id !== noteId)
+        : [...shareNoteIds, noteId]
+    );
   };
 
   const renderChoice = <T extends string>(
@@ -317,14 +352,45 @@ export function TendingCheckinScreen({
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} testID="tending-checkin-screen">
       <View style={styles.stepper}>
-        {STEP_ORDER.map((s, i) => (
+        {stepOrder.map((s, i) => (
           <View key={s} style={[styles.stepDot, i === stepIndex && styles.stepDotActive]} testID={`tending-checkin-step-${s}`} />
         ))}
       </View>
-      <Text style={styles.title}>{STEP_COPY[step].title}</Text>
-      <Text style={styles.subtitle}>{STEP_COPY[step].subtitle}</Text>
+      <Text style={styles.title}>{STEP_COPY[activeStep].title}</Text>
+      <Text style={styles.subtitle}>{STEP_COPY[activeStep].subtitle}</Text>
 
-      {step === 'followThrough' && respondable.map((entry) => (
+      {activeStep === 'privateNotes' && betweenPeriodNotes.map((note) => {
+        const included = includedNoteIds.includes(note.id);
+        const shared = shareNoteIds.includes(note.id);
+        return (
+          <View key={note.id} style={styles.entryRow} testID={`tending-between-note-choice-${note.id}`}>
+            <Text style={styles.entryTitle}>{note.content}</Text>
+            <View style={styles.toggleRow}>
+              {renderChoice(
+                `tending-include-note-${note.id}`,
+                'include',
+                'Factor in',
+                included,
+                () => toggleIncludedNote(note.id)
+              )}
+              {renderChoice(
+                `tending-share-note-${note.id}`,
+                'share',
+                'May mention',
+                included && shared,
+                () => toggleShareNote(note.id)
+              )}
+            </View>
+            <Text style={styles.helperText}>
+              {included
+                ? 'This can shape your check-in. It only crosses to your partner if you choose May mention.'
+                : 'This stays private and will not be used in this check-in.'}
+            </Text>
+          </View>
+        );
+      })}
+
+      {activeStep === 'followThrough' && respondable.map((entry) => (
         <View key={entry.id} style={styles.entryRow} testID={`tending-checkin-entry-${entry.id}`}>
           <Text style={styles.entryTitle}>{entryLabel(entry)}</Text>
           <View style={styles.toggleRow}>
@@ -350,7 +416,7 @@ export function TendingCheckinScreen({
         </View>
       ))}
 
-      {step === 'helpfulness' && respondable.map((entry) => (
+      {activeStep === 'helpfulness' && respondable.map((entry) => (
         <View key={entry.id} style={styles.entryRow}>
           <Text style={styles.entryTitle}>{entryLabel(entry)}</Text>
           <View style={styles.toggleRow}>
@@ -387,7 +453,7 @@ export function TendingCheckinScreen({
         </View>
       ))}
 
-      {step === 'needsReview' && reviewNeeds.map((need, index) => {
+      {activeStep === 'needsReview' && reviewNeeds.map((need, index) => {
         const key = need.id ?? `${need.label}-${index}`;
         return (
           <View key={key} style={styles.entryRow} testID={`tending-need-${key}`}>
@@ -416,7 +482,7 @@ export function TendingCheckinScreen({
         );
       })}
 
-      {step === 'whatComesNext' && (
+      {activeStep === 'whatComesNext' && (
         <View>
           {NEXT_CHOICES.map(([continueChoice, action, label]) => {
             const selected = choice === continueChoice && nextAction === action;
@@ -586,6 +652,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '700', color: colors.textPrimary },
   subtitle: { fontSize: 14, color: colors.textSecondary, lineHeight: 20, marginBottom: 8 },
   fieldLabel: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginTop: 12 },
+  helperText: { fontSize: 12, color: colors.textMuted, lineHeight: 18 },
   entryRow: { gap: 8, marginBottom: 14 },
   entryTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
   textInput: {

@@ -203,6 +203,36 @@ describe('TendingPanel', () => {
     expect(defaultProps.onCreateReentry).toHaveBeenCalledWith('I want to revisit the open need.');
   });
 
+  it('creates private between-period notes without starting re-entry', () => {
+    const onCreateBetweenPeriodNote = jest.fn();
+    render(
+      <TendingPanel
+        {...defaultProps}
+        betweenPeriodNotes={[{
+          id: 'note-1',
+          sessionId: 'session-1',
+          userId: 'user-1',
+          content: 'The plan still feels tender.',
+          carryForwardSelected: false,
+          consentToShareWithPartner: false,
+          shareConsentAt: null,
+          selectedForCheckinId: null,
+          createdAt: '2026-05-21T00:00:00.000Z',
+          updatedAt: '2026-05-21T00:00:00.000Z',
+        }]}
+        onCreateBetweenPeriodNote={onCreateBetweenPeriodNote}
+      />
+    );
+
+    expect(screen.getByTestId('tending-between-note-note-1')).toBeTruthy();
+    expect(screen.getByText('The plan still feels tender.')).toBeTruthy();
+    fireEvent.changeText(screen.getByTestId('tending-between-note-input'), 'I want to remember this privately.');
+    fireEvent.press(screen.getByTestId('create-tending-between-note'));
+
+    expect(onCreateBetweenPeriodNote).toHaveBeenCalledWith('I want to remember this privately.');
+    expect(defaultProps.onCreateReentry).not.toHaveBeenCalled();
+  });
+
   describe('parseSummaryLines rendering', () => {
     it('renders a standard Label: value line', () => {
       render(

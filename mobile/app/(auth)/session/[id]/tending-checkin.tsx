@@ -105,6 +105,7 @@ export default function TendingCheckinRoute() {
   return (
     <TendingCheckinScreen
       entries={entries}
+      betweenPeriodNotes={entriesQuery.data?.betweenPeriodNotes ?? []}
       needs={needs}
       initialEntryId={typeof tendingEntryId === 'string' ? tendingEntryId : null}
       isSubmitting={submit.isPending}

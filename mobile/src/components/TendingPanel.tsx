@@ -4,6 +4,7 @@ import { CalendarClock, CheckCircle2, RotateCcw } from 'lucide-react-native';
 import {
   AgreementDTO,
   Stage4OutcomeDTO,
+  TendingBetweenPeriodNoteDTO,
   TendingCoordinationCycleDTO,
   TendingCoordinationStatus,
   TendingEntryDTO,
@@ -18,14 +19,17 @@ type Palette = ReturnType<typeof useAppAppearance>['palette'];
 interface TendingPanelProps {
   entries: TendingEntryDTO[];
   coordinationCycles?: TendingCoordinationCycleDTO[];
+  betweenPeriodNotes?: TendingBetweenPeriodNoteDTO[];
   agreements?: AgreementDTO[];
   outcome?: Stage4OutcomeDTO | null;
   initialEntryId?: string | null;
   isCreatingReentry?: boolean;
+  isCreatingBetweenPeriodNote?: boolean;
   isSubmittingResponse?: boolean;
   currentUserId?: string;
   isUpdatingShare?: boolean;
   onCreateReentry: (intent?: string) => void;
+  onCreateBetweenPeriodNote?: (content: string) => void;
   onStartCheckin?: (entryId?: string) => void;
   /** @deprecated Legacy one-entry review path is kept only for compatibility during mobile cutover. */
   onSubmitResponse?: (
@@ -119,20 +123,24 @@ function canRespond(entry: TendingEntryDTO): boolean {
 export function TendingPanel({
   entries,
   coordinationCycles = [],
+  betweenPeriodNotes = [],
   agreements = [],
   outcome,
   initialEntryId,
   isCreatingReentry = false,
+  isCreatingBetweenPeriodNote = false,
   isSubmittingResponse = false,
   currentUserId,
   isUpdatingShare = false,
   onCreateReentry,
+  onCreateBetweenPeriodNote,
   onStartCheckin,
   onToggleShare,
 }: TendingPanelProps) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => createStyles(palette), [palette]);
   const [intent, setIntent] = useState('');
+  const [betweenPeriodNote, setBetweenPeriodNote] = useState('');
 
   const selectedEntry = useMemo(() => {
     const byId = initialEntryId
@@ -164,6 +172,12 @@ export function TendingPanel({
     if (isCreatingReentry) return;
     onCreateReentry(intent.trim() || undefined);
     setIntent('');
+  };
+  const handleCreateBetweenPeriodNote = () => {
+    const content = betweenPeriodNote.trim();
+    if (!content || isCreatingBetweenPeriodNote) return;
+    onCreateBetweenPeriodNote?.(content);
+    setBetweenPeriodNote('');
   };
 
   return (
@@ -291,6 +305,56 @@ export function TendingPanel({
           )}
         </View>
       )}
+
+      <View style={styles.card}>
+        <View style={styles.entryHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Private notes</Text>
+            <Text style={styles.entryMeta}>
+              {betweenPeriodNotes.length > 0
+                ? `${betweenPeriodNotes.length} saved for you`
+                : 'Saved only for your check-in context'}
+            </Text>
+          </View>
+        </View>
+        {betweenPeriodNotes.slice(-3).map((note) => (
+          <View key={note.id} style={styles.contextBox} testID={`tending-between-note-${note.id}`}>
+            <Text style={styles.contextText}>{note.content}</Text>
+            {note.carryForwardSelected && (
+              <Text style={styles.contextMeta}>Selected for check-in</Text>
+            )}
+          </View>
+        ))}
+        {onCreateBetweenPeriodNote && (
+          <>
+            <TextInput
+              value={betweenPeriodNote}
+              onChangeText={setBetweenPeriodNote}
+              placeholder="Private note for your future check-in"
+              placeholderTextColor={palette.textFaint}
+              multiline
+              style={styles.textInput}
+              accessibilityLabel="Private Tending note"
+              testID="tending-between-note-input"
+            />
+            <TouchableOpacity
+              style={[
+                styles.secondaryButton,
+                (!betweenPeriodNote.trim() || isCreatingBetweenPeriodNote) && styles.disabledButton,
+              ]}
+              onPress={handleCreateBetweenPeriodNote}
+              disabled={!betweenPeriodNote.trim() || isCreatingBetweenPeriodNote}
+              accessibilityRole="button"
+              accessibilityLabel="Save private Tending note"
+              testID="create-tending-between-note"
+            >
+              <Text style={styles.secondaryButtonText}>
+                {isCreatingBetweenPeriodNote ? 'Saving...' : 'Save private note'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
 
       <View style={styles.card}>
         <View style={styles.entryHeader}>

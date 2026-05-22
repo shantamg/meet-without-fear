@@ -6,6 +6,36 @@ Branch: `codex/full-tending-flow`
 
 ## Full Tending Flow Progress
 
+### 2026-05-22 — Chunk 6 Mobile Private Note Surface
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `mobile/src/hooks/useStages.ts`
+  - `mobile/src/hooks/index.ts`
+  - `mobile/src/components/TendingPanel.tsx`
+  - `mobile/src/components/__tests__/TendingPanel.test.tsx`
+  - `mobile/src/screens/TendingCheckinScreen.tsx`
+  - `mobile/src/screens/__tests__/TendingCheckinScreen.test.tsx`
+  - `mobile/app/(auth)/session/[id]/tending-checkin.tsx`
+  - `mobile/src/screens/UnifiedSessionScreen.tsx`
+- Decisions made:
+  - Added `useCreateTendingBetweenPeriodNote` for `POST /sessions/:id/tending/notes`.
+  - Added a private-note card on the resolved-session Tending panel. Notes are shown from the caller's own `betweenPeriodNotes`, and saving a note does not start passive re-entry.
+  - Wired the resolved-session screen to pass private notes from `GET /tending` and create notes through the new mutation.
+  - Added a first check-in step when notes exist, asking whether each note should be factored into the check-in and whether it may be mentioned to the partner.
+  - Check-in submission now sends `includedBetweenPeriodNoteIds` and `shareBetweenPeriodNoteIds`; share IDs are filtered to notes selected for carry-forward.
+  - Preserved `betweenPeriodNotes` in existing Tending cache updates for response, share-toggle, and re-entry mutations.
+- Commands run:
+  - `npm run check --workspace shared`
+  - `npm run check --workspace mobile`
+  - `npm test --workspace mobile -- --runTestsByPath src/screens/__tests__/TendingCheckinScreen.test.tsx src/components/__tests__/TendingPanel.test.tsx --runInBand`
+- Test results:
+  - Shared typecheck passed.
+  - Mobile typecheck passed.
+  - Mobile Tending component tests passed: 16 tests.
+- Known blockers: none.
+- Next step: add browser/E2E coverage for Eve adding a private note, Adam not seeing it, and Eve choosing carry-forward at check-in.
+
 ### 2026-05-22 — Chunk 6 Backend Private Between-Period Notes
 
 - Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.

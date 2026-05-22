@@ -85,6 +85,7 @@ import {
   useUnshareStage4Selections,
   useDeclineStage4Need,
   useUndeclineStage4Need,
+  useCreateTendingBetweenPeriodNote,
   useCreateTendingReentry,
   useSetTendingEntryShare,
   useNeedsComparison,
@@ -1746,6 +1747,11 @@ export function UnifiedSessionScreen({
   const createTendingReentry = useCreateTendingReentry({
     onError: () => {
       showError('Could not open Tending re-entry. Please try again.');
+    },
+  });
+  const createTendingBetweenPeriodNote = useCreateTendingBetweenPeriodNote({
+    onError: () => {
+      showError('Could not save that private Tending note. Please try again.');
     },
   });
   const submitTendingResponse = useSubmitTendingResponse({
@@ -3831,12 +3837,18 @@ export function UnifiedSessionScreen({
     <TendingPanel
       entries={tendingEntriesQuery.data?.entries ?? []}
       coordinationCycles={tendingEntriesQuery.data?.coordinationCycles ?? []}
+      betweenPeriodNotes={tendingEntriesQuery.data?.betweenPeriodNotes ?? []}
       agreements={stage4State?.outcome?.agreements ?? agreements}
       outcome={stage4State?.outcome}
       initialEntryId={initialTendingEntryId}
       isCreatingReentry={createTendingReentry.isPending}
+      isCreatingBetweenPeriodNote={createTendingBetweenPeriodNote.isPending}
       isSubmittingResponse={submitTendingResponse.isPending}
       onCreateReentry={handleCreateTendingReentry}
+      onCreateBetweenPeriodNote={(content) => {
+        if (!sessionId) return;
+        createTendingBetweenPeriodNote.mutate({ sessionId, content });
+      }}
       onStartCheckin={(entryId) => {
         const suffix = entryId ? `?tendingEntryId=${encodeURIComponent(entryId)}` : '';
         router.push(`/session/${sessionId}/tending-checkin${suffix}`);
