@@ -4,6 +4,55 @@ Last updated: 2026-05-06
 Worktree: `/Users/shantam/Software/meet-without-fear-stage4-tending`
 Branch: `codex/stage4-tending-focus`
 
+## Full Tending Flow Progress
+
+### 2026-05-22 — New Dedicated Worktree And Source Import
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Reason for new worktree: the previously recorded dedicated worktree `/Users/shantam/Software/meet-without-fear-stage4-tending` no longer exists, and the goal prompt requires implementation outside the main checkout.
+- Imported source docs from `/Users/shantam/Software/meet-without-fear`:
+  - `docs/product/source-material/stage-4-and-beyond-transcript.md`
+  - `docs/product/tending-goal-prompt.md`
+  - `docs/product/tending-implementation-plan.md`
+  - `docs/product/source-material/index.md`
+- Preflight commands run:
+  - `git status --short --branch` in the main checkout.
+  - `git worktree add -b codex/full-tending-flow /Users/shantam/Software/meet-without-fear-full-tending HEAD`.
+  - `git diff --cached -- docs/product/source-material/index.md docs/product/source-material/stage-4-and-beyond-transcript.md docs/product/tending-goal-prompt.md docs/product/tending-implementation-plan.md | git -C /Users/shantam/Software/meet-without-fear-full-tending apply --index`.
+  - Read the goal prompt, implementation plan, technical spec, gold question analysis, Stage 4 and Beyond transcript, relevant golden transcript Tending sections, `CLAUDE.md`, and the current Tending schema/service/controller/mobile screen.
+- Current status: Chunk 1 is starting from the existing Stage 4/Tending base. Existing code has Tending entries/responses and three-orientation check-ins, but does not yet have batch `TendingCheckin`, structured entry outcomes, need outcomes, or reminders.
+- First intended chunk: add additive Prisma/shared data structures for structured Tending outcomes and reminders, then validate Prisma plus shared/backend typechecks.
+- Known blockers: none.
+- Next step: implement Chunk 1 schema/shared contracts.
+
+### 2026-05-22 — Chunk 1 Contract And Schema
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260522000000_add_structured_tending_checkins/migration.sql`
+  - `shared/src/enums.ts`
+  - `shared/src/dto/strategy.ts`
+  - imported source docs listed above
+- Decisions made:
+  - Added `TendingCheckin` as the batch parent for session-level check-in submissions.
+  - Added `checkinId` to `TendingResponse` as optional so legacy single-entry responses remain valid.
+  - Added `TendingEntryOutcome`, `TendingNeedOutcome`, and `TendingReminder` as additive tables rather than overloading the existing blob response.
+  - Added shared optional DTO fields so existing mobile/backend callers can continue compiling during the richer flow cutover.
+  - `TendingNextAction` includes both `ADJUST_COMMITMENT` and `REOPEN_STRATEGY_WORK`; legacy `ContinueChoice.ANOTHER_ROUND` remains for compatibility until backend/mobile path naming is fully migrated.
+- Commands run:
+  - `npm ci` in the fresh worktree to install dependencies.
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/mwf npx prisma@6.12.0 validate --schema backend/prisma/schema.prisma`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace backend`
+  - `npx prisma@6.12.0 generate --schema backend/prisma/schema.prisma`
+- Test results:
+  - Prisma schema validation passed.
+  - Shared typecheck passed.
+  - Backend typecheck passed after generating the Prisma client in the new worktree.
+- Known blockers: none.
+- Next step: Chunk 2 backend structured check-in persistence.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.

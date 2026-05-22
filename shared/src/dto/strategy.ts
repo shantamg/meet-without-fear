@@ -15,9 +15,15 @@ import {
   Stage4SelectionDecision,
   Stage4SubChatAnchor,
   Stage4SubChatStatus,
+  TendingBlockerCategory,
   TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
+  TendingFollowThroughStatus,
+  TendingHelpfulnessStatus,
+  TendingNeedResolutionStatus,
+  TendingNextAction,
+  TendingReminderScope,
 } from '../enums';
 
 /** Maximum number of agreements allowed per session */
@@ -341,16 +347,78 @@ export interface TendingEntryDTO {
   updatedAt: string;
   myResponse: TendingResponseDTO | null;
   responseCount: number;
+  latestOutcome?: TendingEntryOutcomeDTO | null;
+  reminders?: TendingReminderDTO[];
 }
 
 export interface TendingResponseDTO {
   id: string;
   tendingEntryId: string;
   userId: string;
+  checkinId?: string | null;
   status: string;
   reflection: string | null;
   continueChoice: string | null;
   submittedAt: string;
+}
+
+export interface TendingCheckinDTO {
+  id: string;
+  sessionId: string;
+  userId: string;
+  nextAction: TendingNextAction | null;
+  continueChoice: ContinueChoice | null;
+  reflectionSummary: string | null;
+  submittedAt: string;
+  createdAt: string;
+  entryOutcomes?: TendingEntryOutcomeDTO[];
+  needOutcomes?: TendingNeedOutcomeDTO[];
+  reminders?: TendingReminderDTO[];
+}
+
+export interface TendingEntryOutcomeDTO {
+  id: string;
+  checkinId: string;
+  tendingEntryId: string;
+  responseId: string | null;
+  userId: string;
+  followThroughStatus: TendingFollowThroughStatus;
+  helpfulnessStatus: TendingHelpfulnessStatus | null;
+  blockerCategories: TendingBlockerCategory[];
+  whatHappened: string | null;
+  helpedNeed: string | null;
+  blockerNote: string | null;
+  stillWorthTrying: boolean | null;
+  createdAt: string;
+}
+
+export interface TendingNeedOutcomeDTO {
+  id: string;
+  checkinId: string;
+  sessionId: string;
+  needId: string | null;
+  needLabel: string;
+  sourceUserId: string | null;
+  resolutionStatus: TendingNeedResolutionStatus;
+  note: string | null;
+  changedNeedLabel: string | null;
+  nextAction: TendingNextAction | null;
+  createdAt: string;
+}
+
+export interface TendingReminderDTO {
+  id: string;
+  sessionId: string;
+  checkinId: string | null;
+  tendingEntryId: string | null;
+  userId: string;
+  scope: TendingReminderScope;
+  remindAt: string;
+  cadence: string | null;
+  note: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface GetTendingEntriesResponse {
@@ -386,9 +454,41 @@ export interface TendingCheckinOrientationReflection {
   perEntryNotes?: Record<string, string>;
 }
 
+export interface TendingCheckinEntryOutcomeInput {
+  tendingEntryId: string;
+  followThroughStatus: TendingFollowThroughStatus;
+  helpfulnessStatus?: TendingHelpfulnessStatus;
+  blockerCategories?: TendingBlockerCategory[];
+  whatHappened?: string;
+  helpedNeed?: string;
+  blockerNote?: string;
+  stillWorthTrying?: boolean;
+  note?: string;
+}
+
+export interface TendingCheckinNeedOutcomeInput {
+  needId?: string;
+  needLabel: string;
+  sourceUserId?: string;
+  resolutionStatus: TendingNeedResolutionStatus;
+  note?: string;
+  changedNeedLabel?: string;
+  nextAction?: TendingNextAction;
+}
+
+export interface TendingReminderInput {
+  tendingEntryId?: string;
+  scope: TendingReminderScope;
+  remindAt: string;
+  cadence?: string;
+  note?: string;
+}
+
 export interface TendingCheckinWhatComesNext {
   continueChoice: ContinueChoice;
+  nextAction?: TendingNextAction;
   partialClosure?: Record<string, PartialClosureResolution>;
+  reminders?: TendingReminderInput[];
 }
 
 export interface TendingCheckinOrientations {
@@ -399,10 +499,17 @@ export interface TendingCheckinOrientations {
 
 export interface SubmitTendingCheckinRequest {
   orientations: TendingCheckinOrientations;
+  entryOutcomes?: TendingCheckinEntryOutcomeInput[];
+  needOutcomes?: TendingCheckinNeedOutcomeInput[];
+  reminders?: TendingReminderInput[];
+  nextAction?: TendingNextAction;
+  resolvedEnoughOverride?: boolean;
+  resolvedEnoughOverrideNote?: string;
 }
 
 export interface SubmitTendingCheckinResponse {
   entries: TendingEntryDTO[];
+  checkin?: TendingCheckinDTO;
   newSessionId?: string;
   continueChoice: ContinueChoice;
   nextScheduledFor?: string | null;
