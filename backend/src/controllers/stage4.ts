@@ -479,6 +479,10 @@ function userIsSessionMember(session: Stage4MutableSession, userId: string): boo
   return session.relationship.members.some((member) => member.userId === userId);
 }
 
+function isPrismaUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
 function selectionsByProposalAndUser(
   selections: Stage4SelectionForClosure[]
 ): Map<string, Map<string, Stage4SelectionForClosure>> {
@@ -1182,7 +1186,8 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const [proposals, selections, coverageRows, sharedVessel] = await Promise.all([
+    const memberUserIds = mutable.session.relationship.members.map((member) => member.userId);
+    const [proposals, selections, coverageRows, sharedVessel, stage4ProgressRows] = await Promise.all([
       prisma.strategyProposal.findMany({
         where: { sessionId, status: { not: Stage4ProposalStatus.REMOVED } },
         select: {
@@ -1205,6 +1210,10 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
         select: { id: true, needId: true, coverageStatus: true },
       }) as Promise<Stage4CoverageForClosure[]>,
       prisma.sharedVessel.findUnique({ where: { sessionId } }),
+      prisma.stageProgress.findMany({
+        where: { sessionId, stage: 4, userId: { in: memberUserIds } },
+        select: { userId: true, gatesSatisfied: true },
+      }),
     ]);
 
     if (!sharedVessel) {
@@ -1212,9 +1221,9 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const selectionUserIds = new Set(selections.map((selection) => selection.userId));
+    const progressByUserId = new Map(stage4ProgressRows.map((progress) => [progress.userId, progress]));
     const bothPartnersSubmitted = mutable.session.relationship.members.every((member) =>
-      selectionUserIds.has(member.userId)
+      hasSubmittedSelectionGate(progressByUserId.get(member.userId)?.gatesSatisfied)
     );
     const selectionsByProposal = selectionsByProposalAndUser(selections);
     const mutuallyWillingSharedProposals = proposals
@@ -1402,6 +1411,10 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
       state,
     });
   } catch (error) {
+    if (isPrismaUniqueConstraintError(error)) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
     logger.error('[closeStage4] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to close Stage 4', 500);
   }

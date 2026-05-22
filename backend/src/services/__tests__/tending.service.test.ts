@@ -1706,6 +1706,8 @@ describe('tending.service', () => {
         expect.objectContaining({
           where: { id: 'sp-1' },
           data: expect.objectContaining({
+            status: 'IN_PROGRESS',
+            completedAt: null,
             gatesSatisfied: expect.objectContaining({
               tendingReopen: expect.objectContaining({
                 checkinId: 'checkin-1',

@@ -1337,7 +1337,11 @@ export async function submitTendingCheckin(args: {
           };
           await tx.stageProgress.update({
             where: { id: row.id },
-            data: { gatesSatisfied: gates as Prisma.InputJsonValue },
+            data: {
+              status: 'IN_PROGRESS',
+              completedAt: null,
+              gatesSatisfied: gates as Prisma.InputJsonValue,
+            },
           });
         }
         // Close out current Tending entries so a fresh inventory cycle can run.

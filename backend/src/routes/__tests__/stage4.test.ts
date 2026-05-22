@@ -115,7 +115,15 @@ describe('Stage 4 API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.stageProgress.findMany as jest.Mock).mockImplementation((args) => {
+      if (args?.where?.stage === 4 && args?.where?.userId?.in) {
+        return Promise.resolve([
+          { userId: mockUser.id, stage: 4, gatesSatisfied: { selectionSubmitted: true } },
+          { userId: mockPartnerId, stage: 4, gatesSatisfied: { selectionSubmitted: true } },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
     (getModelCompletion as jest.Mock).mockResolvedValue(null);
   });
 
@@ -1455,6 +1463,10 @@ describe('Stage 4 API', () => {
       ]);
       (prisma.stage4ProposalSelection.findMany as jest.Mock).mockResolvedValue([
         { proposalId: mockStrategyIds[0], userId: mockUser.id, decision: Stage4SelectionDecision.WILLING },
+      ]);
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValueOnce([
+        { userId: mockUser.id, stage: 4, gatesSatisfied: { selectionSubmitted: true } },
+        { userId: mockPartnerId, stage: 4, gatesSatisfied: {} },
       ]);
       (prisma.stage4NeedCoverage.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.sharedVessel.findUnique as jest.Mock).mockResolvedValue({ id: 'shared-vessel-1' });
