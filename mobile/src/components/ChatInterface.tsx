@@ -320,6 +320,8 @@ export function ChatInterface({
   const animationScopeRef = useRef(animationScope);
   const seenAnimatedItemIdsRef = useRef(getSeenAnimatedItemIds(animationScope));
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [composerHeight, setComposerHeight] = useState(0);
+  const [messageListBottomInset, setMessageListBottomInset] = useState(0);
   const [keyboardLift, setKeyboardLift] = useState(0);
   const [auxiliaryControlsVisible, setAuxiliaryControlsVisible] = useState(true);
 
@@ -412,6 +414,7 @@ export function ChatInterface({
       }
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
+      setMessageListBottomInset(0);
       setIsKeyboardVisible(false);
       setKeyboardLift(0);
     });
@@ -1104,6 +1107,54 @@ export function ChatInterface({
     }
   }, [scrollToBottom]);
 
+  const updateMessageListBottomInset = useCallback(() => {
+    if (!isKeyboardVisible) {
+      setMessageListBottomInset(0);
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      flatListContainerRef.current?.measureInWindow((_listX, listY, _listWidth, listHeight) => {
+        composerContainerRef.current?.measureInWindow((_composerX, composerY) => {
+          const listBottom = listY + listHeight;
+          const nextInset = Math.max(0, Math.ceil(listBottom - composerY));
+
+          setMessageListBottomInset((currentInset) => (
+            Math.abs(currentInset - nextInset) > 1 ? nextInset : currentInset
+          ));
+        });
+      });
+    });
+  }, [isKeyboardVisible]);
+
+  const handleComposerLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = event.nativeEvent.layout.height;
+    setComposerHeight((currentHeight) => (
+      Math.abs(currentHeight - nextHeight) > 1 ? nextHeight : currentHeight
+    ));
+  }, []);
+
+  useEffect(() => {
+    updateMessageListBottomInset();
+
+    if (!isKeyboardVisible) {
+      return;
+    }
+
+    const timeoutIds = [
+      setTimeout(updateMessageListBottomInset, 80),
+      setTimeout(updateMessageListBottomInset, 180),
+      setTimeout(updateMessageListBottomInset, 320),
+    ];
+
+    return () => timeoutIds.forEach(clearTimeout);
+  }, [
+    auxiliaryControlsVisible,
+    composerHeight,
+    isKeyboardVisible,
+    updateMessageListBottomInset,
+  ]);
+
   useEffect(() => {
     if (isKeyboardVisible) return;
 
@@ -1180,11 +1231,15 @@ export function ChatInterface({
   const keyboardSpacerStyle = keyboardLift > 0
     ? { height: keyboardLift }
     : null;
+  const keyboardOpenMessageListInset = isKeyboardVisible && messageListBottomInset > 0
+    ? { paddingBottom: messageListBottomInset }
+    : null;
 
   const composerControls = (
     <View
       ref={composerContainerRef}
       style={[styles.bottomContainer, isKeyboardVisible && styles.bottomContainerKeyboardOpen]}
+      onLayout={handleComposerLayout}
     >
       {showEmotionSlider && onEmotionChange && (
         <EmotionSlider
@@ -1221,6 +1276,7 @@ export function ChatInterface({
       stickyHeaderIndices={stickyHeaderIndices}
       contentContainerStyle={[
         styles.messageList,
+        keyboardOpenMessageListInset,
         listItems.length === 0 && (customEmptyState ? styles.customMessageListEmpty : styles.messageListEmpty),
       ]}
       ListHeaderComponent={renderLoadingHeader}
