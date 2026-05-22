@@ -2230,11 +2230,11 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
               tagTrapBuffer = thinkingBuffer.substring(closingTagIndex + 11); // 11 = '</thinking>'.length
               thinkingBuffer = '';
             }
-            // Safety: If buffer > 2000 chars without finding tag, assume no thinking and flush
+            // Safety: If buffer grows without a closing tag, drop it rather
+            // than risk streaming hidden reasoning to the client.
             else if (thinkingBuffer.length > 2000) {
-              logger.warn(`[sendMessageStream:${requestId}] Thinking buffer exceeded 2000 chars without closing tag, flushing`);
+              logger.warn(`[sendMessageStream:${requestId}] Thinking buffer exceeded 2000 chars without closing tag; discarding hidden buffer`);
               isInsideThinking = false;
-              sendCleanText(thinkingBuffer);
               thinkingBuffer = '';
             }
           }
@@ -2358,16 +2358,13 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
 
       // =========================================================================
       // SAFETY FLUSH: Handle AI responses that don't follow expected format
-      // If stream ends while still waiting for </thinking>, the AI likely skipped
-      // the thinking block entirely (e.g., dispatch-only response). Flush the
-      // thinkingBuffer as visible content so dispatch tags can be parsed.
+      // If stream ends while still waiting for </thinking>, discard the buffer
+      // rather than risk leaking hidden reasoning. Still parse semantic tags so
+      // dispatch-only responses can be handled without streaming raw content.
       // =========================================================================
       if (isInsideThinking && thinkingBuffer.length > 0) {
-        logger.warn(`[sendMessageStream:${requestId}] Stream ended while still in thinking trap. Buffer has ${thinkingBuffer.length} chars. Flushing as visible content.`);
-        // The buffer might contain <dispatch>...</dispatch> without a thinking block
-        // Process it through the tag processor to extract dispatch tags
-        const cleanText = processTagTrapBuffer(thinkingBuffer);
-        sendCleanText(cleanText);
+        logger.warn(`[sendMessageStream:${requestId}] Stream ended while still in thinking trap. Buffer has ${thinkingBuffer.length} chars. Discarding hidden buffer.`);
+        processTagTrapBuffer(thinkingBuffer);
         // Store the raw buffer as "thinking" for downstream parsing to find dispatch tags
         thinkingContent = thinkingBuffer;
         thinkingBuffer = '';

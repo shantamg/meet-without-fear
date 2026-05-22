@@ -514,9 +514,9 @@ describe('Stage 3 API', () => {
       await confirmNeeds(req as Request, res as Response);
 
       expect(statusMock).toHaveBeenCalledWith(200);
-      expect(prisma.identifiedNeed.update).toHaveBeenCalledWith(
+      expect(prisma.identifiedNeed.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: mockNeedId1 },
+          where: { id: mockNeedId1, vesselId: mockVesselId },
           data: expect.objectContaining({
             need: 'To feel deeply heard and understood',
             confirmed: true,

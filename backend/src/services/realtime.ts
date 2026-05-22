@@ -339,7 +339,7 @@ export async function isUserPresent(sessionId: string, userId: string): Promise<
   const ably = getAbly();
 
   try {
-    const presenceChannel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
+    const presenceChannel = ably.channels.get(REALTIME_CHANNELS.presence(sessionId));
     const presenceResult = await presenceChannel.presence.get();
     // Ably v2 returns a PaginatedResult, need to access .items
     const members = presenceResult.items || [];
@@ -360,7 +360,7 @@ export async function getSessionPresence(sessionId: string): Promise<string[]> {
   const ably = getAbly();
 
   try {
-    const presenceChannel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
+    const presenceChannel = ably.channels.get(REALTIME_CHANNELS.presence(sessionId));
     const presenceResult = await presenceChannel.presence.get();
     const members = presenceResult.items || [];
     return members.map((m: Ably.PresenceMessage) => m.clientId).filter(Boolean) as string[];

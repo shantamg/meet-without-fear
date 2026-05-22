@@ -156,7 +156,7 @@ export const REALTIME_CHANNELS = {
   /** Main session channel for events */
   session: (sessionId: string) => `meetwithoutfear:session:${sessionId}`,
   /** Presence channel for a session */
-  presence: (sessionId: string) => `meetwithoutfear:session:${sessionId}`,
+  presence: (sessionId: string) => `meetwithoutfear:presence:${sessionId}`,
   /** User's private channel */
   user: (userId: string) => `meetwithoutfear:user:${userId}`,
 } as const;

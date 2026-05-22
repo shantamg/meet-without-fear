@@ -2674,6 +2674,10 @@ describe('Stage 4 API', () => {
       (prisma.stage4Closure.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.stage4ProposalSelection.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.stage4NeedCoverage.findFirst as jest.Mock).mockResolvedValue({
+        id: 'coverage-1',
+        needId,
+      });
       (prisma.stage4NeedCoverage.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.agreement.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([]);
@@ -2690,6 +2694,13 @@ describe('Stage 4 API', () => {
 
       await declineStage4Need(req as Request, res as Response);
 
+      expect(prisma.stage4NeedCoverage.findFirst).toHaveBeenCalledWith({
+        where: {
+          sessionId: mockSessionId,
+          OR: [{ id: needId }, { needId }],
+        },
+        select: { id: true },
+      });
       expect(prisma.stage4NeedDeclination.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
@@ -2703,6 +2714,27 @@ describe('Stage 4 API', () => {
         })
       );
       expect(statusMock).toHaveBeenCalledWith(200);
+    });
+
+    it('rejects phantom need declinations', async () => {
+      arrangeMutable();
+      (prisma.stage4NeedCoverage.findFirst as jest.Mock).mockResolvedValue(null);
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId, needId: 'phantom-need' },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await declineStage4Need(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(404);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({ code: 'NOT_FOUND' }),
+        })
+      );
+      expect(prisma.stage4NeedDeclination.upsert).not.toHaveBeenCalled();
     });
 
     it('undeclines a need (DELETE decline)', async () => {
