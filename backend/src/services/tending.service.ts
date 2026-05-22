@@ -648,7 +648,7 @@ async function buildReentrySummary(sessionId: string, userId: string, intent?: s
   const individualIds = closure?.individualProposalIds ?? [];
   const commitments = individualIds.length > 0
     ? await prisma.strategyProposal.findMany({
-        where: { id: { in: individualIds } },
+        where: { sessionId, id: { in: individualIds } },
         orderBy: { updatedAt: 'desc' },
       })
     : [];
@@ -1308,53 +1308,16 @@ export async function submitTendingCheckin(args: {
     // coordination resolver; individual entries still advance immediately.
     switch (choice) {
       case ContinueChoice.ANOTHER_ROUND: {
-        if (hasSharedEntry) break;
         if (entriesToTransition.length === 0) break;
-        // Reopen Stage 4 strategy work. Keep coverage/declination history as
-        // context; clear only terminal closure/selection gates that block a new
-        // Stage 4 pass.
-        const stillOpenNeedIds = (args.needOutcomes ?? [])
-          .filter((outcome) =>
-            outcome.resolutionStatus === TendingNeedResolutionStatus.STILL_OPEN ||
-            outcome.resolutionStatus === TendingNeedResolutionStatus.CHANGED ||
-            outcome.resolutionStatus === TendingNeedResolutionStatus.NOT_SURE
-          )
-          .map((outcome) => outcome.needId)
-          .filter((needId): needId is string => Boolean(needId));
-        await tx.stage4Closure.deleteMany({ where: { sessionId: args.sessionId } });
-        await tx.stage4ProposalSelection.deleteMany({ where: { sessionId: args.sessionId } });
-        // Clear selectionSubmitted gates on every member's stage-4 progress.
-        const progress = await tx.stageProgress.findMany({
-          where: { sessionId: args.sessionId, stage: 4 },
-        });
-        for (const row of progress) {
-          const gates = (row.gatesSatisfied as Record<string, unknown> | null) ?? {};
-          delete gates.selectionSubmitted;
-          gates.tendingReopen = {
-            checkinId: createdCheckin.id,
-            stillOpenNeedIds,
-            reopenedAt: now.toISOString(),
-          };
-          await tx.stageProgress.update({
-            where: { id: row.id },
-            data: {
-              status: 'IN_PROGRESS',
-              completedAt: null,
-              gatesSatisfied: gates as Prisma.InputJsonValue,
-            },
-          });
-        }
-        // Close out current Tending entries so a fresh inventory cycle can run.
+        // Do not reset session-wide Stage 4 state from a single user's Tending
+        // check-in. Reopening strategy work is coordinated separately once both
+        // partners have had a chance to respond.
         for (const entry of entriesToTransition) {
           await tx.tendingEntry.update({
             where: { id: entry.id },
             data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
           });
         }
-        await tx.session.update({
-          where: { id: args.sessionId },
-          data: { status: 'ACTIVE' },
-        });
         break;
       }
       case ContinueChoice.EXTEND: {

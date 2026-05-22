@@ -1682,12 +1682,9 @@ describe('tending.service', () => {
       );
     });
 
-    it('ANOTHER_ROUND reopens Stage 4 around still-open needs without deleting coverage history', async () => {
+    it('ANOTHER_ROUND records the check-in without unilaterally resetting Stage 4', async () => {
       stubSession();
       (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('t1')]);
-      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
-        { id: 'sp-1', gatesSatisfied: { selectionSubmitted: true } },
-      ]);
       await submitTendingCheckin({
         sessionId,
         userId,
@@ -1698,22 +1695,16 @@ describe('tending.service', () => {
           resolutionStatus: TendingNeedResolutionStatus.STILL_OPEN,
         }],
       });
-      expect(prisma.stage4Closure.deleteMany).toHaveBeenCalledWith({ where: { sessionId } });
-      expect(prisma.stage4ProposalSelection.deleteMany).toHaveBeenCalledWith({ where: { sessionId } });
+      expect(prisma.stage4Closure.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.stage4ProposalSelection.deleteMany).not.toHaveBeenCalled();
       expect(prisma.stage4NeedCoverage.deleteMany).not.toHaveBeenCalled();
       expect(prisma.stage4NeedDeclination.deleteMany).not.toHaveBeenCalled();
-      expect(prisma.stageProgress.update).toHaveBeenCalledWith(
+      expect(prisma.stageProgress.findMany).not.toHaveBeenCalled();
+      expect(prisma.tendingEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'sp-1' },
+          where: { id: 't1' },
           data: expect.objectContaining({
-            status: 'IN_PROGRESS',
-            completedAt: null,
-            gatesSatisfied: expect.objectContaining({
-              tendingReopen: expect.objectContaining({
-                checkinId: 'checkin-1',
-                stillOpenNeedIds: ['need-clean-space'],
-              }),
-            }),
+            status: TendingEntryStatus.COMPLETED,
           }),
         })
       );

@@ -27,8 +27,10 @@ import {
   TendingReminderScope,
 } from '@meet-without-fear/shared';
 
+const tendingResponseStatuses = ['CHECKIN', 'WORKED', 'PARTLY', 'DID_NOT_WORK', 'DID_NOT_TRY', 'OTHER'] as const;
+
 const submitTendingResponseSchema = z.object({
-  status: z.string().min(1).max(80),
+  status: z.enum(tendingResponseStatuses),
   reflection: z.string().max(2000).optional(),
   continueChoice: z.nativeEnum(ContinueChoice).optional(),
 });

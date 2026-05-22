@@ -355,6 +355,10 @@ export async function captureNeeds(req: Request, res: Response): Promise<void> {
       errorResponse(res, 'VALIDATION_ERROR', 'needs array is required', 400);
       return;
     }
+    if (needs.length > 50) {
+      errorResponse(res, 'VALIDATION_ERROR', 'A maximum of 50 needs can be captured at once', 400);
+      return;
+    }
 
     for (const need of needs) {
       if (!need.need || !need.description || !isNeedCategory(need.category)) {
@@ -741,41 +745,41 @@ export async function consentToShareNeeds(
       return;
     }
 
-    // Create consent records for each need
     const now = new Date();
-    for (const needId of needIds) {
-      await prisma.consentRecord.create({
-        data: {
-          sessionId,
-          userId: user.id,
-          targetType: ConsentContentType.IDENTIFIED_NEED,
-          targetId: needId,
-          requestedByUserId: user.id, // Self-initiated consent
-          decision: 'GRANTED',
-          decidedAt: now,
-        },
-      });
-    }
-
-    // Update stage progress
     const gatesSatisfied = {
       ...(progress?.gatesSatisfied as Record<string, unknown> || {}),
       needsShared: true,
       sharedAt: now.toISOString(),
     } satisfies Prisma.InputJsonValue;
 
-    await prisma.stageProgress.update({
-      where: {
-        sessionId_userId_stage: {
-          sessionId,
-          userId: user.id,
-          stage: 3,
+    await prisma.$transaction(async (tx) => {
+      for (const needId of needIds) {
+        await tx.consentRecord.create({
+          data: {
+            sessionId,
+            userId: user.id,
+            targetType: ConsentContentType.IDENTIFIED_NEED,
+            targetId: needId,
+            requestedByUserId: user.id,
+            decision: 'GRANTED',
+            decidedAt: now,
+          },
+        });
+      }
+
+      await tx.stageProgress.update({
+        where: {
+          sessionId_userId_stage: {
+            sessionId,
+            userId: user.id,
+            stage: 3,
+          },
         },
-      },
-      data: {
-        gatesSatisfied,
-        status: 'GATE_PENDING',
-      },
+        data: {
+          gatesSatisfied,
+          status: 'GATE_PENDING',
+        },
+      });
     });
 
     // Notify partner via real-time
@@ -966,42 +970,62 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
 
     const canAdvance = validated && partnerValidated;
     if (canAdvance && partnerId) {
-      await prisma.stageProgress.updateMany({
-        where: {
-          sessionId,
-          stage: 3,
-          userId: { in: [user.id, partnerId] },
-        },
-        data: {
-          status: 'COMPLETED',
-          completedAt: now,
-        },
-      });
+      const transitionInputs = await Promise.all(
+        [user.id, partnerId].map(async (uid) => ({
+          uid,
+          firstNeed: await getFirstStage4NeedText(sessionId, uid),
+        }))
+      );
 
-      for (const uid of [user.id, partnerId]) {
-        await prisma.stageProgress.upsert({
+      const transitionMessages = await prisma.$transaction(async (tx) => {
+        await tx.stageProgress.updateMany({
           where: {
-            sessionId_userId_stage: {
+            sessionId,
+            stage: 3,
+            userId: { in: [user.id, partnerId] },
+          },
+          data: {
+            status: 'COMPLETED',
+            completedAt: now,
+          },
+        });
+
+        for (const uid of [user.id, partnerId]) {
+          await tx.stageProgress.upsert({
+            where: {
+              sessionId_userId_stage: {
+                sessionId,
+                userId: uid,
+                stage: 4,
+              },
+            },
+            create: {
               sessionId,
               userId: uid,
               stage: 4,
+              status: 'IN_PROGRESS',
+              startedAt: now,
             },
-          },
-          create: {
-            sessionId,
-            userId: uid,
-            stage: 4,
-            status: 'IN_PROGRESS',
-            startedAt: now,
-          },
-          update: {},
-        });
-      }
+            update: {},
+          });
+        }
 
-      const transitionMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
-      for (const uid of [user.id, partnerId]) {
-        transitionMessages.push(await createStage4TransitionMessage(sessionId, uid));
-      }
+        const createdMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
+        for (const input of transitionInputs) {
+          const message = await tx.message.create({
+            data: {
+              sessionId,
+              senderId: null,
+              forUserId: input.uid,
+              role: 'AI',
+              content: buildStage4TransitionContent(input.firstNeed),
+              stage: 4,
+            },
+          });
+          createdMessages.push({ id: message.id, content: message.content, timestamp: message.timestamp, forUserId: input.uid });
+        }
+        return createdMessages;
+      });
 
       for (const transitionMessage of transitionMessages) {
         await publishSessionEvent(sessionId, 'partner.stage_completed', {

@@ -2269,9 +2269,31 @@ export async function confirmAgreement(req: Request, res: Response): Promise<voi
     }
     // If not confirmed, we don't change agreement status - it stays PROPOSED for renegotiation
 
-    const updatedAgreement = await prisma.agreement.update({
-      where: { id: agreementId },
-      data: updateData,
+    const now = new Date();
+    const { updatedAgreement, sessionCanResolve } = await prisma.$transaction(async (tx) => {
+      const updatedAgreement = await tx.agreement.update({
+        where: { id: agreementId },
+        data: updateData,
+      });
+
+      const allAgreements = await tx.agreement.findMany({
+        where: { sharedVessel: { sessionId } },
+      });
+      const sessionCanResolve = allAgreements.length > 0 &&
+        allAgreements.every((a) => a.agreedByA && a.agreedByB);
+
+      if (sessionCanResolve) {
+        await tx.session.update({
+          where: { id: sessionId },
+          data: { status: 'RESOLVED', resolvedAt: now },
+        });
+        await tx.stageProgress.updateMany({
+          where: { sessionId, completedAt: null },
+          data: { status: 'COMPLETED', completedAt: now },
+        });
+      }
+
+      return { updatedAgreement, sessionCanResolve };
     });
 
     const bothConfirmed = updatedAgreement.agreedByA && updatedAgreement.agreedByB;
@@ -2287,25 +2309,7 @@ export async function confirmAgreement(req: Request, res: Response): Promise<voi
       });
     }
 
-    // Check if ALL agreements in this session are fully confirmed
-    const allAgreements = await prisma.agreement.findMany({
-      where: { sharedVessel: { sessionId } },
-    });
-    const sessionCanResolve = allAgreements.length > 0 &&
-      allAgreements.every(a => a.agreedByA && a.agreedByB);
-
     if (sessionCanResolve) {
-      // Auto-resolve session when all agreements confirmed
-      await prisma.session.update({
-        where: { id: sessionId },
-        data: { status: 'RESOLVED', resolvedAt: new Date() },
-      });
-      // Mark all stage progress as COMPLETED
-      await prisma.stageProgress.updateMany({
-        where: { sessionId, completedAt: null },
-        data: { status: 'COMPLETED', completedAt: new Date() },
-      });
-
       await publishSessionEvent(sessionId, 'session.resolved', {
         agreementId: updatedAgreement.id,
       });
