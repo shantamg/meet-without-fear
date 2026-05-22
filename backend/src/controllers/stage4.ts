@@ -299,6 +299,19 @@ type Stage4CoverageForClosure = {
   coverageStatus: string;
 };
 
+class Stage4ClosedConflictError extends Error {
+  constructor() {
+    super('Stage 4 is already closed');
+    this.name = 'Stage4ClosedConflictError';
+  }
+}
+
+type Stage4ProgressWriter = {
+  stageProgress: {
+    update(args: Prisma.StageProgressUpdateArgs): Promise<unknown>;
+  };
+};
+
 async function getMutableStage4Session(
   sessionId: string,
   userId: string
@@ -352,7 +365,8 @@ async function stage4NeedExistsForSession(sessionId: string, needId: string): Pr
 async function markStage4SelectionSubmitted(
   sessionId: string,
   userId: string,
-  existingGates: Prisma.JsonValue | null | undefined
+  existingGates: Prisma.JsonValue | null | undefined,
+  client: Stage4ProgressWriter = prisma
 ): Promise<void> {
   const gatesSatisfied = {
     ...((existingGates as Record<string, unknown> | null) || {}),
@@ -360,7 +374,7 @@ async function markStage4SelectionSubmitted(
     selectionSubmittedAt: new Date().toISOString(),
   } satisfies Prisma.InputJsonValue;
 
-  await prisma.stageProgress.update({
+  await client.stageProgress.update({
     where: {
       sessionId_userId_stage: { sessionId, userId, stage: 4 },
     },
@@ -371,7 +385,8 @@ async function markStage4SelectionSubmitted(
 async function clearStage4SelectionSubmitted(
   sessionId: string,
   userId: string,
-  existingGates: Prisma.JsonValue | null | undefined
+  existingGates: Prisma.JsonValue | null | undefined,
+  client: Stage4ProgressWriter = prisma
 ): Promise<void> {
   const next = {
     ...((existingGates as Record<string, unknown> | null) || {}),
@@ -379,7 +394,7 @@ async function clearStage4SelectionSubmitted(
   delete next.selectionSubmitted;
   delete next.selectionSubmittedAt;
 
-  await prisma.stageProgress.update({
+  await client.stageProgress.update({
     where: {
       sessionId_userId_stage: { sessionId, userId, stage: 4 },
     },
@@ -481,6 +496,12 @@ function userIsSessionMember(session: Stage4MutableSession, userId: string): boo
 
 function isPrismaUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
+async function assertStage4StillOpen(tx: Prisma.TransactionClient, sessionId: string): Promise<void> {
+  if (await tx.stage4Closure.findUnique({ where: { sessionId } })) {
+    throw new Stage4ClosedConflictError();
+  }
 }
 
 function selectionsByProposalAndUser(
@@ -919,7 +940,13 @@ export async function shareStage4Selections(req: Request, res: Response): Promis
       return;
     }
 
-    await markStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied);
+    await prisma.$transaction(
+      async (tx) => {
+        await assertStage4StillOpen(tx, sessionId);
+        await markStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied, tx);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
 
     const partnerId = await getPartnerUserId(sessionId, user.id);
     if (partnerId) {
@@ -989,6 +1016,10 @@ export async function shareStage4Selections(req: Request, res: Response): Promis
     const state = await buildStage4State(sessionId, user.id);
     successResponse(res, { state });
   } catch (error) {
+    if (error instanceof Stage4ClosedConflictError) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
     logger.error('[shareStage4Selections] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to share Stage 4 selections', 500);
   }
@@ -1029,15 +1060,25 @@ export async function declineStage4Need(req: Request, res: Response): Promise<vo
       return;
     }
 
-    await prisma.stage4NeedDeclination.upsert({
-      where: { sessionId_userId_needId: { sessionId, userId: user.id, needId } },
-      update: {},
-      create: { sessionId, userId: user.id, needId },
-    });
+    await prisma.$transaction(
+      async (tx) => {
+        await assertStage4StillOpen(tx, sessionId);
+        await tx.stage4NeedDeclination.upsert({
+          where: { sessionId_userId_needId: { sessionId, userId: user.id, needId } },
+          update: {},
+          create: { sessionId, userId: user.id, needId },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
 
     const state = await buildStage4State(sessionId, user.id);
     successResponse(res, { state });
   } catch (error) {
+    if (error instanceof Stage4ClosedConflictError) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
     logger.error('[declineStage4Need] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to decline need', 500);
   }
@@ -1078,13 +1119,23 @@ export async function undeclineStage4Need(req: Request, res: Response): Promise<
       return;
     }
 
-    await prisma.stage4NeedDeclination.deleteMany({
-      where: { sessionId, userId: user.id, needId },
-    });
+    await prisma.$transaction(
+      async (tx) => {
+        await assertStage4StillOpen(tx, sessionId);
+        await tx.stage4NeedDeclination.deleteMany({
+          where: { sessionId, userId: user.id, needId },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
 
     const state = await buildStage4State(sessionId, user.id);
     successResponse(res, { state });
   } catch (error) {
+    if (error instanceof Stage4ClosedConflictError) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
     logger.error('[undeclineStage4Need] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to undecline need', 500);
   }
@@ -1118,7 +1169,13 @@ export async function unshareStage4Selections(req: Request, res: Response): Prom
       return;
     }
 
-    await clearStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied);
+    await prisma.$transaction(
+      async (tx) => {
+        await assertStage4StillOpen(tx, sessionId);
+        await clearStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied, tx);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
 
     const partnerId = await getPartnerUserId(sessionId, user.id);
     if (partnerId) {
@@ -1132,6 +1189,10 @@ export async function unshareStage4Selections(req: Request, res: Response): Prom
     const state = await buildStage4State(sessionId, user.id);
     successResponse(res, { state });
   } catch (error) {
+    if (error instanceof Stage4ClosedConflictError) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
     logger.error('[unshareStage4Selections] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to revise Stage 4 selections', 500);
   }
