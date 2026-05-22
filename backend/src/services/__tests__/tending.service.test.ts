@@ -743,6 +743,48 @@ describe('tending.service', () => {
       );
     });
 
+    it('EXTEND completes entries that are no longer worth trying instead of rescheduling them', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([
+        openSharedEntry('t1'),
+        openSharedEntry('t2'),
+      ]);
+
+      await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.EXTEND),
+        entryOutcomes: [
+          {
+            tendingEntryId: 't1',
+            followThroughStatus: TendingFollowThroughStatus.DID_NOT_HAPPEN,
+            helpfulnessStatus: TendingHelpfulnessStatus.DID_NOT_HELP,
+            blockerCategories: [TendingBlockerCategory.TOO_HARD],
+            stillWorthTrying: false,
+          },
+          {
+            tendingEntryId: 't2',
+            followThroughStatus: TendingFollowThroughStatus.HAPPENED,
+            helpfulnessStatus: TendingHelpfulnessStatus.HELPED,
+            stillWorthTrying: true,
+          },
+        ],
+      });
+
+      expect(prisma.tendingEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 't1' },
+          data: expect.objectContaining({ status: TendingEntryStatus.COMPLETED }),
+        })
+      );
+      expect(prisma.tendingEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 't2' },
+          data: expect.objectContaining({ status: TendingEntryStatus.SCHEDULED }),
+        })
+      );
+    });
+
     it('FULL_CLOSURE marks every open entry COMPLETED and resolves the session', async () => {
       stubSession();
       (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
@@ -750,6 +792,11 @@ describe('tending.service', () => {
         sessionId,
         userId,
         orientations: baseOrientations(ContinueChoice.FULL_CLOSURE),
+        needOutcomes: [{
+          needId: 'need-1',
+          needLabel: 'predictability',
+          resolutionStatus: TendingNeedResolutionStatus.RESOLVED,
+        }],
       });
       expect(prisma.tendingEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -765,7 +812,56 @@ describe('tending.service', () => {
       );
     });
 
-    it('ANOTHER_ROUND clears stage 4 state and selectionSubmitted gates', async () => {
+    it('FULL_CLOSURE rejects still-open needs without an explicit resolved-enough override', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+
+      await expect(
+        submitTendingCheckin({
+          sessionId,
+          userId,
+          orientations: baseOrientations(ContinueChoice.FULL_CLOSURE),
+          needOutcomes: [{
+            needId: 'need-1',
+            needLabel: 'predictability',
+            resolutionStatus: TendingNeedResolutionStatus.STILL_OPEN,
+          }],
+        })
+      ).rejects.toBeInstanceOf(TendingInvalidStateError);
+
+      expect(prisma.tendingCheckin.create).not.toHaveBeenCalled();
+    });
+
+    it('FULL_CLOSURE records override context instead of blocking indefinitely', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+
+      await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.FULL_CLOSURE),
+        needOutcomes: [{
+          needId: 'need-1',
+          needLabel: 'predictability',
+          resolutionStatus: TendingNeedResolutionStatus.STILL_OPEN,
+        }],
+        resolvedEnoughOverride: true,
+        resolvedEnoughOverrideNote: 'I know this is not perfect, but I want to close here.',
+      });
+
+      expect(prisma.tendingCheckin.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          reflectionSummary: expect.stringContaining('Resolved-enough override'),
+        }),
+      });
+      expect(prisma.session.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'RESOLVED' }),
+        })
+      );
+    });
+
+    it('ANOTHER_ROUND reopens Stage 4 around still-open needs without deleting coverage history', async () => {
       stubSession();
       (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
       (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
@@ -775,13 +871,27 @@ describe('tending.service', () => {
         sessionId,
         userId,
         orientations: baseOrientations(ContinueChoice.ANOTHER_ROUND),
+        needOutcomes: [{
+          needId: 'need-clean-space',
+          needLabel: 'healthy, clean space',
+          resolutionStatus: TendingNeedResolutionStatus.STILL_OPEN,
+        }],
       });
       expect(prisma.stage4Closure.deleteMany).toHaveBeenCalledWith({ where: { sessionId } });
       expect(prisma.stage4ProposalSelection.deleteMany).toHaveBeenCalledWith({ where: { sessionId } });
+      expect(prisma.stage4NeedCoverage.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.stage4NeedDeclination.deleteMany).not.toHaveBeenCalled();
       expect(prisma.stageProgress.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'sp-1' },
-          data: expect.objectContaining({ gatesSatisfied: expect.not.objectContaining({ selectionSubmitted: true }) }),
+          data: expect.objectContaining({
+            gatesSatisfied: expect.objectContaining({
+              tendingReopen: expect.objectContaining({
+                checkinId: 'checkin-1',
+                stillOpenNeedIds: ['need-clean-space'],
+              }),
+            }),
+          }),
         })
       );
     });

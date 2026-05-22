@@ -12,6 +12,7 @@ import {
   TendingEntryStatus,
   TendingEntryType,
   TendingNeedOutcomeDTO,
+  TendingNeedResolutionStatus,
   TendingNextAction,
   TendingReminderDTO,
   TendingReminderInput,
@@ -660,6 +661,16 @@ export async function submitTendingCheckin(args: {
       }
     }
   }
+  if (choice === ContinueChoice.FULL_CLOSURE && !args.resolvedEnoughOverride) {
+    const unresolvedNeeds = (args.needOutcomes ?? []).filter(
+      (outcome) => outcome.resolutionStatus !== TendingNeedResolutionStatus.RESOLVED
+    );
+    if (unresolvedNeeds.length > 0) {
+      throw new TendingInvalidStateError(
+        'Full closure requires submitted needs to be resolved or an explicit resolved-enough override'
+      );
+    }
+  }
   const reflection = [
     args.orientations.whatWorked.reflection
       ? `What worked: ${args.orientations.whatWorked.reflection}`
@@ -823,12 +834,19 @@ export async function submitTendingCheckin(args: {
     // 2) Apply path-specific state transitions.
     switch (choice) {
       case ContinueChoice.ANOTHER_ROUND: {
-        // Reset Stage 4 to inventory building: clear closure, selections, gates.
-        // Preserve agreements as historical context.
+        // Reopen Stage 4 strategy work. Keep coverage/declination history as
+        // context; clear only terminal closure/selection gates that block a new
+        // Stage 4 pass.
+        const stillOpenNeedIds = (args.needOutcomes ?? [])
+          .filter((outcome) =>
+            outcome.resolutionStatus === TendingNeedResolutionStatus.STILL_OPEN ||
+            outcome.resolutionStatus === TendingNeedResolutionStatus.CHANGED ||
+            outcome.resolutionStatus === TendingNeedResolutionStatus.NOT_SURE
+          )
+          .map((outcome) => outcome.needId)
+          .filter((needId): needId is string => Boolean(needId));
         await tx.stage4Closure.deleteMany({ where: { sessionId: args.sessionId } });
         await tx.stage4ProposalSelection.deleteMany({ where: { sessionId: args.sessionId } });
-        await tx.stage4NeedCoverage.deleteMany({ where: { sessionId: args.sessionId } });
-        await tx.stage4NeedDeclination.deleteMany({ where: { sessionId: args.sessionId } });
         // Clear selectionSubmitted gates on every member's stage-4 progress.
         const progress = await tx.stageProgress.findMany({
           where: { sessionId: args.sessionId, stage: 4 },
@@ -836,6 +854,11 @@ export async function submitTendingCheckin(args: {
         for (const row of progress) {
           const gates = (row.gatesSatisfied as Record<string, unknown> | null) ?? {};
           delete gates.selectionSubmitted;
+          gates.tendingReopen = {
+            checkinId: createdCheckin.id,
+            stillOpenNeedIds,
+            reopenedAt: now.toISOString(),
+          };
           await tx.stageProgress.update({
             where: { id: row.id },
             data: { gatesSatisfied: gates as Prisma.InputJsonValue },
@@ -857,6 +880,14 @@ export async function submitTendingCheckin(args: {
       case ContinueChoice.EXTEND: {
         nextScheduledFor = addDays(now, DEFAULT_EXTENSION_DAYS);
         for (const entry of openEntries) {
+          const entryOutcome = entryOutcomeByEntryId.get(entry.id);
+          if (entryOutcome?.stillWorthTrying === false) {
+            await tx.tendingEntry.update({
+              where: { id: entry.id },
+              data: { status: TendingEntryStatus.COMPLETED, completedAt: now },
+            });
+            continue;
+          }
           await tx.tendingEntry.update({
             where: { id: entry.id },
             data: {

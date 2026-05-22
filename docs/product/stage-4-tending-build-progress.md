@@ -81,6 +81,25 @@ Branch: `codex/stage4-tending-focus`
 - Known blockers: none.
 - Next step: Chunk 3 path semantics, especially using structured need outcomes for full closure, extension, partial closure, strategy reopening, and new-process context.
 
+### 2026-05-22 — Chunk 3 Path Semantics Checkpoint
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+- Decisions made:
+  - Full closure now rejects submitted non-resolved need outcomes unless the user explicitly supplies a resolved-enough override. The override is recorded in the check-in reflection summary.
+  - Reopen strategy work (`ContinueChoice.ANOTHER_ROUND`) no longer deletes Stage 4 need coverage or need declination history. It clears terminal closure/selection state and seeds each Stage 4 progress row with `gatesSatisfied.tendingReopen` containing the check-in id and still-open need ids.
+  - Extend now reschedules only entries that are still worth trying; entries with structured outcome `stillWorthTrying: false` are completed rather than blindly extended.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Tending service test suite passed: 23 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Next step: continue Chunk 3 by adding richer new-process context preservation/recommendation helper coverage, then move to Tending prompt/conversation support.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.
