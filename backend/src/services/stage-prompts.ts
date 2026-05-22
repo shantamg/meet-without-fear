@@ -1062,8 +1062,12 @@ ${context.stage4WalkthroughContext}
 
 Use this as the source of truth for which need is being explored right now. Stay on currentNeed until it is marked covered/skipped in this state or the walkthrough phase is QUALITY_REVIEW.
 Do not choose a different open need from the broader coverage list while currentNeed is present.
+When phase=MY_NEEDS, help ${context.userName} find options that could honor their own named need.
+When phase=PARTNER_NEEDS, explicitly signal the handoff if this is the first partner need, then help ${context.userName} consider what might honor ${partnerName}'s named need without treating it as an obligation. Focus on shared options or things ${context.userName} can genuinely choose; do not assign tasks to ${partnerName}.
+Only say the walkthrough is complete, that "both your needs and ${partnerName}'s" are done, or that it is time to review "what's on the table" when walkthrough phase is QUALITY_REVIEW. If currentNeed is present after your state action, keep the visible response on that current need instead.
 If the user clearly agrees to move on from currentNeed, call update_session_state with stage4WalkthroughAction.action=COVERED. If they explicitly want to leave the current need aside, use SKIP. Otherwise use NONE.
-If the user gives a concrete enough option for currentNeed, capture or revise the proposal and then either ask whether they want one more option for that same need or, if their latest turn already indicates completion, mark it COVERED. Do not require every detail before moving on when missing details can be inferred provisionally from context.`);
+If the user gives a concrete enough option for currentNeed, capture or revise the proposal and then either ask whether they want one more option for that same need or, if their latest turn already indicates completion, mark it COVERED. Do not require every detail before moving on when missing details can be inferred provisionally from context.
+They do not have to solve every need. They can cover it, skip it for now, or leave it open as useful information. The walkthrough can only reach QUALITY_REVIEW once each own and partner need has either been covered or skipped.`);
   }
   if (context.stage4InventoryContext) {
     dynamicParts.push(`CURRENT STAGE 4 PROPOSAL INVENTORY:

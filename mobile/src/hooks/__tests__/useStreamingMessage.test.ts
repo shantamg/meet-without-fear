@@ -67,7 +67,7 @@ describe('useStreamingMessage', () => {
     jest.useRealTimers();
   });
 
-  it('recovers a stuck stream timeout by refetching persisted messages instead of entering error state', async () => {
+  it('soft-recovers a slow stream by refetching persisted messages without closing the connection', async () => {
     const queryClient = createQueryClient();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
     const refetchSpy = jest.spyOn(queryClient, 'refetchQueries');
@@ -92,8 +92,8 @@ describe('useStreamingMessage', () => {
       jest.advanceTimersByTime(15000);
     });
 
-    expect(mockEventSourceInstances[0].close).toHaveBeenCalled();
-    expect(result.current.status).toBe('idle');
+    expect(mockEventSourceInstances[0].close).not.toHaveBeenCalled();
+    expect(result.current.status).toBe('sending');
     expect(result.current.errorMessage).toBeNull();
     expect(result.current.failedMessageContent).toBeNull();
 
@@ -102,7 +102,14 @@ describe('useStreamingMessage', () => {
     expect(refetchSpy).toHaveBeenCalledWith({ queryKey: timelineKeys.infinite('session-123') });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: sessionKeys.state('session-123') });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: stageKeys.empathyStatus('session-123') });
-    expect(warnSpy).toHaveBeenCalledWith('[useStreamingMessage] 15s timeout - recovering persisted messages');
+    expect(warnSpy).toHaveBeenCalledWith('[useStreamingMessage] 15s soft recovery - refetching persisted messages while stream remains open');
+
+    await act(async () => {
+      jest.advanceTimersByTime(75000);
+    });
+
+    expect(mockEventSourceInstances[0].close).toHaveBeenCalled();
+    expect(result.current.status).toBe('idle');
 
     unmount();
     queryClient.clear();

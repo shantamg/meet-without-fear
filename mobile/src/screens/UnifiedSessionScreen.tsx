@@ -1707,19 +1707,24 @@ export function UnifiedSessionScreen({
   const hasRedesignedStage4 =
     !!stage4State &&
     (currentStage === Stage.STRATEGIC_REPAIR || session?.status === SessionStatus.RESOLVED);
+  const isStage4WalkingNeeds =
+    hasRedesignedStage4 &&
+    Boolean(stage4State?.walkthrough?.currentNeed) &&
+    (stage4State?.walkthrough?.phase === 'MY_NEEDS' ||
+      stage4State?.walkthrough?.phase === 'PARTNER_NEEDS');
+
   const redesignedStage4ProposalCount =
     (stage4State?.inventory.sharedProposals.length ?? 0) +
     (stage4State?.inventory.individualCommitments.length ?? 0);
   const redesignedStage4AllowsInput =
     currentStage === Stage.STRATEGIC_REPAIR &&
     !!stage4State &&
-    (
-      stage4State.phase === Stage4Phase.INVENTORY_BUILDING ||
-      (
-        stage4State.phase === Stage4Phase.COVERAGE_REVIEW &&
-        redesignedStage4ProposalCount < 2
-      )
-    );
+    !stage4State.outcome &&
+    isStage4WalkingNeeds;
+  const redesignedStage4ShouldHideInput =
+    hasRedesignedStage4 &&
+    !!stage4State &&
+    !redesignedStage4AllowsInput;
 
   const submitStage4Selection = useSubmitStage4ProposalSelection({
     onError: () => {
@@ -3588,16 +3593,16 @@ export function UnifiedSessionScreen({
           );
         }
 
-        // Fallback: when no other panel is queued and we're in the redesigned
-        // Stage 4, surface the proposal-review entry point above the input so
-        // the user always has a way to open the Stage 4 drawer.
+        // Fallback: always keep the redesigned Stage 4 surface reachable. The
+        // drawer is the only place to review proposals, explicitly skip a need,
+        // or mark the current need covered.
         if (hasRedesignedStage4 && stage4State) {
           const walkthrough = stage4State.walkthrough;
-          const isWalkingNeeds =
+          if (
             !stage4State.outcome &&
             (walkthrough.phase === 'MY_NEEDS' || walkthrough.phase === 'PARTNER_NEEDS') &&
-            Boolean(walkthrough.currentNeed);
-          if (isWalkingNeeds && walkthrough.currentNeed) {
+            walkthrough.currentNeed
+          ) {
             const currentNeedProposalCount = walkthrough.proposalGroups.reduce(
               (count, group) => count + group.proposals.length,
               0
@@ -3607,7 +3612,7 @@ export function UnifiedSessionScreen({
             const totalInPhase = Math.max(1, walkthrough.totalInPhase);
             const subtitle =
               currentNeedProposalCount === 0
-                ? 'Keep working in chat; open this only if you want to skip.'
+                ? 'Open this to review the current need, skip it, or keep working in chat.'
                 : currentNeedProposalCount === 1
                   ? 'Open this to refine the option, mark it covered, or skip it.'
                   : `Open this to refine ${currentNeedProposalCount} options, mark it covered, or skip it.`;
@@ -4301,7 +4306,9 @@ export function UnifiedSessionScreen({
             </>
           ) : undefined}
           hideInput={
-            redesignedStage4AllowsInput ? false : derivedShouldHideInput
+            redesignedStage4AllowsInput
+              ? false
+              : redesignedStage4ShouldHideInput || derivedShouldHideInput
           }
           validationCards={validationCards}
           onValidateAccurate={handleValidationAccurate}
