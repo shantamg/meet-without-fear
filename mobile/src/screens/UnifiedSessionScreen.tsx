@@ -28,6 +28,7 @@ import {
   IdentifiedNeedDTO,
   NeedEditConversationTurn,
   NeedEditPlan,
+  ContinueChoice,
 } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem, ChatCustomCardItem } from '../components/ChatInterface';
@@ -2023,10 +2024,19 @@ export function UnifiedSessionScreen({
         continueChoice: 'CONTINUE' | 'ADJUST' | 'CLOSE' | 'NEW_PROCESS' | 'OTHER_TRACK';
       }
     ) => {
+      const choiceByLegacyValue: Record<typeof response.continueChoice, ContinueChoice> = {
+        CONTINUE: ContinueChoice.EXTEND,
+        ADJUST: ContinueChoice.PARTIAL_CLOSURE,
+        CLOSE: ContinueChoice.FULL_CLOSURE,
+        NEW_PROCESS: ContinueChoice.NEW_PROCESS,
+        OTHER_TRACK: ContinueChoice.ANOTHER_ROUND,
+      };
       submitTendingResponse.mutate({
         sessionId,
         entryId,
-        ...response,
+        status: response.status,
+        reflection: response.reflection,
+        continueChoice: choiceByLegacyValue[response.continueChoice],
       });
     },
     [sessionId, submitTendingResponse]

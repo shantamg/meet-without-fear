@@ -27,7 +27,9 @@ import {
   TendingReminderDTO,
   TendingReminderInput,
   TendingReminderScope,
+  TendingReminderStatus,
   TendingResponseDTO,
+  TendingResponseStatus,
 } from '@meet-without-fear/shared';
 import { prisma } from '../lib/prisma';
 import { logger } from '../lib/logger';
@@ -136,7 +138,7 @@ function toResponseDTO(response: TendingEntryWithResponses['responses'][number])
     tendingEntryId: response.tendingEntryId,
     userId: response.userId,
     checkinId: response.checkinId ?? null,
-    status: response.status,
+    status: response.status as TendingResponseStatus,
     reflection: response.reflection,
     continueChoice: response.continueChoice,
     submittedAt: response.submittedAt.toISOString(),
@@ -172,7 +174,7 @@ function toReminderDTO(reminder: NonNullable<TendingEntryWithResponses['reminder
     remindAt: reminder.remindAt.toISOString(),
     cadence: reminder.cadence,
     note: reminder.note,
-    status: reminder.status,
+    status: reminder.status as TendingReminderStatus,
     createdAt: reminder.createdAt.toISOString(),
     updatedAt: reminder.updatedAt.toISOString(),
   };
@@ -1306,6 +1308,7 @@ export async function submitTendingCheckin(args: {
     // coordination resolver; individual entries still advance immediately.
     switch (choice) {
       case ContinueChoice.ANOTHER_ROUND: {
+        if (hasSharedEntry) break;
         if (entriesToTransition.length === 0) break;
         // Reopen Stage 4 strategy work. Keep coverage/declination history as
         // context; clear only terminal closure/selection gates that block a new

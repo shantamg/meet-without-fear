@@ -1717,6 +1717,35 @@ describe('tending.service', () => {
       );
     });
 
+    it('ANOTHER_ROUND with a shared entry waits for coordination before reopening Stage 4', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([
+        openSharedEntry('shared-1'),
+        openIndividualEntry('private-1'),
+      ]);
+
+      const result = await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.ANOTHER_ROUND),
+        needOutcomes: [{
+          needId: 'need-clean-space',
+          needLabel: 'healthy, clean space',
+          resolutionStatus: TendingNeedResolutionStatus.STILL_OPEN,
+        }],
+      });
+
+      expect(result.coordinationCycle).toBeTruthy();
+      expect(prisma.stage4Closure.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.stage4ProposalSelection.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.stageProgress.findMany).not.toHaveBeenCalled();
+      expect(prisma.session.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'ACTIVE' }),
+        })
+      );
+    });
+
     it('NEW_PROCESS creates a fresh session linked back to the current one and resolves it', async () => {
       stubSession();
       (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('t1')]);

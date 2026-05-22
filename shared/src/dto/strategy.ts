@@ -357,11 +357,13 @@ export interface TendingResponseDTO {
   tendingEntryId: string;
   userId: string;
   checkinId?: string | null;
-  status: string;
+  status: TendingResponseStatus;
   reflection: string | null;
-  continueChoice: string | null;
+  continueChoice: ContinueChoice | null;
   submittedAt: string;
 }
+
+export type TendingResponseStatus = 'CHECKIN' | 'WORKED' | 'PARTLY' | 'DID_NOT_WORK' | 'DID_NOT_TRY' | 'OTHER';
 
 export interface TendingCheckinDTO {
   id: string;
@@ -433,10 +435,12 @@ export interface TendingReminderDTO {
   remindAt: string;
   cadence: string | null;
   note: string | null;
-  status: string;
+  status: TendingReminderStatus;
   createdAt: string;
   updatedAt: string;
 }
+
+export type TendingReminderStatus = 'SCHEDULED' | 'DELIVERED' | 'CANCELLED';
 
 export interface TendingAdjustmentDTO {
   id: string;
@@ -506,9 +510,9 @@ export interface GetTendingHistoryResponse {
 }
 
 export interface SubmitTendingResponseRequest {
-  status: string;
+  status: TendingResponseStatus;
   reflection?: string;
-  continueChoice?: string;
+  continueChoice?: ContinueChoice;
 }
 
 export interface SubmitTendingResponseResponse {
