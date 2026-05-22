@@ -53,6 +53,34 @@ Branch: `codex/stage4-tending-focus`
 - Known blockers: none.
 - Next step: Chunk 2 backend structured check-in persistence.
 
+### 2026-05-22 — Chunk 2 Backend Structured Check-In Persistence
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/controllers/tending.ts`
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `backend/src/lib/__mocks__/prisma.ts`
+- Decisions made:
+  - `/sessions/:id/tending/checkin` now accepts structured entry outcomes, need outcomes, reminders, `nextAction`, and resolved-enough override fields while preserving the legacy three-orientation payload.
+  - `submitTendingCheckin` creates one `TendingCheckin` parent, links each upserted `TendingResponse` via `checkinId`, and keeps legacy readable reflection text as a backup summary.
+  - Per-entry notes are folded into each entry response reflection instead of being dropped.
+  - Entry outcomes and need outcomes are persisted in their dedicated tables.
+  - Reminder creation validates that shared reminders are tied to shared Tending entries; private individual reminders do not publish partner-visible events.
+  - Check-in submission notification is emitted only when the batch includes a shared entry, preserving private individual check-ins/reminders.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace shared`
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/mwf npx prisma@6.12.0 validate --schema backend/prisma/schema.prisma`
+- Test results:
+  - Tending service test suite passed: 20 tests.
+  - Backend typecheck passed.
+  - Shared typecheck passed.
+  - Prisma schema validation passed.
+- Known blockers: none.
+- Next step: Chunk 3 path semantics, especially using structured need outcomes for full closure, extension, partial closure, strategy reopening, and new-process context.
+
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.

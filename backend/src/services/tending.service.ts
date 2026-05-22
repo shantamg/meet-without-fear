@@ -2,11 +2,20 @@ import { Prisma } from '@prisma/client';
 import {
   ContinueChoice,
   PartialClosureResolution,
+  TendingCheckinDTO,
+  TendingCheckinEntryOutcomeInput,
+  TendingCheckinNeedOutcomeInput,
   TendingCheckinOrientations,
   TendingEntryDTO,
+  TendingEntryOutcomeDTO,
   TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
+  TendingNeedOutcomeDTO,
+  TendingNextAction,
+  TendingReminderDTO,
+  TendingReminderInput,
+  TendingReminderScope,
   TendingResponseDTO,
 } from '@meet-without-fear/shared';
 import { prisma } from '../lib/prisma';
@@ -40,10 +49,40 @@ type TendingEntryWithResponses = {
     id: string;
     tendingEntryId: string;
     userId: string;
+    checkinId: string | null;
     status: string;
     reflection: string | null;
     continueChoice: ContinueChoice | null;
     submittedAt: Date;
+  }>;
+  entryOutcomes?: Array<{
+    id: string;
+    checkinId: string;
+    tendingEntryId: string;
+    responseId: string | null;
+    userId: string;
+    followThroughStatus: any;
+    helpfulnessStatus: any | null;
+    blockerCategories: any[];
+    whatHappened: string | null;
+    helpedNeed: string | null;
+    blockerNote: string | null;
+    stillWorthTrying: boolean | null;
+    createdAt: Date;
+  }>;
+  reminders?: Array<{
+    id: string;
+    sessionId: string;
+    checkinId: string | null;
+    tendingEntryId: string | null;
+    userId: string;
+    scope: any;
+    remindAt: Date;
+    cadence: string | null;
+    note: string | null;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
   }>;
 };
 
@@ -77,6 +116,7 @@ function toResponseDTO(response: TendingEntryWithResponses['responses'][number])
     id: response.id,
     tendingEntryId: response.tendingEntryId,
     userId: response.userId,
+    checkinId: response.checkinId ?? null,
     status: response.status,
     reflection: response.reflection,
     continueChoice: response.continueChoice,
@@ -84,8 +124,46 @@ function toResponseDTO(response: TendingEntryWithResponses['responses'][number])
   };
 }
 
+function toEntryOutcomeDTO(outcome: NonNullable<TendingEntryWithResponses['entryOutcomes']>[number]): TendingEntryOutcomeDTO {
+  return {
+    id: outcome.id,
+    checkinId: outcome.checkinId,
+    tendingEntryId: outcome.tendingEntryId,
+    responseId: outcome.responseId,
+    userId: outcome.userId,
+    followThroughStatus: outcome.followThroughStatus,
+    helpfulnessStatus: outcome.helpfulnessStatus,
+    blockerCategories: outcome.blockerCategories,
+    whatHappened: outcome.whatHappened,
+    helpedNeed: outcome.helpedNeed,
+    blockerNote: outcome.blockerNote,
+    stillWorthTrying: outcome.stillWorthTrying,
+    createdAt: outcome.createdAt.toISOString(),
+  };
+}
+
+function toReminderDTO(reminder: NonNullable<TendingEntryWithResponses['reminders']>[number]): TendingReminderDTO {
+  return {
+    id: reminder.id,
+    sessionId: reminder.sessionId,
+    checkinId: reminder.checkinId,
+    tendingEntryId: reminder.tendingEntryId,
+    userId: reminder.userId,
+    scope: reminder.scope as TendingReminderScope,
+    remindAt: reminder.remindAt.toISOString(),
+    cadence: reminder.cadence,
+    note: reminder.note,
+    status: reminder.status,
+    createdAt: reminder.createdAt.toISOString(),
+    updatedAt: reminder.updatedAt.toISOString(),
+  };
+}
+
 function toEntryDTO(entry: TendingEntryWithResponses, userId: string): TendingEntryDTO {
   const myResponse = entry.responses.find((response) => response.userId === userId) ?? null;
+  const latestOutcome = (entry.entryOutcomes ?? [])
+    .filter((outcome) => outcome.userId === userId)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
 
   return {
     id: entry.id,
@@ -104,6 +182,10 @@ function toEntryDTO(entry: TendingEntryWithResponses, userId: string): TendingEn
     updatedAt: entry.updatedAt.toISOString(),
     myResponse: myResponse ? toResponseDTO(myResponse) : null,
     responseCount: entry.responses.length,
+    latestOutcome: latestOutcome ? toEntryOutcomeDTO(latestOutcome) : null,
+    reminders: (entry.reminders ?? [])
+      .filter((reminder) => reminder.userId === userId || reminder.scope === TendingReminderScope.SHARED)
+      .map(toReminderDTO),
   };
 }
 
@@ -213,7 +295,7 @@ export async function listTendingEntries(sessionId: string, userId: string): Pro
       ],
     },
     orderBy: [{ scheduledFor: 'asc' }, { createdAt: 'asc' }],
-    include: { responses: true },
+    include: { responses: true, entryOutcomes: true, reminders: true },
   })) as TendingEntryWithResponses[];
 
   return entries.map((entry) => toEntryDTO(entry, userId));
@@ -413,7 +495,7 @@ export async function createPassiveReentry(args: {
       openedAt: now,
       summary,
     },
-    include: { responses: true },
+    include: { responses: true, entryOutcomes: true, reminders: true },
   })) as TendingEntryWithResponses;
 
   return toEntryDTO(entry, args.userId);
@@ -449,15 +531,85 @@ function addDays(date: Date, days: number): Date {
 
 export type SubmitTendingCheckinResult = {
   entries: TendingEntryDTO[];
+  checkin?: TendingCheckinDTO;
   newSessionId?: string;
   continueChoice: ContinueChoice;
   nextScheduledFor?: Date | null;
 };
 
+function nextActionFromChoice(choice: ContinueChoice): TendingNextAction {
+  switch (choice) {
+    case ContinueChoice.FULL_CLOSURE:
+      return TendingNextAction.FULL_CLOSURE;
+    case ContinueChoice.EXTEND:
+      return TendingNextAction.EXTEND;
+    case ContinueChoice.NEW_PROCESS:
+      return TendingNextAction.NEW_PROCESS;
+    case ContinueChoice.PARTIAL_CLOSURE:
+      return TendingNextAction.PARTIAL_CLOSURE;
+    case ContinueChoice.ANOTHER_ROUND:
+      return TendingNextAction.REOPEN_STRATEGY_WORK;
+  }
+}
+
+function buildEntryReflection(args: {
+  baseReflection: string;
+  entryId: string;
+  whatWorkedNote?: string;
+  supportNote?: string;
+  outcome?: TendingCheckinEntryOutcomeInput;
+}): string | null {
+  const lines = [
+    args.baseReflection || null,
+    args.whatWorkedNote ? `Entry note - what worked: ${args.whatWorkedNote}` : null,
+    args.supportNote ? `Entry note - more support: ${args.supportNote}` : null,
+    args.outcome?.whatHappened ? `What actually happened: ${args.outcome.whatHappened}` : null,
+    args.outcome?.helpedNeed ? `Need impact: ${args.outcome.helpedNeed}` : null,
+    args.outcome?.blockerNote ? `Blocker: ${args.outcome.blockerNote}` : null,
+    args.outcome?.note ? `Entry note: ${args.outcome.note}` : null,
+  ];
+
+  return lines.filter(Boolean).join('\n') || null;
+}
+
+function toNeedOutcomeDTO(outcome: {
+  id: string;
+  checkinId: string;
+  sessionId: string;
+  needId: string | null;
+  needLabel: string;
+  sourceUserId: string | null;
+  resolutionStatus: any;
+  note: string | null;
+  changedNeedLabel: string | null;
+  nextAction: any;
+  createdAt: Date;
+}): TendingNeedOutcomeDTO {
+  return {
+    id: outcome.id,
+    checkinId: outcome.checkinId,
+    sessionId: outcome.sessionId,
+    needId: outcome.needId,
+    needLabel: outcome.needLabel,
+    sourceUserId: outcome.sourceUserId,
+    resolutionStatus: outcome.resolutionStatus,
+    note: outcome.note,
+    changedNeedLabel: outcome.changedNeedLabel,
+    nextAction: outcome.nextAction as TendingNextAction | null,
+    createdAt: outcome.createdAt.toISOString(),
+  };
+}
+
 export async function submitTendingCheckin(args: {
   sessionId: string;
   userId: string;
   orientations: TendingCheckinOrientations;
+  entryOutcomes?: TendingCheckinEntryOutcomeInput[];
+  needOutcomes?: TendingCheckinNeedOutcomeInput[];
+  reminders?: TendingReminderInput[];
+  nextAction?: TendingNextAction;
+  resolvedEnoughOverride?: boolean;
+  resolvedEnoughOverrideNote?: string;
   now?: Date;
 }): Promise<SubmitTendingCheckinResult> {
   const now = args.now ?? new Date();
@@ -472,7 +624,7 @@ export async function submitTendingCheckin(args: {
         { scope: TendingEntryScope.INDIVIDUAL, ownerUserId: args.userId },
       ],
     },
-    include: { responses: true },
+    include: { responses: true, entryOutcomes: true, reminders: true },
   })) as TendingEntryWithResponses[];
 
   if (openEntries.length === 0) {
@@ -480,6 +632,34 @@ export async function submitTendingCheckin(args: {
   }
 
   const choice = args.orientations.whatComesNext.continueChoice;
+  const nextAction = args.nextAction
+    ?? args.orientations.whatComesNext.nextAction
+    ?? nextActionFromChoice(choice);
+  const entryOutcomeByEntryId = new Map(
+    (args.entryOutcomes ?? []).map((outcome) => [outcome.tendingEntryId, outcome])
+  );
+  const openEntryIds = new Set(openEntries.map((entry) => entry.id));
+  for (const outcome of args.entryOutcomes ?? []) {
+    if (!openEntryIds.has(outcome.tendingEntryId)) {
+      throw new TendingInvalidStateError('Entry outcome references a non-open Tending entry');
+    }
+  }
+  for (const reminder of [
+    ...(args.reminders ?? []),
+    ...(args.orientations.whatComesNext.reminders ?? []),
+  ]) {
+    if (reminder.tendingEntryId && !openEntryIds.has(reminder.tendingEntryId)) {
+      throw new TendingInvalidStateError('Reminder references a non-open Tending entry');
+    }
+    if (reminder.scope === TendingReminderScope.SHARED) {
+      const linkedEntry = reminder.tendingEntryId
+        ? openEntries.find((entry) => entry.id === reminder.tendingEntryId)
+        : null;
+      if (!linkedEntry || linkedEntry.scope !== TendingEntryScope.SHARED) {
+        throw new TendingInvalidStateError('Shared reminders require a shared Tending entry');
+      }
+    }
+  }
   const reflection = [
     args.orientations.whatWorked.reflection
       ? `What worked: ${args.orientations.whatWorked.reflection}`
@@ -487,20 +667,36 @@ export async function submitTendingCheckin(args: {
     args.orientations.whereMoreSupport.reflection
       ? `Where more support: ${args.orientations.whereMoreSupport.reflection}`
       : null,
+    args.resolvedEnoughOverride
+      ? `Resolved-enough override: ${args.resolvedEnoughOverrideNote ?? 'User explicitly chose to proceed.'}`
+      : null,
   ]
     .filter(Boolean)
     .join('\n');
 
   let nextScheduledFor: Date | null = null;
   let newSessionId: string | undefined;
+  let checkinDTO: TendingCheckinDTO | undefined;
 
   await prisma.$transaction(async (tx) => {
+    const createdCheckin = await tx.tendingCheckin.create({
+      data: {
+        sessionId: args.sessionId,
+        userId: args.userId,
+        nextAction,
+        continueChoice: choice,
+        reflectionSummary: reflection || null,
+        submittedAt: now,
+      },
+    });
+
     // 1) Persist a TendingResponse for each open entry that the user can respond to.
     const responseIds: Record<string, string> = {};
     for (const entry of openEntries) {
       if (entry.scope === TendingEntryScope.INDIVIDUAL && entry.ownerUserId !== args.userId) {
         continue;
       }
+      const entryOutcome = entryOutcomeByEntryId.get(entry.id);
       const upserted = await tx.tendingResponse.upsert({
         where: {
           tendingEntryId_userId: {
@@ -511,20 +707,118 @@ export async function submitTendingCheckin(args: {
         create: {
           tendingEntryId: entry.id,
           userId: args.userId,
+          checkinId: createdCheckin.id,
           status: 'CHECKIN',
-          reflection: reflection || null,
+          reflection: buildEntryReflection({
+            baseReflection: reflection,
+            entryId: entry.id,
+            whatWorkedNote: args.orientations.whatWorked.perEntryNotes?.[entry.id],
+            supportNote: args.orientations.whereMoreSupport.perEntryNotes?.[entry.id],
+            outcome: entryOutcome,
+          }),
           continueChoice: choice,
           submittedAt: now,
         },
         update: {
+          checkinId: createdCheckin.id,
           status: 'CHECKIN',
-          reflection: reflection || null,
+          reflection: buildEntryReflection({
+            baseReflection: reflection,
+            entryId: entry.id,
+            whatWorkedNote: args.orientations.whatWorked.perEntryNotes?.[entry.id],
+            supportNote: args.orientations.whereMoreSupport.perEntryNotes?.[entry.id],
+            outcome: entryOutcome,
+          }),
           continueChoice: choice,
           submittedAt: now,
         },
       });
       responseIds[entry.id] = upserted.id;
+
+      if (entryOutcome) {
+        await tx.tendingEntryOutcome.upsert({
+          where: {
+            checkinId_tendingEntryId: {
+              checkinId: createdCheckin.id,
+              tendingEntryId: entry.id,
+            },
+          },
+          create: {
+            checkinId: createdCheckin.id,
+            tendingEntryId: entry.id,
+            responseId: upserted.id,
+            userId: args.userId,
+            followThroughStatus: entryOutcome.followThroughStatus,
+            helpfulnessStatus: entryOutcome.helpfulnessStatus,
+            blockerCategories: entryOutcome.blockerCategories ?? [],
+            whatHappened: entryOutcome.whatHappened,
+            helpedNeed: entryOutcome.helpedNeed,
+            blockerNote: entryOutcome.blockerNote ?? entryOutcome.note,
+            stillWorthTrying: entryOutcome.stillWorthTrying,
+          },
+          update: {
+            responseId: upserted.id,
+            followThroughStatus: entryOutcome.followThroughStatus,
+            helpfulnessStatus: entryOutcome.helpfulnessStatus,
+            blockerCategories: entryOutcome.blockerCategories ?? [],
+            whatHappened: entryOutcome.whatHappened,
+            helpedNeed: entryOutcome.helpedNeed,
+            blockerNote: entryOutcome.blockerNote ?? entryOutcome.note,
+            stillWorthTrying: entryOutcome.stillWorthTrying,
+          },
+        });
+      }
     }
+
+    const createdNeedOutcomes = [];
+    for (const needOutcome of args.needOutcomes ?? []) {
+      createdNeedOutcomes.push(await tx.tendingNeedOutcome.create({
+        data: {
+          checkinId: createdCheckin.id,
+          sessionId: args.sessionId,
+          needId: needOutcome.needId,
+          needLabel: needOutcome.needLabel,
+          sourceUserId: needOutcome.sourceUserId,
+          resolutionStatus: needOutcome.resolutionStatus,
+          note: needOutcome.note,
+          changedNeedLabel: needOutcome.changedNeedLabel,
+          nextAction: needOutcome.nextAction,
+        },
+      }));
+    }
+
+    const reminderInputs = [
+      ...(args.reminders ?? []),
+      ...(args.orientations.whatComesNext.reminders ?? []),
+    ];
+    const createdReminders = [];
+    for (const reminder of reminderInputs) {
+      createdReminders.push(await tx.tendingReminder.create({
+        data: {
+          sessionId: args.sessionId,
+          checkinId: createdCheckin.id,
+          tendingEntryId: reminder.tendingEntryId,
+          userId: args.userId,
+          scope: reminder.scope,
+          remindAt: new Date(reminder.remindAt),
+          cadence: reminder.cadence,
+          note: reminder.note,
+        },
+      }));
+    }
+
+    checkinDTO = {
+      id: createdCheckin.id,
+      sessionId: createdCheckin.sessionId,
+      userId: createdCheckin.userId,
+      nextAction: createdCheckin.nextAction as TendingNextAction | null,
+      continueChoice: createdCheckin.continueChoice as ContinueChoice | null,
+      reflectionSummary: createdCheckin.reflectionSummary,
+      submittedAt: createdCheckin.submittedAt.toISOString(),
+      createdAt: createdCheckin.createdAt.toISOString(),
+      needOutcomes: createdNeedOutcomes.map(toNeedOutcomeDTO),
+      reminders: createdReminders.map(toReminderDTO),
+    };
 
     // 2) Apply path-specific state transitions.
     switch (choice) {
@@ -658,24 +952,29 @@ export async function submitTendingCheckin(args: {
     }
   });
 
-  try {
-    await publishSessionEvent(args.sessionId, 'notification.pending_action', {
-      kind: 'tending_checkin_submitted',
-      continueChoice: choice,
-      submittedBy: args.userId,
-      newSessionId,
-    }, args.userId);
-  } catch (error) {
-    logger.warn('[tending] Failed to publish check-in event', { sessionId: args.sessionId, error });
+  const hasSharedEntry = openEntries.some((entry) => entry.scope === TendingEntryScope.SHARED);
+  if (hasSharedEntry) {
+    try {
+      await publishSessionEvent(args.sessionId, 'notification.pending_action', {
+        kind: 'tending_checkin_submitted',
+        continueChoice: choice,
+        nextAction,
+        submittedBy: args.userId,
+        newSessionId,
+      }, args.userId);
+    } catch (error) {
+      logger.warn('[tending] Failed to publish check-in event', { sessionId: args.sessionId, error });
+    }
   }
 
   const refreshed = (await prisma.tendingEntry.findMany({
     where: { id: { in: openEntries.map((e) => e.id) } },
-    include: { responses: true },
+    include: { responses: true, entryOutcomes: true, reminders: true },
   })) as TendingEntryWithResponses[];
 
   return {
     entries: refreshed.map((entry) => toEntryDTO(entry, args.userId)),
+    checkin: checkinDTO,
     newSessionId,
     continueChoice: choice,
     nextScheduledFor,

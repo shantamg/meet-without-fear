@@ -16,9 +16,15 @@ import {
 import {
   ContinueChoice,
   PartialClosureResolution,
+  TendingBlockerCategory,
   TendingEntryScope,
   TendingEntryStatus,
   TendingEntryType,
+  TendingFollowThroughStatus,
+  TendingHelpfulnessStatus,
+  TendingNeedResolutionStatus,
+  TendingNextAction,
+  TendingReminderScope,
 } from '@meet-without-fear/shared';
 
 jest.mock('../../lib/prisma');
@@ -460,6 +466,15 @@ describe('tending.service', () => {
       responses: [],
     });
 
+    const openIndividualEntry = (id: string) => ({
+      ...openSharedEntry(id),
+      agreementId: null,
+      type: TendingEntryType.SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN,
+      scope: TendingEntryScope.INDIVIDUAL,
+      ownerUserId: userId,
+      summary: 'Private individual commitment',
+    });
+
     const stubSession = () => {
       (prisma.session.findFirst as jest.Mock).mockResolvedValue({
         id: sessionId,
@@ -471,8 +486,54 @@ describe('tending.service', () => {
     };
 
     beforeEach(() => {
+      (prisma.tendingCheckin.create as jest.Mock).mockResolvedValue({
+        id: 'checkin-1',
+        sessionId,
+        userId,
+        nextAction: TendingNextAction.EXTEND,
+        continueChoice: ContinueChoice.EXTEND,
+        reflectionSummary: 'What worked: small wins\nWhere more support: still hard',
+        submittedAt: new Date('2026-05-20T10:00:00.000Z'),
+        createdAt: new Date('2026-05-20T10:00:00.000Z'),
+      });
       (prisma.tendingResponse.upsert as jest.Mock).mockImplementation((args: any) =>
-        Promise.resolve({ id: `resp-${args.where.tendingEntryId_userId.tendingEntryId}` })
+        Promise.resolve({
+          id: `resp-${args.where.tendingEntryId_userId.tendingEntryId}`,
+          ...args.create,
+          submittedAt: args.create.submittedAt ?? new Date('2026-05-20T10:00:00.000Z'),
+        })
+      );
+      (prisma.tendingEntryOutcome.upsert as jest.Mock).mockImplementation((args: any) =>
+        Promise.resolve({
+          id: `outcome-${args.create.tendingEntryId}`,
+          ...args.create,
+          createdAt: new Date('2026-05-20T10:01:00.000Z'),
+        })
+      );
+      (prisma.tendingNeedOutcome.create as jest.Mock).mockImplementation((args: any) =>
+        Promise.resolve({
+          id: `need-outcome-${args.data.needId ?? 'unknown'}`,
+          ...args.data,
+          needId: args.data.needId ?? null,
+          sourceUserId: args.data.sourceUserId ?? null,
+          note: args.data.note ?? null,
+          changedNeedLabel: args.data.changedNeedLabel ?? null,
+          nextAction: args.data.nextAction ?? null,
+          createdAt: new Date('2026-05-20T10:02:00.000Z'),
+        })
+      );
+      (prisma.tendingReminder.create as jest.Mock).mockImplementation((args: any) =>
+        Promise.resolve({
+          id: `reminder-${args.data.scope}`,
+          ...args.data,
+          checkinId: args.data.checkinId ?? null,
+          tendingEntryId: args.data.tendingEntryId ?? null,
+          cadence: args.data.cadence ?? null,
+          note: args.data.note ?? null,
+          status: 'SCHEDULED',
+          createdAt: new Date('2026-05-20T10:03:00.000Z'),
+          updatedAt: new Date('2026-05-20T10:03:00.000Z'),
+        })
       );
     });
 
@@ -486,6 +547,178 @@ describe('tending.service', () => {
           orientations: baseOrientations(ContinueChoice.EXTEND),
         })
       ).rejects.toBeInstanceOf(TendingInvalidStateError);
+    });
+
+    it('persists structured entry outcomes and per-entry notes on the batch response', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+
+      await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: {
+          whatWorked: {
+            reflection: 'We tested it.',
+            perEntryNotes: { t1: 'The Sunday talk happened once.' },
+          },
+          whereMoreSupport: {
+            reflection: 'It needs a clearer reminder.',
+            perEntryNotes: { t1: 'We forgot the second week.' },
+          },
+          whatComesNext: { continueChoice: ContinueChoice.EXTEND },
+        },
+        entryOutcomes: [{
+          tendingEntryId: 't1',
+          followThroughStatus: TendingFollowThroughStatus.PARTLY_HAPPENED,
+          helpfulnessStatus: TendingHelpfulnessStatus.PARTLY_HELPED,
+          blockerCategories: [TendingBlockerCategory.FORGOT],
+          whatHappened: 'We did one check-in and missed one.',
+          helpedNeed: 'It helped predictability a little.',
+          blockerNote: 'No calendar reminder.',
+          stillWorthTrying: true,
+        }],
+        now: new Date('2026-05-20T10:00:00.000Z'),
+      });
+
+      expect(prisma.tendingCheckin.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId,
+          userId,
+          nextAction: TendingNextAction.EXTEND,
+          continueChoice: ContinueChoice.EXTEND,
+        }),
+      });
+      expect(prisma.tendingResponse.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            checkinId: 'checkin-1',
+            reflection: expect.stringContaining('Entry note - what worked: The Sunday talk happened once.'),
+          }),
+          update: expect.objectContaining({
+            reflection: expect.stringContaining('What actually happened: We did one check-in and missed one.'),
+          }),
+        })
+      );
+      expect(prisma.tendingEntryOutcome.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            checkinId: 'checkin-1',
+            tendingEntryId: 't1',
+            responseId: 'resp-t1',
+            followThroughStatus: TendingFollowThroughStatus.PARTLY_HAPPENED,
+            helpfulnessStatus: TendingHelpfulnessStatus.PARTLY_HELPED,
+            blockerCategories: [TendingBlockerCategory.FORGOT],
+          }),
+        })
+      );
+    });
+
+    it('persists structured need outcomes on the batch check-in', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+
+      const result = await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.ANOTHER_ROUND),
+        needOutcomes: [{
+          needId: 'need-clean-space',
+          needLabel: 'healthy, clean space',
+          sourceUserId: userId,
+          resolutionStatus: TendingNeedResolutionStatus.STILL_OPEN,
+          note: 'The agreement did not stop the boundary violation.',
+          nextAction: TendingNextAction.REOPEN_STRATEGY_WORK,
+        }],
+      });
+
+      expect(prisma.tendingNeedOutcome.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          checkinId: 'checkin-1',
+          sessionId,
+          needId: 'need-clean-space',
+          needLabel: 'healthy, clean space',
+          resolutionStatus: TendingNeedResolutionStatus.STILL_OPEN,
+        }),
+      });
+      expect(result.checkin?.needOutcomes?.[0]).toEqual(
+        expect.objectContaining({
+          needId: 'need-clean-space',
+          resolutionStatus: TendingNeedResolutionStatus.STILL_OPEN,
+        })
+      );
+    });
+
+    it('creates shared reminders only for shared entries', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openSharedEntry('t1')]);
+
+      await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.EXTEND),
+        reminders: [{
+          tendingEntryId: 't1',
+          scope: TendingReminderScope.SHARED,
+          remindAt: '2026-05-27T10:00:00.000Z',
+          cadence: 'ONCE',
+          note: 'Midpoint shared check-in',
+        }],
+      });
+
+      expect(prisma.tendingReminder.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId,
+          checkinId: 'checkin-1',
+          tendingEntryId: 't1',
+          userId,
+          scope: TendingReminderScope.SHARED,
+          remindAt: new Date('2026-05-27T10:00:00.000Z'),
+        }),
+      });
+
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('private-1')]);
+      await expect(
+        submitTendingCheckin({
+          sessionId,
+          userId,
+          orientations: baseOrientations(ContinueChoice.EXTEND),
+          reminders: [{
+            tendingEntryId: 'private-1',
+            scope: TendingReminderScope.SHARED,
+            remindAt: '2026-05-27T10:00:00.000Z',
+          }],
+        })
+      ).rejects.toBeInstanceOf(TendingInvalidStateError);
+    });
+
+    it('private individual reminders do not notify the partner', async () => {
+      stubSession();
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([openIndividualEntry('private-1')]);
+
+      await submitTendingCheckin({
+        sessionId,
+        userId,
+        orientations: baseOrientations(ContinueChoice.EXTEND),
+        reminders: [{
+          tendingEntryId: 'private-1',
+          scope: TendingReminderScope.PRIVATE,
+          remindAt: '2026-05-27T10:00:00.000Z',
+          note: 'Remind me only',
+        }],
+      });
+
+      expect(prisma.tendingReminder.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          scope: TendingReminderScope.PRIVATE,
+          tendingEntryId: 'private-1',
+        }),
+      });
+      expect(publishSessionEvent).not.toHaveBeenCalledWith(
+        sessionId,
+        'notification.pending_action',
+        expect.objectContaining({ kind: 'tending_checkin_submitted' }),
+        userId
+      );
     });
 
     it('EXTEND reschedules every open entry and keeps the session active', async () => {

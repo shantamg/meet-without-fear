@@ -12,7 +12,16 @@ import {
   TendingInvalidStateError,
   TendingNotFoundError,
 } from '../services/tending.service';
-import { ContinueChoice, PartialClosureResolution } from '@meet-without-fear/shared';
+import {
+  ContinueChoice,
+  PartialClosureResolution,
+  TendingBlockerCategory,
+  TendingFollowThroughStatus,
+  TendingHelpfulnessStatus,
+  TendingNeedResolutionStatus,
+  TendingNextAction,
+  TendingReminderScope,
+} from '@meet-without-fear/shared';
 
 const submitTendingResponseSchema = z.object({
   status: z.string().min(1).max(80),
@@ -31,9 +40,47 @@ const submitTendingCheckinSchema = z.object({
     whereMoreSupport: orientationSchema,
     whatComesNext: z.object({
       continueChoice: z.nativeEnum(ContinueChoice),
+      nextAction: z.nativeEnum(TendingNextAction).optional(),
       partialClosure: z.record(z.string(), z.nativeEnum(PartialClosureResolution)).optional(),
+      reminders: z.array(z.object({
+        tendingEntryId: z.string().optional(),
+        scope: z.nativeEnum(TendingReminderScope),
+        remindAt: z.string().datetime(),
+        cadence: z.string().max(80).optional(),
+        note: z.string().max(1000).optional(),
+      })).optional(),
     }),
   }),
+  entryOutcomes: z.array(z.object({
+    tendingEntryId: z.string(),
+    followThroughStatus: z.nativeEnum(TendingFollowThroughStatus),
+    helpfulnessStatus: z.nativeEnum(TendingHelpfulnessStatus).optional(),
+    blockerCategories: z.array(z.nativeEnum(TendingBlockerCategory)).optional(),
+    whatHappened: z.string().max(2000).optional(),
+    helpedNeed: z.string().max(2000).optional(),
+    blockerNote: z.string().max(2000).optional(),
+    stillWorthTrying: z.boolean().optional(),
+    note: z.string().max(2000).optional(),
+  })).optional(),
+  needOutcomes: z.array(z.object({
+    needId: z.string().optional(),
+    needLabel: z.string().min(1).max(500),
+    sourceUserId: z.string().optional(),
+    resolutionStatus: z.nativeEnum(TendingNeedResolutionStatus),
+    note: z.string().max(2000).optional(),
+    changedNeedLabel: z.string().max(500).optional(),
+    nextAction: z.nativeEnum(TendingNextAction).optional(),
+  })).optional(),
+  reminders: z.array(z.object({
+    tendingEntryId: z.string().optional(),
+    scope: z.nativeEnum(TendingReminderScope),
+    remindAt: z.string().datetime(),
+    cadence: z.string().max(80).optional(),
+    note: z.string().max(1000).optional(),
+  })).optional(),
+  nextAction: z.nativeEnum(TendingNextAction).optional(),
+  resolvedEnoughOverride: z.boolean().optional(),
+  resolvedEnoughOverrideNote: z.string().max(1000).optional(),
 });
 
 const createTendingReentrySchema = z.object({
@@ -152,9 +199,16 @@ export async function postTendingCheckin(req: Request, res: Response): Promise<v
       sessionId: req.params.id,
       userId: user.id,
       orientations: parseResult.data.orientations,
+      entryOutcomes: parseResult.data.entryOutcomes,
+      needOutcomes: parseResult.data.needOutcomes,
+      reminders: parseResult.data.reminders,
+      nextAction: parseResult.data.nextAction,
+      resolvedEnoughOverride: parseResult.data.resolvedEnoughOverride,
+      resolvedEnoughOverrideNote: parseResult.data.resolvedEnoughOverrideNote,
     });
     successResponse(res, {
       entries: result.entries,
+      checkin: result.checkin,
       newSessionId: result.newSessionId,
       continueChoice: result.continueChoice,
       nextScheduledFor: result.nextScheduledFor ? result.nextScheduledFor.toISOString() : null,
