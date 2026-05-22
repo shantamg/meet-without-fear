@@ -6,6 +6,25 @@ Branch: `codex/full-tending-flow`
 
 ## Full Tending Flow Progress
 
+### 2026-05-22 — Chunk 6 Private Note E2E Coverage
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `e2e/tests/two-browser-stage-4-redesign.spec.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Added deterministic coverage for between-period note privacy in the existing Stage 4 redesign suite.
+  - The test creates a private note as user A after resolution, verifies user A sees it in `GET /tending`, verifies user B's `GET /tending` has no note and does not contain the note text, then opens the mobile-web check-in route as user A.
+  - The browser assertion verifies the private-note step appears before check-in and offers separate `Factor in` and `May mention` choices.
+- Commands run:
+  - `npm run check --workspace e2e`
+  - `npm --workspace e2e run e2e -- --project=two-browser-stage-4-redesign`
+- Test results:
+  - E2E typecheck passed.
+  - Stage 4 redesign Playwright target passed: 7 tests.
+- Known blockers: none.
+- Next step: inspect the finish prompt for remaining chunks beyond private notes and continue the next incomplete requirement.
+
 ### 2026-05-22 — Chunk 6 Mobile Private Note Surface
 
 - Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.

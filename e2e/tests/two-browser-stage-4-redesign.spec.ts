@@ -369,6 +369,80 @@ test.describe('Stage 4 redesign: deterministic two-user coverage', () => {
     await expect(page.getByTestId('tending-reminder-controls')).toBeVisible();
   });
 
+  test('between-period notes stay private and are offered for check-in carry-forward', async ({ request, page }) => {
+    const seeded = await seedSession(request, 'STAGE4_REDESIGN_SHARED_SELECTIONS');
+    const apiA = apiFor(request, users.a.email, seeded.userAId);
+    const apiB = apiFor(request, users.b.email, seeded.userBId);
+
+    const beforeClose = await readJson<any>(
+      await apiA.get(`/api/sessions/${seeded.sessionId}/stage4`),
+      'get mutual Stage 4 state before private note check'
+    );
+    const sharedProposal = beforeClose.data.inventory.sharedProposals.find((proposal: any) =>
+      proposal.description.includes('Sunday evening planning check-in')
+    );
+    expect(sharedProposal).toBeTruthy();
+
+    const dueDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    await readJson<any>(
+      await apiA.post(`/api/sessions/${seeded.sessionId}/stage4/close`, {
+        kind: 'SHARED_AGREEMENT',
+        followUpDatesByProposalId: { [sharedProposal.id]: dueDate },
+      }),
+      'close shared-agreement Stage 4 before private note'
+    );
+
+    const noteContent = 'Eve private note: I felt myself bracing after we set the plan.';
+    const noteData = await readJson<any>(
+      await apiA.post(`/api/sessions/${seeded.sessionId}/tending/notes`, {
+        content: noteContent,
+      }),
+      'create private between-period note'
+    );
+    expect(noteData.data.note).toEqual(expect.objectContaining({
+      userId: seeded.userAId,
+      content: noteContent,
+      carryForwardSelected: false,
+      consentToShareWithPartner: false,
+    }));
+
+    const tendingForA = await readJson<any>(
+      await apiA.get(`/api/sessions/${seeded.sessionId}/tending`),
+      'list Tending with private note for owner'
+    );
+    expect(tendingForA.data.betweenPeriodNotes.map((note: any) => note.content)).toContain(noteContent);
+
+    const tendingForB = await readJson<any>(
+      await apiB.get(`/api/sessions/${seeded.sessionId}/tending`),
+      'list Tending without partner private note'
+    );
+    expect(tendingForB.data.betweenPeriodNotes ?? []).toHaveLength(0);
+    expect(JSON.stringify(tendingForB.data)).not.toContain(noteContent);
+
+    const sharedTending = tendingForA.data.entries.find((entry: any) =>
+      entry.type === 'SCHEDULED_SHARED_AGREEMENT_CHECKIN'
+    );
+    expect(sharedTending).toBeTruthy();
+
+    const params = new URLSearchParams({
+      tendingEntryId: sharedTending.id,
+      'e2e-user-id': seeded.userAId,
+      'e2e-user-email': users.a.email,
+    });
+    await page.goto(`/session/${seeded.sessionId}/tending-checkin?${params.toString()}`);
+    await page.waitForLoadState('domcontentloaded');
+
+    await expect(page.getByTestId('tending-checkin-step-privateNotes')).toBeVisible();
+    await expect(page.getByText(noteContent)).toBeVisible();
+    await expect(page.getByTestId(`tending-include-note-${noteData.data.note.id}-include`)).toBeVisible();
+    await expect(page.getByTestId(`tending-share-note-${noteData.data.note.id}-share`)).toBeVisible();
+
+    await page.getByTestId(`tending-include-note-${noteData.data.note.id}-include`).click();
+    await page.getByTestId(`tending-share-note-${noteData.data.note.id}-share`).click();
+    await page.getByTestId('tending-checkin-next').click();
+    await expect(page.getByTestId('tending-checkin-step-followThrough')).toBeVisible();
+  });
+
   test('no shared agreement preserves individual Tending and supports passive re-entry', async ({ request }) => {
     const seeded = await seedSession(request, 'STAGE4_REDESIGN_NO_OVERLAP_SELECTIONS');
     const apiA = apiFor(request, users.a.email, seeded.userAId);
