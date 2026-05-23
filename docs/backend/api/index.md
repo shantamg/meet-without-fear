@@ -4,7 +4,7 @@ sidebar_position: 1
 description: REST API endpoints for the Meet Without Fear backend. All endpoints use JSON request/response bodies.
 slug: /backend/api
 created: 2026-03-11
-updated: 2026-05-18
+updated: 2026-05-23
 status: living
 ---
 # API Specification
@@ -170,9 +170,14 @@ Post-resolution check-in and re-entry. Surfaces after a session resolves to help
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/sessions/:id/tending` | List tending entries (scheduled check-ins + re-entries) |
+| `GET` | `/sessions/:id/tending` | List tending entries, coordination cycles, and between-period notes |
+| `GET` | `/sessions/:id/tending/history` | Get historical tending check-ins (last 20) |
+| `POST` | `/sessions/:id/tending/checkin` | Submit structured three-orientation check-in |
+| `POST` | `/sessions/:id/tending/notes` | Create a between-period reflection note |
 | `POST` | `/sessions/:id/tending/reentry` | Initiate passive re-entry on a resolved session |
 | `POST` | `/sessions/:id/tending/:entryId/responses` | Submit response to an open tending entry |
+| `POST` | `/sessions/:id/tending/:entryId/share` | Share an individual tending entry with partner |
+| `POST` | `/sessions/:id/tending/:entryId/unshare` | Unshare an individual tending entry |
 
 ### [Consent](./consent.md)
 Consensual Bridge mechanism.

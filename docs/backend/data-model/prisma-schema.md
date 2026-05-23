@@ -3,7 +3,7 @@ title: Prisma Schema
 sidebar_position: 1
 description: Core Vessel Architecture tables plus pointers to the rest of the Prisma schema (Inner Work, reconciler, memory, needs/people, telemetry).
 slug: /backend/data-model/prisma-schema
-updated: "2026-05-13"
+updated: "2026-05-23"
 ---
 # Prisma Schema
 
@@ -245,20 +245,31 @@ model EmotionalReading {
 
 ```prisma
 model IdentifiedNeed {
-  id          String     @id @default(cuid())
-  vessel      UserVessel @relation(fields: [vesselId], references: [id])
-  vesselId    String
-  need        String     // From universal needs taxonomy
-  category    NeedCategory
-  evidence    String[]   // Quotes/references supporting this need
-  confirmed   Boolean    @default(false) // User confirmed this need
-  aiConfidence Float     // AI confidence in identification
-  createdAt   DateTime   @default(now())
+  id                 String           @id @default(cuid())
+  vessel             UserVessel       @relation(fields: [vesselId], references: [id], onDelete: Cascade)
+  vesselId           String
+  need               String           // From universal needs taxonomy
+  category           NeedCategory
+  evidence           String[]         // Quotes/references supporting this need
+  confirmed          Boolean          @default(false) // User confirmed this need
+  aiConfidence       Float            // AI confidence in identification
+  supersededByNeed   IdentifiedNeed?  @relation("NeedSupersession", fields: [supersededByNeedId], references: [id], onDelete: SetNull)
+  supersededByNeedId String?          // Set when this need is replaced by a refined version in Stage 3
+  supersedes         IdentifiedNeed[] @relation("NeedSupersession")
+  lockedAt           DateTime?        // Set when user confirms needs; prevents further AI modifications
+  deletedAt          DateTime?        // Soft-delete; excluded from active need lists
+  createdAt          DateTime         @default(now())
 
   // Link to shared version if consented
   consentedContent ConsentedContent?
 
+  proposalLinks    StrategyProposalNeed[]
+  refiningMessages Message[]          // Messages associated with refining this need in Stage 3
+
   @@index([vesselId])
+  @@index([supersededByNeedId])
+  @@index([lockedAt])
+  @@index([deletedAt])
 }
 
 enum NeedCategory {
@@ -522,16 +533,18 @@ if (progress.isSynthesisDirty) {
 
 ```prisma
 model Message {
-  id        String      @id @default(cuid())
-  session   Session     @relation(fields: [sessionId], references: [id])
-  sessionId String
-  sender    User?       @relation(fields: [senderId], references: [id])
-  senderId  String?     // null for AI messages
-  forUserId String?     // Which user the AI was responding to (data isolation)
-  role      MessageRole
-  content   String      @db.Text
-  stage     Int
-  timestamp DateTime    @default(now())
+  id             String         @id @default(cuid())
+  session        Session        @relation(fields: [sessionId], references: [id])
+  sessionId      String
+  sender         User?          @relation(fields: [senderId], references: [id])
+  senderId       String?        // null for AI messages
+  forUserId      String?        // Which user the AI was responding to (data isolation)
+  role           MessageRole
+  content        String         @db.Text
+  stage          Int
+  timestamp      DateTime       @default(now())
+  refiningNeed   IdentifiedNeed? @relation(fields: [refiningNeedId], references: [id], onDelete: SetNull)
+  refiningNeedId String?        // Links message to the need it helps refine in Stage 3
 
   // NOTE: Message-level embedding removed per fact-ledger architecture.
   // Session-level contentEmbedding on UserVessel is used instead.
@@ -542,6 +555,7 @@ model Message {
 
   @@index([sessionId, timestamp])
   @@index([sessionId, forUserId, role])
+  @@index([refiningNeedId])
 }
 
 ## Stage 2: Empathy Attempts
@@ -858,8 +872,11 @@ model TendingEntry {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  responses      TendingResponse[]
+  responses       TendingResponse[]
   partialClosures TendingResponsePartialClosure[]
+  entryOutcomes   TendingEntryOutcome[]
+  reminders       TendingReminder[]
+  adjustments     TendingAdjustment[]
 
   @@index([sessionId, scope, ownerUserId])
 }
@@ -891,17 +908,23 @@ One response per entry/user (enforced by upsert in the service).
 
 ```prisma
 model TendingResponse {
-  id             String        @id @default(cuid())
-  tendingEntry   TendingEntry  @relation(fields: [tendingEntryId], references: [id])
+  id             String          @id @default(cuid())
+  tendingEntry   TendingEntry    @relation(fields: [tendingEntryId], references: [id], onDelete: Cascade)
   tendingEntryId String
-  user           User          @relation(fields: [userId], references: [id])
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId         String
-  status         String        // e.g. "WORKED", "PARTLY", "DID_NOT_WORK"
-  reflection     String?       @db.Text
-  continueChoice ContinueChoice?  // Structured forward path enum (see ContinueChoice below)
-  submittedAt    DateTime      @default(now())
+  checkin        TendingCheckin? @relation(fields: [checkinId], references: [id], onDelete: SetNull)
+  checkinId      String?         // Linked when submitted as part of a structured three-orientation check-in
+  status         String          // e.g. "WORKED", "PARTLY", "DID_NOT_WORK"
+  reflection     String?         @db.Text
+  continueChoice ContinueChoice? // Structured forward path enum (see ContinueChoice below)
+  submittedAt    DateTime        @default(now())
 
   partialClosures TendingResponsePartialClosure[]
+  entryOutcomes   TendingEntryOutcome[]
+
+  @@unique([tendingEntryId, userId])
+  @@index([checkinId])
 }
 
 enum ContinueChoice {
@@ -933,6 +956,269 @@ model TendingResponsePartialClosure {
 enum PartialClosureResolution {
   RESOLVED
   CONTINUING
+}
+```
+
+### TendingCheckin
+
+Structured three-orientation check-in submitted by a user at the end of a tending period. Captures how things went across all open entries and needs in one transaction. May be linked to a `TendingCoordinationCycle` when partners co-submit.
+
+```prisma
+model TendingCheckin {
+  id                  String                    @id @default(cuid())
+  session             Session                   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId           String
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId              String
+  coordinationCycle   TendingCoordinationCycle? @relation(fields: [coordinationCycleId], references: [id], onDelete: SetNull)
+  coordinationCycleId String?
+  nextAction          TendingNextAction?
+  continueChoice      ContinueChoice?
+  reflectionSummary   String?                   @db.Text
+  submittedAt         DateTime                  @default(now())
+  createdAt           DateTime                  @default(now())
+
+  responses          TendingResponse[]
+  entryOutcomes      TendingEntryOutcome[]
+  needOutcomes       TendingNeedOutcome[]
+  reminders          TendingReminder[]
+  adjustments        TendingAdjustment[]
+  betweenPeriodNotes TendingBetweenPeriodNote[]
+
+  @@index([sessionId, submittedAt])
+  @@index([userId, submittedAt])
+  @@index([coordinationCycleId])
+}
+```
+
+### TendingCoordinationCycle
+
+Coordinates a simultaneous check-in across both partners. Created when a user submits a check-in and the partner has not yet submitted. When both submit (or a deadline passes), the cycle resolves and their outcomes are merged.
+
+```prisma
+model TendingCoordinationCycle {
+  id                 String                    @id @default(cuid())
+  session            Session                   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId          String
+  createdBy          User                      @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  createdByUserId    String
+  coordinationKey    String?                   // Deduplication key; prevents duplicate cycles for the same set of entries
+  status             TendingCoordinationStatus @default(WAITING_FOR_PARTNER)
+  entryIds           String[]
+  participantUserIds String[]
+  submittedUserIds   String[]
+  responseDeadlineAt DateTime
+  resolvedAt         DateTime?
+  resultSummary      String?                   @db.Text
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  checkins TendingCheckin[]
+
+  @@index([sessionId, status])
+  @@index([coordinationKey])
+  @@index([responseDeadlineAt])
+}
+
+enum TendingCoordinationStatus {
+  WAITING_FOR_PARTNER
+  READY_TO_RESOLVE
+  RESOLVED
+  TIMED_OUT
+}
+```
+
+### TendingEntryOutcome
+
+Per-entry follow-through assessment recorded during a structured check-in. One row per entry per check-in.
+
+```prisma
+model TendingEntryOutcome {
+  id                  String                     @id @default(cuid())
+  checkin             TendingCheckin             @relation(fields: [checkinId], references: [id], onDelete: Cascade)
+  checkinId           String
+  tendingEntry        TendingEntry               @relation(fields: [tendingEntryId], references: [id], onDelete: Cascade)
+  tendingEntryId      String
+  response            TendingResponse?           @relation(fields: [responseId], references: [id], onDelete: SetNull)
+  responseId          String?
+  user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId              String
+  followThroughStatus TendingFollowThroughStatus
+  helpfulnessStatus   TendingHelpfulnessStatus?
+  blockerCategories   TendingBlockerCategory[]
+  whatHappened        String?                    @db.Text
+  helpedNeed          String?                    @db.Text
+  blockerNote         String?                    @db.Text
+  stillWorthTrying    Boolean?
+  createdAt           DateTime                   @default(now())
+
+  @@unique([checkinId, tendingEntryId])
+  @@index([tendingEntryId])
+  @@index([userId, createdAt])
+}
+
+enum TendingFollowThroughStatus {
+  HAPPENED
+  PARTLY_HAPPENED
+  DID_NOT_HAPPEN
+  NOT_SURE
+}
+
+enum TendingHelpfulnessStatus {
+  HELPED
+  PARTLY_HELPED
+  DID_NOT_HELP
+  NOT_SURE
+}
+
+enum TendingBlockerCategory {
+  FORGOT
+  TOO_HARD
+  TOO_FREQUENT
+  UNCLEAR
+  PARTNER_DID_NOT_DO_PART
+  I_DID_NOT_DO_PART
+  CIRCUMSTANCES_CHANGED
+  NO_LONGER_WANTED
+  OTHER
+}
+```
+
+### TendingNeedOutcome
+
+Per-need resolution assessment recorded during a structured check-in.
+
+```prisma
+model TendingNeedOutcome {
+  id               String                      @id @default(cuid())
+  checkin          TendingCheckin              @relation(fields: [checkinId], references: [id], onDelete: Cascade)
+  checkinId        String
+  session          Session                     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId        String
+  needId           String?
+  needLabel        String
+  sourceUserId     String?
+  resolutionStatus TendingNeedResolutionStatus
+  note             String?                     @db.Text
+  changedNeedLabel String?
+  nextAction       TendingNextAction?
+  createdAt        DateTime                    @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([checkinId])
+  @@index([needId])
+}
+
+enum TendingNeedResolutionStatus {
+  RESOLVED
+  IMPROVING
+  STILL_OPEN
+  CHANGED
+  NOT_SURE
+}
+```
+
+### TendingReminder
+
+A reminder scheduled for a user about a tending entry. Created during a check-in to follow up on open commitments.
+
+```prisma
+model TendingReminder {
+  id             String               @id @default(cuid())
+  session        Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId      String
+  checkin        TendingCheckin?      @relation(fields: [checkinId], references: [id], onDelete: SetNull)
+  checkinId      String?
+  tendingEntry   TendingEntry?        @relation(fields: [tendingEntryId], references: [id], onDelete: Cascade)
+  tendingEntryId String?
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  scope          TendingReminderScope
+  remindAt       DateTime
+  cadence        String?              // e.g. "WEEKLY", "MONTHLY", "BIMONTHLY", "ONCE"
+  note           String?              @db.Text
+  status         String               @default("SCHEDULED")
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([sessionId, remindAt])
+  @@index([userId, remindAt])
+  @@index([checkinId])
+  @@index([tendingEntryId])
+}
+
+enum TendingReminderScope {
+  PRIVATE  // Visible only to the user who created it
+  SHARED   // Visible to both partners
+}
+```
+
+### TendingAdjustment
+
+Records a modification to a commitment (text, cadence, scope, or success criteria) made during a check-in.
+
+```prisma
+model TendingAdjustment {
+  id                     String               @id @default(cuid())
+  session                Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId              String
+  checkin                TendingCheckin       @relation(fields: [checkinId], references: [id], onDelete: Cascade)
+  checkinId              String
+  tendingEntry           TendingEntry         @relation(fields: [tendingEntryId], references: [id], onDelete: Cascade)
+  tendingEntryId         String
+  user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                 String
+  privacyScope           TendingReminderScope @default(PRIVATE)
+  revisedCommitmentText  String?              @db.Text
+  revisedCadence         String?
+  revisedScope           String?              @db.Text
+  revisedSuccessCriteria String?              @db.Text
+  reason                 String?              @db.Text
+  blockerAddressed       TendingBlockerCategory[]
+  createdAt              DateTime             @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([checkinId])
+  @@index([tendingEntryId])
+  @@index([userId, createdAt])
+}
+```
+
+### TendingBetweenPeriodNote
+
+A reflection note written between tending check-ins. Can optionally be carried forward and shared with the partner during the next check-in.
+
+```prisma
+model TendingBetweenPeriodNote {
+  id                        String          @id @default(cuid())
+  session                   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId                 String
+  user                      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                    String
+  content                   String          @db.Text   // max 4000 chars
+  carryForwardSelected      Boolean         @default(false)
+  consentToShareWithPartner Boolean         @default(false)
+  shareConsentAt            DateTime?
+  selectedForCheckin        TendingCheckin? @relation(fields: [selectedForCheckinId], references: [id], onDelete: SetNull)
+  selectedForCheckinId      String?
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
+
+  @@index([sessionId, userId, createdAt])
+  @@index([selectedForCheckinId])
+}
+```
+
+### Tending Enums (new in Phase 5)
+
+```prisma
+enum TendingNextAction {
+  FULL_CLOSURE        // Mark all entries COMPLETED; session → RESOLVED
+  EXTEND              // Reschedule open entries with a new date
+  ADJUST_COMMITMENT   // Modify commitment text/cadence/scope
+  REOPEN_STRATEGY_WORK // Return to Stage 4 inventory building
+  NEW_PROCESS         // Create a fresh linked session
+  PARTIAL_CLOSURE     // Close some entries, continue others
 }
 ```
 

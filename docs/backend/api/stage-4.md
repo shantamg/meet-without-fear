@@ -3,7 +3,7 @@ title: "Stage 4 API: Strategic Repair"
 sidebar_position: 11
 description: Endpoints for collaborative strategy proposal, willingness selection, agreement documentation, and Tending check-ins.
 slug: /backend/api/stage-4
-updated: 2026-05-19
+updated: 2026-05-23
 ---
 # Stage 4 API: Strategic Repair
 
@@ -52,8 +52,8 @@ interface GetStage4StateResponse {
   coverageAudit: Stage4CoverageAuditDTO;
   mySelections: Stage4SelectionDTO[];
   partnerSelections: Stage4SelectionDTO[];  // visible after both users share
-  mySelectionStatus: 'NOT_SUBMITTED' | 'SUBMITTED' | 'SHARED';
-  partnerSelectionStatus: 'NOT_SUBMITTED' | 'SUBMITTED' | 'SHARED';
+  mySelectionStatus: 'NOT_STARTED' | 'SUBMITTED';
+  partnerSelectionStatus: 'NOT_STARTED' | 'SUBMITTED';
   walkthrough: Stage4WalkthroughDTO;
   outcome: Stage4OutcomeDTO | null;
   tendingPreview: TendingPreviewDTO | null;
@@ -218,7 +218,7 @@ POST /api/v1/sessions/:id/stage4/close
 
 ```typescript
 interface CloseStage4Request {
-  checkInDate?: string;              // ISO 8601 date; defaults to 10 days out when omitted
+  checkInDate: string;               // ISO 8601 date; client defaults to 10 days from defaultCheckInDate in WalkthroughDTO
   kind?: Stage4ClosureKind;          // Overrides computed kind if provided
   reason?: Stage4ClosureReason;
   summary?: string;                  // max 2000 chars
@@ -266,7 +266,7 @@ Publishes the caller's willingness decisions to their partner. Before sharing, d
 POST /api/v1/sessions/:id/stage4/share-selections
 ```
 
-Returns the full `GetStage4StateResponse` with updated `mySelectionStatus: 'SHARED'`.
+Returns the full `GetStage4StateResponse`. After sharing, `mySelectionStatus` remains `'SUBMITTED'` (sharing is tracked via a separate visibility flag, not an additional status state).
 
 ---
 
@@ -278,7 +278,7 @@ Withdraws the caller's shared selections (allowed while partner has not yet shar
 POST /api/v1/sessions/:id/stage4/unshare-selections
 ```
 
-Returns the full `GetStage4StateResponse` with updated `mySelectionStatus: 'SUBMITTED'`.
+Returns the full `GetStage4StateResponse`.
 
 ---
 
