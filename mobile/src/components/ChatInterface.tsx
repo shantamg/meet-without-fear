@@ -1417,7 +1417,9 @@ const useStyles = () => {
       paddingBottom: 0,
     },
     auxiliaryControls: {
-      overflow: 'hidden',
+      // overflow: 'hidden' removed — it interacted badly with
+      // LayoutAnimation during keyboard transitions, permanently
+      // clipping CTA panels at the bottom of the composer.
     },
   }));
 };
