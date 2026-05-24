@@ -97,7 +97,7 @@ Call this tool before your visible conversational response whenever the latest t
             description: { type: 'string' },
             kind: { type: ['string', 'null'], enum: ['SHARED_PROPOSAL', 'INDIVIDUAL_COMMITMENT', null] },
             ownerUserId: { type: ['string', 'null'] },
-            needsAddressed: { type: 'array', items: { type: 'string' } },
+            needsAddressed: { type: 'array', items: { type: 'string' }, description: 'Human-readable need labels (e.g. "Partnership", "Understanding"). Never use internal IDs.' },
             duration: { type: ['string', 'null'] },
             measureOfSuccess: { type: ['string', 'null'] },
           },
