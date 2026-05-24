@@ -445,6 +445,8 @@ export interface PromptContext {
     need: string;
     category?: string;
   } | null;
+  /** Stage 3: already-captured needs so the AI avoids duplicates */
+  capturedNeeds?: Array<{ id: string; need: string; confirmed: boolean }> | null;
   /** Whether user is actively refining their empathy draft */
   isRefiningEmpathy?: boolean;
   /** Shared context from partner (when guesser is in REFINING status from reconciler flow) */
@@ -938,6 +940,14 @@ ${buildResponseProtocol(3)}`;
     dynamicParts.push(`REFINING NEED CONTEXT:
 The user is refining need ${context.refiningNeed.id} currently reading: "${context.refiningNeed.need}".
 Focus on this need only this turn. If the user's update is clear, call update_session_state with needAction.type=refine and supersedes="${context.refiningNeed.id}" for the revised version. If they dismiss or say never mind, respond conversationally and do not update state.`);
+  }
+
+  // Inject already-captured needs so the AI avoids proposing duplicates
+  if (context.capturedNeeds?.length) {
+    const needsList = context.capturedNeeds
+      .map((n, i) => `${i + 1}. "${n.need}" (${n.confirmed ? 'confirmed' : 'draft'})`)
+      .join('\n');
+    dynamicParts.push(`ALREADY CAPTURED NEEDS:\n${needsList}\nDo NOT propose a need that duplicates an existing one. If ${context.userName} says this is enough, stop proposing new needs.`);
   }
 
   // Content-aware pacing (every turn): let what the user said drive the mode,

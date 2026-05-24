@@ -1783,7 +1783,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
     // Assemble full context including notable facts from UserVessel
     // Also fetch latest emotional reading for intensity-dependent prompt behavior
-    const [contextBundle, sharedContentHistory, milestoneContext, emotionalIntensity] = await Promise.all([
+    const [contextBundle, sharedContentHistory, milestoneContext, emotionalIntensity, capturedNeeds] = await Promise.all([
       assembleContextBundle(
         sessionId,
         user.id,
@@ -1817,6 +1817,22 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         }
         return 5; // Default if no reading
       })(),
+      // Stage 3: fetch already-captured needs so the AI avoids duplicates
+      currentStage === 3
+        ? (async () => {
+            const vessel = await prisma.userVessel.findUnique({
+              where: { userId_sessionId: { userId: user.id, sessionId } },
+              select: { id: true },
+            });
+            if (!vessel) return null;
+            const needs = await prisma.identifiedNeed.findMany({
+              where: { vesselId: vessel.id },
+              orderBy: { createdAt: 'asc' },
+              select: { id: true, need: true, confirmed: true },
+            });
+            return needs.length > 0 ? needs : null;
+          })()
+        : Promise.resolve(null),
     ]);
 
     logger.info(`[sendMessageStream:${requestId}] Context assembled: notableFacts=${contextBundle.notableFacts?.length ?? 0}, emotionalIntensity=${emotionalIntensity}`);
@@ -1948,6 +1964,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       empathyDraft: empathyDraftContent || undefined,
       isRefiningEmpathy: isRefiningEmpathy || undefined,
       refiningNeed: refiningNeedContext,
+      capturedNeeds,
       stage4InventoryContext,
       stage4WalkthroughContext,
       stage4OpenNeeds,

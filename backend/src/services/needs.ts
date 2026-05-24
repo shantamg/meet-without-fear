@@ -223,6 +223,12 @@ export async function captureSingleNeedForUser(
     : [];
 
   const created = await prisma.$transaction(async (tx) => {
+    // Prevent duplicate unconfirmed needs from accumulating across turns.
+    // The AI cannot see already-captured needs and may re-propose.
+    await tx.identifiedNeed.deleteMany({
+      where: { vesselId: vessel.id, confirmed: false },
+    });
+
     const need = await tx.identifiedNeed.create({
       data: {
         vesselId: vessel.id,
