@@ -49,7 +49,7 @@ interface Stage4RedesignFooterProps {
 }
 
 /**
- * True iff every OPEN or PARTIAL need is either covered by a proposal the user
+ * True iff every OPEN need is either covered by a proposal the user
  * marked WILLING or explicitly declined ("leave for now") by the user.
  */
 function allOpenNeedsAddressedOrDeclined(state: GetStage4StateResponse): boolean {
