@@ -59,7 +59,7 @@ function allOpenNeedsAddressedOrDeclined(state: GetStage4StateResponse): boolean
       .filter((p) => p.myDecision === Stage4SelectionDecision.WILLING)
       .map((p) => p.id),
   );
-  const rows = [...safeState.coverageAudit.open, ...safeState.coverageAudit.partial];
+  const rows = safeState.coverageAudit.open;
   return rows.every((row) => {
     if (row.userDeclinedToAddress) return true;
     return row.coveringProposalIds.some((pid) => willingProposalIds.has(pid));
