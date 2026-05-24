@@ -84,7 +84,7 @@ export async function linkProposalToIdentifiedNeeds(
   const matchedNeedIds = new Set<string>();
   for (const label of needLabels) {
     for (const candidate of candidates) {
-      if (needLabelMatches(label, candidate.need)) {
+      if (label === candidate.id || needLabelMatches(label, candidate.need)) {
         matchedNeedIds.add(candidate.id);
       }
     }

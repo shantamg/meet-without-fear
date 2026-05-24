@@ -227,7 +227,8 @@ function buildProposalCard(
   selections: Stage4SelectionRow[],
   coverageRows: Stage4NeedCoverageRow[],
   revealPartnerSelections: boolean,
-  needLinks: Array<{ needId: string; needText: string }> = []
+  needLinks: Array<{ needId: string; needText: string }> = [],
+  needIdToLabel: Map<string, string> = new Map()
 ): ProposalCardDTO {
   const mySelection = selections.find(
     (selection) => selection.proposalId === proposal.id && selection.userId === userId
@@ -273,8 +274,8 @@ function buildProposalCard(
           })
         : linkedCoverage.length > 0
           ? linkedCoverage
-          : proposal.needsAddressed.map((label) => ({
-              label,
+          : proposal.needsAddressed.map((raw) => ({
+              label: needIdToLabel.get(raw) ?? raw,
               coverage: 'COVERED',
             })),
     duration: proposal.duration,
@@ -679,6 +680,10 @@ export async function getStage4State(
     arr.push({ needId: link.needId, needText: text });
     linksByProposal.set(link.proposalId, arr);
   }
+  const needIdToLabel = new Map<string, string>();
+  for (const row of coverageRows) {
+    if (row.needId) needIdToLabel.set(row.needId, row.needLabel);
+  }
   const proposalCards = activeProposals.map((proposal) =>
     buildProposalCard(
       proposal,
@@ -687,7 +692,8 @@ export async function getStage4State(
       selections,
       coverageRows,
       revealPartnerSelections,
-      linksByProposal.get(proposal.id) ?? []
+      linksByProposal.get(proposal.id) ?? [],
+      needIdToLabel
     )
   );
   const unaddressedNeeds = buildUnaddressedNeeds(coverageRows, userId, partnerUserId);
