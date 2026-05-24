@@ -1724,7 +1724,9 @@ export function UnifiedSessionScreen({
   const redesignedStage4ShouldHideInput =
     hasRedesignedStage4 &&
     !!stage4State &&
-    !redesignedStage4AllowsInput;
+    !redesignedStage4AllowsInput &&
+    // Don't hide input before walkthrough begins — user should be able to chat
+    (redesignedStage4ProposalCount > 0 || !!stage4State.walkthrough?.currentNeed);
 
   const submitStage4Selection = useSubmitStage4ProposalSelection({
     onError: () => {
@@ -3648,7 +3650,7 @@ export function UnifiedSessionScreen({
                 tone="needs"
                 eyebrow="What matters"
                 title="Start with the first need"
-                subtitle="Open this to work through what might honor it, one need at a time."
+                subtitle="Tap to explore what might honor each need."
                 compact
                 pressable
                 primaryAction={{
