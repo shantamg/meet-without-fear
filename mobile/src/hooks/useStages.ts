@@ -2280,11 +2280,11 @@ export function useUpdateStage4WalkthroughNeed() {
   return useMutation<
     { state: GetStage4StateResponse },
     ApiClientError,
-    { sessionId: string; needId: string; action: 'covered' | 'skip' },
+    { sessionId: string; needId: string; action: 'covered' | 'skip' | 'reset' },
     { previous: GetStage4StateResponse | undefined }
   >({
     mutationFn: async ({ sessionId, needId, action }) =>
-      post<{ state: GetStage4StateResponse }, { action: 'covered' | 'skip' }>(
+      post<{ state: GetStage4StateResponse }, { action: 'covered' | 'skip' | 'reset' }>(
         `/sessions/${sessionId}/stage4/walkthrough/needs/${needId}`,
         { action }
       ),

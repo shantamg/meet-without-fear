@@ -1006,6 +1006,98 @@ describe('Stage 4 API', () => {
         })
       );
     });
+
+    it('resets a skipped partner need from quality review back to walkthrough without removing proposals', async () => {
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId, needId: 'need-partner' },
+        body: { action: 'reset' },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        stage: 4,
+        gatesSatisfied: {},
+      });
+      (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue({
+        gatesSatisfied: {
+          stage4Walkthrough: {
+            phase: 'QUALITY_REVIEW',
+            currentNeedId: null,
+            coveredNeedIds: ['need-own'],
+            skippedNeedIds: ['need-partner'],
+          },
+        },
+      });
+      (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: mockStrategyIds[0],
+          description: 'Weekly check-in',
+          needsAddressed: ['need-own'],
+          duration: null,
+          measureOfSuccess: null,
+          kind: Stage4ProposalKind.SHARED_PROPOSAL,
+          status: Stage4ProposalStatus.ACTIVE,
+          createdByUserId: mockUser.id,
+          updatedAt: new Date('2026-05-06T10:00:00.000Z'),
+        },
+      ]);
+      (prisma.stage4ProposalSelection.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.stage4NeedCoverage.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'coverage-own',
+          needId: 'need-own',
+          needLabel: 'reliability around chores',
+          sourceUserId: mockUser.id,
+          coverageStatus: 'OPEN',
+          coveringProposalIds: [mockStrategyIds[0]],
+          note: null,
+          updatedAt: new Date('2026-05-06T10:03:00.000Z'),
+        },
+        {
+          id: 'coverage-partner',
+          needId: 'need-partner',
+          needLabel: 'more appreciation',
+          sourceUserId: mockPartnerId,
+          coverageStatus: 'OPEN',
+          coveringProposalIds: [],
+          note: null,
+          updatedAt: new Date('2026-05-06T10:04:00.000Z'),
+        },
+      ]);
+      (prisma.stage4Closure.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.agreement.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.tendingEntry.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.strategyProposalNeed.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.stageProgress.update as jest.Mock).mockResolvedValue({});
+
+      await updateStage4WalkthroughNeedStatus(req as Request, res as Response);
+
+      expect(prisma.stageProgress.update).toHaveBeenCalledWith({
+        where: { sessionId_userId_stage: { sessionId: mockSessionId, userId: mockUser.id, stage: 4 } },
+        data: {
+          gatesSatisfied: expect.objectContaining({
+            stage4Walkthrough: expect.objectContaining({
+              phase: 'PARTNER_NEEDS',
+              currentNeedId: 'need-partner',
+              coveredNeedIds: ['need-own'],
+              skippedNeedIds: [],
+            }),
+          }),
+        },
+      });
+      expect(prisma.strategyProposal.findMany).toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(200);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            state: expect.any(Object),
+          }),
+        })
+      );
+    });
   });
 
   describe('POST /sessions/:id/stage4 selections and close', () => {
