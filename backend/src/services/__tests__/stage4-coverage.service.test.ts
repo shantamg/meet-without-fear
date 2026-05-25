@@ -142,6 +142,65 @@ describe('stage4-coverage.service', () => {
     expect(result).toEqual({ covered: 0, partial: 0, open: 2, total: 2 });
   });
 
+  it('covers a need when a proposal stores the need id in needsAddressed', async () => {
+    (prisma.identifiedNeed.findMany as jest.Mock).mockResolvedValue([
+      need({
+        id: 'need-authenticity',
+        need: "I need authenticity in our relating — the knowledge that I'm honoring him and he's honoring me",
+      }),
+    ]);
+    (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+      proposal({
+        id: 'proposal-honesty',
+        description: 'When we talk, Shantam will commit to being honest about where things stand',
+        needsAddressed: ['need-authenticity'],
+      }),
+    ]);
+
+    const result = await refreshStage4NeedCoverage(sessionId);
+
+    expect(prisma.stage4NeedCoverage.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          needId: 'need-authenticity',
+          coverageStatus: 'COVERED',
+          coveringProposalIds: ['proposal-honesty'],
+        }),
+      ],
+    });
+    expect(result).toEqual({ covered: 1, partial: 0, open: 0, total: 1 });
+  });
+
+  it('covers a need when a proposal has a StrategyProposalNeed link row', async () => {
+    (prisma.identifiedNeed.findMany as jest.Mock).mockResolvedValue([
+      need({
+        id: 'need-clarity',
+        need: "To know whether Shantam's not right now means temporary or permanent",
+      }),
+    ]);
+    (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+      proposal({
+        id: 'proposal-checkin',
+        description: 'Check in once every 6 months to talk about how things are',
+        needsAddressed: [],
+        needLinks: [{ needId: 'need-clarity' }],
+      }),
+    ]);
+
+    const result = await refreshStage4NeedCoverage(sessionId);
+
+    expect(prisma.stage4NeedCoverage.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          needId: 'need-clarity',
+          coverageStatus: 'COVERED',
+          coveringProposalIds: ['proposal-checkin'],
+        }),
+      ],
+    });
+    expect(result).toEqual({ covered: 1, partial: 0, open: 0, total: 1 });
+  });
+
   it('partly covers Stage 4 needs when proposals use process language instead of repeated need text', async () => {
     (prisma.identifiedNeed.findMany as jest.Mock).mockResolvedValue([
       need({
