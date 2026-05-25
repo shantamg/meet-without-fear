@@ -917,13 +917,13 @@ export async function shareStage4Selections(req: Request, res: Response): Promis
       return;
     }
 
-    // Gate: every open/partial need must be addressed by a willing-active
+    // Gate: every open need must be addressed by a willing-active
     // proposal or explicitly declined ("leave for now") by this user.
-    const [openOrPartialNeeds, willingSelections, declinations] = await Promise.all([
+    const [openNeeds, willingSelections, declinations] = await Promise.all([
       prisma.stage4NeedCoverage.findMany({
         where: {
           sessionId,
-          coverageStatus: { in: ['OPEN', 'PARTIAL'] },
+          coverageStatus: 'OPEN',
         },
         select: {
           id: true,
@@ -957,7 +957,7 @@ export async function shareStage4Selections(req: Request, res: Response): Promis
     );
     const declinedNeedIds = new Set(declinations.map((d) => d.needId));
 
-    const ungated = openOrPartialNeeds.filter((row) => {
+    const ungated = openNeeds.filter((row) => {
       const needIdentifier = row.needId ?? row.id;
       if (declinedNeedIds.has(needIdentifier)) return false;
       const hasWillingCover = row.coveringProposalIds.some(

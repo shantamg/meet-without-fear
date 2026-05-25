@@ -2964,5 +2964,38 @@ describe('Stage 4 API', () => {
       expect(prisma.stageProgress.update).toHaveBeenCalled();
       expect(statusMock).toHaveBeenCalledWith(200);
     });
+
+    it('allows share when remaining coverage rows are only partial', async () => {
+      arrangeForShare({
+        openCoverage: [
+          {
+            id: 'cov-partial',
+            needId: 'need-partial',
+            coverageStatus: 'PARTIAL',
+            coveringProposalIds: ['prop-a'],
+          },
+        ],
+        willingProposalIds: ['prop-a'],
+        activeProposalIds: ['prop-a'],
+      });
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+      });
+      const { res, statusMock } = createMockResponse();
+
+      await shareStage4Selections(req as Request, res as Response);
+
+      expect(prisma.stage4NeedCoverage.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            coverageStatus: 'OPEN',
+          }),
+        })
+      );
+      expect(prisma.stageProgress.update).toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(200);
+    });
   });
 });
