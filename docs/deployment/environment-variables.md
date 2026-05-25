@@ -38,7 +38,7 @@ All required environment variables for Meet Without Fear services.
 | `CORS_ORIGIN` | Allowed CORS origins | `*` |
 | `RATE_LIMIT_WINDOW_MS` | Rate limit window | `60000` |
 | `RATE_LIMIT_MAX` | Max requests per window | `100` |
-| `EXPO_ACCESS_TOKEN` | Expo push notification token | (optional) |
+| `EXPO_ACCESS_TOKEN` | Expo access token used by the backend when Expo push security is enabled. | (optional unless Expo push security is enabled) |
 | `OPENAI_API_KEY` | OpenAI key for TTS (`/api/tts` → `tts-1` / `tts-1-hd`). Without it, TTS returns 500 and meditation/gratitude/chat read-aloud features are broken. | (none) |
 | `APP_LATEST_BUILD_NUMBER_IOS` / `APP_LATEST_BUILD_NUMBER_ANDROID` | Latest native mobile build number for optional update prompts. Falls back to `APP_LATEST_BUILD_NUMBER`. | `40` |
 | `APP_MIN_BUILD_NUMBER_IOS` / `APP_MIN_BUILD_NUMBER_ANDROID` | Minimum supported native mobile build number for required update prompts. Falls back to `APP_MIN_BUILD_NUMBER`. | (none) |

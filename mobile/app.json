@@ -91,7 +91,8 @@
         {
           "faceIDPermission": "Meet Without Fear uses Face ID to protect your private sessions."
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "extra": {
       "eas": {
