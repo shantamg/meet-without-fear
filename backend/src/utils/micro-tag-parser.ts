@@ -12,11 +12,17 @@
 
 import { extractJsonFromResponse } from './json-extractor';
 import { logger } from '../lib/logger';
-import { NeedCategory, Stage4ProposalKind, type CapturedNeedInput } from '@meet-without-fear/shared';
+import {
+  NeedCategory,
+  Stage4ProposalKind,
+  type CapturedNeedInput,
+  type ParsedNeedAction,
+} from '@meet-without-fear/shared';
 import { cleanVisibleAIText } from './visible-text';
 
 export type ParsedStage4ProposalClassification = 'PROPOSAL' | 'REFLECTION' | 'SUCCESS_MARKER' | 'PROCESS';
 export type ParsedStage4ProposalAction = 'ADD' | 'REVISE' | 'REMOVE' | 'IGNORE';
+export type ParsedStage4WalkthroughActionType = 'COVERED' | 'SKIP' | 'NONE';
 
 export interface ParsedStage4ProposalInput {
   action: ParsedStage4ProposalAction;
@@ -28,6 +34,12 @@ export interface ParsedStage4ProposalInput {
   needsAddressed?: string[];
   duration?: string;
   measureOfSuccess?: string;
+}
+
+export interface ParsedStage4WalkthroughAction {
+  action: ParsedStage4WalkthroughActionType;
+  needId?: string;
+  reason?: string;
 }
 
 export interface ParsedMicroTagResponse {
@@ -52,8 +64,16 @@ export interface ParsedMicroTagResponse {
   stage4Proposals: ParsedStage4ProposalInput[];
   /** True when the response included a hidden Stage 4 proposal classification block */
   stage4ProposalBlockPresent: boolean;
+  /** Structured Stage 4 current-need walkthrough action from the model */
+  stage4WalkthroughAction: ParsedStage4WalkthroughAction | null;
   /** Structured needs proposed by Stage 3 in a hidden <needs> JSON block */
   proposedNeeds: CapturedNeedInput[];
+  /** Structured single need proposed by Stage 3 in a hidden <need> JSON block */
+  proposedNeed: CapturedNeedInput | null;
+  /** Structured Stage 3 need edit/delete/lock action */
+  needAction: ParsedNeedAction | null;
+  /** Parser rejection reason for invalid Stage 3 need tags */
+  needParseError: string | null;
 }
 
 function isNeedCategory(value: unknown): value is NeedCategory {
@@ -104,6 +124,81 @@ function parseNeedsBlock(rawNeeds: string | null): CapturedNeedInput[] {
     logger.warn('[micro-tag-parser] Failed to parse <needs> block', error);
     return [];
   }
+}
+
+function normalizeNeedItem(item: unknown): CapturedNeedInput | null {
+  if (!item || typeof item !== 'object') return null;
+  const candidate = item as Record<string, unknown>;
+  const need = typeof candidate.need === 'string' ? cleanVisibleAIText(candidate.need) : '';
+  const description = typeof candidate.description === 'string'
+    ? cleanVisibleAIText(candidate.description)
+    : need;
+  const category = candidate.category;
+  const evidence = Array.isArray(candidate.evidence)
+    ? candidate.evidence
+        .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        .map((entry) => cleanVisibleAIText(entry))
+        .filter(Boolean)
+    : [];
+
+  if (!need || !description || !isNeedCategory(category)) return null;
+
+  return { need, category, description, evidence };
+}
+
+function parseNeedBlock(rawNeed: string | null): CapturedNeedInput | null {
+  if (!rawNeed) return null;
+
+  try {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawNeed);
+    } catch {
+      parsed = extractJsonFromResponse(rawNeed) as unknown;
+    }
+    return normalizeNeedItem(parsed);
+  } catch (error) {
+    logger.warn('[micro-tag-parser] Failed to parse <need> block', error);
+    return null;
+  }
+}
+
+function parseTagAttributes(rawAttributes: string): Record<string, string> {
+  const attributes: Record<string, string> = {};
+  const attrRegex = /([a-zA-Z][a-zA-Z0-9_-]*)\s*=\s*"([^"]*)"/g;
+  let match: RegExpExecArray | null;
+  while ((match = attrRegex.exec(rawAttributes)) !== null) {
+    attributes[match[1]] = match[2];
+  }
+  return attributes;
+}
+
+function parseNeedActionTag(rawResponse: string): ParsedNeedAction | null {
+  const fullMatch = rawResponse.match(/<need-action\b([^>]*)>([\s\S]*?)<\/need-action>/i);
+  const selfClosingMatch = rawResponse.match(/<need-action\b([^>]*)\/>/i);
+  const match = fullMatch ?? selfClosingMatch;
+  if (!match) return null;
+
+  const attributes = parseTagAttributes(match[1] ?? '');
+  const type = attributes.type;
+  if (type !== 'refine' && type !== 'delete' && type !== 'lock') return null;
+
+  const body = fullMatch?.[2]?.trim();
+  const payload = body ? parseNeedBlock(body) : null;
+  return {
+    type,
+    needId: attributes.needId || undefined,
+    supersedes: attributes.supersedes || undefined,
+    need: payload?.need,
+    category: payload?.category,
+    description: payload?.description,
+    evidence: payload?.evidence,
+  };
+}
+
+function countTagOccurrences(rawResponse: string, tagName: string): number {
+  const boundary = tagName === 'need' ? '(?![-\\w])' : '\\b';
+  return rawResponse.match(new RegExp(`<${tagName}${boundary}`, 'gi'))?.length ?? 0;
 }
 
 function isStage4ProposalClassification(value: unknown): value is ParsedStage4ProposalClassification {
@@ -179,6 +274,33 @@ function parseStage4ProposalsBlock(rawProposals: string | null): ParsedStage4Pro
   }
 }
 
+function parseStage4WalkthroughBlock(rawAction: string | null): ParsedStage4WalkthroughAction | null {
+  if (!rawAction) return null;
+
+  try {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawAction);
+    } catch {
+      parsed = extractJsonFromResponse(rawAction) as unknown;
+    }
+    if (!parsed || typeof parsed !== 'object') return null;
+    const candidate = parsed as Record<string, unknown>;
+    const action = candidate.action;
+    if (action !== 'COVERED' && action !== 'SKIP' && action !== 'NONE') return null;
+    const needId = typeof candidate.needId === 'string' && candidate.needId.trim().length > 0
+      ? candidate.needId.trim()
+      : undefined;
+    const reason = typeof candidate.reason === 'string' && candidate.reason.trim().length > 0
+      ? cleanVisibleAIText(candidate.reason)
+      : undefined;
+    return { action, needId, reason };
+  } catch (error) {
+    logger.warn('[micro-tag-parser] Failed to parse <stage4_walkthrough> block', error);
+    return null;
+  }
+}
+
 function isFollowUpTimingOnlyStrategy(strategy: string): boolean {
   const normalized = strategy.toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!normalized) return true;
@@ -243,26 +365,43 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
   // 1. Extract blocks using regex
   const thinkingMatch = rawResponse.match(/<thinking>([\s\S]*?)<\/thinking>/i);
   const draftMatch = rawResponse.match(/<draft>([\s\S]*?)<\/draft>/i);
+  const singleNeedMatch = rawResponse.match(/<need>([\s\S]*?)<\/need>/i);
   const needsMatch = rawResponse.match(/<needs>([\s\S]*?)<\/needs>/i);
   const stage4ProposalsMatch = rawResponse.match(/<stage4_proposals>([\s\S]*?)<\/stage4_proposals>/i);
+  const stage4WalkthroughMatch = rawResponse.match(/<stage4_walkthrough>([\s\S]*?)<\/stage4_walkthrough>/i);
   const dispatchMatch = rawResponse.match(/<dispatch>([\s\S]*?)<\/dispatch>/i);
 
   const thinking = thinkingMatch?.[1]?.trim() ?? '';
   const draft = draftMatch?.[1]?.trim() ?? null;
+  const needRaw = singleNeedMatch?.[1]?.trim() ?? null;
   const needsRaw = needsMatch?.[1]?.trim() ?? null;
   const stage4ProposalsRaw = stage4ProposalsMatch?.[1]?.trim() ?? null;
+  const stage4WalkthroughRaw = stage4WalkthroughMatch?.[1]?.trim() ?? null;
   const dispatchTag = dispatchMatch?.[1]?.trim() ?? null;
+  const singularNeedCount = countTagOccurrences(rawResponse, 'need');
+  const needActionCount = countTagOccurrences(rawResponse, 'need-action');
+  const totalNewNeedTags = singularNeedCount + needActionCount;
+  const needParseError = totalNewNeedTags > 1
+    ? 'Only one <need> or <need-action> tag is allowed per turn.'
+    : null;
+  const proposedNeed = needParseError ? null : parseNeedBlock(needRaw);
+  const needAction = needParseError ? null : parseNeedActionTag(rawResponse);
   const proposedNeeds = parseNeedsBlock(needsRaw);
   const stage4ProposalBlockPresent = Boolean(stage4ProposalsMatch);
   const stage4Proposals = parseStage4ProposalsBlock(stage4ProposalsRaw);
+  const stage4WalkthroughAction = parseStage4WalkthroughBlock(stage4WalkthroughRaw);
 
   // 2. Clean response text - remove all tags
   let responseText = rawResponse
     .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
     .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
+    .replace(/<need>[\s\S]*?<\/need>/gi, '')
+    .replace(/<need-action\b[^>]*>[\s\S]*?<\/need-action>/gi, '')
+    .replace(/<need-action\b[^>]*\/>/gi, '')
     .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
     .replace(/<needs[_-]?ready>[\s\S]*?<\/needs[_-]?ready>/gi, '')
     .replace(/<stage4_proposals>[\s\S]*?<\/stage4_proposals>/gi, '')
+    .replace(/<stage4_walkthrough>[\s\S]*?<\/stage4_walkthrough>/gi, '')
     .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '')
     .trim();
   responseText = stripKnownControlTags(responseText).trim();
@@ -326,7 +465,11 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
         proposedStrategies,
         stage4Proposals,
         stage4ProposalBlockPresent,
+        stage4WalkthroughAction,
         proposedNeeds,
+        proposedNeed,
+        needAction,
+        needParseError,
       };
     } catch {
       // Fall through to raw responseText
@@ -344,6 +487,10 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     proposedStrategies,
     stage4Proposals,
     stage4ProposalBlockPresent,
+    stage4WalkthroughAction,
     proposedNeeds,
+    proposedNeed,
+    needAction,
+    needParseError,
   };
 }

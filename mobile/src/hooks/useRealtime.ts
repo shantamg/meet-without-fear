@@ -154,6 +154,7 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
 
   // Refs for channel and subscription management
   const channelRef = useRef<AblyRealtimeChannel | null>(null);
+  const presenceChannelRef = useRef<AblyRealtimeChannel | null>(null);
   const connectionListenerRef = useRef<((stateChange: Ably.ConnectionStateChange) => void) | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingRef = useRef<boolean>(false);
@@ -359,15 +360,26 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
 
         // Subscribe to all events
         await channel.subscribe(handleMessage);
+        if (isCleanedUp) {
+          console.log('[Realtime] Cleanup called after subscribe, aborting setup');
+          return;
+        }
 
         // Set up presence if enabled
         if (enablePresence) {
           console.log('[Realtime] Entering presence...');
-          await channel.presence.enter({ name: user.name });
+          const presenceChannelName = REALTIME_CHANNELS.presence(sessionId);
+          const presenceChannel = ably.channels.get(presenceChannelName);
+          presenceChannelRef.current = presenceChannel;
+          await presenceChannel.presence.enter({ name: user.name });
+          if (isCleanedUp) {
+            console.log('[Realtime] Cleanup called after presence enter, aborting setup');
+            return;
+          }
           console.log('[Realtime] Presence entered successfully');
 
           // Subscribe to presence events
-          channel.presence.subscribe('enter', (member: Ably.PresenceMessage) => {
+          presenceChannel.presence.subscribe('enter', (member: Ably.PresenceMessage) => {
             if (isCleanedUp || !isMountedRef.current) return;
             console.log('[Realtime] Presence enter event:', member.clientId);
             if (member.clientId !== user.id) {
@@ -376,7 +388,7 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
             }
           });
 
-          channel.presence.subscribe('leave', (member: Ably.PresenceMessage) => {
+          presenceChannel.presence.subscribe('leave', (member: Ably.PresenceMessage) => {
             if (isCleanedUp || !isMountedRef.current) return;
             console.log('[Realtime] Presence leave event:', member.clientId);
             if (member.clientId !== user.id) {
@@ -387,7 +399,7 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
           });
 
           // Check current presence
-          const members = await channel.presence.get();
+          const members = await presenceChannel.presence.get();
           console.log('[Realtime] Current presence members:', members.map(m => m.clientId));
           const partnerPresent = members.some((m: Ably.PresenceMessage) => m.clientId !== user.id);
           console.log('[Realtime] Partner present:', partnerPresent);
@@ -472,17 +484,23 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
       if (channel) {
         try {
           channel.unsubscribe();
-          channel.presence.unsubscribe();
-          // Leave presence (fire and forget)
-          channel.presence.leave().catch((err) => {
-            console.warn('[Realtime] Error leaving presence:', err);
-          });
         } catch (err) {
           console.warn('[Realtime] Error during channel cleanup:', err);
         }
       }
+      if (presenceChannelRef.current) {
+        try {
+          presenceChannelRef.current.presence.unsubscribe();
+          presenceChannelRef.current.presence.leave().catch((err) => {
+            console.warn('[Realtime] Error leaving presence:', err);
+          });
+        } catch (err) {
+          console.warn('[Realtime] Error during presence cleanup:', err);
+        }
+      }
 
       channelRef.current = null;
+      presenceChannelRef.current = null;
 
       // Clear typing timeout
       if (typingTimeoutRef.current) {
@@ -511,10 +529,10 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
         // App came to foreground - re-enter presence
-        if (channelRef.current && enablePresence && user?.id) {
+        if (presenceChannelRef.current && enablePresence && user?.id) {
           console.log('[Realtime] App active - re-entering presence');
           try {
-            await channelRef.current.presence.enter({ name: user.name });
+            await presenceChannelRef.current.presence.enter({ name: user.name });
           } catch (err) {
             console.warn('[Realtime] Failed to re-enter presence:', err);
           }
@@ -528,9 +546,9 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
         }
       } else if (nextAppState === 'background') {
         // App went to background - leave presence so partner sees offline immediately
-        if (channelRef.current && enablePresence) {
+        if (presenceChannelRef.current && enablePresence) {
           console.log('[Realtime] App background - leaving presence');
-          channelRef.current.presence.leave().catch((err) => {
+          presenceChannelRef.current.presence.leave().catch((err) => {
             console.warn('[Realtime] Failed to leave presence:', err);
           });
         }
@@ -588,8 +606,8 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
     // We just leave presence and clear local state
     console.log('[Realtime] Disconnect requested (clearing local state)');
 
-    if (channelRef.current && enablePresence) {
-      channelRef.current.presence.leave().catch((err) => {
+    if (presenceChannelRef.current && enablePresence) {
+      presenceChannelRef.current.presence.leave().catch((err) => {
         console.warn('[Realtime] Error leaving presence:', err);
       });
     }

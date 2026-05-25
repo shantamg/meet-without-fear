@@ -189,20 +189,21 @@ describe('Above Input Panel Priority', () => {
     expect(result.aboveInputPanel).not.toBe('feel-heard');
   });
 
-  it('does not show share-suggestion panel before Subject has submitted their own empathy', () => {
+  it('shows share-suggestion panel before Subject has submitted their own empathy', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
       myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
       hasShareSuggestion: true,
+      shareOffer: { hasSuggestion: true },
       hasRespondedToShareOfferLocal: false,
       empathyAlreadyConsented: false,
       empathyDraft: { alreadyConsented: false },
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showShareSuggestionPanel).toBe(false);
-    expect(result.aboveInputPanel).toBeNull();
+    expect(result.panels.showShareSuggestionPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('share-suggestion');
     expect(result.shouldHideInput).toBe(false);
   });
 
@@ -237,6 +238,7 @@ describe('Above Input Panel Priority', () => {
       messageCountSinceSharedContext: 1,
       hasEmpathyContent: true,
       hasLiveProposedEmpathyStatement: true,
+      hasDistinctRefinedEmpathyContent: true,
       empathyStatus: {
         hasNewSharedContext: true,
         myAttemptStatus: 'REFINING',
@@ -405,7 +407,7 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(true);
   });
 
-  it('hides input while partner empathy validation owns the next action', () => {
+  it('shows partner empathy validation panel while keeping chat available', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -417,7 +419,28 @@ describe('Input Hiding (shouldHideInput)', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.shouldHideInput).toBe(true);
+    expect(result.aboveInputPanel).toBe('partner-empathy-validation');
+    expect(result.panels.showPartnerEmpathyValidationPanel).toBe(true);
+    expect(result.shouldHideInput).toBe(false);
+  });
+
+  it('queues share suggestions behind partner empathy validation', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      hasPartnerEmpathy: true,
+      myValidation: { validated: false },
+      empathyStatus: { myAttemptStatus: 'REVEALED' },
+      empathyDraft: { alreadyConsented: true },
+      hasShareSuggestion: true,
+      shareOffer: { hasSuggestion: true, action: 'OFFER_OPTIONAL' },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.aboveInputPanel).toBe('partner-empathy-validation');
+    expect(result.panels.showShareSuggestionPanel).toBe(true);
+    expect(result.shouldHideInput).toBe(false);
   });
 
   it('shows a waiting banner and hides input after I validate partner empathy but partner has not validated mine', () => {
@@ -731,9 +754,7 @@ describe('Empathy Panel Visibility', () => {
     expect(result.panels.showEmpathyPanel).toBe(false);
   });
 
-  it('shows in refining mode after user engages with Stage 2B', () => {
-    // During REFINING, the panel should re-appear so user can resubmit revised empathy.
-    // empathyAlreadyConsented is true (user shared once) but panel still shows during REFINING.
+  it('does not show in refining mode with only the prior empathy attempt', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -746,7 +767,27 @@ describe('Empathy Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
+    expect(result.panels.showEmpathyPanel).toBe(false);
+  });
+
+  it('shows in refining mode after a distinct revised draft exists', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      isRefiningEmpathy: true,
+      empathyAlreadyConsented: true,
+      messageCountSinceSharedContext: 1,
+      hasEmpathyContent: true,
+      hasLiveProposedEmpathyStatement: true,
+      hasDistinctRefinedEmpathyContent: true,
+      myAttemptContent: true,
+      empathyStatus: { hasNewSharedContext: true },
+    });
+
+    const result = computeChatUIState(inputs);
     expect(result.panels.showEmpathyPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('empathy-statement');
   });
 
   it('does not show in refining mode before user reflects, even when an attempt is reviewable', () => {
@@ -790,6 +831,7 @@ describe('Empathy Panel Visibility', () => {
       messageCountSinceSharedContext: 0,
       hasEmpathyContent: true,
       hasLiveProposedEmpathyStatement: true,
+      hasDistinctRefinedEmpathyContent: true,
       empathyStatus: { hasNewSharedContext: true },
     });
 
@@ -885,7 +927,7 @@ describe('Typewriter Animation Integration', () => {
 // ============================================================================
 
 describe('Needs Review Panel Visibility', () => {
-  it('shows when needs are available in Stage 3', () => {
+  it('does not show a review panel just because needs are available in Stage 3', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -897,8 +939,8 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(true);
-    expect(result.aboveInputPanel).toBe('needs-review');
+    expect(result.panels.showNeedsSendPanel).toBe(false);
+    expect(result.aboveInputPanel).toBeNull();
   });
 
   it('does not show when not in Stage 3', () => {
@@ -913,10 +955,10 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(false);
+    expect(result.panels.showNeedsSendPanel).toBe(false);
   });
 
-  it('shows needs-share after needs are confirmed so the user can share explicitly', () => {
+  it('shows needs-send after all live needs are locked so the user can share explicitly', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -928,12 +970,11 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(false);
-    expect(result.panels.showNeedsSharePanel).toBe(true);
-    expect(result.aboveInputPanel).toBe('needs-share');
+    expect(result.panels.showNeedsSendPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('needs-send');
   });
 
-  it('shows needs-share even when the local confirm latch is still set after server confirmation', () => {
+  it('shows needs-send even when the local confirm latch is still set after server confirmation', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -945,8 +986,8 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsSharePanel).toBe(true);
-    expect(result.aboveInputPanel).toBe('needs-share');
+    expect(result.panels.showNeedsSendPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('needs-send');
   });
 
   it('does not show when needs are already shared', () => {
@@ -961,10 +1002,10 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(false);
+    expect(result.panels.showNeedsSendPanel).toBe(false);
   });
 
-  it('hides review and shows share when local confirm latch is set before server catches up', () => {
+  it('does not show when only the confirm latch is set and needs are not locked', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -976,9 +1017,7 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(false);
-    expect(result.panels.showNeedsSharePanel).toBe(true);
-    expect(result.aboveInputPanel).toBe('needs-share');
+    expect(result.panels.showNeedsSendPanel).toBe(false);
   });
 
   it('does not show when no needs available', () => {
@@ -993,7 +1032,7 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(false);
+    expect(result.panels.showNeedsSendPanel).toBe(false);
   });
 });
 
@@ -1110,13 +1149,13 @@ describe('Needs Reveal Validation Panel Visibility', () => {
     expect(result.aboveInputPanel).toBe('needs-reveal-validation');
   });
 
-  it('needs-review takes priority over needs-reveal-validation', () => {
+  it('needs-send takes priority over needs-reveal-validation', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
       myProgress: { stage: Stage.NEED_MAPPING },
       needsAvailable: true,
-      allNeedsConfirmed: false,
+      allNeedsConfirmed: true,
       needsShared: false,
       hasConfirmedNeedsLocal: false,
       needsRevealAvailable: true,
@@ -1126,6 +1165,6 @@ describe('Needs Reveal Validation Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.aboveInputPanel).toBe('needs-review');
+    expect(result.aboveInputPanel).toBe('needs-send');
   });
 });

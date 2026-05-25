@@ -255,11 +255,19 @@ export async function assembleContextBundle(
     throw new Error(`Session ${sessionId} not found`);
   }
 
-  // Get user and partner names
+  // Get user and partner names.
+  // Partner name MUST prefer the nickname this user gave their partner, so the AI
+  // refers to the partner by the name the user knows them by (not their real
+  // first name, which may be sensitive or unfamiliar). Nickname is stored on the
+  // current user's RelationshipMember row ("what this member calls their partner").
   const currentMember = session.relationship.members.find((m) => m.userId === userId);
   const partnerMember = session.relationship.members.find((m) => m.userId !== userId);
   const userName = currentMember?.user.name || 'there';
-  const partnerName = partnerMember?.user.name || 'your partner';
+  const partnerName =
+    currentMember?.nickname ||
+    partnerMember?.user.firstName ||
+    partnerMember?.user.name ||
+    'your partner';
 
   // Get stage progress
   const progress = session.stageProgress[0];

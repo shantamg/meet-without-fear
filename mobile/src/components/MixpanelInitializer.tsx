@@ -25,8 +25,10 @@ import {
   setUserProperties,
   setUserPropertiesOnce,
   reset,
+  setAnalyticsOptOut,
 } from '../services/mixpanel';
 import { initializeAppSession, getCurrentSessionId } from '../utils/appSession';
+import { usePrivacyPreferences } from '../hooks/useProfile';
 
 const ALIAS_FLAG_PREFIX = '@mixpanel_aliased_';
 // Track if a reset() was called this session - if so, skip alias() since
@@ -36,6 +38,7 @@ const RESET_FLAG = '@mixpanel_reset_this_session';
 export function MixpanelInitializer() {
   const { isSignedIn, isLoaded } = useAuth();
   const { user } = useUser();
+  const { data: privacyPreferencesData } = usePrivacyPreferences({ enabled: isLoaded && !!isSignedIn });
   const prevSignedIn = useRef<boolean | null>(null);
   const hasTrackedLaunch = useRef(false);
 
@@ -148,6 +151,12 @@ export function MixpanelInitializer() {
 
     handleAuthChange();
   }, [isLoaded, isSignedIn, user]);
+
+  // Sync analytics opt-out preference
+  useEffect(() => {
+    const optOut = privacyPreferencesData?.preferences?.analyticsOptOut ?? false;
+    setAnalyticsOptOut(optOut);
+  }, [privacyPreferencesData?.preferences?.analyticsOptOut]);
 
   // Update session properties on app foreground
   useEffect(() => {

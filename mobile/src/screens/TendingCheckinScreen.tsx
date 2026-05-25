@@ -3,125 +3,303 @@ import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet } from 
 import {
   ContinueChoice,
   PartialClosureResolution,
+  SubmitTendingCheckinRequest,
+  TendingBetweenPeriodNoteDTO,
+  TendingBlockerCategory,
   TendingEntryDTO,
   TendingEntryScope,
   TendingEntryStatus,
+  TendingFollowThroughStatus,
+  TendingHelpfulnessStatus,
+  TendingNeedResolutionStatus,
+  TendingNextAction,
+  TendingReminderScope,
 } from '@meet-without-fear/shared';
 import { colors } from '@/theme';
 
-/**
- * Stage 4 Phase 5 — Three-orientation Tending check-in.
- *
- * Sequential step navigation (back/next). Non-sequential navigation is the gold
- * spec; this is documented as a follow-up in the phase plan.
- */
-type Step = 'whatWorked' | 'whereMoreSupport' | 'whatComesNext';
+type Step = 'privateNotes' | 'followThrough' | 'helpfulness' | 'needsReview' | 'whatComesNext';
 
-const STEP_ORDER: Step[] = ['whatWorked', 'whereMoreSupport', 'whatComesNext'];
+const DEFAULT_STEP_ORDER: Step[] = ['followThrough', 'helpfulness', 'needsReview', 'whatComesNext'];
 
-const PROMPTS: Record<Step, { title: string; subtitle: string; placeholder: string }> = {
-  whatWorked: {
-    title: 'What worked',
-    subtitle:
-      "Take a moment with each of these — what shifted, even a little? Wins worth naming, however small.",
-    placeholder: 'A win worth naming…',
+const STEP_COPY: Record<Step, { title: string; subtitle: string }> = {
+  privateNotes: {
+    title: 'Private notes',
+    subtitle: 'Choose whether your saved notes should shape this check-in.',
   },
-  whereMoreSupport: {
-    title: 'Where would more support help',
-    subtitle: "What's still feeling hard or stuck? No judgment — just naming it.",
-    placeholder: 'What still needs support…',
+  followThrough: {
+    title: 'What happened',
+    subtitle: 'Check each commitment against what actually happened.',
+  },
+  helpfulness: {
+    title: 'Did it help',
+    subtitle: 'Name whether this helped the need, and what got in the way if not.',
+  },
+  needsReview: {
+    title: 'Needs review',
+    subtitle: 'Look at one underlying need at a time.',
   },
   whatComesNext: {
     title: 'What comes next',
-    subtitle: 'Where would you like to take it from here?',
-    placeholder: '',
+    subtitle: 'Choose the path that fits what you learned.',
   },
 };
 
-const CHOICE_LABELS: Record<ContinueChoice, { label: string; subtitle: string }> = {
-  [ContinueChoice.ANOTHER_ROUND]: {
-    label: 'Try another round',
-    subtitle: "New experiments grounded in what you've learned",
-  },
-  [ContinueChoice.EXTEND]: {
-    label: 'Keep going',
-    subtitle: 'Current experiments still feel right — extend for another check-in',
-  },
-  [ContinueChoice.NEW_PROCESS]: {
-    label: 'Start a new process',
-    subtitle: 'Something significant shifted — start fresh from Stage 1',
-  },
-  [ContinueChoice.PARTIAL_CLOSURE]: {
-    label: 'Close some, continue others',
-    subtitle: 'Mark each agreement individually',
-  },
-  [ContinueChoice.FULL_CLOSURE]: {
-    label: 'Close fully',
-    subtitle: "You're ready to wrap this up",
-  },
-};
+const FOLLOW_THROUGH = [
+  [TendingFollowThroughStatus.HAPPENED, 'Happened'],
+  [TendingFollowThroughStatus.PARTLY_HAPPENED, 'Partly'],
+  [TendingFollowThroughStatus.DID_NOT_HAPPEN, 'Did not happen'],
+  [TendingFollowThroughStatus.NOT_SURE, 'Not sure'],
+] as const;
 
-const CHOICE_ORDER: ContinueChoice[] = [
-  ContinueChoice.ANOTHER_ROUND,
-  ContinueChoice.EXTEND,
-  ContinueChoice.NEW_PROCESS,
-  ContinueChoice.PARTIAL_CLOSURE,
-  ContinueChoice.FULL_CLOSURE,
-];
+const HELPFULNESS = [
+  [TendingHelpfulnessStatus.HELPED, 'Helped'],
+  [TendingHelpfulnessStatus.PARTLY_HELPED, 'Partly helped'],
+  [TendingHelpfulnessStatus.DID_NOT_HELP, 'Did not help'],
+  [TendingHelpfulnessStatus.NOT_SURE, 'Not sure'],
+] as const;
 
-export interface TendingCheckinPayload {
-  whatWorked: { reflection: string; perEntryNotes: Record<string, string> };
-  whereMoreSupport: { reflection: string; perEntryNotes: Record<string, string> };
-  whatComesNext: {
-    continueChoice: ContinueChoice;
-    partialClosure: Record<string, PartialClosureResolution>;
-  };
+const BLOCKERS = [
+  [TendingBlockerCategory.FORGOT, 'Forgot'],
+  [TendingBlockerCategory.TOO_HARD, 'Too hard'],
+  [TendingBlockerCategory.TOO_FREQUENT, 'Too frequent'],
+  [TendingBlockerCategory.UNCLEAR, 'Unclear'],
+  [TendingBlockerCategory.PARTNER_DID_NOT_DO_PART, 'Partner part'],
+  [TendingBlockerCategory.I_DID_NOT_DO_PART, 'My part'],
+  [TendingBlockerCategory.CIRCUMSTANCES_CHANGED, 'Changed'],
+  [TendingBlockerCategory.NO_LONGER_WANTED, 'No longer wanted'],
+  [TendingBlockerCategory.OTHER, 'Other'],
+] as const;
+
+const NEED_STATUSES = [
+  [TendingNeedResolutionStatus.RESOLVED, 'Resolved'],
+  [TendingNeedResolutionStatus.IMPROVING, 'Improving'],
+  [TendingNeedResolutionStatus.STILL_OPEN, 'Still open'],
+  [TendingNeedResolutionStatus.CHANGED, 'Changed'],
+  [TendingNeedResolutionStatus.NOT_SURE, 'Not sure'],
+] as const;
+
+const NEXT_CHOICES = [
+  [ContinueChoice.FULL_CLOSURE, TendingNextAction.FULL_CLOSURE, 'Close fully'],
+  [ContinueChoice.EXTEND, TendingNextAction.EXTEND, 'Keep going'],
+  [ContinueChoice.EXTEND, TendingNextAction.ADJUST_COMMITMENT, 'Adjust'],
+  [ContinueChoice.ANOTHER_ROUND, TendingNextAction.REOPEN_STRATEGY_WORK, 'Reopen strategy'],
+  [ContinueChoice.NEW_PROCESS, TendingNextAction.NEW_PROCESS, 'New process'],
+  [ContinueChoice.PARTIAL_CLOSURE, TendingNextAction.PARTIAL_CLOSURE, 'Partial closure'],
+] as const;
+
+const REMINDER_PRESETS = [
+  ['TOMORROW', 'Tomorrow'],
+  ['HALFWAY', 'Halfway'],
+  ['ONE_WEEK', 'One week'],
+  ['TWO_WEEKS', 'Two weeks'],
+  ['ONE_MONTH', 'One month'],
+  ['CUSTOM', 'Custom'],
+] as const;
+
+const REMINDER_CADENCES = [
+  ['ONCE', 'One-time'],
+  ['WEEKLY', 'Weekly'],
+  ['MONTHLY', 'Monthly'],
+  ['EVERY_COUPLE_MONTHS', 'Every couple months'],
+] as const;
+
+export interface TendingCheckinNeed {
+  id?: string | null;
+  label: string;
+  sourceUserId?: string | null;
 }
+
+export type TendingCheckinPayload = SubmitTendingCheckinRequest;
 
 export interface TendingCheckinScreenProps {
   entries: TendingEntryDTO[];
+  betweenPeriodNotes?: TendingBetweenPeriodNoteDTO[];
+  needs?: TendingCheckinNeed[];
+  currentUserId?: string | null;
+  initialEntryId?: string | null;
   isSubmitting?: boolean;
   onSubmit: (payload: TendingCheckinPayload) => void;
   onCancel?: () => void;
 }
 
 function isRespondable(entry: TendingEntryDTO, currentUserId?: string): boolean {
-  if (entry.status !== TendingEntryStatus.OPEN && entry.status !== TendingEntryStatus.PARTIAL) {
+  if (
+    entry.scope === TendingEntryScope.INDIVIDUAL &&
+    entry.ownerUserId !== currentUserId
+  ) {
     return false;
   }
-  if (entry.scope === TendingEntryScope.INDIVIDUAL && currentUserId && entry.ownerUserId !== currentUserId) {
-    return false;
-  }
-  return true;
+
+  return entry.status === TendingEntryStatus.OPEN || entry.status === TendingEntryStatus.PARTIAL;
+}
+
+function entryLabel(entry: TendingEntryDTO): string {
+  return entry.summary ?? (entry.scope === TendingEntryScope.INDIVIDUAL ? 'Individual commitment' : 'Shared agreement');
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date.getTime());
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function addMonths(date: Date, months: number): Date {
+  const next = new Date(date.getTime());
+  next.setMonth(next.getMonth() + months);
+  return next;
 }
 
 export function TendingCheckinScreen({
   entries,
+  betweenPeriodNotes = [],
+  needs = [],
+  currentUserId,
+  initialEntryId,
   isSubmitting = false,
   onSubmit,
   onCancel,
 }: TendingCheckinScreenProps) {
-  const respondable = useMemo(() => entries.filter((e) => isRespondable(e)), [entries]);
+  const respondable = useMemo(() => {
+    const open = entries.filter((entry) => isRespondable(entry, currentUserId ?? undefined));
+    if (!initialEntryId) return open;
+    const selected = open.find((entry) => entry.id === initialEntryId);
+    return selected ? [selected, ...open.filter((entry) => entry.id !== initialEntryId)] : open;
+  }, [entries, initialEntryId, currentUserId]);
+  const reviewNeeds = needs.length > 0
+    ? needs
+    : respondable.map((entry) => ({ id: entry.agreementId, label: entryLabel(entry) }));
 
-  const [step, setStep] = useState<Step>('whatWorked');
-  const [whatWorked, setWhatWorked] = useState({ reflection: '', perEntryNotes: {} as Record<string, string> });
-  const [whereMore, setWhereMore] = useState({ reflection: '', perEntryNotes: {} as Record<string, string> });
+  const [step, setStep] = useState<Step>('privateNotes');
+  const [followThrough, setFollowThrough] = useState<Record<string, TendingFollowThroughStatus>>({});
+  const [whatHappened, setWhatHappened] = useState<Record<string, string>>({});
+  const [helpfulness, setHelpfulness] = useState<Record<string, TendingHelpfulnessStatus>>({});
+  const [blockers, setBlockers] = useState<Record<string, TendingBlockerCategory[]>>({});
+  const [helpedNeed, setHelpedNeed] = useState<Record<string, string>>({});
+  const [needStatuses, setNeedStatuses] = useState<Record<string, TendingNeedResolutionStatus>>({});
+  const [needNotes, setNeedNotes] = useState<Record<string, string>>({});
   const [choice, setChoice] = useState<ContinueChoice>(ContinueChoice.EXTEND);
+  const [nextAction, setNextAction] = useState<TendingNextAction>(TendingNextAction.EXTEND);
   const [partialClosure, setPartialClosure] = useState<Record<string, PartialClosureResolution>>({});
+  const [privateReminder, setPrivateReminder] = useState(false);
+  const [sharedReminder, setSharedReminder] = useState(false);
+  const [reminderPreset, setReminderPreset] = useState<(typeof REMINDER_PRESETS)[number][0]>('TWO_WEEKS');
+  const [reminderCadence, setReminderCadence] = useState<(typeof REMINDER_CADENCES)[number][0]>('ONCE');
+  const [customReminderAt, setCustomReminderAt] = useState('');
+  const [adjustmentText, setAdjustmentText] = useState('');
+  const [adjustmentCadence, setAdjustmentCadence] = useState('');
+  const [adjustmentSuccessCriteria, setAdjustmentSuccessCriteria] = useState('');
+  const [adjustmentReason, setAdjustmentReason] = useState('');
+  const [includedNoteIds, setIncludedNoteIds] = useState<string[]>([]);
+  const [shareNoteIds, setShareNoteIds] = useState<string[]>([]);
 
-  const stepIndex = STEP_ORDER.indexOf(step);
-  const isLast = stepIndex === STEP_ORDER.length - 1;
+  const stepOrder = useMemo(
+    () => (betweenPeriodNotes.length > 0 ? ['privateNotes', ...DEFAULT_STEP_ORDER] as Step[] : DEFAULT_STEP_ORDER),
+    [betweenPeriodNotes.length]
+  );
+  const activeStep = stepOrder.includes(step) ? step : stepOrder[0];
+  const stepIndex = stepOrder.indexOf(activeStep);
+  const isLast = stepIndex === stepOrder.length - 1;
 
   const goNext = () => {
-    if (isLast) {
-      onSubmit({
-        whatWorked,
-        whereMoreSupport: whereMore,
-        whatComesNext: { continueChoice: choice, partialClosure },
-      });
+    if (!isLast) {
+      setStep(stepOrder[stepIndex + 1]);
       return;
     }
-    setStep(STEP_ORDER[stepIndex + 1]);
+
+    const entryOutcomes = respondable.map((entry) => ({
+      tendingEntryId: entry.id,
+      followThroughStatus: followThrough[entry.id] ?? TendingFollowThroughStatus.NOT_SURE,
+      helpfulnessStatus: helpfulness[entry.id] ?? TendingHelpfulnessStatus.NOT_SURE,
+      blockerCategories: blockers[entry.id] ?? [],
+      whatHappened: whatHappened[entry.id]?.trim() || undefined,
+      helpedNeed: helpedNeed[entry.id]?.trim() || undefined,
+      stillWorthTrying: nextAction !== TendingNextAction.FULL_CLOSURE && nextAction !== TendingNextAction.NEW_PROCESS,
+    }));
+    const needOutcomes = reviewNeeds.map((need, index) => {
+      const key = need.id ?? `${need.label}-${index}`;
+      return {
+        needId: need.id ?? undefined,
+        needLabel: need.label,
+        sourceUserId: 'sourceUserId' in need ? need.sourceUserId ?? undefined : undefined,
+        resolutionStatus: needStatuses[key] ?? TendingNeedResolutionStatus.NOT_SURE,
+        note: needNotes[key]?.trim() || undefined,
+        nextAction,
+      };
+    });
+    const reminderEntry = respondable[0];
+    const now = new Date();
+    const reminderDate =
+      reminderPreset === 'CUSTOM' && customReminderAt.trim()
+        ? customReminderAt.trim()
+        : reminderPreset === 'TOMORROW'
+          ? addDays(now, 1).toISOString()
+          : reminderPreset === 'HALFWAY'
+            ? addDays(now, 14).toISOString()
+            : reminderPreset === 'ONE_WEEK'
+              ? addDays(now, 7).toISOString()
+              : reminderPreset === 'ONE_MONTH'
+                ? addMonths(now, 1).toISOString()
+                : addDays(now, 14).toISOString();
+    const reminders = [
+      privateReminder && reminderEntry
+        ? {
+            tendingEntryId: reminderEntry.id,
+            scope: TendingReminderScope.PRIVATE,
+            remindAt: reminderDate,
+            cadence: reminderCadence,
+            note: 'Private Tending reminder',
+          }
+        : null,
+      sharedReminder && reminderEntry?.scope === TendingEntryScope.SHARED
+        ? {
+            tendingEntryId: reminderEntry.id,
+            scope: TendingReminderScope.SHARED,
+            remindAt: reminderDate,
+            cadence: reminderCadence,
+            note: 'Shared Tending reminder',
+          }
+        : null,
+    ].filter(Boolean) as NonNullable<SubmitTendingCheckinRequest['reminders']>;
+    const adjustmentEntry = respondable[0];
+    const adjustments =
+      nextAction === TendingNextAction.ADJUST_COMMITMENT && adjustmentEntry
+        ? [{
+            tendingEntryId: adjustmentEntry.id,
+            privacyScope: adjustmentEntry.scope === TendingEntryScope.SHARED
+              ? TendingReminderScope.SHARED
+              : TendingReminderScope.PRIVATE,
+            revisedCommitmentText: adjustmentText.trim() || undefined,
+            revisedCadence: adjustmentCadence.trim() || undefined,
+            revisedSuccessCriteria: adjustmentSuccessCriteria.trim() || undefined,
+            reason: adjustmentReason.trim() || undefined,
+            blockerAddressed: blockers[adjustmentEntry.id] ?? [],
+          }]
+        : undefined;
+
+    onSubmit({
+      orientations: {
+        whatWorked: {
+          reflection: '',
+          perEntryNotes: Object.fromEntries(
+            Object.entries(whatHappened).filter(([, value]) => value.trim())
+          ),
+        },
+        whereMoreSupport: {
+          reflection: '',
+          perEntryNotes: Object.fromEntries(
+            Object.entries(helpedNeed).filter(([, value]) => value.trim())
+          ),
+        },
+        whatComesNext: { continueChoice: choice, nextAction, partialClosure, reminders },
+      },
+      entryOutcomes,
+      needOutcomes,
+      reminders,
+      adjustments,
+      includedBetweenPeriodNoteIds: includedNoteIds,
+      shareBetweenPeriodNoteIds: shareNoteIds.filter((noteId) => includedNoteIds.includes(noteId)),
+      nextAction,
+    });
   };
 
   const goBack = () => {
@@ -129,115 +307,324 @@ export function TendingCheckinScreen({
       onCancel?.();
       return;
     }
-    setStep(STEP_ORDER[stepIndex - 1]);
+    setStep(stepOrder[stepIndex - 1]);
   };
 
-  const renderEntryNotes = (
-    current: { reflection: string; perEntryNotes: Record<string, string> },
-    setCurrent: typeof setWhatWorked,
-    placeholder: string
+  const toggleBlocker = (entryId: string, blocker: TendingBlockerCategory) => {
+    const current = blockers[entryId] ?? [];
+    setBlockers({
+      ...blockers,
+      [entryId]: current.includes(blocker)
+        ? current.filter((item) => item !== blocker)
+        : [...current, blocker],
+    });
+  };
+
+  const toggleIncludedNote = (noteId: string) => {
+    const nextIncluded = includedNoteIds.includes(noteId)
+      ? includedNoteIds.filter((id) => id !== noteId)
+      : [...includedNoteIds, noteId];
+    setIncludedNoteIds(nextIncluded);
+    if (!nextIncluded.includes(noteId)) {
+      setShareNoteIds(shareNoteIds.filter((id) => id !== noteId));
+    }
+  };
+
+  const toggleShareNote = (noteId: string) => {
+    if (!includedNoteIds.includes(noteId)) return;
+    setShareNoteIds(
+      shareNoteIds.includes(noteId)
+        ? shareNoteIds.filter((id) => id !== noteId)
+        : [...shareNoteIds, noteId]
+    );
+  };
+
+  const renderChoice = <T extends string>(
+    id: string,
+    value: T,
+    label: string,
+    selected: boolean,
+    onPress: () => void
   ) => (
-    <>
-      {respondable.map((entry) => (
-        <View key={entry.id} style={styles.entryRow} testID={`tending-checkin-entry-${entry.id}`}>
-          <Text style={styles.entryTitle}>{entry.summary ?? 'Tending entry'}</Text>
-          <TextInput
-            value={current.perEntryNotes[entry.id] ?? ''}
-            onChangeText={(text) =>
-              setCurrent({
-                ...current,
-                perEntryNotes: { ...current.perEntryNotes, [entry.id]: text },
-              })
-            }
-            placeholder={placeholder}
-            placeholderTextColor={colors.textMuted}
-            style={styles.textInput}
-            multiline
-            accessibilityLabel={`Note for ${entry.summary ?? entry.id}`}
-          />
-        </View>
-      ))}
-      <Text style={styles.fieldLabel}>Overall reflection</Text>
-      <TextInput
-        value={current.reflection}
-        onChangeText={(text) => setCurrent({ ...current, reflection: text })}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textMuted}
-        style={[styles.textInput, styles.reflectionInput]}
-        multiline
-        accessibilityLabel="Overall reflection"
-        testID="tending-checkin-reflection"
-      />
-    </>
+    <TouchableOpacity
+      key={`${id}-${value}`}
+      style={[styles.toggleButton, selected && styles.toggleButtonSelected]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      testID={`${id}-${value}`}
+    >
+      <Text style={[styles.toggleText, selected && styles.toggleTextSelected]}>{label}</Text>
+    </TouchableOpacity>
   );
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} testID="tending-checkin-screen">
       <View style={styles.stepper}>
-        {STEP_ORDER.map((s, i) => (
-          <View
-            key={s}
-            style={[styles.stepDot, i === stepIndex && styles.stepDotActive]}
-            testID={`tending-checkin-step-${s}`}
-          />
+        {stepOrder.map((s, i) => (
+          <View key={s} style={[styles.stepDot, i === stepIndex && styles.stepDotActive]} testID={`tending-checkin-step-${s}`} />
         ))}
       </View>
-      <Text style={styles.title}>{PROMPTS[step].title}</Text>
-      <Text style={styles.subtitle}>{PROMPTS[step].subtitle}</Text>
+      <Text style={styles.title}>{STEP_COPY[activeStep].title}</Text>
+      <Text style={styles.subtitle}>{STEP_COPY[activeStep].subtitle}</Text>
 
-      {step === 'whatWorked' && renderEntryNotes(whatWorked, setWhatWorked, PROMPTS.whatWorked.placeholder)}
-      {step === 'whereMoreSupport' &&
-        renderEntryNotes(whereMore, setWhereMore, PROMPTS.whereMoreSupport.placeholder)}
+      {activeStep === 'privateNotes' && betweenPeriodNotes.map((note) => {
+        const included = includedNoteIds.includes(note.id);
+        const shared = shareNoteIds.includes(note.id);
+        return (
+          <View key={note.id} style={styles.entryRow} testID={`tending-between-note-choice-${note.id}`}>
+            <Text style={styles.entryTitle}>{note.content}</Text>
+            <View style={styles.toggleRow}>
+              {renderChoice(
+                `tending-include-note-${note.id}`,
+                'include',
+                'Factor in',
+                included,
+                () => toggleIncludedNote(note.id)
+              )}
+              {renderChoice(
+                `tending-share-note-${note.id}`,
+                'share',
+                'May mention',
+                included && shared,
+                () => toggleShareNote(note.id)
+              )}
+            </View>
+            <Text style={styles.helperText}>
+              {included
+                ? 'This can shape your check-in. It only crosses to your partner if you choose May mention.'
+                : 'This stays private and will not be used in this check-in.'}
+            </Text>
+          </View>
+        );
+      })}
 
-      {step === 'whatComesNext' && (
+      {activeStep === 'followThrough' && respondable.map((entry) => (
+        <View key={entry.id} style={styles.entryRow} testID={`tending-checkin-entry-${entry.id}`}>
+          <Text style={styles.entryTitle}>{entryLabel(entry)}</Text>
+          <View style={styles.toggleRow}>
+            {FOLLOW_THROUGH.map(([value, label]) =>
+              renderChoice(
+                `tending-follow-through-${entry.id}`,
+                value,
+                label,
+                (followThrough[entry.id] ?? TendingFollowThroughStatus.NOT_SURE) === value,
+                () => setFollowThrough({ ...followThrough, [entry.id]: value })
+              )
+            )}
+          </View>
+          <TextInput
+            value={whatHappened[entry.id] ?? ''}
+            onChangeText={(text) => setWhatHappened({ ...whatHappened, [entry.id]: text })}
+            placeholder="What actually happened?"
+            placeholderTextColor={colors.textMuted}
+            style={styles.textInput}
+            multiline
+            testID={`tending-what-happened-${entry.id}`}
+          />
+        </View>
+      ))}
+
+      {activeStep === 'helpfulness' && respondable.map((entry) => (
+        <View key={entry.id} style={styles.entryRow}>
+          <Text style={styles.entryTitle}>{entryLabel(entry)}</Text>
+          <View style={styles.toggleRow}>
+            {HELPFULNESS.map(([value, label]) =>
+              renderChoice(
+                `tending-helpfulness-${entry.id}`,
+                value,
+                label,
+                (helpfulness[entry.id] ?? TendingHelpfulnessStatus.NOT_SURE) === value,
+                () => setHelpfulness({ ...helpfulness, [entry.id]: value })
+              )
+            )}
+          </View>
+          <View style={styles.toggleRow}>
+            {BLOCKERS.map(([value, label]) =>
+              renderChoice(
+                `tending-blocker-${entry.id}`,
+                value,
+                label,
+                (blockers[entry.id] ?? []).includes(value),
+                () => toggleBlocker(entry.id, value)
+              )
+            )}
+          </View>
+          <TextInput
+            value={helpedNeed[entry.id] ?? ''}
+            onChangeText={(text) => setHelpedNeed({ ...helpedNeed, [entry.id]: text })}
+            placeholder="Did it help the need it was meant to serve?"
+            placeholderTextColor={colors.textMuted}
+            style={styles.textInput}
+            multiline
+            testID={`tending-helped-need-${entry.id}`}
+          />
+        </View>
+      ))}
+
+      {activeStep === 'needsReview' && reviewNeeds.map((need, index) => {
+        const key = need.id ?? `${need.label}-${index}`;
+        return (
+          <View key={key} style={styles.entryRow} testID={`tending-need-${key}`}>
+            <Text style={styles.entryTitle}>{need.label}</Text>
+            <View style={styles.toggleRow}>
+              {NEED_STATUSES.map(([value, label]) =>
+                renderChoice(
+                  `tending-need-resolution-${key}`,
+                  value,
+                  label,
+                  (needStatuses[key] ?? TendingNeedResolutionStatus.NOT_SURE) === value,
+                  () => setNeedStatuses({ ...needStatuses, [key]: value })
+                )
+              )}
+            </View>
+            <TextInput
+              value={needNotes[key] ?? ''}
+              onChangeText={(text) => setNeedNotes({ ...needNotes, [key]: text })}
+              placeholder="What changed or remains open?"
+              placeholderTextColor={colors.textMuted}
+              style={styles.textInput}
+              multiline
+              testID={`tending-need-note-${key}`}
+            />
+          </View>
+        );
+      })}
+
+      {activeStep === 'whatComesNext' && (
         <View>
-          {CHOICE_ORDER.map((c) => {
-            const selected = c === choice;
+          {NEXT_CHOICES.map(([continueChoice, action, label]) => {
+            const selected = choice === continueChoice && nextAction === action;
             return (
               <TouchableOpacity
-                key={c}
+                key={`${continueChoice}-${action}`}
                 style={[styles.choiceCard, selected && styles.choiceCardSelected]}
-                onPress={() => setChoice(c)}
+                onPress={() => {
+                  setChoice(continueChoice);
+                  setNextAction(action);
+                }}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
-                testID={`tending-checkin-choice-${c}`}
+                testID={`tending-checkin-choice-${action}`}
               >
-                <Text style={[styles.choiceLabel, selected && styles.choiceLabelSelected]}>
-                  {CHOICE_LABELS[c].label}
-                </Text>
-                <Text style={styles.choiceSubtitle}>{CHOICE_LABELS[c].subtitle}</Text>
+                <Text style={[styles.choiceLabel, selected && styles.choiceLabelSelected]}>{label}</Text>
               </TouchableOpacity>
             );
           })}
 
+          {(nextAction === TendingNextAction.EXTEND || nextAction === TendingNextAction.ADJUST_COMMITMENT) && (
+            <View style={styles.reminderBlock} testID="tending-reminder-controls">
+              <Text style={styles.fieldLabel}>Reminder</Text>
+              <View style={styles.toggleRow}>
+                {REMINDER_PRESETS.map(([value, label]) =>
+                  renderChoice(
+                    'tending-reminder-preset',
+                    value,
+                    label,
+                    reminderPreset === value,
+                    () => setReminderPreset(value)
+                  )
+                )}
+              </View>
+              {reminderPreset === 'CUSTOM' && (
+                <TextInput
+                  value={customReminderAt}
+                  onChangeText={setCustomReminderAt}
+                  placeholder="YYYY-MM-DDTHH:mm:ss.sssZ"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.textInput}
+                  testID="tending-reminder-custom-at"
+                />
+              )}
+              <View style={styles.toggleRow}>
+                {REMINDER_CADENCES.map(([value, label]) =>
+                  renderChoice(
+                    'tending-reminder-cadence',
+                    value,
+                    label,
+                    reminderCadence === value,
+                    () => setReminderCadence(value)
+                  )
+                )}
+              </View>
+              <TouchableOpacity
+                style={[styles.toggleButton, privateReminder && styles.toggleButtonSelected]}
+                onPress={() => setPrivateReminder(!privateReminder)}
+                testID="tending-private-reminder"
+              >
+                <Text style={[styles.toggleText, privateReminder && styles.toggleTextSelected]}>Private reminder</Text>
+              </TouchableOpacity>
+              {respondable.some((entry) => entry.scope === TendingEntryScope.SHARED) && (
+                <TouchableOpacity
+                  style={[styles.toggleButton, sharedReminder && styles.toggleButtonSelected]}
+                  onPress={() => setSharedReminder(!sharedReminder)}
+                  testID="tending-shared-reminder"
+                >
+                  <Text style={[styles.toggleText, sharedReminder && styles.toggleTextSelected]}>Shared reminder</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {nextAction === TendingNextAction.ADJUST_COMMITMENT && (
+            <View style={styles.adjustmentBlock} testID="tending-adjustment-controls">
+              <Text style={styles.fieldLabel}>Adjustment</Text>
+              <TextInput
+                value={adjustmentText}
+                onChangeText={setAdjustmentText}
+                placeholder="What would make this commitment more doable?"
+                placeholderTextColor={colors.textMuted}
+                style={styles.textInput}
+                multiline
+                testID="tending-adjustment-text"
+              />
+              <TextInput
+                value={adjustmentCadence}
+                onChangeText={setAdjustmentCadence}
+                placeholder="Cadence or frequency"
+                placeholderTextColor={colors.textMuted}
+                style={styles.textInput}
+                testID="tending-adjustment-cadence"
+              />
+              <TextInput
+                value={adjustmentSuccessCriteria}
+                onChangeText={setAdjustmentSuccessCriteria}
+                placeholder="How will you know it helped?"
+                placeholderTextColor={colors.textMuted}
+                style={styles.textInput}
+                multiline
+                testID="tending-adjustment-success"
+              />
+              <TextInput
+                value={adjustmentReason}
+                onChangeText={setAdjustmentReason}
+                placeholder="What blocker does this address?"
+                placeholderTextColor={colors.textMuted}
+                style={styles.textInput}
+                multiline
+                testID="tending-adjustment-reason"
+              />
+            </View>
+          )}
+
           {choice === ContinueChoice.PARTIAL_CLOSURE && (
             <View style={styles.partialClosureBlock} testID="tending-checkin-partial-closure">
-              <Text style={styles.fieldLabel}>For each agreement</Text>
+              <Text style={styles.fieldLabel}>For each commitment</Text>
               {respondable.map((entry) => {
                 const value = partialClosure[entry.id] ?? PartialClosureResolution.CONTINUING;
                 return (
                   <View key={entry.id} style={styles.partialClosureRow}>
-                    <Text style={styles.entryTitle}>{entry.summary ?? 'Tending entry'}</Text>
-                    <View style={styles.partialClosureToggleRow}>
-                      {(
-                        [PartialClosureResolution.RESOLVED, PartialClosureResolution.CONTINUING] as const
-                      ).map((r) => {
-                        const sel = value === r;
-                        return (
-                          <TouchableOpacity
-                            key={r}
-                            style={[styles.toggleButton, sel && styles.toggleButtonSelected]}
-                            onPress={() => setPartialClosure({ ...partialClosure, [entry.id]: r })}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: sel }}
-                            testID={`tending-checkin-resolution-${entry.id}-${r}`}
-                          >
-                            <Text style={[styles.toggleText, sel && styles.toggleTextSelected]}>
-                              {r === PartialClosureResolution.RESOLVED ? 'Resolved' : 'Continuing'}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
+                    <Text style={styles.entryTitle}>{entryLabel(entry)}</Text>
+                    <View style={styles.toggleRow}>
+                      {([PartialClosureResolution.RESOLVED, PartialClosureResolution.CONTINUING] as const).map((r) =>
+                        renderChoice(
+                          `tending-checkin-resolution-${entry.id}`,
+                          r,
+                          r === PartialClosureResolution.RESOLVED ? 'Resolved' : 'Continuing',
+                          value === r,
+                          () => setPartialClosure({ ...partialClosure, [entry.id]: r })
+                        )
+                      )}
                     </View>
                   </View>
                 );
@@ -248,12 +635,7 @@ export function TendingCheckinScreen({
       )}
 
       <View style={styles.navRow}>
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={goBack}
-          accessibilityRole="button"
-          testID="tending-checkin-back"
-        >
+        <TouchableOpacity style={styles.secondaryButton} onPress={goBack} accessibilityRole="button" testID="tending-checkin-back">
           <Text style={styles.secondaryButtonText}>{stepIndex === 0 ? 'Cancel' : 'Back'}</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -263,9 +645,7 @@ export function TendingCheckinScreen({
           accessibilityRole="button"
           testID={isLast ? 'tending-checkin-submit' : 'tending-checkin-next'}
         >
-          <Text style={styles.primaryButtonText}>
-            {isLast ? (isSubmitting ? 'Submitting…' : 'Submit') : 'Next'}
-          </Text>
+          <Text style={styles.primaryButtonText}>{isLast ? (isSubmitting ? 'Submitting...' : 'Submit') : 'Next'}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -276,20 +656,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgPrimary },
   content: { padding: 16, gap: 12 },
   stepper: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  stepDot: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-  },
+  stepDot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colors.border },
   stepDotActive: { backgroundColor: colors.accent },
   title: { fontSize: 20, fontWeight: '700', color: colors.textPrimary },
   subtitle: { fontSize: 14, color: colors.textSecondary, lineHeight: 20, marginBottom: 8 },
   fieldLabel: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginTop: 12 },
-  entryRow: { gap: 6 },
-  entryTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+  helperText: { fontSize: 12, color: colors.textMuted, lineHeight: 18 },
+  entryRow: { gap: 8, marginBottom: 14 },
+  entryTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
   textInput: {
-    minHeight: 48,
+    minHeight: 54,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
@@ -299,9 +675,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlignVertical: 'top',
   },
-  reflectionInput: { minHeight: 72 },
+  toggleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  toggleButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bgSecondary,
+  },
+  toggleButtonSelected: { borderColor: colors.accent, backgroundColor: colors.bgTertiary },
+  toggleText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
+  toggleTextSelected: { color: colors.accent },
   choiceCard: {
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 12,
@@ -311,29 +698,12 @@ const styles = StyleSheet.create({
   choiceCardSelected: { borderColor: colors.accent, backgroundColor: colors.bgTertiary },
   choiceLabel: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
   choiceLabelSelected: { color: colors.accent },
-  choiceSubtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+  reminderBlock: { marginTop: 16, gap: 8 },
+  adjustmentBlock: { marginTop: 16, gap: 8 },
   partialClosureBlock: { marginTop: 16, gap: 12 },
   partialClosureRow: { gap: 6 },
-  partialClosureToggleRow: { flexDirection: 'row', gap: 8 },
-  toggleButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bgSecondary,
-  },
-  toggleButtonSelected: { borderColor: colors.accent, backgroundColor: colors.bgTertiary },
-  toggleText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
-  toggleTextSelected: { color: colors.accent },
   navRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 16 },
-  primaryButton: {
-    flex: 1,
-    borderRadius: 8,
-    backgroundColor: colors.accent,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
+  primaryButton: { flex: 1, borderRadius: 8, backgroundColor: colors.accent, paddingVertical: 12, alignItems: 'center' },
   primaryButtonText: { color: colors.textOnAccent, fontSize: 14, fontWeight: '700' },
   secondaryButton: {
     flex: 1,

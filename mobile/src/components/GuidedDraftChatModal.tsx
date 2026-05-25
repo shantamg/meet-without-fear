@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Modal,
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
@@ -117,53 +116,51 @@ export function GuidedDraftChatModal({
     testID,
   ]);
 
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={onClose}
-      testID={testID}
-    >
-      <View style={styles.modalPage}>
-        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-          <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
-            <Text style={styles.headerTitle}>{title}</Text>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={onClose}
-              testID={`${testID}-close`}
-            >
-              <X color={palette.text} size={24} />
-            </TouchableOpacity>
-          </View>
+  if (!visible) return null;
 
-          {anchorHeader ? (
-            <View style={styles.anchorHeader} testID={`${testID}-anchor`}>
-              {anchorHeader}
-            </View>
-          ) : null}
-          <ChatInterface
-            sessionId={sessionKey}
-            messages={messages}
-            onSendMessage={onSendMessage}
-            isLoading={isLoading}
-            isInputDisabled={isFinalizing}
-            partnerName={partnerName}
-            renderMessageExtra={renderMessageExtra}
-            emptyStateTitle={emptyStateTitle}
-            emptyStateMessage={emptyStateMessage}
-            keyboardVerticalOffset={0}
-          />
-        </SafeAreaView>
-      </View>
-    </Modal>
+  return (
+    <View style={styles.modalPage} testID={testID}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
+          <Text style={styles.headerTitle}>{title}</Text>
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={onClose}
+            testID={`${testID}-close`}
+          >
+            <X color={palette.text} size={24} />
+          </TouchableOpacity>
+        </View>
+
+        {anchorHeader ? (
+          <View style={styles.anchorHeader} testID={`${testID}-anchor`}>
+            {anchorHeader}
+          </View>
+        ) : null}
+        <ChatInterface
+          sessionId={sessionKey}
+          messages={messages}
+          onSendMessage={onSendMessage}
+          isLoading={isLoading}
+          isInputDisabled={isFinalizing}
+          partnerName={partnerName}
+          renderMessageExtra={renderMessageExtra}
+          emptyStateTitle={emptyStateTitle}
+          emptyStateMessage={emptyStateMessage}
+          keyboardVerticalOffset={0}
+        />
+      </SafeAreaView>
+    </View>
   );
 }
 
 const makeStyles = (palette: ReturnType<typeof useAppAppearance>['palette']) => StyleSheet.create({
   modalPage: {
+    ...StyleSheet.absoluteFillObject,
     ...modalPageStyle,
+    backgroundColor: palette.bg,
+    zIndex: 100,
+    elevation: 100,
   },
   container: {
     flex: 1,

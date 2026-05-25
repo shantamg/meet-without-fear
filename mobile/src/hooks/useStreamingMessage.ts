@@ -16,6 +16,7 @@ import {
   GetMessagesResponse,
   Stage,
   CapturedNeedInput,
+  IdentifiedNeedDTO,
 } from '@meet-without-fear/shared';
 import { messageKeys, sessionKeys, stageKeys, timelineKeys } from './queryKeys';
 import { getPersistedMessageRefreshQueryKeys } from '../utils/realtimeInvalidation';
@@ -30,6 +31,7 @@ interface UserMessageEvent {
   id: string;
   content: string;
   timestamp: string;
+  refiningNeedId?: string | null;
 }
 
 interface ChunkEvent {
@@ -55,8 +57,29 @@ export interface StreamMetadata {
   offerReadyToShare?: boolean;
   proposedEmpathyStatement?: string | null;
   proposedStrategies?: string[];
+  stage4Proposals?: Array<Record<string, unknown>>;
   proposedNeeds?: CapturedNeedInput[];
+  proposedNeed?: CapturedNeedInput;
+  needAction?: {
+    type: 'refine' | 'delete' | 'lock';
+    needId?: string;
+    supersedes?: string;
+  };
+  needParseError?: string;
   needsCaptured?: boolean;
+  stage4WalkthroughAction?: {
+    action: 'COVERED' | 'SKIP' | 'NONE';
+    needId?: string;
+    reason?: string;
+  };
+  stage4Capture?: {
+    appliedOperationCount?: number;
+    skippedOperationCount?: number;
+    selectionCaptured?: boolean;
+    closureSignalCaptured?: boolean;
+    confidence?: number;
+    autoClosed?: boolean;
+  };
   topicFrame?: string | null;
   analysis?: string;
 }
@@ -73,6 +96,7 @@ export interface SendStreamingMessageParams {
   sessionId: string;
   content: string;
   currentStage?: Stage;
+  refiningNeedId?: string | null;
 }
 
 /** Options for the streaming hook */
@@ -164,7 +188,9 @@ export function useStreamingMessage(
 
   // Ref for 15-second fallback timer to handle stuck connections
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const FALLBACK_TIMEOUT = 15000; // 15 seconds
+  const hardTimeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const SOFT_RECOVERY_TIMEOUT = 15000; // 15 seconds
+  const HARD_STREAM_TIMEOUT = 90000; // 90 seconds
   const reconciliationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
@@ -431,10 +457,14 @@ export function useStreamingMessage(
         queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       }
       if (stage === Stage.NEED_MAPPING) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      }
+      if (stage === Stage.STRATEGIC_REPAIR) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.stage4(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       }
     },
     [queryClient]
@@ -479,8 +509,12 @@ export function useStreamingMessage(
         queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       }
       if (stage === Stage.NEED_MAPPING) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
+      if (stage === Stage.STRATEGIC_REPAIR) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.stage4(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
@@ -544,9 +578,19 @@ export function useStreamingMessage(
       }
 
       if (metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      }
+
+      if (
+        metadata.stage4Proposals ||
+        metadata.stage4WalkthroughAction ||
+        metadata.stage4Capture
+      ) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.stage4(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
       // NOTE: We intentionally avoid broad invalidation here.
@@ -571,7 +615,7 @@ export function useStreamingMessage(
    */
   const sendMessage = useCallback(
     async (params: SendStreamingMessageParams) => {
-      const { sessionId, content, currentStage } = params;
+      const { sessionId, content, currentStage, refiningNeedId } = params;
 
       // Store params for retry
       lastParamsRef.current = params;
@@ -601,6 +645,7 @@ export function useStreamingMessage(
         content,
         stage: currentStage ?? Stage.ONBOARDING,
         timestamp: new Date().toISOString(),
+        refiningNeedId: refiningNeedId ?? null,
         status: 'sending',
       };
 
@@ -635,29 +680,45 @@ export function useStreamingMessage(
             'Content-Type': 'application/json',
             ...authHeaders,
           },
-          body: JSON.stringify({ content }),
+          body: JSON.stringify({ content, refiningNeedId: refiningNeedId ?? undefined }),
           pollingInterval: 0, // Disable polling, use SSE
         });
 
         eventSourceRef.current = es;
 
-        // Start 15-second fallback timer for stuck connections
-        // If streaming doesn't complete in time, poll for latest state
+        // Start a soft recovery timer for slow streams. Some model calls take
+        // longer than 15s before the first visible token; do not close the SSE
+        // connection here or the final response can be lost after it persists.
         if (fallbackTimerRef.current) {
           clearTimeout(fallbackTimerRef.current);
         }
         fallbackTimerRef.current = setTimeout(() => {
-          // Only trigger if EventSource is still active (connection still open)
-          // The timer is cleared on complete/error, so reaching here means we're stuck
           if (eventSourceRef.current) {
-            console.warn('[useStreamingMessage] 15s timeout - recovering persisted messages');
-            // Close the stuck connection
+            console.warn('[useStreamingMessage] 15s soft recovery - refetching persisted messages while stream remains open');
+            fallbackTimerRef.current = null;
+            reconcilePersistedMessages(sessionId);
+            queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+            if (currentStage === Stage.PERSPECTIVE_STRETCH) {
+              queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+            }
+            if (currentStage === Stage.NEED_MAPPING) {
+              queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+            }
+          }
+        }, SOFT_RECOVERY_TIMEOUT);
+
+        if (hardTimeoutTimerRef.current) {
+          clearTimeout(hardTimeoutTimerRef.current);
+        }
+        hardTimeoutTimerRef.current = setTimeout(() => {
+          if (eventSourceRef.current) {
+            console.warn('[useStreamingMessage] 90s hard timeout - closing stream and recovering persisted messages');
             eventSourceRef.current.close();
             eventSourceRef.current = null;
-            fallbackTimerRef.current = null;
+            hardTimeoutTimerRef.current = null;
             recoverTimedOutStream(sessionId, currentStage);
           }
-        }, FALLBACK_TIMEOUT);
+        }, HARD_STREAM_TIMEOUT);
 
         // Create placeholder AI message once streaming starts
         let placeholderCreated = false;
@@ -673,6 +734,7 @@ export function useStreamingMessage(
             content: '',
             stage: currentStage ?? Stage.ONBOARDING,
             timestamp: new Date().toISOString(),
+            refiningNeedId: refiningNeedId ?? null,
             status: 'streaming',
           };
           addMessageToCache(sessionId, placeholderAIMessage, currentStage);
@@ -691,6 +753,7 @@ export function useStreamingMessage(
               updateMessageInCache(sessionId, optimisticUserIdRef.current, {
                 timestamp: data.timestamp,
                 content: data.content, // In case server modified content
+                refiningNeedId: data.refiningNeedId ?? null,
               }, currentStage);
               optimisticUserIdRef.current = ''; // Clear after update
             } else {
@@ -703,6 +766,7 @@ export function useStreamingMessage(
                 content: data.content,
                 stage: currentStage ?? Stage.ONBOARDING,
                 timestamp: data.timestamp,
+                refiningNeedId: data.refiningNeedId ?? null,
               };
               addMessageToCache(sessionId, realUserMessage, currentStage);
             }
@@ -738,6 +802,7 @@ export function useStreamingMessage(
                 content: accumulatedTextRef.current,
                 stage: currentStage ?? Stage.ONBOARDING,
                 timestamp: new Date().toISOString(),
+                refiningNeedId: refiningNeedId ?? null,
                 status: 'streaming',
               };
               addMessageToCache(sessionId, updatedAIMessage, currentStage);
@@ -809,6 +874,7 @@ export function useStreamingMessage(
               content: accumulatedTextRef.current,
               stage: currentStage ?? Stage.ONBOARDING,
               timestamp: new Date().toISOString(),
+              refiningNeedId: refiningNeedId ?? null,
               status: 'sent',
             };
             addMessageToCache(sessionId, finalAIMessage, currentStage);
@@ -847,6 +913,10 @@ export function useStreamingMessage(
           if (fallbackTimerRef.current) {
             clearTimeout(fallbackTimerRef.current);
             fallbackTimerRef.current = null;
+          }
+          if (hardTimeoutTimerRef.current) {
+            clearTimeout(hardTimeoutTimerRef.current);
+            hardTimeoutTimerRef.current = null;
           }
           if (pendingUpdateRef.current) {
             clearTimeout(pendingUpdateRef.current);
@@ -888,6 +958,7 @@ export function useStreamingMessage(
                   content: accumulatedTextRef.current,
                   stage: currentStage ?? Stage.ONBOARDING,
                   timestamp: new Date().toISOString(),
+                  refiningNeedId: refiningNeedId ?? null,
                   status: 'sent',
                 };
                 addMessageToCache(sessionId, finalAIMessage, currentStage);
@@ -922,6 +993,10 @@ export function useStreamingMessage(
             clearTimeout(fallbackTimerRef.current);
             fallbackTimerRef.current = null;
           }
+          if (hardTimeoutTimerRef.current) {
+            clearTimeout(hardTimeoutTimerRef.current);
+            hardTimeoutTimerRef.current = null;
+          }
           if (reconciliationTimerRef.current) {
             clearTimeout(reconciliationTimerRef.current);
             reconciliationTimerRef.current = null;
@@ -953,6 +1028,10 @@ export function useStreamingMessage(
           clearTimeout(reconciliationTimerRef.current);
           reconciliationTimerRef.current = null;
         }
+        if (hardTimeoutTimerRef.current) {
+          clearTimeout(hardTimeoutTimerRef.current);
+          hardTimeoutTimerRef.current = null;
+        }
         console.error('[useStreamingMessage] Error:', error);
         cleanupFailedStream(sessionId, currentStage);
         setErrorMessage((error as Error).message || 'Failed to send message');
@@ -971,6 +1050,10 @@ export function useStreamingMessage(
     if (fallbackTimerRef.current) {
       clearTimeout(fallbackTimerRef.current);
       fallbackTimerRef.current = null;
+    }
+    if (hardTimeoutTimerRef.current) {
+      clearTimeout(hardTimeoutTimerRef.current);
+      hardTimeoutTimerRef.current = null;
     }
     if (reconciliationTimerRef.current) {
       clearTimeout(reconciliationTimerRef.current);

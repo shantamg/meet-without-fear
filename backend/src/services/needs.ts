@@ -9,7 +9,7 @@
 
 import { resetBedrockClient } from '../lib/bedrock';
 import { prisma } from '../lib/prisma';
-import { NeedCategory, type CapturedNeedInput } from '@meet-without-fear/shared';
+import { NeedCategory, type CapturedNeedInput, type IdentifiedNeedDTO } from '@meet-without-fear/shared';
 import { cleanVisibleAIText } from '../utils/visible-text';
 
 // ============================================================================
@@ -31,12 +31,90 @@ export interface IdentifiedNeedRecord {
   evidence: string[];
   aiConfidence: number;
   confirmed: boolean;
+  lockedAt?: Date | null;
+  deletedAt?: Date | null;
+  supersededByNeedId?: string | null;
   createdAt: Date;
+  needsReframing?: boolean;
+  reframingWarning?: string;
 }
 
 export interface CaptureProposedNeedsResult {
   needs: IdentifiedNeedRecord[];
   capturedAt: Date;
+}
+
+export interface CaptureSingleNeedResult {
+  need: IdentifiedNeedDTO;
+  capturedAt: Date;
+}
+
+export interface UniversalNeedValidationResult {
+  ok: boolean;
+  warning?: string;
+}
+
+const OTHER_PERSON_PATTERNS = [
+  /\bi need\s+(him|her|them|you|my partner)\s+to\b/i,
+  /\bi need\s+(him|her|them|you|my partner)\s+not\s+to\b/i,
+  /\bi need\s+(him|her|them|you|my partner)\s+to\s+stop\b/i,
+  /\bi need\s+.*\b(stop|quit|change|apologize|admit|listen|understand)\b/i,
+  /\bso (he|she|they|you) (will|would|can|could|won't|don't|doesn't)\b/i,
+];
+
+export function validateNeedIsUniversal(need: string): UniversalNeedValidationResult {
+  const text = cleanVisibleAIText(need).trim();
+  if (!text) return { ok: false, warning: 'Need text is empty.' };
+
+  if (OTHER_PERSON_PATTERNS.some((pattern) => pattern.test(text))) {
+    return {
+      ok: false,
+      warning:
+        'This may still be framed around what the other person should do. Reword it toward what matters to you.',
+    };
+  }
+
+  return { ok: true };
+}
+
+export function withNeedReframingWarning<T extends { need: string }>(
+  need: T
+): T & { needsReframing: boolean; reframingWarning?: string } {
+  const validation = validateNeedIsUniversal(need.need);
+  return {
+    ...need,
+    needsReframing: !validation.ok,
+    reframingWarning: validation.warning,
+  };
+}
+
+export function toIdentifiedNeedDTO(need: IdentifiedNeedRecord): IdentifiedNeedDTO {
+  const warned = withNeedReframingWarning(need);
+  const lockedAt = need.lockedAt ?? null;
+  const deletedAt = need.deletedAt ?? null;
+  const supersededByNeedId = need.supersededByNeedId ?? null;
+  return {
+    id: need.id,
+    need: need.need,
+    category: need.category,
+    description: need.need,
+    evidence: need.evidence,
+    confirmed: need.confirmed,
+    lockedAt: lockedAt?.toISOString() ?? null,
+    deletedAt: deletedAt?.toISOString() ?? null,
+    supersededByNeedId,
+    status: deletedAt
+      ? 'deleted'
+      : supersededByNeedId
+        ? 'superseded'
+        : lockedAt
+          ? 'locked'
+          : 'draft',
+    aiConfidence: need.aiConfidence,
+    createdAt: need.createdAt.toISOString(),
+    needsReframing: warned.needsReframing,
+    reframingWarning: warned.reframingWarning,
+  };
 }
 
 async function getOrCreateUserVessel(
@@ -122,10 +200,72 @@ export async function captureProposedNeedsForUser(
   });
 
   return {
-    needs: capturedNeeds.map((need) => ({
-      ...need,
-      category: need.category as unknown as NeedCategory,
-    })),
+    needs: capturedNeeds.map((need) =>
+      withNeedReframingWarning({
+        ...need,
+        category: need.category as unknown as NeedCategory,
+      })
+    ),
+    capturedAt,
+  };
+}
+
+export async function captureSingleNeedForUser(
+  sessionId: string,
+  userId: string,
+  item: CapturedNeedInput
+): Promise<CaptureSingleNeedResult> {
+  const vessel = await getOrCreateUserVessel(sessionId, userId);
+  const capturedAt = new Date();
+
+  const evidence = Array.isArray(item.evidence)
+    ? item.evidence.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+
+  const created = await prisma.$transaction(async (tx) => {
+    const need = await tx.identifiedNeed.create({
+      data: {
+        vesselId: vessel.id,
+        need: cleanVisibleAIText(item.description || item.need),
+        category: item.category,
+        evidence: evidence.map((entry) => cleanVisibleAIText(entry)).filter(Boolean),
+        aiConfidence: 0.85,
+        confirmed: false,
+      },
+    });
+
+    const progress = await tx.stageProgress.findUnique({
+      where: {
+        sessionId_userId_stage: {
+          sessionId,
+          userId,
+          stage: 3,
+        },
+      },
+    });
+
+    if (progress) {
+      const gates = (progress.gatesSatisfied as Record<string, unknown> | null) ?? {};
+      await tx.stageProgress.update({
+        where: { id: progress.id },
+        data: {
+          gatesSatisfied: {
+            ...gates,
+            needsCaptured: true,
+            needsCapturedAt: capturedAt.toISOString(),
+          },
+        },
+      });
+    }
+
+    return need;
+  });
+
+  return {
+    need: toIdentifiedNeedDTO({
+      ...created,
+      category: created.category as unknown as NeedCategory,
+    }),
     capturedAt,
   };
 }

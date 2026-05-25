@@ -222,7 +222,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     bannerText: (p) => `${p} is deciding what they are ready to share.`,
   },
 
-  // Stage 3: Waiting for partner to validate the needs reveal
+  // Stage 3 legacy fallback: waiting for partner to continue from the needs reveal
   'needs-validation-pending': {
     showBanner: true,
     hideInput: true,
@@ -230,10 +230,10 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: false,
-    bannerText: (p) => `${p} is validating the needs reveal.`,
+    bannerText: (p) => `${p} is taking in the needs reveal.`,
   },
 
-  // Stage 3: User validated the side-by-side needs reveal; partner still needs to validate.
+  // Stage 3 legacy fallback: user continued from the reveal; partner still needs to continue.
   'partner-validating-needs': {
     showBanner: true,
     hideInput: true,

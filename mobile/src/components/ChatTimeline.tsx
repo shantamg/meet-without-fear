@@ -66,7 +66,7 @@ export interface ChatTimelineProps {
   compactEmotionSlider?: boolean;
   /** Render guided action content after the input so chat remains attached to the transcript. */
   renderAboveInput?: () => React.ReactNode;
-  /** Keyboard vertical offset for iOS */
+  /** Keyboard vertical offset for iOS. Defaults to 0; callers with overlay chrome should pass a measured offset. */
   keyboardVerticalOffset?: number;
   /** Custom empty state element (e.g., onboarding compact) */
   customEmptyState?: React.ReactNode;
@@ -95,7 +95,7 @@ export function ChatTimeline({
   onHighEmotion,
   compactEmotionSlider = false,
   renderAboveInput,
-  keyboardVerticalOffset = 100,
+  keyboardVerticalOffset = 0,
   customEmptyState,
   onTypewriterComplete,
   onTypewriterStateChange,

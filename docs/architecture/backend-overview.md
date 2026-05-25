@@ -3,7 +3,7 @@ title: Architecture
 sidebar_position: 2
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-05-09
+updated: 2026-05-18
 status: living
 ---
 # Architecture
@@ -55,7 +55,7 @@ status: living
 4. User A drafts the invitation in Stage 0; the backend saves the draft from stream metadata.
 5. Mobile calls `/sessions/{id}/topic-frame/generate` and `/sessions/{id}/topic-frame/confirm`; the backend stores `Session.topicFrame` and `topicFrameConfirmedAt`.
 6. `/sessions/{id}/invitation/confirm` requires the finalized topic frame before the session moves `CREATED → INVITED`.
-7. User B receives invite link, sees the topic frame in `GET /invitations/{id}`, then accepts via `POST /invitations/{id}/accept`.
+7. User B receives invite link, sees limited invitation info (name, inviter name, session status) via `GET /invitations/{id}`, then accepts via `POST /invitations/{id}/accept`.
 8. Backend creates Invitation acceptance record; publishes `session.joined` event.
 9. Both users' `sessionKeys.state` cache updates; chat UI becomes available.
 
@@ -204,8 +204,9 @@ status: living
 - Mobile: Clerk Expo SDK manages tokens; `useAuth()` hook provides `token` for API calls; E2E mode sends the `x-e2e-user-id` / `x-e2e-user-email` headers described above instead of a Clerk token.
 
 **Rate Limiting:**
-- Implemented via `backend/src/middleware/rate-limit.ts` with three tiers:
+- Implemented via `backend/src/middleware/rate-limit.ts` with four tiers:
   - `streamingRateLimit`: 10 req/min (LLM-backed streaming endpoints)
+  - `invitationLookupRateLimit`: 10 req/min per IP (public invitation lookup — unauthenticated)
   - `empathyRateLimit`: 20 req/min (reconciler endpoints)
   - `authRateLimit`: 30 req/min (auth token endpoints)
 - Global fallback: 100 req/min; skipped during E2E tests (non-production only)

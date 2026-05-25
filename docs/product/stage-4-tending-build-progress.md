@@ -1,16 +1,656 @@
 # Stage 4/Tending Build Progress
 
-Last updated: 2026-05-06
-Worktree: `/Users/shantam/Software/meet-without-fear-stage4-tending`
-Branch: `codex/stage4-tending-focus`
+Last updated: 2026-05-22
+Worktree: `/Users/shantam/Software/meet-without-fear-full-tending`
+Branch: `codex/full-tending-flow`
+
+## Full Tending Flow Progress
+
+### 2026-05-22 — Final Validation And PR Update
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Ran the required final validation sweep from `docs/product/tending-finish-goal-prompt.md`.
+  - Updated PR #640 body with current summary, verification commands/counts, and remaining risk notes.
+  - Kept PR #640 as draft because it remains stacked on `codex/stages-3-4-rework`.
+- Commands run:
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/mwf npx prisma@6.12.0 validate --schema backend/prisma/schema.prisma`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace mobile`
+  - `npm run check --workspace e2e`
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts src/routes/__tests__/stage4.test.ts --runInBand`
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/stage-prompts.test.ts src/services/__tests__/stage4-prompts.test.ts --runInBand`
+  - `npm test --workspace backend -- --runTestsByPath src/routes/__tests__/messages.test.ts --runInBand`
+  - `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/TendingPanel.test.tsx src/screens/__tests__/TendingCheckinScreen.test.tsx src/hooks/__tests__/useStages.test.ts --runInBand --forceExit`
+  - `python3 scripts/test_mwf_moment_eval.py`
+  - `python3 scripts/mwf_moment_eval.py run --moment stage-4-tending-structured-checkin --max-iterations 1 --mock-response "What happened first matters. If the commitment did not happen, that is information for adjusting or reopening strategy work, not proof that either person failed."`
+  - `npm --workspace e2e run e2e -- --project=two-browser-stage-4-redesign`
+  - `gh pr view 640 --repo shantamg/meet-without-fear --json title,body,url,headRefName,baseRefName,isDraft`
+  - `gh pr edit 640 --repo shantamg/meet-without-fear --body-file -`
+- Test results:
+  - Prisma schema validation passed.
+  - Shared, backend, mobile, and e2e typechecks passed.
+  - Backend Tending + Stage 4 route suites passed: 87 tests.
+  - Backend prompt suites passed: 140 tests.
+  - Backend messages route suite passed: 19 tests.
+  - Mobile Tending + hooks suites passed: 58 tests.
+  - Moment evaluator Python unit suite passed: 76 tests; existing datetime deprecation warnings were emitted.
+  - Mock moment run completed: `eval/runs/moment-stage-4-tending-structured-checkin-20260522-174742-iter-01`.
+  - Stage 4 redesign Playwright target passed: 7 tests.
+- Known blockers: none.
+- Remaining risk notes:
+  - No separate manual browser screenshots were committed; browser coverage is via Playwright target and its report/traces.
+  - PR remains draft pending stacked review context.
+
+### 2026-05-22 — Chunk 8 Tending History Read Model
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `shared/src/dto/strategy.ts`
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/controllers/tending.ts`
+  - `backend/src/routes/tending.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `mobile/src/hooks/useStages.ts`
+  - `mobile/src/hooks/index.ts`
+  - `mobile/src/components/TendingPanel.tsx`
+  - `mobile/src/components/__tests__/TendingPanel.test.tsx`
+  - `mobile/src/screens/UnifiedSessionScreen.tsx`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Added `GET /sessions/:id/tending/history` returning current-user Tending cycles.
+  - History cycles serialize reviewed commitments, what happened/helpfulness/blockers, need outcomes, adjustments, reminders, and coordination status/summary.
+  - The read model is user-scoped through `sessionId + userId` check-ins and does not expose partner private check-in rows.
+  - Mobile now fetches Tending history for resolved sessions and shows the latest record in the Tending panel.
+  - Existing Tending mutations refetch the history cache after responses/check-ins.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/TendingPanel.test.tsx --runInBand`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace mobile`
+- Test results:
+  - Tending service suite passed: 43 tests.
+  - TendingPanel tests passed: 12 tests.
+  - Shared, backend, and mobile typechecks passed.
+- Known blockers: none.
+- Next step: Chunk 9 browser verification and final required validation sweep.
+
+### 2026-05-22 — Chunk 7 Live Tending Prompt Integration
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/stage4-prompts.ts`
+  - `backend/src/services/stage-prompts.ts`
+  - `backend/src/controllers/messages.ts`
+  - `backend/src/services/__tests__/stage4-prompts.test.ts`
+  - `backend/src/services/__tests__/stage-prompts.test.ts`
+  - `backend/src/routes/__tests__/messages.test.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Extended `buildTendingConversationPrompt` to include success criteria and selected between-period notes.
+  - Selected between-period notes are labeled as private unless explicit share consent is recorded.
+  - `buildStagePrompt` can now append a rendered Tending conversation prompt to the dynamic Stage 4 block.
+  - The streaming message route now permits `RESOLVED` sessions for private Tending/listen-first chat instead of rejecting them as inactive.
+  - Resolved-session message context loads Tending entries, Stage 4 needs, selected between-period notes for the current user only, and latest structured outcomes/adjustments.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/stage-prompts.test.ts src/services/__tests__/stage4-prompts.test.ts --runInBand`
+  - `npm test --workspace backend -- --runTestsByPath src/routes/__tests__/messages.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Stage prompt suites passed: 140 tests.
+  - Message route suite passed: 19 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Next step: implement Chunk 8 Tending history/read model and mobile summary surface.
+
+### 2026-05-22 — Chunk 6 Private Note E2E Coverage
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `e2e/tests/two-browser-stage-4-redesign.spec.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Added deterministic coverage for between-period note privacy in the existing Stage 4 redesign suite.
+  - The test creates a private note as user A after resolution, verifies user A sees it in `GET /tending`, verifies user B's `GET /tending` has no note and does not contain the note text, then opens the mobile-web check-in route as user A.
+  - The browser assertion verifies the private-note step appears before check-in and offers separate `Factor in` and `May mention` choices.
+- Commands run:
+  - `npm run check --workspace e2e`
+  - `npm --workspace e2e run e2e -- --project=two-browser-stage-4-redesign`
+- Test results:
+  - E2E typecheck passed.
+  - Stage 4 redesign Playwright target passed: 7 tests.
+- Known blockers: none.
+- Next step: inspect the finish prompt for remaining chunks beyond private notes and continue the next incomplete requirement.
+
+### 2026-05-22 — Chunk 6 Mobile Private Note Surface
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `mobile/src/hooks/useStages.ts`
+  - `mobile/src/hooks/index.ts`
+  - `mobile/src/components/TendingPanel.tsx`
+  - `mobile/src/components/__tests__/TendingPanel.test.tsx`
+  - `mobile/src/screens/TendingCheckinScreen.tsx`
+  - `mobile/src/screens/__tests__/TendingCheckinScreen.test.tsx`
+  - `mobile/app/(auth)/session/[id]/tending-checkin.tsx`
+  - `mobile/src/screens/UnifiedSessionScreen.tsx`
+- Decisions made:
+  - Added `useCreateTendingBetweenPeriodNote` for `POST /sessions/:id/tending/notes`.
+  - Added a private-note card on the resolved-session Tending panel. Notes are shown from the caller's own `betweenPeriodNotes`, and saving a note does not start passive re-entry.
+  - Wired the resolved-session screen to pass private notes from `GET /tending` and create notes through the new mutation.
+  - Added a first check-in step when notes exist, asking whether each note should be factored into the check-in and whether it may be mentioned to the partner.
+  - Check-in submission now sends `includedBetweenPeriodNoteIds` and `shareBetweenPeriodNoteIds`; share IDs are filtered to notes selected for carry-forward.
+  - Preserved `betweenPeriodNotes` in existing Tending cache updates for response, share-toggle, and re-entry mutations.
+- Commands run:
+  - `npm run check --workspace shared`
+  - `npm run check --workspace mobile`
+  - `npm test --workspace mobile -- --runTestsByPath src/screens/__tests__/TendingCheckinScreen.test.tsx src/components/__tests__/TendingPanel.test.tsx --runInBand`
+- Test results:
+  - Shared typecheck passed.
+  - Mobile typecheck passed.
+  - Mobile Tending component tests passed: 16 tests.
+- Known blockers: none.
+- Next step: add browser/E2E coverage for Eve adding a private note, Adam not seeing it, and Eve choosing carry-forward at check-in.
+
+### 2026-05-22 — Chunk 6 Backend Private Between-Period Notes
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260522113000_add_tending_between_period_notes/migration.sql`
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/controllers/tending.ts`
+  - `backend/src/routes/tending.ts`
+  - `backend/src/lib/__mocks__/prisma.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `shared/src/dto/strategy.ts`
+- Decisions made:
+  - Added `TendingBetweenPeriodNote` as a private, per-user note table for resolved sessions.
+  - Added `POST /sessions/:id/tending/notes` to create a note only when the session is `RESOLVED`.
+  - Added the caller's own `betweenPeriodNotes` to `GET /sessions/:id/tending`; the query filters by both `sessionId` and `userId`.
+  - Added `includedBetweenPeriodNoteIds` and `shareBetweenPeriodNoteIds` to check-in submission. Carry-forward selection and partner-share consent are recorded separately, and share consent is rejected unless the note is also selected for carry-forward.
+  - `submitTendingCheckin` validates referenced note IDs against the current user and session before writing, so partner notes cannot be selected or consented by the other participant.
+  - Creating a between-period note does not publish a partner-visible session event.
+- Commands run:
+  - `npx prisma@6.12.0 generate --schema backend/prisma/schema.prisma`
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/mwf npx prisma@6.12.0 validate --schema backend/prisma/schema.prisma`
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace backend`
+- Test results:
+  - Prisma client generation passed.
+  - Prisma schema validation passed.
+  - Tending service suite passed: 42 tests.
+  - Shared typecheck passed.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Next step: surface between-period notes in mobile before/during Tending check-in so Eve can add a private note, Adam cannot see it, and Eve is asked whether to factor it into check-in.
+
+### 2026-05-22 — New Dedicated Worktree And Source Import
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Reason for new worktree: the previously recorded dedicated worktree `/Users/shantam/Software/meet-without-fear-stage4-tending` no longer exists, and the goal prompt requires implementation outside the main checkout.
+- Imported source docs from `/Users/shantam/Software/meet-without-fear`:
+  - `docs/product/source-material/stage-4-and-beyond-transcript.md`
+  - `docs/product/tending-goal-prompt.md`
+  - `docs/product/tending-implementation-plan.md`
+  - `docs/product/source-material/index.md`
+- Preflight commands run:
+  - `git status --short --branch` in the main checkout.
+  - `git worktree add -b codex/full-tending-flow /Users/shantam/Software/meet-without-fear-full-tending HEAD`.
+  - `git diff --cached -- docs/product/source-material/index.md docs/product/source-material/stage-4-and-beyond-transcript.md docs/product/tending-goal-prompt.md docs/product/tending-implementation-plan.md | git -C /Users/shantam/Software/meet-without-fear-full-tending apply --index`.
+  - Read the goal prompt, implementation plan, technical spec, gold question analysis, Stage 4 and Beyond transcript, relevant golden transcript Tending sections, `CLAUDE.md`, and the current Tending schema/service/controller/mobile screen.
+- Current status: Chunk 1 is starting from the existing Stage 4/Tending base. Existing code has Tending entries/responses and three-orientation check-ins, but does not yet have batch `TendingCheckin`, structured entry outcomes, need outcomes, or reminders.
+- First intended chunk: add additive Prisma/shared data structures for structured Tending outcomes and reminders, then validate Prisma plus shared/backend typechecks.
+- Known blockers: none.
+- Next step: implement Chunk 1 schema/shared contracts.
+
+### 2026-05-22 — Chunk 1 Contract And Schema
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260522000000_add_structured_tending_checkins/migration.sql`
+  - `shared/src/enums.ts`
+  - `shared/src/dto/strategy.ts`
+  - imported source docs listed above
+- Decisions made:
+  - Added `TendingCheckin` as the batch parent for session-level check-in submissions.
+  - Added `checkinId` to `TendingResponse` as optional so legacy single-entry responses remain valid.
+  - Added `TendingEntryOutcome`, `TendingNeedOutcome`, and `TendingReminder` as additive tables rather than overloading the existing blob response.
+  - Added shared optional DTO fields so existing mobile/backend callers can continue compiling during the richer flow cutover.
+  - `TendingNextAction` includes both `ADJUST_COMMITMENT` and `REOPEN_STRATEGY_WORK`; legacy `ContinueChoice.ANOTHER_ROUND` remains for compatibility until backend/mobile path naming is fully migrated.
+- Commands run:
+  - `npm ci` in the fresh worktree to install dependencies.
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/mwf npx prisma@6.12.0 validate --schema backend/prisma/schema.prisma`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace backend`
+  - `npx prisma@6.12.0 generate --schema backend/prisma/schema.prisma`
+- Test results:
+  - Prisma schema validation passed.
+  - Shared typecheck passed.
+  - Backend typecheck passed after generating the Prisma client in the new worktree.
+- Known blockers: none.
+- Next step: Chunk 2 backend structured check-in persistence.
+
+### 2026-05-22 — Chunk 2 Backend Structured Check-In Persistence
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/controllers/tending.ts`
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `backend/src/lib/__mocks__/prisma.ts`
+- Decisions made:
+  - `/sessions/:id/tending/checkin` now accepts structured entry outcomes, need outcomes, reminders, `nextAction`, and resolved-enough override fields while preserving the legacy three-orientation payload.
+  - `submitTendingCheckin` creates one `TendingCheckin` parent, links each upserted `TendingResponse` via `checkinId`, and keeps legacy readable reflection text as a backup summary.
+  - Per-entry notes are folded into each entry response reflection instead of being dropped.
+  - Entry outcomes and need outcomes are persisted in their dedicated tables.
+  - Reminder creation validates that shared reminders are tied to shared Tending entries; private individual reminders do not publish partner-visible events.
+  - Check-in submission notification is emitted only when the batch includes a shared entry, preserving private individual check-ins/reminders.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace shared`
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/mwf npx prisma@6.12.0 validate --schema backend/prisma/schema.prisma`
+- Test results:
+  - Tending service test suite passed: 20 tests.
+  - Backend typecheck passed.
+  - Shared typecheck passed.
+  - Prisma schema validation passed.
+- Known blockers: none.
+- Next step: Chunk 3 path semantics, especially using structured need outcomes for full closure, extension, partial closure, strategy reopening, and new-process context.
+
+### 2026-05-22 — Chunk 3 Path Semantics Checkpoint
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+- Decisions made:
+  - Full closure now rejects submitted non-resolved need outcomes unless the user explicitly supplies a resolved-enough override. The override is recorded in the check-in reflection summary.
+  - Reopen strategy work (`ContinueChoice.ANOTHER_ROUND`) no longer deletes Stage 4 need coverage or need declination history. It clears terminal closure/selection state and seeds each Stage 4 progress row with `gatesSatisfied.tendingReopen` containing the check-in id and still-open need ids.
+  - Extend now reschedules only entries that are still worth trying; entries with structured outcome `stillWorthTrying: false` are completed rather than blindly extended.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Tending service test suite passed: 23 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Next step: continue Chunk 3 by adding richer new-process context preservation/recommendation helper coverage, then move to Tending prompt/conversation support.
+
+### 2026-05-22 — Chunk 3 Backend Semantics Completed
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+- Decisions made:
+  - Added `recommendTendingNextAction` so structured outcomes influence the recorded next action: still-open needs plus failed follow-through recommend reopening strategy work; partial follow-through or blockers recommend adjustment.
+  - Extension now completes entries instead of rescheduling them when all submitted need outcomes are resolved.
+  - `NEW_PROCESS` now creates a linked fresh session with a system handoff message summarizing Tending reflection, entry outcomes, blockers, need outcomes, and what remains open.
+  - The legacy `continueChoice` remains preserved for compatibility while `nextAction` captures the structured recommendation.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts src/routes/__tests__/stage4.test.ts --runInBand`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace shared`
+- Test results:
+  - Tending service and Stage 4 route suites passed: 2 suites, 69 tests.
+  - Backend typecheck passed.
+  - Shared typecheck passed.
+- Known blockers: none.
+- Next step: Chunk 4 Tending prompt and conversation support.
+
+### 2026-05-22 — Chunk 4 Tending Prompt Support
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/stage4-prompts.ts`
+  - `backend/src/services/__tests__/stage4-prompts.test.ts`
+- Decisions made:
+  - Kept `RESOLVED_LISTEN_FIRST_CLAUSE` intact for resolved-session pre-check-in chat.
+  - Updated the "what worked" Tending persona to ask what actually happened before asking what worked, and to state that agreement is not resolution.
+  - Updated the more-support persona with blocker categories and no-shame framing.
+  - Added `TENDING_NEEDS_REVIEW_PERSONA` for resolved/improving/still-open/changed/not-sure need review.
+  - Updated the what-comes-next persona so failed follow-through points to adjustment or strategy reopening rather than generic extension.
+  - Added `buildTendingConversationPrompt` for `whatHappened`, `whatWorked`, `whereMoreSupport`, `needsReview`, and `whatComesNext`, with private-by-default partner boundary language and one-at-a-time guidance.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/stage-prompts.test.ts src/services/__tests__/stage4-prompts.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Stage prompt and Stage 4 prompt suites passed: 2 suites, 139 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Next step: Chunk 5 mobile UI consolidation.
+
+### 2026-05-22 — Chunk 5 Mobile UI Consolidation
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `mobile/app/(auth)/session/[id]/tending-checkin.tsx`
+  - `mobile/src/components/TendingPanel.tsx`
+  - `mobile/src/components/__tests__/TendingPanel.test.tsx`
+  - `mobile/src/screens/TendingCheckinScreen.tsx`
+  - `mobile/src/screens/UnifiedSessionScreen.tsx`
+  - `mobile/src/screens/__tests__/TendingCheckinScreen.test.tsx`
+- Decisions made:
+  - Resolved-session Tending now launches the rich check-in route for open/respondable entries instead of saving the legacy one-entry review inline.
+  - The check-in route accepts `tendingEntryId`, loads current Stage 4 needs, and submits the structured `SubmitTendingCheckinRequest` payload directly.
+  - The mobile check-in screen now walks through four concrete review steps: follow-through, helpfulness/blockers, needs review, and what comes next.
+  - Entry outcomes capture follow-through status, helpfulness status, blocker categories, what happened, and whether the entry is still worth trying.
+  - Need outcomes capture resolved/improving/still-open/changed/not-sure status plus notes.
+  - Next-action choices map to structured `TendingNextAction` values, including extension, adjustment, strategy reopening, new process, partial closure, and full closure.
+  - Reminder controls support private and shared reminders, with shared reminders shown only when a shared entry is in the check-in set.
+- Commands run:
+  - `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/TendingPanel.test.tsx src/screens/__tests__/TendingCheckinScreen.test.tsx src/hooks/__tests__/useStages.test.ts --runInBand --forceExit`
+  - `npm run check --workspace mobile`
+- Test results:
+  - Targeted mobile suites passed: 3 suites, 52 tests.
+  - Mobile typecheck passed.
+- Known blockers: none.
+- Next step: Chunk 6 E2E/evaluation coverage and browser verification from a real Stage 4 snapshot.
+
+### 2026-05-22 — Chunk 6 E2E/Eval Coverage And Browser Verification
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Draft PR: [#640 - Build full Tending check-in flow](https://github.com/shantamg/meet-without-fear/pull/640), targeting `codex/stages-3-4-rework`.
+- Files changed:
+  - `e2e/tests/two-browser-stage-4-redesign.spec.ts`
+  - `eval/moments/stage-4-tending-structured-checkin.yaml`
+  - `eval/baselines/stage-4-tending-structured-checkin.json`
+  - `eval/scorer/judge-prompts/stage-4-tending-structured-checkin.md`
+  - `scripts/mwf_moment_eval.py`
+  - `scripts/test_mwf_moment_eval.py`
+- Decisions made:
+  - Extended deterministic Stage 4 redesign E2E coverage with a due shared Tending check-in that submits structured entry outcomes, need outcomes, blocker categories, and `REOPEN_STRATEGY_WORK`.
+  - Added a real browser smoke in the same Playwright project that deep-links into the due Tending check-in route and walks through follow-through, helpfulness/blockers, needs review, and what-comes-next screens.
+  - Added a Tending moment-eval fixture anchored to the core protocol's Tending check-in section.
+  - Added deterministic hard invariants for "agreement is not resolution," failed support should not generically extend the same commitment, and private reminders staying private.
+  - Added a baseline and judge prompt for the new Tending moment.
+- Commands run:
+  - `npm run check --workspace e2e`
+  - `python3 scripts/test_mwf_moment_eval.py`
+  - `python3 scripts/mwf_moment_eval.py run --moment stage-4-tending-structured-checkin --max-iterations 1 --mock-response "..."`
+  - `npm --workspace e2e run e2e -- --project=two-browser-stage-4-redesign`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace mobile`
+  - `npm run check --workspace e2e`
+- Test results:
+  - E2E typecheck passed.
+  - Moment-eval unit suite passed: 76 tests.
+  - New Tending mock moment run produced a passing eval run artifact; generated raw run output was removed from the worktree after verification.
+  - Stage 4 redesign Playwright project passed: 6 tests, including the new structured Tending API test and browser route smoke.
+  - Final backend, shared, mobile, and e2e typechecks passed.
+- Known blockers: none.
+- Next step: review PR #640 and address CI/review feedback.
+
+### 2026-05-22 — Finish Tending Chunk 1 Coordination Hold
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Finish prompt: `docs/product/tending-finish-goal-prompt.md`.
+- Files changed:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260522093000_add_tending_coordination_cycles/migration.sql`
+  - `shared/src/enums.ts`
+  - `shared/src/dto/strategy.ts`
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/controllers/tending.ts`
+  - `backend/src/lib/__mocks__/prisma.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+- Decisions made:
+  - Added `TendingCoordinationCycle` and `TendingCoordinationStatus` so shared Tending check-ins have a durable coordination window instead of immediately applying one user's shared choice.
+  - Linked `TendingCheckin` to an optional coordination cycle.
+  - Shared entries now persist the submitting user's private check-in/outcomes and move to `PARTIAL`, while path transitions such as extend, reopen Stage 4, new process, partial closure, and full closure are held for the later coordination resolver.
+  - Individual entries still use immediate one-user path semantics.
+  - Added a timeout resolver entry point, `resolveTimedOutTendingCoordinationCycles`, which marks overdue shared cycles `TIMED_OUT`, records missing participants, and publishes a coordination-timeout event. It does not yet perform full overlap resolution; that remains the next finish chunk.
+- Commands run:
+  - `npx prisma@6.12.0 generate --schema backend/prisma/schema.prisma`
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/mwf npx prisma@6.12.0 validate --schema backend/prisma/schema.prisma`
+  - `npm run check --workspace shared`
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Prisma schema validation passed.
+  - Shared typecheck passed.
+  - Backend Tending service suite passed: 28 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Next step: Finish Tending Chunk 2, implement overlap/coordination resolution for shared cycles and E2E coverage for the Adam/Eve-style held-choice reveal.
+
+### 2026-05-22 — Finish Tending Chunk 2 Backend Resolver Slice
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Added `resolveReadyTendingCoordinationCycles` as the first deterministic backend resolver for shared coordination cycles that are ready after both partners submit.
+  - If both participants choose `EXTEND` and there is no failed-follow-through plus still-open-need signal, shared entries are rescheduled together for the default 28-day extension.
+  - If both participants choose `FULL_CLOSURE` and no submitted need remains open/changed/unclear, shared entries complete and the session remains/resolves terminally.
+  - If either participant requests a new process, reopens strategy work, reports failed follow-through with a still-open need, or submits mixed choices, the resolver records a mediated summary instead of blindly mutating shared commitments.
+  - Partner-visible notification is published only after the coordination cycle resolves, not on the first private submission.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Backend Tending service suite passed: 30 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Remaining Chunk 2 work:
+  - Persist/display richer coordination summaries in the Tending read model.
+  - Add E2E coverage for an Adam/Eve-style held-choice reveal.
+  - Wire mobile waiting/resolved coordination states so users can see the held and combined outcomes.
+- Next step: either finish Chunk 2 UI/E2E coverage or start Chunk 3 real adjustment data/UI if backend coordination state is sufficient for parallel product work.
+
+### 2026-05-22 — Finish Tending Chunk 2 Read Model And Mobile State
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `shared/src/dto/strategy.ts`
+  - `backend/src/controllers/tending.ts`
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `mobile/src/components/TendingPanel.tsx`
+  - `mobile/src/components/__tests__/TendingPanel.test.tsx`
+  - `mobile/src/screens/UnifiedSessionScreen.tsx`
+- Decisions made:
+  - Extended `GET /sessions/:id/tending` to return recent `coordinationCycles` for cycles that include the current user.
+  - Added the coordination cycle list to shared Tending DTOs so mobile can render waiting/resolved coordination state from the same Tending read model as entries.
+  - Wired `UnifiedSessionScreen` to pass coordination cycles into `TendingPanel`.
+  - `TendingPanel` now shows held-private copy for `WAITING_FOR_PARTNER` cycles and resolved coordination summaries for completed cycles tied to the selected entry.
+  - The held-private copy explicitly says shared choices are saved and held until the partner completes their side or the response window closes.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm test --workspace mobile -- --runTestsByPath src/components/__tests__/TendingPanel.test.tsx --runInBand --forceExit`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace mobile`
+- Test results:
+  - Backend Tending service suite passed: 31 tests.
+  - Mobile TendingPanel suite passed: 10 tests.
+  - Shared, backend, and mobile typechecks passed.
+- Known blockers: none.
+- Remaining Chunk 2 work:
+  - Add E2E coverage for an Adam/Eve-style held-choice reveal.
+  - Expand resolver coverage for partial-closure overlap and mixed extension/partial-closure choices.
+- Next step: finish the remaining Chunk 2 backend/E2E cases or start Chunk 3 adjustment persistence.
+
+### 2026-05-22 — Finish Tending Chunk 2 Partial-Closure Resolver
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Coordination resolution now loads per-check-in `TendingResponsePartialClosure` rows through each check-in's responses.
+  - If both users choose `PARTIAL_CLOSURE`, only shared entries explicitly marked `RESOLVED` by every participant are completed.
+  - Shared entries not mutually closed are rescheduled for the default 28-day continuation window.
+  - Mixed `EXTEND` + `PARTIAL_CLOSURE` choices continue unresolved shared entries and record a mediated summary instead of treating one user's closure as binding on the partner.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Backend Tending service suite passed: 33 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Remaining Chunk 2 work:
+  - Add E2E coverage for an Adam/Eve-style held-choice reveal.
+  - Add browser/mobile verification for waiting and resolved coordination states.
+- Next step: move to E2E coverage for the held-choice reveal, then Chunk 3 adjustment persistence.
+
+### 2026-05-22 — Finish Tending Chunk 2 Held-Choice E2E
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `e2e/tests/two-browser-stage-4-redesign.spec.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Updated the deterministic due shared Tending test so one user's failed/still-open shared check-in no longer expects immediate Stage 4 reopening.
+  - The test now asserts the gold-aligned held-choice behavior: first submission persists structured outcomes, creates a coordination cycle, marks the shared entry `PARTIAL`, leaves the Stage 4 outcome intact, and returns `WAITING_FOR_PARTNER`.
+  - Added partner-side submission in the same E2E path and asserts the coordination cycle moves to `READY_TO_RESOLVE` with both users in `submittedUserIds`.
+  - Kept the existing rich mobile check-in browser smoke in the same Playwright project.
+- Commands run:
+  - `npm run check --workspace e2e`
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm --workspace e2e run e2e -- --project=two-browser-stage-4-redesign`
+- Test results:
+  - E2E typecheck passed.
+  - Backend Tending service suite passed: 33 tests.
+  - Targeted Playwright project passed: 6 tests.
+- Known blockers: none.
+- Remaining Chunk 2 work:
+  - Full browser verification of the resolved coordination summary on the resolved-session Tending panel after running the resolver.
+- Next step: Chunk 3 adjustment persistence and mobile adjustment form, unless finishing the resolved-summary browser state is cheaper first.
+
+### 2026-05-22 — Finish Tending Chunk 3 Adjustment Persistence
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260522103000_add_tending_adjustments/migration.sql`
+  - `shared/src/dto/strategy.ts`
+  - `backend/src/controllers/tending.ts`
+  - `backend/src/lib/__mocks__/prisma.ts`
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `mobile/src/screens/TendingCheckinScreen.tsx`
+  - `mobile/src/screens/__tests__/TendingCheckinScreen.test.tsx`
+- Decisions made:
+  - Added `TendingAdjustment` as an append-only revision/history table tied to session, check-in, entry, and user.
+  - Adjustment payload now captures revised commitment text, cadence/frequency, scope, success criteria, reason, blocker addressed, and private/shared scope.
+  - `/sessions/:id/tending/checkin` accepts `adjustments` and persists them with the same check-in batch as outcomes/reminders.
+  - Adjustment references are validated against currently open/respondable entries, and individual adjustments remain owner-only.
+  - Mobile `TendingCheckinScreen` now shows adjustment inputs when the user chooses `ADJUST_COMMITMENT` and submits them in the structured payload.
+- Commands run:
+  - `npx prisma@6.12.0 generate --schema backend/prisma/schema.prisma`
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/mwf npx prisma@6.12.0 validate --schema backend/prisma/schema.prisma`
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm test --workspace mobile -- --runTestsByPath src/screens/__tests__/TendingCheckinScreen.test.tsx --runInBand --forceExit`
+  - `npm run check --workspace shared`
+  - `npm run check --workspace backend`
+  - `npm run check --workspace mobile`
+- Test results:
+  - Prisma schema validation passed.
+  - Backend Tending service suite passed: 35 tests.
+  - Mobile TendingCheckinScreen suite passed: 4 tests.
+  - Shared, backend, and mobile typechecks passed.
+- Known blockers: none.
+- Remaining Chunk 3 work:
+  - Browser test for changing cadence, e.g. "twice a month" to "once a month", with a reminder.
+  - Richer mobile controls for presets/frequency rather than plain text fields.
+- Next step: Chunk 4 reminder delivery processor and preset controls, or add the Chunk 3 browser scenario first.
+
+### 2026-05-22 — Finish Tending Chunk 4 Reminder Delivery Processor
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `backend/src/services/__mocks__/realtime.ts`
+  - `backend/src/scripts/open-due-tending-entries.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Added `processDueTendingReminders` to deliver scheduled reminders due at or before `now`.
+  - One-time reminders are marked `DELIVERED`.
+  - Recurring reminders advance their `remindAt` according to cadence (`WEEKLY`, `MONTHLY`, and every-couple-months aliases) and stay `SCHEDULED`.
+  - Private reminders publish only to the requesting user's private realtime channel via `publishUserEvent(..., 'session.updated', ...)`, avoiding partner-visible session events.
+  - Shared reminders publish a `notification.pending_action` session event.
+  - Updated `open-due-tending-entries.ts` so the scheduled/cron entrypoint opens due Tending entries and processes due reminders together.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Backend Tending service suite passed: 37 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Remaining Chunk 4 work:
+  - Mobile preset/custom date controls beyond the current fixed two-week reminder toggle.
+  - E2E/API tests for private versus shared reminder delivery beyond unit coverage.
+- Next step: mobile reminder preset controls and payload tests.
+
+### 2026-05-22 — Finish Tending Chunk 4 Mobile Reminder Controls
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `mobile/src/screens/TendingCheckinScreen.tsx`
+  - `mobile/src/screens/__tests__/TendingCheckinScreen.test.tsx`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - Replaced the hardcoded two-week reminder payload with selectable reminder timing.
+  - Added presets: tomorrow, halfway, one week, two weeks, one month, and custom ISO date/time.
+  - Added cadence controls: one-time, weekly, monthly, every couple months.
+  - Reminder payload now includes the selected `remindAt` and `cadence` for private and shared reminders.
+- Commands run:
+  - `npm test --workspace mobile -- --runTestsByPath src/screens/__tests__/TendingCheckinScreen.test.tsx --runInBand --forceExit`
+  - `npm run check --workspace mobile`
+- Test results:
+  - Mobile TendingCheckinScreen suite passed: 4 tests.
+  - Mobile typecheck passed.
+- Known blockers: none.
+- Remaining Chunk 4 work:
+  - E2E/API tests for private versus shared reminder delivery beyond unit coverage.
+  - Browser UX smoke for the reminder preset controls.
+- Next step: Chunk 5 due opener coverage for individual entries, or E2E/API reminder delivery tests.
+
+### 2026-05-22 — Finish Tending Chunk 5 Individual Due Opener
+
+- Current branch/worktree: `codex/full-tending-flow` at `/Users/shantam/Software/meet-without-fear-full-tending`.
+- Files changed:
+  - `backend/src/services/tending.service.ts`
+  - `backend/src/services/__tests__/tending.service.test.ts`
+  - `docs/product/stage-4-tending-build-progress.md`
+- Decisions made:
+  - `openDueTendingEntries` now opens both due shared agreement check-ins and due individual commitment check-ins.
+  - Shared due entries still publish a session-level pending action.
+  - Individual due entries publish only to the owner via the private user channel and do not notify the partner.
+  - The existing cron/script entrypoint already calls `openDueTendingEntries`, so it now covers individual entries too.
+- Commands run:
+  - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/tending.service.test.ts --runInBand`
+  - `npm run check --workspace backend`
+- Test results:
+  - Backend Tending service suite passed: 38 tests.
+  - Backend typecheck passed.
+- Known blockers: none.
+- Remaining Chunk 5 work:
+  - E2E/API coverage for individual scheduled check-in opening privately.
+  - Response deadline/status metadata exposure in the mobile read model beyond the coordination-cycle deadline.
+- Next step: between-period holding space or E2E/API coverage for reminder/due-entry privacy.
 
 ## Worktree Rule
 
 Do not edit `/Users/shantam/Software/meet-without-fear`. That is the main working directory and may contain unrelated active work.
 
-All Stage 4/Tending implementation must happen in dedicated git worktrees only. The current Stage 4 worktree is:
+All Stage 4/Tending implementation must happen in dedicated git worktrees only. The current full Tending worktree is:
 
-`/Users/shantam/Software/meet-without-fear-stage4-tending`
+`/Users/shantam/Software/meet-without-fear-full-tending`
 
 If a future session needs a different branch or separate parallel track, create another sibling worktree under `/Users/shantam/Software/` and record it here before editing files.
 

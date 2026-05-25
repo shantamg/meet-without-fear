@@ -3,6 +3,9 @@ import {
   CoverageRowDTO,
   GetStage4StateResponse,
   ProposalCardDTO,
+  Stage4NeedWalkthroughStatus,
+  Stage4ProposalSourceLabel,
+  Stage4QualityWarningDTO,
   Stage4CoverageAuditDTO,
   Stage4ClosureKind,
   Stage4ClosureReason,
@@ -11,6 +14,8 @@ import {
   Stage4SelectionDecision,
   Stage4SelectionDTO,
   Stage4ProposalStatus,
+  Stage4WalkthroughDTO,
+  Stage4WalkthroughPhase,
   TendingPreviewDTO,
   UnaddressedNeedDTO,
 } from '@meet-without-fear/shared';
@@ -32,6 +37,7 @@ type Stage4ProposalRow = {
   measureOfSuccess: string | null;
   kind: Stage4ProposalKind;
   status: Stage4ProposalStatus;
+  source: string;
   createdByUserId: string | null;
   updatedAt: Date;
 };
@@ -54,6 +60,13 @@ type Stage4NeedCoverageRow = {
   coveringProposalIds: string[];
   note: string | null;
   updatedAt: Date;
+};
+
+type Stage4WalkthroughStoredState = {
+  phase?: Stage4WalkthroughPhase;
+  currentNeedId?: string | null;
+  coveredNeedIds?: string[];
+  skippedNeedIds?: string[];
 };
 
 type Stage4ClosureRow = {
@@ -123,6 +136,41 @@ function getSourceLabel(
   return 'UNKNOWN';
 }
 
+function getProposalSourceLabel(
+  proposal: Stage4ProposalRow,
+  userId: string,
+  partnerUserId: string | null
+): Stage4ProposalSourceLabel {
+  if (proposal.createdByUserId === userId) return 'YOU';
+  if (proposal.createdByUserId === partnerUserId) return 'PARTNER';
+  if (proposal.source === 'AI_SUGGESTED') return 'AI';
+  return 'UNKNOWN';
+}
+
+function getWalkthroughState(progressRows: Stage4ProgressRow[], userId: string): Stage4WalkthroughStoredState {
+  const gates = progressRows.find((row) => row.userId === userId)?.gatesSatisfied;
+  if (!gates || typeof gates !== 'object' || Array.isArray(gates)) return {};
+  const value = (gates as Record<string, unknown>).stage4Walkthrough;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const stored = value as Record<string, unknown>;
+  return {
+    phase:
+      stored.phase === 'PARTNER_NEEDS' ||
+      stored.phase === 'QUALITY_REVIEW' ||
+      stored.phase === 'SUMMARY' ||
+      stored.phase === 'MY_NEEDS'
+        ? stored.phase
+        : undefined,
+    currentNeedId: typeof stored.currentNeedId === 'string' ? stored.currentNeedId : undefined,
+    coveredNeedIds: Array.isArray(stored.coveredNeedIds)
+      ? stored.coveredNeedIds.filter((id): id is string => typeof id === 'string')
+      : [],
+    skippedNeedIds: Array.isArray(stored.skippedNeedIds)
+      ? stored.skippedNeedIds.filter((id): id is string => typeof id === 'string')
+      : [],
+  };
+}
+
 function buildCoverageAudit(
   coverageRows: Stage4NeedCoverageRow[],
   userId: string,
@@ -179,7 +227,8 @@ function buildProposalCard(
   selections: Stage4SelectionRow[],
   coverageRows: Stage4NeedCoverageRow[],
   revealPartnerSelections: boolean,
-  needLinks: Array<{ needId: string; needText: string }> = []
+  needLinks: Array<{ needId: string; needText: string }> = [],
+  needIdToLabel: Map<string, string> = new Map()
 ): ProposalCardDTO {
   const mySelection = selections.find(
     (selection) => selection.proposalId === proposal.id && selection.userId === userId
@@ -206,6 +255,7 @@ function buildProposalCard(
     id: proposal.id,
     kind: proposal.kind,
     description: proposal.description,
+    sourceLabel: getProposalSourceLabel(proposal, userId, partnerUserId),
     ownerLabel:
       proposal.kind === Stage4ProposalKind.INDIVIDUAL_COMMITMENT
         ? proposal.createdByUserId === userId
@@ -224,8 +274,8 @@ function buildProposalCard(
           })
         : linkedCoverage.length > 0
           ? linkedCoverage
-          : proposal.needsAddressed.map((label) => ({
-              label,
+          : proposal.needsAddressed.map((raw) => ({
+              label: needIdToLabel.get(raw) ?? raw,
               coverage: 'COVERED',
             })),
     duration: proposal.duration,
@@ -233,6 +283,202 @@ function buildProposalCard(
     status: proposal.status,
     myDecision: mySelection?.decision,
     partnerDecisionVisible: revealPartnerSelections ? partnerSelection?.decision : undefined,
+  };
+}
+
+function proposalMatchesNeed(proposal: ProposalCardDTO, needId: string, needLabel: string): boolean {
+  const normalizedLabel = needLabel.toLowerCase();
+  return proposal.needsAddressed.some((need) => {
+    if (need.id && need.id === needId) return true;
+    return need.label.toLowerCase() === normalizedLabel;
+  });
+}
+
+function buildNeedStatus(args: {
+  needId: string;
+  phase: Stage4WalkthroughPhase;
+  currentNeedId?: string | null;
+  coveringProposalIds: string[];
+  coveredIds: Set<string>;
+  skippedIds: Set<string>;
+}): Stage4NeedWalkthroughStatus {
+  if (args.coveredIds.has(args.needId)) return 'covered';
+  if (args.skippedIds.has(args.needId)) return 'skipped';
+  if (args.currentNeedId === args.needId) return 'in_progress';
+  if (args.coveringProposalIds.length === 0) return 'needs_options';
+  return 'not_started';
+}
+
+function defaultCheckInDate(): string {
+  const date = new Date();
+  date.setDate(date.getDate() + 10);
+  return date.toISOString().slice(0, 10);
+}
+
+function buildQualityWarnings(proposals: ProposalCardDTO[]): Stage4QualityWarningDTO[] {
+  const warnings: Stage4QualityWarningDTO[] = [];
+  for (const proposal of proposals.filter((item) => item.myDecision === Stage4SelectionDecision.WILLING)) {
+      const vague =
+        !proposal.duration ||
+        !proposal.measureOfSuccess ||
+        /\b(communicate better|be better|try harder|more supportive|more present)\b/i.test(
+          proposal.description
+        );
+      if (!vague) continue;
+      warnings.push({
+        proposalId: proposal.id,
+        description: proposal.description,
+        warning: 'This may be hard to check later. You can still continue for now.',
+        suggestedRevision: 'Make it concrete: who does what, when, and how you will know it happened.',
+      });
+    }
+  return warnings;
+}
+
+function buildWalkthrough(args: {
+  coverageRows: Stage4NeedCoverageRow[];
+  proposalCards: ProposalCardDTO[];
+  userId: string;
+  partnerUserId: string | null;
+  stored: Stage4WalkthroughStoredState;
+}): Stage4WalkthroughDTO {
+  const coveredIds = new Set(args.stored.coveredNeedIds ?? []);
+  const skippedIds = new Set(args.stored.skippedNeedIds ?? []);
+  const toNeed = (row: Stage4NeedCoverageRow) => {
+    const id = row.needId ?? row.id;
+    return {
+      id,
+      label: row.needLabel,
+      source: getSourceLabel(row.sourceUserId, args.userId, args.partnerUserId) as 'YOU' | 'PARTNER' | 'UNKNOWN',
+      status: 'not_started' as Stage4NeedWalkthroughStatus,
+      coveringProposalIds: row.coveringProposalIds,
+    };
+  };
+
+  const ownRows = args.coverageRows
+    .filter((row) => row.sourceUserId === args.userId)
+    .map(toNeed);
+  const partnerRows = args.coverageRows
+    .filter((row) => row.sourceUserId !== args.userId)
+    .map(toNeed);
+
+  const ownRemaining = ownRows.find((need) => !coveredIds.has(need.id) && !skippedIds.has(need.id));
+  const partnerRemaining = partnerRows.find((need) => !coveredIds.has(need.id) && !skippedIds.has(need.id));
+  const phase =
+    args.stored.phase ??
+    (ownRemaining ? 'MY_NEEDS' : partnerRemaining ? 'PARTNER_NEEDS' : 'QUALITY_REVIEW');
+  const phaseNeeds = phase === 'PARTNER_NEEDS' ? partnerRows : ownRows;
+  const currentNeedId =
+    args.stored.currentNeedId && phaseNeeds.some((need) => need.id === args.stored.currentNeedId)
+      ? args.stored.currentNeedId
+      : phase === 'MY_NEEDS'
+        ? ownRemaining?.id
+        : phase === 'PARTNER_NEEDS'
+          ? partnerRemaining?.id
+          : null;
+
+  const ownNeeds = ownRows.map((need) => ({
+    id: need.id,
+    label: need.label,
+    source: need.source,
+    status: buildNeedStatus({
+      needId: need.id,
+      phase,
+      currentNeedId,
+      coveringProposalIds: need.coveringProposalIds,
+      coveredIds,
+      skippedIds,
+    }),
+  }));
+  const partnerNeeds = partnerRows.map((need) => ({
+    id: need.id,
+    label: need.label,
+    source: need.source,
+    status: buildNeedStatus({
+      needId: need.id,
+      phase,
+      currentNeedId,
+      coveringProposalIds: need.coveringProposalIds,
+      coveredIds,
+      skippedIds,
+    }),
+  }));
+
+  const currentNeed =
+    phase === 'MY_NEEDS'
+      ? ownNeeds.find((need) => need.id === currentNeedId) ?? null
+      : phase === 'PARTNER_NEEDS'
+        ? partnerNeeds.find((need) => need.id === currentNeedId) ?? null
+        : null;
+  const currentIndex = currentNeed
+    ? Math.max(0, phaseNeeds.findIndex((need) => need.id === currentNeed.id))
+    : 0;
+  const currentLabel = currentNeed?.label ?? '';
+  const proposalsForCurrent = currentNeed
+    ? args.proposalCards.filter((proposal) =>
+        proposalMatchesNeed(proposal, currentNeed.id, currentLabel)
+      )
+    : [];
+
+  const group = (
+    key: Stage4WalkthroughDTO['proposalGroups'][number]['key'],
+    title: string,
+    proposals: ProposalCardDTO[],
+    readOnly = false
+  ) => ({ key, title, proposals, readOnly });
+
+  const proposalGroups =
+    phase === 'PARTNER_NEEDS'
+      ? [
+          group(
+            'partner_may_do',
+            'Things your partner may do themselves',
+            proposalsForCurrent.filter(
+              (proposal) =>
+                proposal.kind === Stage4ProposalKind.INDIVIDUAL_COMMITMENT &&
+                proposal.sourceLabel === 'PARTNER'
+            ),
+            true
+          ),
+          group(
+            'shared_options',
+            'Things you could do together',
+            proposalsForCurrent.filter((proposal) => proposal.kind === Stage4ProposalKind.SHARED_PROPOSAL)
+          ),
+          group(
+            'your_prior_suggestions',
+            'Things you already suggested',
+            proposalsForCurrent.filter((proposal) => proposal.sourceLabel === 'YOU')
+          ),
+        ]
+      : [
+          group(
+            'you_suggested',
+            'Options you suggested',
+            proposalsForCurrent.filter((proposal) => proposal.sourceLabel === 'YOU')
+          ),
+          group(
+            'partner_suggested',
+            'Options your partner suggested',
+            proposalsForCurrent.filter((proposal) => proposal.sourceLabel === 'PARTNER')
+          ),
+          group(
+            'ai_suggested',
+            'MWF ideas',
+            proposalsForCurrent.filter((proposal) => proposal.sourceLabel === 'AI')
+          ),
+        ];
+
+  return {
+    phase,
+    currentNeed,
+    currentIndex,
+    totalInPhase: phaseNeeds.length,
+    ownNeeds,
+    partnerNeeds,
+    proposalGroups,
+    qualityWarnings: buildQualityWarnings(args.proposalCards),
+    defaultCheckInDate: defaultCheckInDate(),
   };
 }
 
@@ -434,6 +680,10 @@ export async function getStage4State(
     arr.push({ needId: link.needId, needText: text });
     linksByProposal.set(link.proposalId, arr);
   }
+  const needIdToLabel = new Map<string, string>();
+  for (const row of coverageRows) {
+    if (row.needId) needIdToLabel.set(row.needId, row.needLabel);
+  }
   const proposalCards = activeProposals.map((proposal) =>
     buildProposalCard(
       proposal,
@@ -442,7 +692,8 @@ export async function getStage4State(
       selections,
       coverageRows,
       revealPartnerSelections,
-      linksByProposal.get(proposal.id) ?? []
+      linksByProposal.get(proposal.id) ?? [],
+      needIdToLabel
     )
   );
   const unaddressedNeeds = buildUnaddressedNeeds(coverageRows, userId, partnerUserId);
@@ -464,6 +715,13 @@ export async function getStage4State(
       partnerSelections,
       mySelectionSubmitted,
       partnerSelectionSubmitted,
+    }),
+    walkthrough: buildWalkthrough({
+      coverageRows,
+      proposalCards,
+      userId,
+      partnerUserId,
+      stored: getWalkthroughState(progressRows ?? [], userId),
     }),
     inventory: {
       sharedProposals: proposalCards.filter(

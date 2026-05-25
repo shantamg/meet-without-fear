@@ -467,9 +467,7 @@ export async function expectNeedsSummaryFromApi(
 }
 
 /**
- * Confirm needs through the visible Stage 3 summary drawer.
- * The production flow asks users to confirm their own needs first, then make
- * the separate share/consent choice before reveal.
+ * Share Stage 3 needs through the needs drawer.
  */
 export async function confirmNeedsSummaryAndConsent(
   page: Page,
@@ -479,24 +477,13 @@ export async function confirmNeedsSummaryAndConsent(
   label: string,
   timeout = 30000
 ): Promise<void> {
-  await expect(page.getByTestId('needs-review-button')).toBeVisible({ timeout });
-  await page.getByTestId('needs-review-button').click();
-
-  const drawer = page.getByTestId('needs-drawer');
-  await expect(drawer).toBeVisible({ timeout });
-  await expect(drawer.getByText('Your Identified Needs')).toBeVisible({ timeout });
-  await expect(drawer.getByText(/Review and confirm/i)).toBeVisible({ timeout });
-  await expect(drawer.locator('[data-testid^="needs-drawer-need-"]').first()).toBeVisible({ timeout });
-
-  await drawer.getByTestId('needs-drawer-confirm').click();
-
-  await waitForProgressGate(api, apiBaseUrl, sessionId, 'needsConfirmed', label, timeout);
-
-  await expect(page.getByTestId('needs-review-button')).toBeVisible({ timeout });
-  await page.getByTestId('needs-review-button').click();
-  await expect(drawer).toBeVisible({ timeout });
-  await expect(drawer.getByText('Share my needs')).toBeVisible({ timeout });
-  await drawer.getByTestId('needs-drawer-confirm').click();
+  await expect(page.getByTestId('needs-drawer-open-button')).toBeVisible({ timeout });
+  await page.getByTestId('needs-drawer-open-button').click();
+  await expect(page.getByTestId('needs-drawer-send')).toBeVisible({ timeout });
+  page.once('dialog', async (dialog) => {
+    await dialog.accept();
+  });
+  await page.getByTestId('needs-drawer-send').click();
 
   await waitForProgressGate(api, apiBaseUrl, sessionId, 'needsShared', label, timeout);
 }
@@ -532,27 +519,26 @@ export async function waitForNeedsReveal(
 }
 
 /**
- * Assert the side-by-side needs reveal and the noticing/validation step, then
- * validate the needs reveal through the UI. After both partners run this helper,
- * Stage 4 should be created by the backend transition.
+ * Legacy fallback: assert the side-by-side needs reveal and continue through it.
+ * Current sessions normally advance to Stage 4 automatically once both partners
+ * send needs.
  */
 export async function confirmSideBySideRevealAndValidation(
   page: Page,
   partnerName: string,
   timeout = 30000
 ): Promise<void> {
-  await expect(page.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout });
-  await page.getByTestId('common-ground-confirm-button').click();
+  await expect(page.getByTestId('needs-reveal-validate-button')).toBeVisible({ timeout });
+  await page.getByTestId('needs-reveal-validate-button').click();
 
-  const drawer = page.getByTestId('needs-drawer');
-  await expect(drawer).toBeVisible({ timeout });
-  await expect(drawer.getByText('Review Needs Together')).toBeVisible({ timeout });
-  await expect(drawer.getByText(/Look at both lists together/i)).toBeVisible({ timeout });
-  await expect(drawer.getByText('You')).toBeVisible({ timeout });
-  await expect(drawer.getByText(partnerName)).toBeVisible({ timeout });
-  await expect(drawer.getByTestId('needs-drawer-side-by-side')).toBeVisible({ timeout });
+  const modal = page.getByTestId('needs-reveal-modal');
+  await expect(modal).toBeVisible({ timeout });
+  await expect(modal.getByText('Needs side by side')).toBeVisible({ timeout });
+  await expect(modal.getByText(/You have both sent your needs/i)).toBeVisible({ timeout });
+  await expect(modal.getByText('You')).toBeVisible({ timeout });
+  await expect(modal.getByText(partnerName)).toBeVisible({ timeout });
 
-  await drawer.getByTestId('needs-drawer-confirm-cg').click();
+  await modal.getByTestId('needs-reveal-validate').click();
 }
 
 /**

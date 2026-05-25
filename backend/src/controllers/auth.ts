@@ -236,7 +236,8 @@ export const getAblyToken = asyncHandler(async (req: Request, res: Response): Pr
 
   // Add capabilities for specific sessions
   for (const session of sessions) {
-    capability[`meetwithoutfear:session:${session.id}`] = ['subscribe', 'publish', 'presence'];
+    capability[`meetwithoutfear:session:${session.id}`] = ['subscribe', 'publish'];
+    capability[`meetwithoutfear:presence:${session.id}`] = ['subscribe', 'presence'];
   }
 
   try {
@@ -589,6 +590,7 @@ export const updatePrivacyPreferences = asyncHandler(async (req: Request, res: R
   const newPreferences: PrivacyPreferencesDTO = {
     showActivityStatus: updates.showActivityStatus ?? currentPrefs.showActivityStatus,
     allowSessionInvites: updates.allowSessionInvites ?? currentPrefs.allowSessionInvites,
+    analyticsOptOut: updates.analyticsOptOut ?? currentPrefs.analyticsOptOut,
   };
 
   await prisma.user.update({

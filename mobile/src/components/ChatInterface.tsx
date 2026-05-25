@@ -25,7 +25,7 @@ import { createStyles } from '../theme/styled';
 import { designFonts, useAppAppearance } from '../theme';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 import { getAnimationIdentity, isPreRegisteredAnimatedId } from '../utils/animationBridge';
-import { hasLinkedKeyboardController, KeyboardAwareAvoidingView, KeyboardStickyComposer } from '../utils/keyboardController';
+import { hasLinkedKeyboardController, KeyboardStickyComposer } from '../utils/keyboardController';
 
 // ============================================================================
 // Types
@@ -135,7 +135,9 @@ function getSameMomentSortRank(item: ChatListItem): number {
     }
   }
 
-  if (isValidationCard(item)) return 3;
+  // Validation cards should appear before the same-moment AI explanation so
+  // the user sees the thing being reviewed first, then the framing text.
+  if (isValidationCard(item)) return 1.5;
   if (isCustomCard(item)) return 3;
   return 2;
 }
@@ -193,7 +195,7 @@ interface ChatInterfaceProps {
   onInitialRenderReady?: () => void;
   /** Custom element to render when there are no messages (e.g., onboarding compact) */
   customEmptyState?: React.ReactNode;
-  /** Keyboard vertical offset for iOS (accounts for header + status bar) */
+  /** Deprecated: ChatInterface now uses the actual keyboard frame instead of offset guessing. */
   keyboardVerticalOffset?: number;
   /** Skip marking initial messages as history - animate them instead (e.g., after compact signing + mood check) */
   skipInitialHistory?: boolean;
@@ -280,7 +282,6 @@ export function ChatInterface({
   onTypewriterStateChange,
   onInitialRenderReady,
   customEmptyState,
-  keyboardVerticalOffset = 100,
   skipInitialHistory = false,
   partnerName,
   lastSeenChatItemId,
@@ -321,6 +322,7 @@ export function ChatInterface({
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [composerHeight, setComposerHeight] = useState(0);
   const [messageListBottomInset, setMessageListBottomInset] = useState(0);
+  const [keyboardLift, setKeyboardLift] = useState(0);
   const [auxiliaryControlsVisible, setAuxiliaryControlsVisible] = useState(true);
 
   if (animationScopeRef.current !== animationScope) {
@@ -394,10 +396,19 @@ export function ChatInterface({
     const shownEvent = 'keyboardDidShow';
     const hiddenEvent = 'keyboardDidHide';
 
-    const showSub = Keyboard.addListener(showEvent, () => {
+    const updateKeyboardLift = (event: { endCoordinates?: { height?: number } }) => {
+      const nextLift = Math.max(
+        0,
+        Math.ceil((event.endCoordinates?.height ?? 0) - safeAreaInsets.bottom)
+      );
+      setKeyboardLift(nextLift);
+    };
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
       LayoutAnimation.configureNext(auxiliaryControlsLayoutAnimation);
       setAuxiliaryControlsVisible(true);
       setIsKeyboardVisible(true);
+      updateKeyboardLift(event);
       if (isNearBottomRef.current || shouldStickToBottomRef.current) {
         scrollToBottom(false);
       }
@@ -405,8 +416,9 @@ export function ChatInterface({
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setMessageListBottomInset(0);
       setIsKeyboardVisible(false);
+      setKeyboardLift(0);
     });
-    const shownSub = Keyboard.addListener(shownEvent, () => {});
+    const shownSub = Keyboard.addListener(shownEvent, updateKeyboardLift);
     const hiddenSub = Keyboard.addListener(hiddenEvent, () => {
       LayoutAnimation.configureNext(auxiliaryControlsLayoutAnimation);
       setAuxiliaryControlsVisible(true);
@@ -418,7 +430,7 @@ export function ChatInterface({
       shownSub.remove();
       hiddenSub.remove();
     };
-  }, [scrollToBottom]);
+  }, [safeAreaInsets.bottom, scrollToBottom]);
 
   // ---------------------------------------------------------------------------
   // Cache-First Architecture: Derive "waiting for AI" from last message role
@@ -529,11 +541,12 @@ export function ChatInterface({
       if (aIsIndicator && !bIsIndicator) return -1;
       if (bIsIndicator && !aIsIndicator) return 1;
 
-      // Validation cards should appear BELOW messages at the same time
+      // Validation cards should appear ABOVE messages at the same time.
+      // The follow-up AI copy explains the card after the user sees it.
       const aIsValidation = isValidationCard(a);
       const bIsValidation = isValidationCard(b);
-      if (aIsValidation && !bIsValidation) return 1;
-      if (bIsValidation && !aIsValidation) return -1;
+      if (aIsValidation && !bIsValidation) return -1;
+      if (bIsValidation && !aIsValidation) return 1;
 
       // Custom cards should appear below the prompt/message that introduced them.
       const aIsCustomCard = isCustomCard(a);
@@ -966,6 +979,15 @@ export function ChatInterface({
           isSpeaking={isSpeaking && currentId === message.id}
           onSpeakerPress={isAIMessage ? () => handleSpeakerPress(message.content, message.id) : undefined}
           partnerName={partnerName}
+          onPress={
+            (message.role === MessageRole.SHARED_CONTEXT || message.role === MessageRole.EMPATHY_STATEMENT) && onContextSharedPress
+              ? () => onContextSharedPress(
+                  message.timestamp,
+                  message.sharedContentDirection === 'sent',
+                  message.role === MessageRole.EMPATHY_STATEMENT ? 'empathy-shared' : 'context-shared',
+                )
+              : undefined
+          }
         />
         {renderMessageExtra?.(message)}
       </>
@@ -1206,6 +1228,9 @@ export function ChatInterface({
     </View>
   ) : null;
 
+  const keyboardSpacerStyle = keyboardLift > 0
+    ? { height: keyboardLift }
+    : null;
   const keyboardOpenMessageListInset = isKeyboardVisible && messageListBottomInset > 0
     ? { paddingBottom: messageListBottomInset }
     : null;
@@ -1294,16 +1319,13 @@ export function ChatInterface({
   }
 
   return (
-    <KeyboardAwareAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={keyboardVerticalOffset}
-    >
+    <View style={styles.container}>
       <View ref={flatListContainerRef} style={styles.flatListContainer}>
         {messageList}
       </View>
       {composerControls}
-    </KeyboardAwareAvoidingView>
+      {keyboardSpacerStyle ? <View pointerEvents="none" style={keyboardSpacerStyle} /> : null}
+    </View>
   );
 }
 
@@ -1395,7 +1417,9 @@ const useStyles = () => {
       paddingBottom: 0,
     },
     auxiliaryControls: {
-      overflow: 'hidden',
+      // overflow: 'hidden' removed — it interacted badly with
+      // LayoutAnimation during keyboard transitions, permanently
+      // clipping CTA panels at the bottom of the composer.
     },
   }));
 };

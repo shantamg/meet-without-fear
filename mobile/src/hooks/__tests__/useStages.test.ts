@@ -55,6 +55,7 @@ import {
   Stage4ProposalKind,
   Stage4ProposalStatus,
   Stage4SelectionDecision,
+  ContinueChoice,
   TendingEntryStatus,
   TendingEntryType,
 } from '@meet-without-fear/shared';
@@ -1198,9 +1199,9 @@ describe('useStages', () => {
             id: 'response-1',
             tendingEntryId: tendingEntry.id,
             userId: 'user-123',
-            status: 'PARTLY',
+            status: 'CHECKIN',
             reflection: 'It helped once.',
-            continueChoice: 'ADJUST',
+            continueChoice: ContinueChoice.EXTEND,
             submittedAt: '2026-05-13T01:00:00.000Z',
           },
           responseCount: 1,
@@ -1216,18 +1217,18 @@ describe('useStages', () => {
           await result.current.mutateAsync({
             sessionId,
             entryId: tendingEntry.id,
-            status: 'PARTLY',
+            status: 'CHECKIN',
             reflection: 'It helped once.',
-            continueChoice: 'ADJUST',
+            continueChoice: ContinueChoice.EXTEND,
           });
         });
 
         expect(mockPost).toHaveBeenCalledWith(
           `/sessions/${sessionId}/tending/${tendingEntry.id}/responses`,
           {
-            status: 'PARTLY',
+            status: 'CHECKIN',
             reflection: 'It helped once.',
-            continueChoice: 'ADJUST',
+            continueChoice: ContinueChoice.EXTEND,
           }
         );
         expect(queryClient.getQueryData(stageKeys.tending(sessionId))).toEqual({

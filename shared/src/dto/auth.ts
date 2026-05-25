@@ -102,11 +102,14 @@ export interface PrivacyPreferencesDTO {
   showActivityStatus: boolean;
   /** Allow existing connected people to start a new invited session with this user */
   allowSessionInvites: boolean;
+  /** Opt out of anonymous analytics (Mixpanel) tracking */
+  analyticsOptOut: boolean;
 }
 
 export const DEFAULT_PRIVACY_PREFERENCES: PrivacyPreferencesDTO = {
   showActivityStatus: true,
   allowSessionInvites: true,
+  analyticsOptOut: false,
 };
 
 export interface GetPrivacyPreferencesResponse {
@@ -116,6 +119,7 @@ export interface GetPrivacyPreferencesResponse {
 export interface UpdatePrivacyPreferencesRequest {
   showActivityStatus?: boolean;
   allowSessionInvites?: boolean;
+  analyticsOptOut?: boolean;
 }
 
 export interface UpdatePrivacyPreferencesResponse {

@@ -162,7 +162,8 @@ export function stage4HandoffBridgeMessage(partnerName: string | null | undefine
  */
 export const TENDING_WHAT_WORKED_PERSONA = [
   `You're walking the user through the "what worked" part of a Tending check-in.`,
-  `For each agreement or commitment, surface it by name and ask for the specifics of what shifted, even a little. Wins are named, however small.`,
+  `For each agreement or commitment, first ask what actually happened. Did it happen, partly happen, or not happen? Only after that ask what worked or what shifted.`,
+  `Surface each agreement or commitment by name. Wins are named, however small, but agreement itself is never treated as resolution.`,
   `Don't accept "everything went great" without probing for an actual moment — ask: "What's one moment that stands out?"`,
   `Don't rush to the next orientation. Sit with the wins. This is the only part of the protocol that's allowed to be slow on purpose.`,
 ].join('\n');
@@ -174,8 +175,20 @@ export const TENDING_WHAT_WORKED_PERSONA = [
 export const TENDING_MORE_SUPPORT_PERSONA = [
   `You're walking the user through the "where would more support help" part of a Tending check-in.`,
   `Receive what they share without redirecting. If they say "I stopped doing it," your response is "What got in the way?" — NOT "how can we restart?". Abandonment of a commitment is information, not failure.`,
+  `Use blocker categories as gentle sorting, never blame: forgot, too hard, too frequent, unclear, partner did not do part, I did not do part, circumstances changed, no longer wanted, other.`,
   `No judgment, no rescue, no coaching. Just naming what's still hard.`,
   `Default 1–2 sentences per turn.`,
+].join('\n');
+
+/**
+ * "Needs review" — check whether the original need is actually resolved.
+ */
+export const TENDING_NEEDS_REVIEW_PERSONA = [
+  `You're walking the user through the need-resolution part of a Tending check-in.`,
+  `For each named need, ask whether it now feels resolved, improving, still open, changed, or not sure.`,
+  `Do not treat follow-through as proof of resolution. A commitment can happen and the need can still be open; a need can also feel resolved enough even if the commitment changed.`,
+  `If a need is still open, name that as information about the strategy, not a failure by either person.`,
+  `Keep partner boundaries intact: do not pass anything to the partner unless the user chooses a partner-involving path.`,
 ].join('\n');
 
 /**
@@ -184,8 +197,97 @@ export const TENDING_MORE_SUPPORT_PERSONA = [
  */
 export const TENDING_WHAT_COMES_NEXT_PERSONA = [
   `You're walking the user through the "what comes next" part of a Tending check-in.`,
-  `There are five paths: try another round, keep going (extend), start a new process, close some & continue others (partial closure), or close fully.`,
+  `There are five paths: close fully, keep going (extend), adjust the commitment, reopen strategy work around the still-open need, or start a new process. Partial closure is also available when some threads are done and others need tending.`,
   `Describe them neutrally. Do not editorialize on which is "right." Do not nudge toward continuing.`,
+  `If follow-through did not happen or did not help a still-open need, point toward adjustment or reopening strategy work rather than generic extension or full closure.`,
+  `If the user wants a reminder, distinguish private individual reminders from shared reminders. Private reminders do not notify the partner; shared reminders require a shared agreement or explicit partner-involving path.`,
   `If the user picks FULL_CLOSURE: honor it without qualification. A grounded response is something like "Then it matters that you said it here. That's real." Do not try to talk them out of it. Do not ask if they're sure.`,
   `Full closure is a legitimate, dignified outcome — not an abandonment.`,
 ].join('\n');
+
+export type TendingConversationPhase =
+  | 'whatHappened'
+  | 'whatWorked'
+  | 'whereMoreSupport'
+  | 'needsReview'
+  | 'whatComesNext';
+
+export interface TendingConversationPromptContext {
+  userName?: string | null;
+  partnerName?: string | null;
+  entries?: Array<{
+    id: string;
+    summary: string | null;
+    scope?: 'SHARED' | 'INDIVIDUAL' | string;
+    successCriteria?: string | null;
+  }>;
+  needs?: Array<{
+    id?: string | null;
+    label: string;
+  }>;
+  selectedBetweenPeriodNotes?: Array<{
+    id: string;
+    content: string;
+    consentToShareWithPartner?: boolean;
+  }>;
+  latestStructuredOutcomes?: string | null;
+}
+
+function formatTendingEntryList(entries: TendingConversationPromptContext['entries']): string {
+  if (!entries || entries.length === 0) return '- No structured Tending entries were provided.';
+  return entries
+    .map((entry) => [
+      `- ${entry.id}: ${entry.summary || 'Tending entry'}${entry.scope ? ` (${entry.scope})` : ''}`,
+      entry.successCriteria ? `success criteria: ${entry.successCriteria}` : null,
+    ].filter(Boolean).join('; '))
+    .join('\n');
+}
+
+function formatTendingNeedList(needs: TendingConversationPromptContext['needs']): string {
+  if (!needs || needs.length === 0) return '- No linked needs were provided.';
+  return needs.map((need) => `- ${need.id ?? 'need'}: ${need.label}`).join('\n');
+}
+
+function formatTendingBetweenPeriodNotes(notes: TendingConversationPromptContext['selectedBetweenPeriodNotes']): string {
+  if (!notes || notes.length === 0) return '- No between-period notes were selected for this conversation.';
+  return notes.map((note) =>
+    `- ${note.id}: ${note.content}${note.consentToShareWithPartner ? ' (share consent recorded)' : ' (private; do not relay)'}`
+  ).join('\n');
+}
+
+export function buildTendingConversationPrompt(
+  phase: TendingConversationPhase,
+  context: TendingConversationPromptContext = {}
+): string {
+  const userName = context.userName?.trim() || 'the user';
+  const partnerName = context.partnerName?.trim() || 'their partner';
+  const personaByPhase: Record<TendingConversationPhase, string> = {
+    whatHappened: TENDING_WHAT_WORKED_PERSONA,
+    whatWorked: TENDING_WHAT_WORKED_PERSONA,
+    whereMoreSupport: TENDING_MORE_SUPPORT_PERSONA,
+    needsReview: TENDING_NEEDS_REVIEW_PERSONA,
+    whatComesNext: TENDING_WHAT_COMES_NEXT_PERSONA,
+  };
+
+  return [
+    `TENDING CONVERSATION PROMPT`,
+    `You are speaking privately with ${userName}; ${partnerName} is not in this conversation.`,
+    `Never turn this into a three-way conversation. Nothing crosses to ${partnerName} unless ${userName} explicitly chooses a partner-involving path.`,
+    ``,
+    personaByPhase[phase],
+    ``,
+    `TENDING ENTRIES TO REVIEW:`,
+    formatTendingEntryList(context.entries),
+    ``,
+    `UNDERLYING NEEDS TO REVIEW:`,
+    formatTendingNeedList(context.needs),
+    ``,
+    `SELECTED BETWEEN-PERIOD NOTES:`,
+    formatTendingBetweenPeriodNotes(context.selectedBetweenPeriodNotes),
+    context.latestStructuredOutcomes
+      ? `\nLATEST STRUCTURED OUTCOMES:\n${context.latestStructuredOutcomes}`
+      : '',
+    ``,
+    `Ask one thing at a time. Keep the full list available as context, but do not dump it into the user's lap.`,
+  ].filter((part) => part !== '').join('\n');
+}

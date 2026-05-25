@@ -148,7 +148,7 @@ All prompts receive pre-assembled, stage-scoped bundles. Every field must be tag
 | Stage 1 | `messages` (current session, user-only), `emotional_readings` (user-only), `prior_themes` (optional: user-only, same relationship, ≤3 bullets, summarizer = deterministic), `conversation_context` (recent turn buffer, user-only) |
 | Stage 2 | Stage 1 bundle **plus** `shared_partner_content[]` (each item: type TRANSFORMED_NEED or CONSENTED_STATEMENT, content, consentActive true, transformed true, sourceUserId - no raw partner venting), `empathy_draft` (user-authored), `phase` |
 | Stage 3 | `conversation_context` (recent user-only turn buffer), confirmed `user_needs[]`, optional `partner_needs[]` only after both users have consented to reveal, `needs_reveal` metadata, `needs_validation_status` |
-| Stage 4 | `confirmed_needs[]` (both users, from Stage 3 reveal/validation), `strategies[]` (unattributed pool), `user_rankings` (private until both submit), `partner_rankings` (unlock after both submit), `agreements[]`, `micro_experiments[]` (structured only), `global_suggestions[]` (vector-derived, must be labeled `source: global_library`) |
+| Stage 4 | `confirmed_needs[]` (both users, from Stage 3 reveal/validation), `proposals[]` (structured proposals with source label current user/partner/AI), `walkthrough_state` (current per-user need/phase), `willingness_selections[]` (partner selections only after the reveal/share rule allows it), `agreements[]`, `micro_experiments[]` (structured only), `global_suggestions[]` (global-library-derived, persisted as `StrategyProposal.source = AI_SUGGESTED`) |
 | Emotional Support (any stage) | `intensity`, `trend`, `recent_message` (user-only). **No recall contexts injected** when `MemoryIntent=avoid_recall`. |
 
 **Assembler Rules**
@@ -404,6 +404,8 @@ Stage 4 is about action, not exploration. Decisions must be based on structured,
 **Two types of vector search access:**
 - **User Memory**: Forbidden - cannot search user's past content to inform agreements
 - **Global Knowledge**: Allowed - can search anonymized "Micro-Experiments Library" to suggest ideas when users are stuck
+
+The Stage 4 AI suggestion endpoint may use the target confirmed need and curated global library items. It must not use user memory or raw user-vessel content. Generated suggestions are persisted as AI-suggested proposals and linked to the target need when available.
 
 ### Global Library Invariants
 

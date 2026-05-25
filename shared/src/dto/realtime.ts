@@ -90,6 +90,10 @@ export type SessionEventType =
   | 'empathy.status_updated' // Reconciler completed, empathy statuses changed
   // Stage 3: Need Mapping events
   | 'session.needs_extracted' // Current user's structured needs were captured
+  | 'need.captured'
+  | 'need.refined'
+  | 'need.locked'
+  | 'need.deleted'
   | 'partner.needs_confirmed' // Partner confirmed their identified needs
   | 'partner.needs_shared' // Partner consented to share needs
   | 'partner.needs_validated' // Partner validated or rejected side-by-side needs
@@ -152,7 +156,7 @@ export const REALTIME_CHANNELS = {
   /** Main session channel for events */
   session: (sessionId: string) => `meetwithoutfear:session:${sessionId}`,
   /** Presence channel for a session */
-  presence: (sessionId: string) => `meetwithoutfear:session:${sessionId}`,
+  presence: (sessionId: string) => `meetwithoutfear:presence:${sessionId}`,
   /** User's private channel */
   user: (userId: string) => `meetwithoutfear:user:${userId}`,
 } as const;

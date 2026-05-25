@@ -28,6 +28,7 @@ import {
   Stage4ProposalKind,
   Stage4ProposalStatus,
   Stage4SelectionDecision,
+  GetStage4StateResponse,
 } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
@@ -38,6 +39,8 @@ import {
   scheduleIndividualCommitmentTendingEntries,
   scheduleSharedAgreementTendingEntries,
 } from '../services/tending.service';
+import { getModelCompletion } from '../lib/bedrock';
+import { extractJsonFromResponse } from '../utils/json-extractor';
 import { z } from 'zod';
 
 // ============================================================================
@@ -107,6 +110,109 @@ function toStrategyDTO(strategy: StrategyProposalForVisibility) {
   };
 }
 
+type Stage4SuggestionDraft = {
+  description: string;
+  duration: string | null;
+  measureOfSuccess: string | null;
+};
+
+function normalizeSuggestionDrafts(value: unknown, count: number): Stage4SuggestionDraft[] {
+  const raw =
+    typeof value === 'object' && value !== null && Array.isArray((value as { suggestions?: unknown }).suggestions)
+      ? (value as { suggestions: unknown[] }).suggestions
+      : [];
+
+  return raw
+    .map((item): Stage4SuggestionDraft | null => {
+      if (typeof item !== 'object' || item === null) return null;
+      const draft = item as Record<string, unknown>;
+      const description = typeof draft.description === 'string' ? draft.description.trim() : '';
+      if (description.length < 10) return null;
+      return {
+        description,
+        duration: typeof draft.duration === 'string' && draft.duration.trim() ? draft.duration.trim() : null,
+        measureOfSuccess:
+          typeof draft.measureOfSuccess === 'string' && draft.measureOfSuccess.trim()
+            ? draft.measureOfSuccess.trim()
+            : null,
+      };
+    })
+    .filter((draft): draft is Stage4SuggestionDraft => draft !== null)
+    .slice(0, count);
+}
+
+function fallbackSuggestionDrafts(needLabel: string, count: number): Stage4SuggestionDraft[] {
+  const base = needLabel.trim() || 'this need';
+  const drafts: Stage4SuggestionDraft[] = [
+    {
+      description: `Try one small check-in focused on "${base}" and each name one concrete thing that would help this week.`,
+      duration: '10 minutes, once this week',
+      measureOfSuccess: 'Both people can name one next step that feels doable.',
+    },
+    {
+      description: `Choose one low-stakes experiment for "${base}" and agree to revisit it after a few days without treating it as permanent.`,
+      duration: '3 days',
+      measureOfSuccess: 'The experiment gives useful information without creating more pressure.',
+    },
+    {
+      description: `Set aside one moment to ask, "What would make ${base} easier right now?" and write down the smallest answer either person can offer.`,
+      duration: 'One conversation this week',
+      measureOfSuccess: 'There is one specific action or boundary to try next.',
+    },
+  ];
+  return drafts.slice(0, count);
+}
+
+async function generateStage4SuggestionDrafts(params: {
+  sessionId: string;
+  needLabel: string;
+  count: number;
+  globalLibraryItems: Array<{ title: string; description: string; category: string }>;
+}): Promise<Stage4SuggestionDraft[]> {
+  const libraryContext =
+    params.globalLibraryItems.length > 0
+      ? params.globalLibraryItems
+          .map((item) => `- ${item.title} (${item.category}): ${item.description}`)
+          .join('\n')
+      : '(none available)';
+
+  const response = await getModelCompletion('haiku', {
+    systemPrompt: [
+      'You generate Stage 4 micro-experiment suggestions for one confirmed need.',
+      'Use only the need label and the global micro-experiments library below. Do not use user memory or unrelated session history.',
+      'Return JSON only: {"suggestions":[{"description":"...","duration":"...","measureOfSuccess":"..."}]}.',
+      'Each suggestion must be concrete, small, reversible, observable, and phrased as something the partners could try.',
+    ].join('\n'),
+    messages: [
+      {
+        role: 'user',
+        content: [
+          `Need: ${params.needLabel}`,
+          `Count: ${params.count}`,
+          '',
+          'Global micro-experiments library:',
+          libraryContext,
+        ].join('\n'),
+      },
+    ],
+    maxTokens: 900,
+    operation: 'stage4-need-suggestions',
+    sessionId: params.sessionId,
+    turnId: `${params.sessionId}:stage4-suggest:${Date.now()}`,
+  });
+
+  if (!response) return fallbackSuggestionDrafts(params.needLabel, params.count);
+
+  try {
+    const parsed = extractJsonFromResponse(response);
+    const drafts = normalizeSuggestionDrafts(parsed, params.count);
+    return drafts.length > 0 ? drafts : fallbackSuggestionDrafts(params.needLabel, params.count);
+  } catch (error) {
+    logger.warn('[requestSuggestions] Failed to parse AI suggestion response; using fallback', error);
+    return fallbackSuggestionDrafts(params.needLabel, params.count);
+  }
+}
+
 // Create agreement request schema locally
 const createAgreementRequestSchema = z.object({
   strategyId: z.string().optional(),
@@ -136,16 +242,27 @@ const submitStage4SelectionsRequestSchema = z.object({
     .min(1, 'At least one selection is required'),
 });
 
+const stage4NeedWalkthroughActionSchema = z.object({
+  action: z.enum(['covered', 'skip', 'reset']),
+});
+
+const requestSuggestionsRequestSchema = z.object({
+  count: z.number().int().min(1).max(3).optional().default(3),
+  focusNeeds: z.array(z.string()).optional(),
+  needId: z.string().min(1).optional(),
+});
+
 const closeStage4RequestSchema = z.object({
   kind: z.nativeEnum(Stage4ClosureKind).optional(),
   reason: z.nativeEnum(Stage4ClosureReason).optional(),
   summary: z.string().max(2000).optional(),
   checkInDate: z
-    .string({ required_error: 'checkInDate is required' })
+    .string()
     .min(1, 'checkInDate is required')
     .refine((value) => !Number.isNaN(new Date(value).getTime()), {
       message: 'checkInDate must be a valid ISO date string',
-    }),
+    })
+    .optional(),
   // Optional, deprecated. Kept for backward compatibility — Phase 4 removes it.
   // TODO(phase-4): remove followUpDatesByProposalId; checkInDate is the single source.
   followUpDatesByProposalId: z.record(z.string()).optional(),
@@ -182,10 +299,30 @@ type Stage4CoverageForClosure = {
   coverageStatus: string;
 };
 
+class Stage4ClosedConflictError extends Error {
+  constructor() {
+    super('Stage 4 is already closed');
+    this.name = 'Stage4ClosedConflictError';
+  }
+}
+
+class Stage4WalkthroughNeedNotFoundError extends Error {
+  constructor() {
+    super('Stage 4 walkthrough need not found');
+    this.name = 'Stage4WalkthroughNeedNotFoundError';
+  }
+}
+
+type Stage4ProgressWriter = {
+  stageProgress: {
+    update(args: Prisma.StageProgressUpdateArgs): Promise<unknown>;
+  };
+};
+
 async function getMutableStage4Session(
   sessionId: string,
   userId: string
-): Promise<{ session: Stage4MutableSession; progress: { gatesSatisfied: Prisma.JsonValue | null } | null } | null> {
+): Promise<{ session: Stage4MutableSession; progress: { stage: number; gatesSatisfied: Prisma.JsonValue | null } | null } | null> {
   const session = (await prisma.session.findFirst({
     where: {
       id: sessionId,
@@ -215,16 +352,28 @@ async function getMutableStage4Session(
       status: 'IN_PROGRESS',
     },
     orderBy: { stage: 'desc' },
-    select: { gatesSatisfied: true },
+    select: { stage: true, gatesSatisfied: true },
   });
 
   return { session, progress };
 }
 
+async function stage4NeedExistsForSession(sessionId: string, needId: string): Promise<boolean> {
+  const need = await prisma.stage4NeedCoverage.findFirst({
+    where: {
+      sessionId,
+      OR: [{ id: needId }, { needId }],
+    },
+    select: { id: true },
+  });
+  return Boolean(need);
+}
+
 async function markStage4SelectionSubmitted(
   sessionId: string,
   userId: string,
-  existingGates: Prisma.JsonValue | null | undefined
+  existingGates: Prisma.JsonValue | null | undefined,
+  client: Stage4ProgressWriter = prisma
 ): Promise<void> {
   const gatesSatisfied = {
     ...((existingGates as Record<string, unknown> | null) || {}),
@@ -232,7 +381,7 @@ async function markStage4SelectionSubmitted(
     selectionSubmittedAt: new Date().toISOString(),
   } satisfies Prisma.InputJsonValue;
 
-  await prisma.stageProgress.update({
+  await client.stageProgress.update({
     where: {
       sessionId_userId_stage: { sessionId, userId, stage: 4 },
     },
@@ -243,7 +392,8 @@ async function markStage4SelectionSubmitted(
 async function clearStage4SelectionSubmitted(
   sessionId: string,
   userId: string,
-  existingGates: Prisma.JsonValue | null | undefined
+  existingGates: Prisma.JsonValue | null | undefined,
+  client: Stage4ProgressWriter = prisma
 ): Promise<void> {
   const next = {
     ...((existingGates as Record<string, unknown> | null) || {}),
@@ -251,7 +401,7 @@ async function clearStage4SelectionSubmitted(
   delete next.selectionSubmitted;
   delete next.selectionSubmittedAt;
 
-  await prisma.stageProgress.update({
+  await client.stageProgress.update({
     where: {
       sessionId_userId_stage: { sessionId, userId, stage: 4 },
     },
@@ -266,8 +416,115 @@ function hasSubmittedSelectionGate(
   return Boolean(gates && gates.selectionSubmitted === true);
 }
 
+async function updateStage4WalkthroughNeed(
+  sessionId: string,
+  userId: string,
+  needId: string,
+  action: 'covered' | 'skip' | 'reset',
+): Promise<GetStage4StateResponse> {
+  const before = await buildStage4State(sessionId, userId);
+  const targetOwnNeed = before.walkthrough.ownNeeds.find(need => need.id === needId);
+  const targetPartnerNeed = before.walkthrough.partnerNeeds.find(need => need.id === needId);
+  if (!targetOwnNeed && !targetPartnerNeed) {
+    throw new Stage4WalkthroughNeedNotFoundError();
+  }
+
+  const progress = await prisma.stageProgress.findUnique({
+    where: { sessionId_userId_stage: { sessionId, userId, stage: 4 } },
+    select: { gatesSatisfied: true },
+  });
+  const gates = (progress?.gatesSatisfied as Record<string, unknown> | null) ?? {};
+  const existing =
+    gates.stage4Walkthrough &&
+    typeof gates.stage4Walkthrough === 'object' &&
+    !Array.isArray(gates.stage4Walkthrough)
+      ? (gates.stage4Walkthrough as Record<string, unknown>)
+      : {};
+  const covered = new Set(
+    Array.isArray(existing.coveredNeedIds)
+      ? existing.coveredNeedIds.filter((id): id is string => typeof id === 'string')
+      : [],
+  );
+  const skipped = new Set(
+    Array.isArray(existing.skippedNeedIds)
+      ? existing.skippedNeedIds.filter((id): id is string => typeof id === 'string')
+      : [],
+  );
+
+  if (action === 'covered') {
+    covered.add(needId);
+    skipped.delete(needId);
+  } else if (action === 'skip') {
+    skipped.add(needId);
+    covered.delete(needId);
+  } else {
+    covered.delete(needId);
+    skipped.delete(needId);
+  }
+
+  const remainingOwn = before.walkthrough.ownNeeds.find(
+    need => !covered.has(need.id) && !skipped.has(need.id),
+  );
+  const remainingPartner = before.walkthrough.partnerNeeds.find(
+    need => !covered.has(need.id) && !skipped.has(need.id),
+  );
+
+  let phase: 'MY_NEEDS' | 'PARTNER_NEEDS' | 'QUALITY_REVIEW';
+  let currentNeedId: string | null;
+  if (action === 'reset') {
+    phase = targetOwnNeed ? 'MY_NEEDS' : 'PARTNER_NEEDS';
+    currentNeedId = needId;
+  } else if (before.walkthrough.phase === 'MY_NEEDS' && remainingOwn) {
+    phase = 'MY_NEEDS';
+    currentNeedId = remainingOwn.id;
+  } else if (before.walkthrough.phase === 'MY_NEEDS' && remainingPartner) {
+    phase = 'PARTNER_NEEDS';
+    currentNeedId = remainingPartner.id;
+  } else if (before.walkthrough.phase === 'PARTNER_NEEDS' && remainingPartner) {
+    phase = 'PARTNER_NEEDS';
+    currentNeedId = remainingPartner.id;
+  } else if (remainingOwn) {
+    phase = 'MY_NEEDS';
+    currentNeedId = remainingOwn.id;
+  } else if (remainingPartner) {
+    phase = 'PARTNER_NEEDS';
+    currentNeedId = remainingPartner.id;
+  } else {
+    phase = 'QUALITY_REVIEW';
+    currentNeedId = null;
+  }
+
+  await prisma.stageProgress.update({
+    where: { sessionId_userId_stage: { sessionId, userId, stage: 4 } },
+    data: {
+      gatesSatisfied: {
+        ...gates,
+        stage4Walkthrough: {
+          phase,
+          currentNeedId,
+          coveredNeedIds: [...covered],
+          skippedNeedIds: [...skipped],
+          updatedAt: new Date().toISOString(),
+        },
+      } satisfies Prisma.InputJsonValue,
+    },
+  });
+
+  return buildStage4State(sessionId, userId);
+}
+
 function userIsSessionMember(session: Stage4MutableSession, userId: string): boolean {
   return session.relationship.members.some((member) => member.userId === userId);
+}
+
+function isPrismaUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
+async function assertStage4StillOpen(tx: Prisma.TransactionClient, sessionId: string): Promise<void> {
+  if (await tx.stage4Closure.findUnique({ where: { sessionId } })) {
+    throw new Stage4ClosedConflictError();
+  }
 }
 
 function selectionsByProposalAndUser(
@@ -419,6 +676,69 @@ export async function submitStage4Selections(req: Request, res: Response): Promi
   } catch (error) {
     logger.error('[submitStage4Selections] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to submit Stage 4 selections', 500);
+  }
+}
+
+/**
+ * Persist Stage 4 walkthrough progress for one need.
+ * POST /sessions/:id/stage4/walkthrough/needs/:needId
+ */
+export async function updateStage4WalkthroughNeedStatus(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId, needId } = req.params;
+    const parseResult = stage4NeedWalkthroughActionSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.issues);
+      return;
+    }
+
+    const mutable = await getMutableStage4Session(sessionId, user.id);
+    if (!mutable) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (mutable.session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+    if (mutable.progress?.stage !== 4) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        `Cannot update Stage 4 walkthrough: you are in stage ${mutable.progress?.stage ?? 0}, but stage 4 is required`,
+        400,
+      );
+      return;
+    }
+    if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+
+    const state = await updateStage4WalkthroughNeed(
+      sessionId,
+      user.id,
+      needId,
+      parseResult.data.action
+    );
+    successResponse(res, { state });
+  } catch (error) {
+    if (error instanceof Stage4StateNotFoundError) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (error instanceof Stage4WalkthroughNeedNotFoundError) {
+      errorResponse(res, 'NOT_FOUND', 'Need not found', 404);
+      return;
+    }
+    logger.error('[updateStage4WalkthroughNeedStatus] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to update Stage 4 walkthrough', 500);
   }
 }
 
@@ -656,7 +976,13 @@ export async function shareStage4Selections(req: Request, res: Response): Promis
       return;
     }
 
-    await markStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied);
+    await prisma.$transaction(
+      async (tx) => {
+        await assertStage4StillOpen(tx, sessionId);
+        await markStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied, tx);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
 
     const partnerId = await getPartnerUserId(sessionId, user.id);
     if (partnerId) {
@@ -726,6 +1052,10 @@ export async function shareStage4Selections(req: Request, res: Response): Promis
     const state = await buildStage4State(sessionId, user.id);
     successResponse(res, { state });
   } catch (error) {
+    if (error instanceof Stage4ClosedConflictError) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
     logger.error('[shareStage4Selections] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to share Stage 4 selections', 500);
   }
@@ -753,20 +1083,38 @@ export async function declineStage4Need(req: Request, res: Response): Promise<vo
       errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
       return;
     }
+    if (mutable.progress?.stage !== 4) {
+      errorResponse(res, 'VALIDATION_ERROR', `Cannot decline need: you are in stage ${mutable.progress?.stage ?? 0}, but stage 4 is required`, 400);
+      return;
+    }
     if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
       errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
       return;
     }
+    if (!(await stage4NeedExistsForSession(sessionId, needId))) {
+      errorResponse(res, 'NOT_FOUND', 'Need not found', 404);
+      return;
+    }
 
-    await prisma.stage4NeedDeclination.upsert({
-      where: { sessionId_userId_needId: { sessionId, userId: user.id, needId } },
-      update: {},
-      create: { sessionId, userId: user.id, needId },
-    });
+    await prisma.$transaction(
+      async (tx) => {
+        await assertStage4StillOpen(tx, sessionId);
+        await tx.stage4NeedDeclination.upsert({
+          where: { sessionId_userId_needId: { sessionId, userId: user.id, needId } },
+          update: {},
+          create: { sessionId, userId: user.id, needId },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
 
     const state = await buildStage4State(sessionId, user.id);
     successResponse(res, { state });
   } catch (error) {
+    if (error instanceof Stage4ClosedConflictError) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
     logger.error('[declineStage4Need] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to decline need', 500);
   }
@@ -794,18 +1142,36 @@ export async function undeclineStage4Need(req: Request, res: Response): Promise<
       errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
       return;
     }
+    if (mutable.progress?.stage !== 4) {
+      errorResponse(res, 'VALIDATION_ERROR', `Cannot undecline need: you are in stage ${mutable.progress?.stage ?? 0}, but stage 4 is required`, 400);
+      return;
+    }
     if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
       errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
       return;
     }
+    if (!(await stage4NeedExistsForSession(sessionId, needId))) {
+      errorResponse(res, 'NOT_FOUND', 'Need not found', 404);
+      return;
+    }
 
-    await prisma.stage4NeedDeclination.deleteMany({
-      where: { sessionId, userId: user.id, needId },
-    });
+    await prisma.$transaction(
+      async (tx) => {
+        await assertStage4StillOpen(tx, sessionId);
+        await tx.stage4NeedDeclination.deleteMany({
+          where: { sessionId, userId: user.id, needId },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
 
     const state = await buildStage4State(sessionId, user.id);
     successResponse(res, { state });
   } catch (error) {
+    if (error instanceof Stage4ClosedConflictError) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
     logger.error('[undeclineStage4Need] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to undecline need', 500);
   }
@@ -839,7 +1205,13 @@ export async function unshareStage4Selections(req: Request, res: Response): Prom
       return;
     }
 
-    await clearStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied);
+    await prisma.$transaction(
+      async (tx) => {
+        await assertStage4StillOpen(tx, sessionId);
+        await clearStage4SelectionSubmitted(sessionId, user.id, mutable.progress?.gatesSatisfied, tx);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
 
     const partnerId = await getPartnerUserId(sessionId, user.id);
     if (partnerId) {
@@ -853,6 +1225,10 @@ export async function unshareStage4Selections(req: Request, res: Response): Prom
     const state = await buildStage4State(sessionId, user.id);
     successResponse(res, { state });
   } catch (error) {
+    if (error instanceof Stage4ClosedConflictError) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
     logger.error('[unshareStage4Selections] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to revise Stage 4 selections', 500);
   }
@@ -907,7 +1283,8 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const [proposals, selections, coverageRows, sharedVessel] = await Promise.all([
+    const memberUserIds = mutable.session.relationship.members.map((member) => member.userId);
+    const [proposals, selections, coverageRows, sharedVessel, stage4ProgressRows] = await Promise.all([
       prisma.strategyProposal.findMany({
         where: { sessionId, status: { not: Stage4ProposalStatus.REMOVED } },
         select: {
@@ -930,6 +1307,10 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
         select: { id: true, needId: true, coverageStatus: true },
       }) as Promise<Stage4CoverageForClosure[]>,
       prisma.sharedVessel.findUnique({ where: { sessionId } }),
+      prisma.stageProgress.findMany({
+        where: { sessionId, stage: 4, userId: { in: memberUserIds } },
+        select: { userId: true, gatesSatisfied: true },
+      }),
     ]);
 
     if (!sharedVessel) {
@@ -937,9 +1318,9 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const selectionUserIds = new Set(selections.map((selection) => selection.userId));
+    const progressByUserId = new Map(stage4ProgressRows.map((progress) => [progress.userId, progress]));
     const bothPartnersSubmitted = mutable.session.relationship.members.every((member) =>
-      selectionUserIds.has(member.userId)
+      hasSubmittedSelectionGate(progressByUserId.get(member.userId)?.gatesSatisfied)
     );
     const selectionsByProposal = selectionsByProposalAndUser(selections);
     const mutuallyWillingSharedProposals = proposals
@@ -1004,7 +1385,9 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
         followUpDate: Date | null;
       }> = [];
 
-      const checkInAt = new Date(parseResult.data.checkInDate);
+      const checkInAt = parseResult.data.checkInDate
+        ? new Date(parseResult.data.checkInDate)
+        : new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000);
 
       if (closureKind === Stage4ClosureKind.SHARED_AGREEMENT) {
         for (const proposal of mutuallyWillingSharedProposals) {
@@ -1125,6 +1508,10 @@ export async function closeStage4(req: Request, res: Response): Promise<void> {
       state,
     });
   } catch (error) {
+    if (isPrismaUniqueConstraintError(error)) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
     logger.error('[closeStage4] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to close Stage 4', 500);
   }
@@ -1918,9 +2305,31 @@ export async function confirmAgreement(req: Request, res: Response): Promise<voi
     }
     // If not confirmed, we don't change agreement status - it stays PROPOSED for renegotiation
 
-    const updatedAgreement = await prisma.agreement.update({
-      where: { id: agreementId },
-      data: updateData,
+    const now = new Date();
+    const { updatedAgreement, sessionCanResolve } = await prisma.$transaction(async (tx) => {
+      const updatedAgreement = await tx.agreement.update({
+        where: { id: agreementId },
+        data: updateData,
+      });
+
+      const allAgreements = await tx.agreement.findMany({
+        where: { sharedVessel: { sessionId } },
+      });
+      const sessionCanResolve = allAgreements.length > 0 &&
+        allAgreements.every((a) => a.agreedByA && a.agreedByB);
+
+      if (sessionCanResolve) {
+        await tx.session.update({
+          where: { id: sessionId },
+          data: { status: 'RESOLVED', resolvedAt: now },
+        });
+        await tx.stageProgress.updateMany({
+          where: { sessionId, completedAt: null },
+          data: { status: 'COMPLETED', completedAt: now },
+        });
+      }
+
+      return { updatedAgreement, sessionCanResolve };
     });
 
     const bothConfirmed = updatedAgreement.agreedByA && updatedAgreement.agreedByB;
@@ -1936,25 +2345,7 @@ export async function confirmAgreement(req: Request, res: Response): Promise<voi
       });
     }
 
-    // Check if ALL agreements in this session are fully confirmed
-    const allAgreements = await prisma.agreement.findMany({
-      where: { sharedVessel: { sessionId } },
-    });
-    const sessionCanResolve = allAgreements.length > 0 &&
-      allAgreements.every(a => a.agreedByA && a.agreedByB);
-
     if (sessionCanResolve) {
-      // Auto-resolve session when all agreements confirmed
-      await prisma.session.update({
-        where: { id: sessionId },
-        data: { status: 'RESOLVED', resolvedAt: new Date() },
-      });
-      // Mark all stage progress as COMPLETED
-      await prisma.stageProgress.updateMany({
-        where: { sessionId, completedAt: null },
-        data: { status: 'COMPLETED', completedAt: new Date() },
-      });
-
       await publishSessionEvent(sessionId, 'session.resolved', {
         agreementId: updatedAgreement.id,
       });
@@ -1995,10 +2386,12 @@ export async function requestSuggestions(req: Request, res: Response): Promise<v
     }
 
     const { id: sessionId } = req.params;
-    const { count = 3, focusNeeds } = req.body as {
-      count?: number;
-      focusNeeds?: string[];
-    };
+    const parseResult = requestSuggestionsRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid suggestion request', 400, parseResult.error.issues);
+      return;
+    }
+    const { count, focusNeeds, needId } = parseResult.data;
 
     // Check session exists and user has access
     const session = await prisma.session.findFirst({
@@ -2045,14 +2438,81 @@ export async function requestSuggestions(req: Request, res: Response): Promise<v
       return;
     }
 
-    // TODO: Call AI service to generate strategy suggestions based on common ground
-    // For now, return empty array - implement AI suggestion service separately
-    const suggestions: never[] = [];
+    const targetNeed = needId
+      ? await prisma.identifiedNeed.findFirst({
+          where: {
+            id: needId,
+            vessel: {
+              sessionId,
+              userId: user.id,
+            },
+          },
+        })
+      : null;
+
+    if (needId && !targetNeed) {
+      errorResponse(res, 'NOT_FOUND', 'Need not found', 404);
+      return;
+    }
+
+    const fallbackNeedLabel = focusNeeds?.find((need) => need.trim().length > 0)?.trim();
+    const needLabel = targetNeed?.need ?? fallbackNeedLabel;
+
+    if (!needLabel) {
+      errorResponse(res, 'VALIDATION_ERROR', 'A needId or focusNeeds value is required', 400);
+      return;
+    }
+
+    const globalLibraryItems = await prisma.globalLibraryItem.findMany({
+      where: {
+        source: 'CURATED',
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 8,
+      select: {
+        title: true,
+        description: true,
+        category: true,
+      },
+    });
+
+    const drafts = await generateStage4SuggestionDrafts({
+      sessionId,
+      needLabel,
+      count,
+      globalLibraryItems,
+    });
+
+    const created = await Promise.all(
+      drafts.map((draft) =>
+        prisma.strategyProposal.create({
+          data: {
+            sessionId,
+            createdByUserId: null,
+            description: draft.description,
+            needsAddressed: [needLabel],
+            duration: draft.duration,
+            measureOfSuccess: draft.measureOfSuccess,
+            source: 'AI_SUGGESTED',
+            kind: 'SHARED_PROPOSAL',
+            ...(targetNeed
+              ? {
+                  needLinks: {
+                    create: {
+                      needId: targetNeed.id,
+                    },
+                  },
+                }
+              : {}),
+          },
+        })
+      )
+    );
 
     successResponse(res, {
-      suggestions,
+      suggestions: created.map(toStrategyDTO),
       source: 'AI_GENERATED',
-      count: suggestions.length,
+      count: created.length,
     });
   } catch (error) {
     logger.error('[requestSuggestions] Error:', error);

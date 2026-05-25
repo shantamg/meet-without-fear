@@ -28,7 +28,7 @@ export function FeelHeardConfirmation({
     <GuidedActionPanel
       tone="success"
       title="Feel heard enough to continue?"
-      compact
+      compactActionLayout="stacked"
       primaryAction={{
         label: 'I feel heard',
         onPress: onConfirm,

@@ -32,7 +32,7 @@ Canonical mapping from gate keys to the endpoints/payloads that set them. Used b
 |------|----------|-----------------|
 | `needsConfirmed` | `POST /sessions/:id/needs/confirm` | Caller confirms needs |
 | `needsShared` | `POST /sessions/:id/needs/consent` | Caller consents to share confirmed needs |
-| `needsValidated` | `POST /sessions/:id/needs/validate` | Caller validates the side-by-side needs reveal |
+| `needsValidated` | Set automatically after both users share needs; legacy `POST /sessions/:id/needs/validate` remains for compatibility | Side-by-side reveal has been reviewed / Stage 4 can start |
 
 ## Stage 4
 | Gate | Endpoint | Payload trigger |

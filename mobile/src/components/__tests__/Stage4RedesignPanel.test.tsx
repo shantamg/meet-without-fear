@@ -11,7 +11,7 @@ import {
   Stage4ProposalStatus,
   Stage4SelectionDecision,
 } from '@meet-without-fear/shared';
-import { Stage4RedesignPanel } from '../Stage4RedesignPanel';
+import { Stage4RedesignFooter, Stage4RedesignPanel } from '../Stage4RedesignPanel';
 
 jest.mock('lucide-react-native', () => {
   const React = require('react');
@@ -96,6 +96,45 @@ const baseState: GetStage4StateResponse = {
   tendingPreview: null,
 };
 
+const walkthroughNeedsState: GetStage4StateResponse = {
+  ...baseState,
+  walkthrough: {
+    phase: 'MY_NEEDS',
+    currentNeed: {
+      id: 'coverage-1',
+      label: 'Feeling heard',
+      source: 'YOU',
+      status: 'in_progress',
+    },
+    currentIndex: 0,
+    totalInPhase: 2,
+    ownNeeds: [
+      {
+        id: 'coverage-0',
+        label: 'A previously reviewed need',
+        source: 'YOU',
+        status: 'covered',
+      },
+      {
+        id: 'coverage-1',
+        label: 'Feeling heard',
+        source: 'YOU',
+        status: 'in_progress',
+      },
+    ],
+    partnerNeeds: [],
+    proposalGroups: [
+      {
+        key: 'you_suggested',
+        title: 'Options you suggested',
+        proposals: [baseState.inventory.sharedProposals[0]],
+      },
+    ],
+    qualityWarnings: [],
+    defaultCheckInDate: '2026-06-09',
+  },
+};
+
 describe('Stage4RedesignPanel', () => {
   const defaultProps = {
     state: baseState,
@@ -147,6 +186,116 @@ describe('Stage4RedesignPanel', () => {
     expect(willing.length).toBeGreaterThan(0);
     expect(notWilling.length).toBeGreaterThan(0);
     expect(screen.queryByText('Discuss')).toBeNull();
+  });
+
+  it('does not ask for stances while walking needs one at a time', () => {
+    render(<Stage4RedesignPanel {...defaultProps} state={walkthroughNeedsState} />);
+
+    expect(screen.getByText('Working toward agreements')).toBeTruthy();
+    expect(screen.getByText('Take turns naming the impact before problem solving.')).toBeTruthy();
+    expect(screen.queryByText('Your stance')).toBeNull();
+    expect(screen.queryByText(/Eve hasn't shared their stance yet/i)).toBeNull();
+    expect(screen.queryByLabelText('Willing for proposal')).toBeNull();
+  });
+
+  it('shows reviewed needs as a secondary reference while walking the current need', () => {
+    render(<Stage4RedesignPanel {...defaultProps} state={walkthroughNeedsState} />);
+
+    expect(screen.getByTestId('stage4-previous-needs')).toBeTruthy();
+    expect(screen.getByText('Already reviewed')).toBeTruthy();
+    expect(screen.getByText('A previously reviewed need')).toBeTruthy();
+    expect(screen.getByText('Covered')).toBeTruthy();
+  });
+
+  it('does not let the drawer brainstorm options for an empty current need', () => {
+    const emptyState: GetStage4StateResponse = {
+      ...walkthroughNeedsState,
+      walkthrough: {
+        ...walkthroughNeedsState.walkthrough!,
+        proposalGroups: walkthroughNeedsState.walkthrough!.proposalGroups.map((group) => ({
+          ...group,
+          proposals: [],
+        })),
+      },
+    };
+
+    render(<Stage4RedesignPanel {...defaultProps} state={emptyState} />);
+
+    expect(screen.getByTestId('stage4-current-need-chat-guidance')).toBeTruthy();
+    expect(screen.getByText(/Keep brainstorming in the chat/i)).toBeTruthy();
+    expect(screen.queryByTestId('stage4-current-need-brainstorm')).toBeNull();
+    expect(screen.queryByTestId('stage4-current-need-covered')).toBeNull();
+    expect(screen.getByTestId('stage4-current-need-skip')).toBeTruthy();
+  });
+
+  it('hides the share footer while walking needs one at a time', () => {
+    render(
+      <Stage4RedesignFooter
+        state={walkthroughNeedsState}
+        partnerName="Eve"
+        onCloseStage4={jest.fn()}
+      />
+    );
+
+    expect(screen.queryByTestId('stage4-share-selections')).toBeNull();
+  });
+
+  it('asks for stances after the needs walkthrough reaches review', () => {
+    const reviewState: GetStage4StateResponse = {
+      ...walkthroughNeedsState,
+      walkthrough: {
+        ...walkthroughNeedsState.walkthrough!,
+        phase: 'QUALITY_REVIEW',
+        currentNeed: null,
+      },
+    };
+
+    render(<Stage4RedesignPanel {...defaultProps} state={reviewState} />);
+
+    expect(screen.getByText('Options to consider')).toBeTruthy();
+    expect(screen.getAllByText('Your stance').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('Willing for proposal').length).toBeGreaterThan(0);
+  });
+
+  it('does not show agreement review when quality review has no proposals', () => {
+    const onBackToChat = jest.fn();
+    const onResetNeed = jest.fn();
+    const reviewState: GetStage4StateResponse = {
+      ...walkthroughNeedsState,
+      inventory: {
+        ...walkthroughNeedsState.inventory,
+        sharedProposals: [],
+        individualCommitments: [],
+      },
+      walkthrough: {
+        ...walkthroughNeedsState.walkthrough!,
+        phase: 'QUALITY_REVIEW',
+        currentNeed: null,
+        proposalGroups: [],
+      },
+    };
+
+    render(
+      <Stage4RedesignPanel
+        {...defaultProps}
+        state={reviewState}
+        onBackToChat={onBackToChat}
+        onResetNeed={onResetNeed}
+      />
+    );
+
+    expect(screen.getByText('Keep brainstorming')).toBeTruthy();
+    expect(screen.getByText('No options have been captured yet.')).toBeTruthy();
+    expect(screen.getByText('Go back to a need')).toBeTruthy();
+    expect(screen.queryByText('Review agreements')).toBeNull();
+    expect(screen.queryByText('Options to consider')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('stage4-reset-need-coverage-0'));
+    expect(onResetNeed).toHaveBeenCalledWith('coverage-0');
+
+    fireEvent.press(screen.getByTestId('stage4-back-to-chat'));
+
+    expect(onBackToChat).toHaveBeenCalledTimes(1);
   });
 
   it('enables shared-agreement closure only when mutual willingness is visible', () => {

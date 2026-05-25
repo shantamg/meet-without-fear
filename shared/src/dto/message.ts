@@ -19,6 +19,7 @@ export interface MessageDTO {
   content: string;
   stage: Stage;
   timestamp: string;
+  refiningNeedId?: string | null;
 
   // For USER messages: was an emotion check included?
   emotionalReading?: EmotionalReadingDTO;
@@ -27,6 +28,7 @@ export interface MessageDTO {
 export interface SendMessageRequest {
   sessionId: string;
   content: string;
+  refiningNeedId?: string | null;
 
   // Optional: include emotional reading with message
   emotionalIntensity?: number; // 1-10

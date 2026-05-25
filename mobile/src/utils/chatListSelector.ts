@@ -265,23 +265,49 @@ export function deriveIndicators(data: SessionIndicatorData): IndicatorItem[] {
  * exact bug this helper exists to prevent.
  *
  * @param status - Current status of the user's empathy attempt.
- * @param revealedAt - When the attempt was revealed to the partner. Stable
- *   server timestamp; null if the attempt has not yet been revealed.
+ * @param validatedAt - When the partner confirmed this attempt. Stable
+ *   server timestamp; null if the attempt has not yet been validated.
  * @param partnerName - Display name to show in the indicator metadata.
  * @returns The indicator item, or null if it shouldn't be shown.
  */
 export function deriveEmpathyValidatedIndicator(
   status: string | null,
-  revealedAt: string | null,
+  validatedAt: string | null,
   partnerName: string
 ): IndicatorItem | null {
   if (status !== 'VALIDATED') return null;
-  if (!revealedAt) return null;
+  if (!validatedAt) return null;
   return {
     type: 'indicator',
     indicatorType: 'empathy-validated',
     id: 'empathy-validated',
-    timestamp: revealedAt,
+    timestamp: validatedAt,
+    metadata: { partnerName },
+  };
+}
+
+/**
+ * Derive the "partner-empathy-confirmed" indicator (the green
+ * "— YOU CONFIRMED {Partner}'S UNDERSTANDING —" divider).
+ *
+ * Inverse direction of `deriveEmpathyValidatedIndicator`: this one fires when
+ * the CURRENT user confirmed their partner's empathy attempt as accurate.
+ * Pinned to `validatedAt` (stable server timestamp) — same care as the other
+ * indicator: never fall back to `Date.now()`, or it will visually drift on
+ * every render.
+ */
+export function derivePartnerEmpathyConfirmedIndicator(
+  validated: boolean,
+  validatedAt: string | null,
+  partnerName: string
+): IndicatorItem | null {
+  if (!validated) return null;
+  if (!validatedAt) return null;
+  return {
+    type: 'indicator',
+    indicatorType: 'partner-empathy-confirmed',
+    id: 'partner-empathy-confirmed',
+    timestamp: validatedAt,
     metadata: { partnerName },
   };
 }

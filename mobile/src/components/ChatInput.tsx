@@ -35,6 +35,7 @@ interface ChatInputProps {
 
 const DEFAULT_MAX_LENGTH = 2000;
 const CHARACTER_WARNING_THRESHOLD = 0.8;
+const MULTILINE_CONTENT_HEIGHT_THRESHOLD = 32;
 
 // ============================================================================
 // Component
@@ -56,6 +57,7 @@ export function ChatInput({
   const styles = useStyles(keyboardVisible);
   const { palette } = useAppAppearance();
   const [input, setInput] = useState('');
+  const [inputContentHeight, setInputContentHeight] = useState(0);
   const inputRef = useRef<TextInputType>(null);
   // Flag to ignore onChangeText events right after sending (prevents autocorrect race condition)
   const justSentRef = useRef(false);
@@ -83,6 +85,7 @@ export function ChatInput({
   const showWarning = characterRatio >= CHARACTER_WARNING_THRESHOLD;
   // Voice recording is not supported on web; hide the mic regardless of caller.
   const showVoiceButton = !!onVoicePress && Platform.OS !== 'web';
+  const isExpandedInput = input.includes('\n') || inputContentHeight > MULTILINE_CONTENT_HEIGHT_THRESHOLD;
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
@@ -91,10 +94,14 @@ export function ChatInput({
     justSentRef.current = true;
     // Clear both React state and native TextInput to ensure sync
     setInput('');
+    setInputContentHeight(0);
     inputRef.current?.clear();
     try {
       onSend(message);
     } finally {
+      if (Platform.OS === 'web') {
+        requestAnimationFrame(() => inputRef.current?.focus());
+      }
       // Reset flag after a short delay to allow autocorrect events to be ignored.
       // Must be in finally block so the flag is always cleared even if onSend throws.
       setTimeout(() => {
@@ -109,6 +116,13 @@ export function ChatInput({
     setInput(text);
   }, []);
 
+  const handleContentSizeChange = useCallback((event: { nativeEvent: { contentSize: { height: number } } }) => {
+    const nextHeight = event.nativeEvent.contentSize.height;
+    setInputContentHeight((currentHeight) => (
+      Math.abs(currentHeight - nextHeight) > 1 ? nextHeight : currentHeight
+    ));
+  }, []);
+
   const handleKeyPress = useCallback((e: any) => {
     // Web only: Enter sends message, Shift+Enter adds newline
     if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
@@ -119,7 +133,10 @@ export function ChatInput({
 
   return (
     <View style={styles.container}>
-      <View style={styles.inputWrapper}>
+      <View
+        style={[styles.inputWrapper, isExpandedInput && styles.inputWrapperExpanded]}
+        testID="chat-input-wrapper"
+      >
         <TextInput
           ref={inputRef}
           style={styles.input}
@@ -129,6 +146,7 @@ export function ChatInput({
           placeholder={placeholder}
           placeholderTextColor={palette.textFaint}
           multiline
+          onContentSizeChange={handleContentSizeChange}
           maxLength={maxLength}
           editable={!inputDisabled}
           testID="chat-input"
@@ -187,6 +205,9 @@ const useStyles = (keyboardVisible: boolean) => {
       borderRadius: 999,
       borderWidth: 1,
       borderColor: palette.border,
+    },
+    inputWrapperExpanded: {
+      borderRadius: 24,
     },
     input: {
       paddingHorizontal: t.spacing.lg,

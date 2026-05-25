@@ -6,8 +6,7 @@
  * - Triggering needs extraction via API (AI returns deterministic fixture responses)
  * - Reviewing and confirming identified needs
  * - Explicitly consenting to share needs
- * - Both users seeing side-by-side needs
- * - Both users validating the needs reveal
+ * - Both users making side-by-side needs available
  * - Both users advancing to Stage 4
  *
  * SUCCESS CRITERIA:
@@ -16,7 +15,7 @@
  * - Both users see needs review UI and confirm needs
  * - Both users explicitly share/consent before reveal
  * - Both users see side-by-side needs without overlap badges
- * - Both users validate the needs reveal and advance to Stage 4
+ * - Both users advance to Stage 4 after both have sent needs
  * - 8+ screenshots document each state for both users
  *
  * VISUAL REGRESSION BASELINES:
@@ -32,9 +31,9 @@
 import { test, expect, devices, Page, BrowserContext, APIRequestContext } from '@playwright/test';
 import {
   cleanupE2EData,
+  confirmNeedsSummaryAndConsent,
   getE2EHeaders,
   SessionBuilder,
-  confirmSideBySideRevealAndValidation,
   expectNeedsComparisonFromApi,
   expectNeedsSummaryFromApi,
   waitForNeedsReveal,
@@ -243,11 +242,11 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     ]);
 
     // ========================================
-    // STEP 3: Reload and verify needs review phase
+    // STEP 3: Reload and verify needs drawer CTA phase
     // ========================================
-    console.log(`${elapsed()} === STEP 3: Verify needs review phase ===`);
+    console.log(`${elapsed()} === STEP 3: Verify needs drawer CTA phase ===`);
 
-    // Reload pages to show needs review UI
+    // Reload pages to show the needs CTA
     await Promise.all([
       pageA.reload(),
       pageB.reload(),
@@ -262,30 +261,20 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     await handleMoodCheck(pageA);
     await handleMoodCheck(pageB);
 
-    await expect(pageA.getByTestId('needs-review-button')).toBeVisible({ timeout: 30000 });
-    await expect(pageB.getByTestId('needs-review-button')).toBeVisible({ timeout: 30000 });
     await expectNeedsSummaryFromApi(apiA, API_BASE_URL, sessionId, 'User A');
     await expectNeedsSummaryFromApi(apiB, API_BASE_URL, sessionId, 'User B');
 
-    console.log(`${elapsed()} Needs summary UI visible for both users`);
+    await expect(pageA.getByTestId('needs-drawer-open-button')).toBeVisible({ timeout: 30000 });
+    await expect(pageB.getByTestId('needs-drawer-open-button')).toBeVisible({ timeout: 30000 });
 
-    // Verify at least one need card is visible for each user
-    const needCardA = pageA.locator('[data-testid^="needs-drawer-need-"]').first();
-    const needCardB = pageB.locator('[data-testid^="needs-drawer-need-"]').first();
+    console.log(`${elapsed()} Needs drawer CTA visible for both users`);
 
-    await pageA.getByTestId('needs-review-button').click();
-    await pageB.getByTestId('needs-review-button').click();
-    await expect(needCardA).toBeVisible({ timeout: 5000 });
-    await expect(needCardB).toBeVisible({ timeout: 5000 });
+    // Screenshot needs CTA state
+    await pageA.screenshot({ path: 'test-results/stage-3-02-needs-cta-user-a.png' });
+    await pageB.screenshot({ path: 'test-results/stage-3-02-needs-cta-user-b.png' });
 
-    console.log(`${elapsed()} Need cards visible for both users`);
-
-    // Screenshot needs review state
-    await pageA.screenshot({ path: 'test-results/stage-3-02-needs-review-user-a.png' });
-    await pageB.screenshot({ path: 'test-results/stage-3-02-needs-review-user-b.png' });
-
-    await pageA.getByTestId('needs-drawer-confirm').click();
-    await pageB.getByTestId('needs-drawer-confirm').click();
+    await confirmNeedsSummaryAndConsent(pageA, apiA, API_BASE_URL, sessionId, 'User A');
+    await confirmNeedsSummaryAndConsent(pageB, apiB, API_BASE_URL, sessionId, 'User B');
 
     await Promise.all([
       waitForStage(apiA, API_BASE_URL, sessionId, 3, 'User A', 30000),
@@ -327,24 +316,19 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     await handleMoodCheck(pageA);
     await handleMoodCheck(pageB);
 
-    await expect(pageA.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout: 10000 });
-    await expect(pageB.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout: 10000 });
     await expectNeedsComparisonFromApi(apiA, API_BASE_URL, sessionId, 'User A');
     await expectNeedsComparisonFromApi(apiB, API_BASE_URL, sessionId, 'User B');
 
-    console.log(`${elapsed()} Side-by-side reveal data visible for both users`);
+    console.log(`${elapsed()} Side-by-side reveal data available for both users`);
 
     // Screenshot needs reveal state
     await pageA.screenshot({ path: 'test-results/stage-3-05-common-ground-user-a.png' });
     await pageB.screenshot({ path: 'test-results/stage-3-05-common-ground-user-b.png' });
 
     // ========================================
-    // STEP 8: Both users validate needs reveal
+    // STEP 8: Backend advances to Stage 4 after both users send needs
     // ========================================
-    console.log(`${elapsed()} === STEP 8: Validate needs reveal ===`);
-
-    await confirmSideBySideRevealAndValidation(pageA, userB.name);
-    await confirmSideBySideRevealAndValidation(pageB, userA.name);
+    console.log(`${elapsed()} === STEP 8: Wait for automatic Stage 4 transition ===`);
 
     await Promise.all([
       waitForStage(apiA, API_BASE_URL, sessionId, 4, 'User A', 30000),

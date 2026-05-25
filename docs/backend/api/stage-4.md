@@ -3,7 +3,7 @@ title: "Stage 4 API: Strategic Repair"
 sidebar_position: 11
 description: Endpoints for collaborative strategy proposal, willingness selection, agreement documentation, and Tending check-ins.
 slug: /backend/api/stage-4
-updated: 2026-05-13
+updated: 2026-05-19
 ---
 # Stage 4 API: Strategic Repair
 
@@ -20,9 +20,10 @@ Stage 4 is **sequential** (unlike stages 1-3 which are parallel). Both users mus
 > The **legacy flow** (vestigial) used private ranking followed by overlap reveal. Its endpoints (`/strategies/rank`, `/strategies/overlap`, `/strategies/ready`) remain in the router for backward compatibility but are not the primary resolution path.
 
 ### Data persistence
-- Proposals → `StrategyProposal` with `kind` (SHARED_PROPOSAL | INDIVIDUAL_COMMITMENT) and `status` (ACTIVE | REVISED | REMOVED | CONVERTED_TO_AGREEMENT). Source tracked for audit; not exposed to partner. Pool is shuffled server-side before returning.
+- Proposals → `StrategyProposal` with `kind` (SHARED_PROPOSAL | INDIVIDUAL_COMMITMENT), `source` (USER_SUBMITTED | AI_SUGGESTED | CURATED), and `status` (ACTIVE | REVISED | REMOVED | CONVERTED_TO_AGREEMENT). The redesigned walkthrough exposes a source label (current user, partner, AI, or unknown) so users understand where options came from.
 - Willingness selections → `Stage4ProposalSelection` per user per proposal
 - Coverage audit → `Stage4NeedCoverage` tracks which confirmed needs are addressed by proposals
+- Walkthrough state → `StageProgress.gatesSatisfied.stage4Walkthrough` stores the caller's focused phase, current need, covered needs, and skipped needs
 - Closure → `Stage4Closure` records the final outcome kind (SHARED_AGREEMENT | NO_SHARED_AGREEMENT)
 - Agreements → `Agreement` rows linked to proposals via `proposalId`
 - Follow-up check-ins → `TendingEntry` rows scheduled from `Agreement.followUpDate`
@@ -36,7 +37,7 @@ The redesigned endpoints replace the ranking model with a willingness-selection 
 
 ### Get Stage 4 State
 
-Returns the consolidated Stage 4 state: proposal inventory, needs coverage audit, selections, and closure outcome.
+Returns the consolidated Stage 4 state: proposal inventory, needs coverage audit, selections, focused walkthrough state, quality warnings, and closure outcome.
 
 ```
 GET /api/v1/sessions/:id/stage4
@@ -53,6 +54,7 @@ interface GetStage4StateResponse {
   partnerSelections: Stage4SelectionDTO[];  // visible after both users share
   mySelectionStatus: 'NOT_SUBMITTED' | 'SUBMITTED' | 'SHARED';
   partnerSelectionStatus: 'NOT_SUBMITTED' | 'SUBMITTED' | 'SHARED';
+  walkthrough: Stage4WalkthroughDTO;
   outcome: Stage4OutcomeDTO | null;
   tendingPreview: TendingPreviewDTO | null;
 }
@@ -74,6 +76,17 @@ interface ProposalCardDTO {
   status: Stage4ProposalStatus; // ACTIVE | REVISED | REMOVED | CONVERTED_TO_AGREEMENT
   myDecision: Stage4SelectionDecision | null;
   partnerDecisionVisible: Stage4SelectionDecision | null;  // null until partner shares
+  sourceLabel: 'YOU' | 'PARTNER' | 'AI' | 'UNKNOWN';
+}
+
+interface Stage4WalkthroughDTO {
+  phase: 'MY_NEEDS' | 'PARTNER_NEEDS' | 'QUALITY_REVIEW' | 'SUMMARY';
+  currentNeed: Stage4WalkthroughNeedDTO | null;
+  ownNeeds: Stage4WalkthroughNeedDTO[];
+  partnerNeeds: Stage4WalkthroughNeedDTO[];
+  proposalGroups: Stage4WalkthroughProposalGroupDTO[];
+  qualityWarnings: Stage4QualityWarningDTO[];
+  defaultCheckInDate: string; // defaults to 10 days from now
 }
 
 interface ProposalNeedCoverageDTO {
@@ -165,9 +178,37 @@ Gate link: sets `selectionSubmitted`.
 
 ---
 
+### Update Walkthrough Need Status
+
+Persist the caller's one-need-at-a-time walkthrough progress. The server advances from own needs to partner needs to quality review based on the ordered coverage rows.
+
+```
+POST /api/v1/sessions/:id/stage4/walkthrough/needs/:needId
+```
+
+#### Request Body
+
+```typescript
+interface UpdateStage4WalkthroughNeedRequest {
+  action: 'covered' | 'skip';
+}
+```
+
+#### Response
+
+```typescript
+interface UpdateStage4WalkthroughNeedResponse {
+  state: GetStage4StateResponse;
+}
+```
+
+`covered` records that the current need feels sufficiently addressed for the caller. `skip` records that the caller is leaving the need for later. Both actions are per-user state and survive refresh/resume.
+
+---
+
 ### Close Stage 4
 
-Closes the stage and resolves the session. Determines closure kind from selection overlap: if both partners selected WILLING on at least one SHARED_PROPOSAL, the kind is SHARED_AGREEMENT; otherwise NO_SHARED_AGREEMENT. Creates `Agreement` rows for shared proposals both partners accepted. Schedules `TendingEntry` rows for agreements with `followUpDate`.
+Closes the stage and resolves the session from the quality review surface. Determines closure kind from selection overlap: if both partners selected WILLING on at least one SHARED_PROPOSAL, the kind is SHARED_AGREEMENT; otherwise NO_SHARED_AGREEMENT. Creates `Agreement` rows for shared proposals both partners accepted. Schedules `TendingEntry` rows for agreements with the single `checkInDate`, which the client defaults to 10 days from the review date.
 
 ```
 POST /api/v1/sessions/:id/stage4/close
@@ -177,7 +218,7 @@ POST /api/v1/sessions/:id/stage4/close
 
 ```typescript
 interface CloseStage4Request {
-  checkInDate: string;               // REQUIRED. ISO 8601 date — single follow-up date for all tending entries
+  checkInDate?: string;              // ISO 8601 date; defaults to 10 days out when omitted
   kind?: Stage4ClosureKind;          // Overrides computed kind if provided
   reason?: Stage4ClosureReason;
   summary?: string;                  // max 2000 chars
@@ -562,18 +603,21 @@ interface StrategyRefinementSuggestion {
 
 ## Request AI Suggestions
 
-Request AI-generated strategy suggestions.
+Request and persist AI-generated Stage 4 options for a specific need. The preferred redesigned route is:
 
 ```
-POST /api/v1/sessions/:id/strategies/suggest
+POST /api/v1/sessions/:id/stage4/proposals/suggest
 ```
+
+`POST /api/v1/sessions/:id/strategies/suggest` remains wired to the same handler for compatibility.
 
 ### Request Body
 
 ```typescript
 interface RequestSuggestionsRequest {
-  count?: number;  // Default: 3
-  focusNeeds?: string[];  // Which needs to focus on
+  needId?: string;        // Preferred: target confirmed need
+  count?: number;         // Default: 3, max 3
+  focusNeeds?: string[];  // Fallback need labels if no needId is supplied
 }
 ```
 
@@ -588,15 +632,13 @@ interface RequestSuggestionsResponse {
 
 ### Source Constraints
 
-AI suggestions are designed to be generated from:
-- Confirmed Stage 3 needs (Shared Vessel)
-- Global Micro-Experiments Library (anonymized)
+AI suggestions are generated from:
+- The target confirmed Stage 3 need, or the explicit `focusNeeds` fallback
+- Curated Global Micro-Experiments Library items
 
-**Never** from user memory (Retrieval Contract enforced).
+They are never generated from user memory. Created rows use `source = AI_SUGGESTED`, `createdByUserId = null`, and a `StrategyProposalNeed` link when `needId` is supplied so the focused walkthrough can show them immediately in the current need's AI-suggested group.
 
-> **Current state**: this endpoint is a placeholder. The controller returns `{ suggestions: [] }` and does not persist any `StrategyProposal` rows. The route path is `/strategies/suggest`; the JSDoc in the controller still says `/strategies/suggestions` (stale comment, route is correct).
-
-Validation: count 1-5; focusNeeds max 3 entries.
+Validation: count 1-3; either `needId` or a non-empty `focusNeeds` value is required.
 
 ---
 

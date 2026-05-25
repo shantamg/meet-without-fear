@@ -9,7 +9,7 @@
  *
  * Configuration:
  *   FIELD_ENCRYPTION_KEY — 32-byte key, base64-encoded.
- *   If not set, encrypt/decrypt pass through unchanged (graceful degradation for dev/test).
+ *   Required in production (throws on missing key). In dev/test, passes through unchanged.
  */
 
 import crypto from 'crypto';
@@ -21,7 +21,6 @@ const AUTH_TAG_LENGTH = 16; // 128 bits
 const ENCRYPTED_PREFIX = 'enc:v1:';
 
 let encryptionKey: Buffer | null = null;
-let keyWarningLogged = false;
 
 /**
  * Lazily resolves the encryption key from the environment.
@@ -32,12 +31,12 @@ function getKey(): Buffer | null {
 
   const raw = process.env.FIELD_ENCRYPTION_KEY;
   if (!raw) {
-    if (!keyWarningLogged && process.env.NODE_ENV === 'production') {
-      logger.warn(
-        '[FieldEncryption] FIELD_ENCRYPTION_KEY is not set. Sensitive fields will NOT be encrypted. ' +
-          'Set a 32-byte base64-encoded key to enable application-level encryption.',
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[FieldEncryption] FIELD_ENCRYPTION_KEY is not set in production. ' +
+          'Sensitive fields must not be stored as plaintext. ' +
+          'Generate a key with: openssl rand -base64 32',
       );
-      keyWarningLogged = true;
     }
     return null;
   }
@@ -132,5 +131,4 @@ export function isEncrypted(value: string): boolean {
  */
 export function _resetForTesting(): void {
   encryptionKey = null;
-  keyWarningLogged = false;
 }

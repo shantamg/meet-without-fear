@@ -143,8 +143,10 @@ export {
   useUnshareStage4Selections,
   useCloseStage4,
   useTendingEntries,
+  useTendingHistory,
   useSubmitTendingResponse,
   useSubmitTendingCheckin,
+  useCreateTendingBetweenPeriodNote,
   useCreateTendingReentry,
   // Agreements
   useAgreements,

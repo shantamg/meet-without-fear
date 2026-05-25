@@ -122,10 +122,15 @@ describe('field-encryption', () => {
     });
   });
 
-  describe('graceful degradation (no key)', () => {
+  describe('graceful degradation (no key, non-production)', () => {
     beforeEach(() => {
       _resetForTesting();
       delete process.env.FIELD_ENCRYPTION_KEY;
+      process.env.NODE_ENV = 'test';
+    });
+
+    afterEach(() => {
+      delete process.env.NODE_ENV;
     });
 
     it('encrypt returns plaintext unchanged when no key is set', () => {
@@ -141,6 +146,26 @@ describe('field-encryption', () => {
     it('isEncrypted still detects format even without key', () => {
       expect(isEncrypted('enc:v1:abc:def:ghi')).toBe(true);
       expect(isEncrypted('not encrypted')).toBe(false);
+    });
+  });
+
+  describe('production enforcement (no key)', () => {
+    beforeEach(() => {
+      _resetForTesting();
+      delete process.env.FIELD_ENCRYPTION_KEY;
+      process.env.NODE_ENV = 'production';
+    });
+
+    afterEach(() => {
+      process.env.NODE_ENV = 'test';
+    });
+
+    it('encrypt throws when no key is set in production', () => {
+      expect(() => encrypt('sensitive data')).toThrow('FIELD_ENCRYPTION_KEY is not set in production');
+    });
+
+    it('decrypt throws when no key is set in production', () => {
+      expect(() => decrypt('enc:v1:abc:def:ghi')).toThrow('FIELD_ENCRYPTION_KEY is not set in production');
     });
   });
 
