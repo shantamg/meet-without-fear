@@ -118,6 +118,7 @@ export type Stage4CaptureInput = {
   recentStage4Messages?: Array<{ role: 'USER' | 'AI'; userId?: string; content: string; timestamp: string }>;
   structuredProposals?: Stage4StructuredProposalInput[];
   compatibilityProposedStrategies?: string[];
+  topicFrame?: string;
 };
 
 export type Stage4StructuredProposalInput = {
@@ -347,6 +348,34 @@ function isConcreteProposal(description: string): boolean {
   return hasEnoughSpecificity(description);
 }
 
+const TOPIC_OVERLAP_THRESHOLD = 0.6;
+const MIN_STEM_LENGTH = 4;
+
+function normalizeWord(word: string): string {
+  return word.replace(/[''\u2019]s$/i, '').replace(/(?:ing|tion|ment|ness|ates|ated|ting|ted|ies|es|ed|ly|s)$/i, '');
+}
+
+function fuzzyWordMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  const stemA = normalizeWord(a);
+  const stemB = normalizeWord(b);
+  if (stemA.length >= MIN_STEM_LENGTH && stemB.length >= MIN_STEM_LENGTH && stemA === stemB) return true;
+  return false;
+}
+
+function getTopicOverlapScore(haystack: string, needle: string): number {
+  const haystackWords = normalizeText(haystack).split(' ').filter(Boolean);
+  const needleWords = normalizeText(needle).split(' ').filter((word) => word.length > 2);
+  if (needleWords.length === 0) return 0;
+  const overlap = needleWords.filter((nw) => haystackWords.some((hw) => fuzzyWordMatch(hw, nw))).length;
+  return overlap / needleWords.length;
+}
+
+function isTopicRestatement(description: string, topicFrame: string | undefined): boolean {
+  if (!topicFrame) return false;
+  return getTopicOverlapScore(description, topicFrame) >= TOPIC_OVERLAP_THRESHOLD;
+}
+
 function hasRemoveIntent(text: string): boolean {
   return [
     /\b(?:remove|delete)\b.*\b(?:proposal|idea|strategy|that|this|it|one)\b/i,
@@ -373,6 +402,7 @@ function extractAddOperations(input: Stage4CaptureInput): Stage4InventoryOperati
     if (proposal.classification !== 'PROPOSAL' || !proposal.kind) continue;
     const description = cleanProposalDescription(proposal.description);
     if (!description) continue;
+    if (isTopicRestatement(description, input.topicFrame)) continue;
     if (action === 'REVISE' && proposal.targetProposalId) {
       operations.push({
         type: 'REVISE_PROPOSAL',
@@ -412,6 +442,7 @@ function extractAddOperations(input: Stage4CaptureInput): Stage4InventoryOperati
   compatibility.forEach((description, index) => {
     const cleaned = cleanProposalDescription(description);
     if (!isConcreteProposal(cleaned)) return;
+    if (isTopicRestatement(cleaned, input.topicFrame)) return;
     const kind = inferProposalKind(description);
     operations.push({
       type: 'ADD_PROPOSAL',
@@ -438,6 +469,7 @@ function extractAddOperations(input: Stage4CaptureInput): Stage4InventoryOperati
       if (isNonCommitmentFirstPerson(raw)) continue;
       const description = cleanProposalDescription(match[1] ?? '');
       if (!isConcreteProposal(description)) continue;
+      if (isTopicRestatement(description, input.topicFrame)) continue;
       const kind = inferProposalKind(raw);
       operations.push({
         type: 'ADD_PROPOSAL',

@@ -2765,6 +2765,7 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
         aiResponse: aiMessage.content,
         structuredProposals: metadata.stage4Proposals,
         compatibilityProposedStrategies: metadata.proposedStrategies,
+        topicFrame: session.topicFrame || undefined,
       });
       const stage4CaptureMetadata: NonNullable<SessionStateToolInput['stage4Capture']> = {
         appliedOperationCount: captureResult.appliedOperationCount,
