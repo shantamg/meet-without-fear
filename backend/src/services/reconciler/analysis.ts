@@ -102,7 +102,7 @@ export async function getSonnetJson<T>(options: {
     logger.debug('Parsed AI JSON response', { operation: effectiveOperation });
     return json;
   } catch (error) {
-    logger.warn('Failed to parse AI JSON response', { operation: effectiveOperation, error: (error as Error).message, rawResponse: response });
+    logger.warn('Failed to parse AI JSON response', { operation: effectiveOperation, error: (error as Error).message, responseLength: response.length });
     return null;
   }
 }

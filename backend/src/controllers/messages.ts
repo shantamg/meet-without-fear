@@ -1168,7 +1168,7 @@ export async function getConversationHistory(
     if (duplicateContent.length > 0) {
       logger.warn(`[getConversationHistory:${requestId}] ⚠️  WARNING: Found ${duplicateContent.length} message(s) with duplicate content!`);
       duplicateContent.forEach(([key, msgs]) => {
-        logger.warn(`[getConversationHistory:${requestId}]   Content "${key.substring(0, 50)}...": appears ${msgs.length} times`);
+        logger.warn(`[getConversationHistory:${requestId}]   Duplicate group (role=${key.split(':')[0]}): appears ${msgs.length} times`);
         msgs.forEach((msg, idx) => {
           logger.warn(`[getConversationHistory:${requestId}]     ${idx + 1}. ID=${msg.id}, timestamp=${msg.timestamp.toISOString()}`);
         });
@@ -2158,7 +2158,7 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
         const draftMatch = buffer.match(/<draft>([\s\S]*?)<\/draft>/i);
         if (draftMatch) {
           draftContent = draftMatch[1].trim();
-          logger.info(`[sendMessageStream:${requestId}] [HIDDEN DRAFT]:`, draftContent.substring(0, 100) + (draftContent.length > 100 ? '...' : ''));
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN DRAFT]: {length: ${draftContent.length}}`);
         }
 
         // Extract structured Stage 3 needs if present.
@@ -2177,13 +2177,13 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
         const needsMatch = buffer.match(/<needs>([\s\S]*?)<\/needs>/i);
         if (needsMatch) {
           needsTagContent = needsMatch[1].trim();
-          logger.info(`[sendMessageStream:${requestId}] [HIDDEN NEEDS]:`, needsTagContent.substring(0, 160) + (needsTagContent.length > 160 ? '...' : ''));
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN NEEDS]: {length: ${needsTagContent.length}}`);
         }
 
         const stage4ProposalsMatch = buffer.match(/<stage4_proposals>([\s\S]*?)<\/stage4_proposals>/i);
         if (stage4ProposalsMatch) {
           stage4ProposalsTagContent = stage4ProposalsMatch[1].trim();
-          logger.info(`[sendMessageStream:${requestId}] [HIDDEN STAGE 4 PROPOSALS]:`, stage4ProposalsTagContent.substring(0, 160) + (stage4ProposalsTagContent.length > 160 ? '...' : ''));
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN STAGE 4 PROPOSALS]: {length: ${stage4ProposalsTagContent.length}}`);
         }
 
         const stage4WalkthroughMatch = buffer.match(/<stage4_walkthrough>([\s\S]*?)<\/stage4_walkthrough>/i);
@@ -2196,7 +2196,7 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
         const dispatchMatch = buffer.match(/<dispatch>([\s\S]*?)<\/dispatch>/i);
         if (dispatchMatch) {
           dispatchTagContent = dispatchMatch[1].trim();
-          logger.info(`[sendMessageStream:${requestId}] [DISPATCH TAG]:`, dispatchTagContent);
+          logger.info(`[sendMessageStream:${requestId}] [DISPATCH TAG]: {length: ${dispatchTagContent.length}}`);
         }
 
         // Return text with all tags stripped
@@ -2231,7 +2231,7 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
               // Extract and log the hidden thinking
               thinkingContent = thinkingBuffer.substring(0, closingTagIndex);
               logger.info(`[sendMessageStream:${requestId}] [TIMING] Thinking phase complete at ${thinkingEndTime - streamStartTime}ms`);
-              logger.info(`[sendMessageStream:${requestId}] [HIDDEN THINKING]:`, thinkingContent.substring(0, 200) + (thinkingContent.length > 200 ? '...' : ''));
+              logger.info(`[sendMessageStream:${requestId}] [HIDDEN THINKING]: {length: ${thinkingContent.length}}`);
 
               // Put remaining text into tag trap buffer
               tagTrapBuffer = thinkingBuffer.substring(closingTagIndex + 11); // 11 = '</thinking>'.length
