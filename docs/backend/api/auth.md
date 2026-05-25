@@ -4,7 +4,7 @@ sidebar_position: 13
 description: Authentication via Clerk with backend user provisioning and Ably token management.
 slug: /backend/api/auth
 created: 2026-03-11
-updated: 2026-04-30
+updated: 2026-05-18
 status: living
 ---
 # Authentication API
@@ -170,6 +170,18 @@ Not fully documented above; see `backend/src/routes/auth.ts` for the complete li
 - `PATCH /api/v1/auth/me/mood` — set the user's default mood intensity.
 - `GET` / `PUT /api/v1/auth/me/memory-preferences` — read / replace the memory-detection preferences (retention and surfacing toggles).
 - `GET` / `PATCH /api/v1/auth/me/notification-preferences` — read / partially update push-notification categories.
+- `GET` / `PATCH /api/v1/auth/me/privacy-preferences` — read / partially update privacy preferences. The response shape is `PrivacyPreferencesDTO`:
+
+  ```typescript
+  interface PrivacyPreferencesDTO {
+    showActivityStatus: boolean;     // show online/activity status to partner
+    allowSessionInvites: boolean;    // allow others to start invited sessions
+    analyticsOptOut: boolean;        // opt out of anonymous Mixpanel analytics
+  }
+  ```
+
+  `PATCH` accepts any subset of these fields; unset fields are merged from the current value. `analyticsOptOut: true` causes the mobile `MixpanelInitializer` to immediately suppress all analytics calls (track, identify, alias, setUserProperties) for that session.
+
 - `DELETE /api/v1/auth/me` — account deletion. Abandons active sessions, anonymizes historical messages/empathy records, and queues Clerk account deletion.
 
 ---

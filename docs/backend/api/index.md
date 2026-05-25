@@ -208,6 +208,8 @@ Identity provisioning lives in Clerk; the backend only exposes profile and token
 | `PUT`    | `/auth/me/memory-preferences` | Replace memory preferences |
 | `GET`    | `/auth/me/notification-preferences` | Read push notification prefs |
 | `PATCH`  | `/auth/me/notification-preferences` | Partial update of prefs |
+| `GET`    | `/auth/me/privacy-preferences` | Read privacy preferences (`showActivityStatus`, `allowSessionInvites`, `analyticsOptOut`) |
+| `PATCH`  | `/auth/me/privacy-preferences` | Partial update of privacy preferences |
 
 ### Additional feature areas (not yet broken out in this index)
 

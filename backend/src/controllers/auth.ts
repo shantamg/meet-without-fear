@@ -590,6 +590,7 @@ export const updatePrivacyPreferences = asyncHandler(async (req: Request, res: R
   const newPreferences: PrivacyPreferencesDTO = {
     showActivityStatus: updates.showActivityStatus ?? currentPrefs.showActivityStatus,
     allowSessionInvites: updates.allowSessionInvites ?? currentPrefs.allowSessionInvites,
+    analyticsOptOut: updates.analyticsOptOut ?? currentPrefs.analyticsOptOut,
   };
 
   await prisma.user.update({
