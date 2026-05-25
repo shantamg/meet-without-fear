@@ -4725,6 +4725,7 @@ export function UnifiedSessionScreen({
                 onUndeclineNeed={handleUndeclineStage4Need}
                 onMarkNeedCovered={handleMarkStage4NeedCovered}
                 onSkipNeed={handleSkipStage4Need}
+                onBackToChat={() => setShowStage4Drawer(false)}
                 onCloseStage4={(kind, reason, checkInDate) => {
                   handleCloseRedesignedStage4(kind, reason, checkInDate);
                   setShowStage4Drawer(false);
@@ -4742,6 +4743,7 @@ export function UnifiedSessionScreen({
               onShareSelections={handleShareStage4Selections}
               onReviseSelections={handleReviseStage4Selections}
               onKeepRefiningNoOverlap={handleKeepRefiningNoOverlap}
+              onBackToChat={() => setShowStage4Drawer(false)}
               onCloseStage4={(kind, reason, checkInDate) => {
                 handleCloseRedesignedStage4(kind, reason, checkInDate);
                 setShowStage4Drawer(false);

@@ -257,6 +257,41 @@ describe('Stage4RedesignPanel', () => {
     expect(screen.getAllByLabelText('Willing for proposal').length).toBeGreaterThan(0);
   });
 
+  it('does not show agreement review when quality review has no proposals', () => {
+    const onBackToChat = jest.fn();
+    const reviewState: GetStage4StateResponse = {
+      ...walkthroughNeedsState,
+      inventory: {
+        ...walkthroughNeedsState.inventory,
+        sharedProposals: [],
+        individualCommitments: [],
+      },
+      walkthrough: {
+        ...walkthroughNeedsState.walkthrough!,
+        phase: 'QUALITY_REVIEW',
+        currentNeed: null,
+        proposalGroups: [],
+      },
+    };
+
+    render(
+      <Stage4RedesignPanel
+        {...defaultProps}
+        state={reviewState}
+        onBackToChat={onBackToChat}
+      />
+    );
+
+    expect(screen.getByText('Keep brainstorming')).toBeTruthy();
+    expect(screen.getByText('No options have been captured yet.')).toBeTruthy();
+    expect(screen.queryByText('Review agreements')).toBeNull();
+    expect(screen.queryByText('Options to consider')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('stage4-back-to-chat'));
+
+    expect(onBackToChat).toHaveBeenCalledTimes(1);
+  });
+
   it('enables shared-agreement closure only when mutual willingness is visible', () => {
     const state: GetStage4StateResponse = {
       ...baseState,

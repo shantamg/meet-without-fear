@@ -33,6 +33,7 @@ interface Stage4RedesignPanelProps {
   onUndeclineNeed?: (needId: string) => void;
   onMarkNeedCovered?: (needId: string) => void;
   onSkipNeed?: (needId: string) => void;
+  onBackToChat?: () => void;
   onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason, checkInDate: string) => void;
 }
 
@@ -45,6 +46,7 @@ interface Stage4RedesignFooterProps {
   onShareSelections?: () => void;
   onReviseSelections?: () => void;
   onKeepRefiningNoOverlap?: () => void;
+  onBackToChat?: () => void;
   onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason, checkInDate: string) => void;
 }
 
@@ -535,6 +537,7 @@ export function Stage4RedesignFooter({
   onReviseSelections,
   onCloseStage4,
   onKeepRefiningNoOverlap,
+  onBackToChat,
 }: Stage4RedesignFooterProps) {
   const { palette } = useAppAppearance();
   const styles = useMemo(() => makeStyles(palette), [palette]);
@@ -576,10 +579,22 @@ export function Stage4RedesignFooter({
   if (allProposals.length === 0) {
     return (
       <View style={styles.footerContainer}>
-        <View style={styles.statusBlock}>
-          <Text style={styles.statusText}>
-            Proposals will appear here as your conversation develops them.
-          </Text>
+        <View style={styles.actions}>
+          <View style={styles.statusBlock}>
+            <Text style={styles.statusText}>
+              Close this and keep brainstorming in the chat. Proposals will appear here once they are captured.
+            </Text>
+          </View>
+          {onBackToChat && (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={onBackToChat}
+              accessibilityRole="button"
+              testID="stage4-back-to-chat"
+            >
+              <Text style={styles.secondaryButtonText}>Back to chat</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -684,6 +699,7 @@ export function Stage4RedesignPanel({
   onUndeclineNeed,
   onMarkNeedCovered,
   onSkipNeed,
+  onBackToChat,
   onCloseStage4,
 }: Stage4RedesignPanelProps) {
   const { palette } = useAppAppearance();
@@ -826,6 +842,39 @@ export function Stage4RedesignPanel({
   }
 
   if (!state.outcome && walkthrough.phase === 'QUALITY_REVIEW') {
+    if (allProposals.length === 0) {
+      return (
+        <View style={styles.container} testID="stage4-redesign-panel">
+          <View style={styles.walkthroughHeader}>
+            <View>
+              <Text style={styles.walkthroughTitle}>Keep brainstorming</Text>
+              <Text style={styles.walkthroughProgress}>No options have been captured yet.</Text>
+            </View>
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Next step</Text>
+            <Text style={styles.emptyText}>
+              Close this and keep talking in the chat. When something feels workable, it will appear here for review.
+            </Text>
+          </View>
+          {!hideFooter && (
+            <Stage4RedesignFooter
+              state={state}
+              partnerName={partnerName}
+              isClosing={isClosing}
+              isSharing={isSharing}
+              isRevising={isRevising}
+              onShareSelections={onShareSelections}
+              onReviseSelections={onReviseSelections}
+              onKeepRefiningNoOverlap={onKeepRefiningNoOverlap}
+              onBackToChat={onBackToChat}
+              onCloseStage4={onCloseStage4}
+            />
+          )}
+        </View>
+      );
+    }
+
     return (
       <View style={styles.container} testID="stage4-redesign-panel">
         <View style={styles.walkthroughHeader}>
