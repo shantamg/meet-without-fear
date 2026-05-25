@@ -16,6 +16,7 @@ type ProposalRow = {
   description: string;
   needsAddressed: string[];
   status: Stage4ProposalStatus;
+  needLinks?: Array<{ needId: string }>;
 };
 
 export type Stage4NeedCoverageRefreshResult = {
@@ -151,9 +152,13 @@ function classifyCoverage(
   const normalizedNeed = normalizeText(need.need);
   const scored = proposals
     .map((proposal) => {
+      const linkedByNeedId =
+        proposal.needsAddressed.includes(need.id) ||
+        (proposal.needLinks ?? []).some((link) => link.needId === need.id);
       const addressed = proposal.needsAddressed.some((label) => {
         const normalizedLabel = normalizeText(label);
-        return normalizedLabel === normalizedNeed ||
+        return label === need.id ||
+          normalizedLabel === normalizedNeed ||
           normalizedLabel.includes(normalizedNeed) ||
           normalizedNeed.includes(normalizedLabel);
       });
@@ -162,7 +167,7 @@ function classifyCoverage(
       const directMention = normalizedProposalText.includes(normalizedNeed);
       const lexicalScore = overlapScore(need.need, text);
       const semanticScore = conceptOverlapScore(need.need, text);
-      const score = addressed || directMention
+      const score = linkedByNeedId || addressed || directMention
         ? 1
         : Math.max(lexicalScore, Math.min(semanticScore, 0.74));
       return { proposal, score };
@@ -217,6 +222,11 @@ export async function refreshStage4NeedCoverage(
       where: {
         sessionId,
         status: { not: Stage4ProposalStatus.REMOVED },
+      },
+      include: {
+        needLinks: {
+          select: { needId: true },
+        },
       },
       orderBy: { updatedAt: 'desc' },
     }) as Promise<ProposalRow[]>,
