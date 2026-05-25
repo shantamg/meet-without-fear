@@ -9,6 +9,7 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
+import { empathyRateLimit } from '../middleware/rate-limit';
 import {
   runReconcilerHandler,
   getReconcilerStatusHandler,
@@ -33,7 +34,7 @@ router.use(requireAuth);
  * Analyzes empathy gaps in both directions (A→B and B→A).
  * Should be called after both users have shared their empathy statements.
  */
-router.post('/sessions/:id/reconciler/run', runReconcilerHandler);
+router.post('/sessions/:id/reconciler/run', empathyRateLimit, runReconcilerHandler);
 
 /**
  * Get reconciler status for a session
@@ -58,7 +59,7 @@ router.get('/sessions/:id/reconciler/share-offer', getShareOfferHandler);
  *
  * Accept (with selected quote or custom content) or decline the share offer.
  */
-router.post('/sessions/:id/reconciler/share-offer/respond', respondToShareOfferHandler);
+router.post('/sessions/:id/reconciler/share-offer/respond', empathyRateLimit, respondToShareOfferHandler);
 
 /**
  * Skip share offer without explicit response
@@ -66,7 +67,7 @@ router.post('/sessions/:id/reconciler/share-offer/respond', respondToShareOfferH
  *
  * Marks the share offer as skipped, allowing progression without sharing.
  */
-router.post('/sessions/:id/reconciler/share-offer/skip', skipShareOfferHandler);
+router.post('/sessions/:id/reconciler/share-offer/skip', empathyRateLimit, skipShareOfferHandler);
 
 /**
  * Generate a share draft for the user
@@ -75,7 +76,7 @@ router.post('/sessions/:id/reconciler/share-offer/skip', skipShareOfferHandler);
  * Called when user taps "Yes, help me share" in the ShareTopicDrawer.
  * Generates a draft based on suggestedShareFocus and saves as AI message.
  */
-router.post('/sessions/:id/reconciler/share-offer/generate-draft', generateShareDraftHandler);
+router.post('/sessions/:id/reconciler/share-offer/generate-draft', empathyRateLimit, generateShareDraftHandler);
 
 /**
  * Get reconciler summary after completion
@@ -93,7 +94,7 @@ router.get('/sessions/:id/reconciler/summary', getReconcilerSummaryHandler);
  * Client sends full conversation history each time. No DB writes.
  * Returns AI coaching response and optional proposed content.
  */
-router.post('/sessions/:id/reconciler/refinement/message', refinementChatMessageHandler);
+router.post('/sessions/:id/reconciler/refinement/message', empathyRateLimit, refinementChatMessageHandler);
 
 /**
  * Finalize refinement — share refined content with partner
@@ -101,6 +102,6 @@ router.post('/sessions/:id/reconciler/refinement/message', refinementChatMessage
  *
  * Creates SHARED_CONTEXT message and notifies partner via Ably.
  */
-router.post('/sessions/:id/reconciler/refinement/finalize', refinementFinalizeHandler);
+router.post('/sessions/:id/reconciler/refinement/finalize', empathyRateLimit, refinementFinalizeHandler);
 
 export default router;
