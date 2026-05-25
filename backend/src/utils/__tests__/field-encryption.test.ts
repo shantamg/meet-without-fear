@@ -149,7 +149,7 @@ describe('field-encryption', () => {
     });
   });
 
-  describe('production enforcement (no key)', () => {
+  describe('production without key (test-phase passthrough)', () => {
     beforeEach(() => {
       _resetForTesting();
       delete process.env.FIELD_ENCRYPTION_KEY;
@@ -158,14 +158,27 @@ describe('field-encryption', () => {
 
     afterEach(() => {
       process.env.NODE_ENV = 'test';
+      delete process.env.REQUIRE_FIELD_ENCRYPTION;
     });
 
-    it('encrypt throws when no key is set in production', () => {
-      expect(() => encrypt('sensitive data')).toThrow('FIELD_ENCRYPTION_KEY is not set in production');
+    it('encrypt passes through unchanged when no key is set (default)', () => {
+      expect(encrypt('sensitive data')).toBe('sensitive data');
     });
 
-    it('decrypt throws when no key is set in production', () => {
-      expect(() => decrypt('enc:v1:abc:def:ghi')).toThrow('FIELD_ENCRYPTION_KEY is not set in production');
+    it('decrypt passes through unchanged when no key is set (default)', () => {
+      expect(decrypt('enc:v1:abc:def:ghi')).toBe('enc:v1:abc:def:ghi');
+    });
+
+    it('encrypt throws when REQUIRE_FIELD_ENCRYPTION=true and no key', () => {
+      process.env.REQUIRE_FIELD_ENCRYPTION = 'true';
+      _resetForTesting();
+      expect(() => encrypt('sensitive data')).toThrow('REQUIRE_FIELD_ENCRYPTION=true');
+    });
+
+    it('decrypt throws when REQUIRE_FIELD_ENCRYPTION=true and no key', () => {
+      process.env.REQUIRE_FIELD_ENCRYPTION = 'true';
+      _resetForTesting();
+      expect(() => decrypt('enc:v1:abc:def:ghi')).toThrow('REQUIRE_FIELD_ENCRYPTION=true');
     });
   });
 

@@ -9,7 +9,8 @@
  *
  * Configuration:
  *   FIELD_ENCRYPTION_KEY — 32-byte key, base64-encoded.
- *   Required in production (throws on missing key). In dev/test, passes through unchanged.
+ *   When unset, values pass through unchanged (plaintext). Set
+ *   REQUIRE_FIELD_ENCRYPTION=true to require a key in production (throws if missing).
  */
 
 import crypto from 'crypto';
@@ -31,13 +32,17 @@ function getKey(): Buffer | null {
 
   const raw = process.env.FIELD_ENCRYPTION_KEY;
   if (!raw) {
-    if (process.env.NODE_ENV === 'production') {
+    // During the pre-launch test phase we deliberately run keyless so content
+    // stays plaintext and is directly inspectable for prompt debugging. Only
+    // fail when enforcement is explicitly opted into via REQUIRE_FIELD_ENCRYPTION.
+    if (process.env.NODE_ENV === 'production' && process.env.REQUIRE_FIELD_ENCRYPTION === 'true') {
       throw new Error(
-        '[FieldEncryption] FIELD_ENCRYPTION_KEY is not set in production. ' +
+        '[FieldEncryption] FIELD_ENCRYPTION_KEY is not set but REQUIRE_FIELD_ENCRYPTION=true. ' +
           'Sensitive fields must not be stored as plaintext. ' +
           'Generate a key with: openssl rand -base64 32',
       );
     }
+    // No key configured → encrypt()/decrypt() pass values through unchanged (plaintext).
     return null;
   }
 
