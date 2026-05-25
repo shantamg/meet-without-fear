@@ -393,6 +393,12 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
 
   // 2. Clean response text - remove all tags
   let responseText = rawResponse
+    // Defense-in-depth: the model is supposed to call update_session_state via the
+    // real tool-use API, but it sometimes emits the tool call as literal XML text in
+    // the prose pass. Strip any such block so raw <tool_calls>/<invoke> markup never
+    // reaches the user.
+    .replace(/<tool_calls>[\s\S]*?<\/tool_calls>/gi, '')
+    .replace(/<invoke\b[^>]*>[\s\S]*?<\/invoke>/gi, '')
     .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
     .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
     .replace(/<need>[\s\S]*?<\/need>/gi, '')
