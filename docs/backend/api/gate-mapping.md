@@ -35,13 +35,23 @@ Canonical mapping from gate keys to the endpoints/payloads that set them. Used b
 | `needsValidated` | Set automatically after both users share needs; legacy `POST /sessions/:id/needs/validate` remains for compatibility | Side-by-side reveal has been reviewed / Stage 4 can start |
 
 ## Stage 4
+
+**Redesigned flow (primary — willingness-selection model):**
+
+| Gate | Endpoint | Payload trigger |
+|------|----------|-----------------|
+| `selectionSubmitted` | `POST /sessions/:id/stage4/proposals/:proposalId/selection` or `POST /sessions/:id/stage4/selections` or `POST /sessions/:id/stage4/share-selections` | Caller submits or shares willingness decisions |
+| `agreementCreated` | `POST /sessions/:id/stage4/close` | Stage 4 closed with SHARED_AGREEMENT outcome |
+
+**Legacy flow (vestigial — kept for backward compatibility):**
+
 | Gate | Endpoint | Payload trigger |
 |------|----------|-----------------|
 | `strategiesSubmitted` | `POST /sessions/:id/strategies/ready` | Caller marks ready |
 | `rankingsSubmitted` | `POST /sessions/:id/strategies/rank` | Caller submits ranking |
 | `overlapIdentified` | `GET /sessions/:id/strategies/overlap` | Overlap computed (even empty) |
-| `agreementCreated` | `POST /sessions/:id/agreements` | Agreement saved |
 
 ## Notes
 - WAITING state is derived: if one user’s gates for the current stage are all true and the partner’s are not, session shows waiting.
 - Stage advance occurs when all gates for the user’s current stage are true and prerequisites met (e.g., Stage 4 requires both users completed Stage 3).
+- Tending endpoints (`/sessions/:id/tending/*`) operate post-resolution and do not set stage gates.
