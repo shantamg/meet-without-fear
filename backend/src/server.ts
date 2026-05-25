@@ -6,6 +6,7 @@ const PII_KEYS = new Set([
   'name', 'firstName', 'guesser', 'subject',
   'guesserName', 'subjectName', 'partnerName',
   'userName', 'userAName', 'userBName',
+  'email', 'clerkId', 'content', 'conversationSummary',
 ]);
 
 Sentry.init({
@@ -36,6 +37,10 @@ Sentry.init({
           }
         }
       }
+    }
+    // Strip Sentry's automatic user context (can contain email, id, ip)
+    if (event.contexts?.user) {
+      delete event.contexts.user;
     }
     return event;
   },
