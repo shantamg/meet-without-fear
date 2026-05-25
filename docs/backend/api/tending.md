@@ -4,7 +4,7 @@ sidebar_position: 12
 description: Post-resolution check-in and re-entry endpoints for follow-through on Stage 4 agreements.
 slug: /backend/api/tending
 created: 2026-05-06
-updated: 2026-05-13
+updated: 2026-05-14
 status: living
 ---
 # Tending API
@@ -16,7 +16,7 @@ Post-resolution check-in and re-entry endpoints. Tending surfaces after a sessio
 Three Tending entry types exist:
 
 - **Scheduled shared check-ins** (`SCHEDULED_SHARED_AGREEMENT_CHECKIN`) — created automatically for shared agreements when `Stage4Closure` is recorded. Visible to both session members. The cron script `backend/src/scripts/open-due-tending-entries.ts` opens them when their scheduled time arrives.
-- **Scheduled individual check-ins** (`SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN`) — created for each user's individual commitments with `scope = INDIVIDUAL`. Only the owning user sees these by default; they can opt in to share with their partner via `POST tending/:entryId/share`.
+- **Scheduled individual check-ins** (`SCHEDULED_INDIVIDUAL_COMMITMENT_CHECKIN`) — created for each user's individual commitments with `scope = INDIVIDUAL`. Only the owning user sees these by default; they can opt in to share with their partner via `POST tending/:entryId/share`. The same cron script opens these when their scheduled time arrives.
 - **Passive re-entry** (`USER_INITIATED_REENTRY`) — created on demand when a user returns to a resolved session. Context is assembled from the Stage 4 closure summary, agreements, open needs, and individual commitments.
 
 ### Entry status lifecycle
