@@ -243,7 +243,7 @@ const submitStage4SelectionsRequestSchema = z.object({
 });
 
 const stage4NeedWalkthroughActionSchema = z.object({
-  action: z.enum(['covered', 'skip']),
+  action: z.enum(['covered', 'skip', 'reset']),
 });
 
 const requestSuggestionsRequestSchema = z.object({
@@ -303,6 +303,13 @@ class Stage4ClosedConflictError extends Error {
   constructor() {
     super('Stage 4 is already closed');
     this.name = 'Stage4ClosedConflictError';
+  }
+}
+
+class Stage4WalkthroughNeedNotFoundError extends Error {
+  constructor() {
+    super('Stage 4 walkthrough need not found');
+    this.name = 'Stage4WalkthroughNeedNotFoundError';
   }
 }
 
@@ -413,9 +420,15 @@ async function updateStage4WalkthroughNeed(
   sessionId: string,
   userId: string,
   needId: string,
-  action: 'covered' | 'skip'
+  action: 'covered' | 'skip' | 'reset',
 ): Promise<GetStage4StateResponse> {
   const before = await buildStage4State(sessionId, userId);
+  const targetOwnNeed = before.walkthrough.ownNeeds.find(need => need.id === needId);
+  const targetPartnerNeed = before.walkthrough.partnerNeeds.find(need => need.id === needId);
+  if (!targetOwnNeed && !targetPartnerNeed) {
+    throw new Stage4WalkthroughNeedNotFoundError();
+  }
+
   const progress = await prisma.stageProgress.findUnique({
     where: { sessionId_userId_stage: { sessionId, userId, stage: 4 } },
     select: { gatesSatisfied: true },
@@ -430,46 +443,56 @@ async function updateStage4WalkthroughNeed(
   const covered = new Set(
     Array.isArray(existing.coveredNeedIds)
       ? existing.coveredNeedIds.filter((id): id is string => typeof id === 'string')
-      : []
+      : [],
   );
   const skipped = new Set(
     Array.isArray(existing.skippedNeedIds)
       ? existing.skippedNeedIds.filter((id): id is string => typeof id === 'string')
-      : []
+      : [],
   );
 
   if (action === 'covered') {
     covered.add(needId);
     skipped.delete(needId);
-  } else {
+  } else if (action === 'skip') {
     skipped.add(needId);
     covered.delete(needId);
+  } else {
+    covered.delete(needId);
+    skipped.delete(needId);
   }
 
   const remainingOwn = before.walkthrough.ownNeeds.find(
-    (need) => !covered.has(need.id) && !skipped.has(need.id)
+    need => !covered.has(need.id) && !skipped.has(need.id),
   );
   const remainingPartner = before.walkthrough.partnerNeeds.find(
-    (need) => !covered.has(need.id) && !skipped.has(need.id)
+    need => !covered.has(need.id) && !skipped.has(need.id),
   );
-  const phase =
-    before.walkthrough.phase === 'MY_NEEDS' && remainingOwn
-      ? 'MY_NEEDS'
-      : before.walkthrough.phase === 'MY_NEEDS' && remainingPartner
-        ? 'PARTNER_NEEDS'
-        : before.walkthrough.phase === 'PARTNER_NEEDS' && remainingPartner
-          ? 'PARTNER_NEEDS'
-          : remainingOwn
-            ? 'MY_NEEDS'
-            : remainingPartner
-              ? 'PARTNER_NEEDS'
-              : 'QUALITY_REVIEW';
-  const currentNeedId =
-    phase === 'MY_NEEDS'
-      ? remainingOwn?.id ?? null
-      : phase === 'PARTNER_NEEDS'
-        ? remainingPartner?.id ?? null
-        : null;
+
+  let phase: 'MY_NEEDS' | 'PARTNER_NEEDS' | 'QUALITY_REVIEW';
+  let currentNeedId: string | null;
+  if (action === 'reset') {
+    phase = targetOwnNeed ? 'MY_NEEDS' : 'PARTNER_NEEDS';
+    currentNeedId = needId;
+  } else if (before.walkthrough.phase === 'MY_NEEDS' && remainingOwn) {
+    phase = 'MY_NEEDS';
+    currentNeedId = remainingOwn.id;
+  } else if (before.walkthrough.phase === 'MY_NEEDS' && remainingPartner) {
+    phase = 'PARTNER_NEEDS';
+    currentNeedId = remainingPartner.id;
+  } else if (before.walkthrough.phase === 'PARTNER_NEEDS' && remainingPartner) {
+    phase = 'PARTNER_NEEDS';
+    currentNeedId = remainingPartner.id;
+  } else if (remainingOwn) {
+    phase = 'MY_NEEDS';
+    currentNeedId = remainingOwn.id;
+  } else if (remainingPartner) {
+    phase = 'PARTNER_NEEDS';
+    currentNeedId = remainingPartner.id;
+  } else {
+    phase = 'QUALITY_REVIEW';
+    currentNeedId = null;
+  }
 
   await prisma.stageProgress.update({
     where: { sessionId_userId_stage: { sessionId, userId, stage: 4 } },
@@ -684,6 +707,15 @@ export async function updateStage4WalkthroughNeedStatus(req: Request, res: Respo
       errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
       return;
     }
+    if (mutable.progress?.stage !== 4) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        `Cannot update Stage 4 walkthrough: you are in stage ${mutable.progress?.stage ?? 0}, but stage 4 is required`,
+        400,
+      );
+      return;
+    }
     if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
       errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
       return;
@@ -699,6 +731,10 @@ export async function updateStage4WalkthroughNeedStatus(req: Request, res: Respo
   } catch (error) {
     if (error instanceof Stage4StateNotFoundError) {
       errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    if (error instanceof Stage4WalkthroughNeedNotFoundError) {
+      errorResponse(res, 'NOT_FOUND', 'Need not found', 404);
       return;
     }
     logger.error('[updateStage4WalkthroughNeedStatus] Error:', error);

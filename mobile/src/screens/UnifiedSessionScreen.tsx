@@ -1995,6 +1995,19 @@ export function UnifiedSessionScreen({
     },
     [sessionId, showError, updateStage4WalkthroughNeed]
   );
+  const handleResetStage4Need = useCallback(
+    (needId: string) => {
+      updateStage4WalkthroughNeed.mutate(
+        { sessionId, needId, action: 'reset' },
+        {
+          onError: () => {
+            showError('Could not go back to that need. Please try again.');
+          },
+        }
+      );
+    },
+    [sessionId, showError, updateStage4WalkthroughNeed]
+  );
   const handleReviseStage4Selections = useCallback(() => {
     unshareStage4Selections.mutate(
       { sessionId },
@@ -3930,6 +3943,7 @@ export function UnifiedSessionScreen({
               onUndeclineNeed={handleUndeclineStage4Need}
               onMarkNeedCovered={handleMarkStage4NeedCovered}
               onSkipNeed={handleSkipStage4Need}
+              onResetNeed={handleResetStage4Need}
               onCloseStage4={handleCloseRedesignedStage4}
             />
             {tendingPanel}
@@ -4730,6 +4744,7 @@ export function UnifiedSessionScreen({
                 onUndeclineNeed={handleUndeclineStage4Need}
                 onMarkNeedCovered={handleMarkStage4NeedCovered}
                 onSkipNeed={handleSkipStage4Need}
+                onResetNeed={handleResetStage4Need}
                 onBackToChat={() => setShowStage4Drawer(false)}
                 onCloseStage4={(kind, reason, checkInDate) => {
                   handleCloseRedesignedStage4(kind, reason, checkInDate);

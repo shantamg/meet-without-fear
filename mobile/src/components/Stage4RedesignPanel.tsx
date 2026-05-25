@@ -33,6 +33,7 @@ interface Stage4RedesignPanelProps {
   onUndeclineNeed?: (needId: string) => void;
   onMarkNeedCovered?: (needId: string) => void;
   onSkipNeed?: (needId: string) => void;
+  onResetNeed?: (needId: string) => void;
   onBackToChat?: () => void;
   onCloseStage4: (kind: Stage4ClosureKind, reason: Stage4ClosureReason, checkInDate: string) => void;
 }
@@ -699,6 +700,7 @@ export function Stage4RedesignPanel({
   onUndeclineNeed,
   onMarkNeedCovered,
   onSkipNeed,
+  onResetNeed,
   onBackToChat,
   onCloseStage4,
 }: Stage4RedesignPanelProps) {
@@ -843,6 +845,10 @@ export function Stage4RedesignPanel({
 
   if (!state.outcome && walkthrough.phase === 'QUALITY_REVIEW') {
     if (allProposals.length === 0) {
+      const reviewedNeeds = [...walkthrough.ownNeeds, ...walkthrough.partnerNeeds].filter(
+        (need) => need.status === 'covered' || need.status === 'skipped'
+      );
+
       return (
         <View style={styles.container} testID="stage4-redesign-panel">
           <View style={styles.walkthroughHeader}>
@@ -857,6 +863,23 @@ export function Stage4RedesignPanel({
               Close this and keep talking in the chat. When something feels workable, it will appear here for review.
             </Text>
           </View>
+          {reviewedNeeds.length > 0 && onResetNeed && (
+            <View style={styles.card} testID="stage4-empty-review-needs">
+              <Text style={styles.sectionTitle}>Go back to a need</Text>
+              {reviewedNeeds.map((need) => (
+                <TouchableOpacity
+                  key={need.id}
+                  style={styles.secondaryButton}
+                  onPress={() => onResetNeed(need.id)}
+                  accessibilityRole="button"
+                  testID={`stage4-reset-need-${need.id}`}
+                >
+                  <RotateCcw color={palette.text} size={17} />
+                  <Text style={styles.secondaryButtonText}>{need.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
           {!hideFooter && (
             <Stage4RedesignFooter
               state={state}

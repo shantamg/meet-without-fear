@@ -259,6 +259,7 @@ describe('Stage4RedesignPanel', () => {
 
   it('does not show agreement review when quality review has no proposals', () => {
     const onBackToChat = jest.fn();
+    const onResetNeed = jest.fn();
     const reviewState: GetStage4StateResponse = {
       ...walkthroughNeedsState,
       inventory: {
@@ -279,13 +280,18 @@ describe('Stage4RedesignPanel', () => {
         {...defaultProps}
         state={reviewState}
         onBackToChat={onBackToChat}
+        onResetNeed={onResetNeed}
       />
     );
 
     expect(screen.getByText('Keep brainstorming')).toBeTruthy();
     expect(screen.getByText('No options have been captured yet.')).toBeTruthy();
+    expect(screen.getByText('Go back to a need')).toBeTruthy();
     expect(screen.queryByText('Review agreements')).toBeNull();
     expect(screen.queryByText('Options to consider')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('stage4-reset-need-coverage-0'));
+    expect(onResetNeed).toHaveBeenCalledWith('coverage-0');
 
     fireEvent.press(screen.getByTestId('stage4-back-to-chat'));
 
