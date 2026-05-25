@@ -2064,9 +2064,14 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     let metadata: SessionStateToolInput = {};
     let streamError: Error | null = null;
 
-    // Tag trap state - Claude outputs <thinking>...</thinking> first, which we hide
-    // After thinking, there may be <draft>, <dispatch>, or <needs> tags that we also hide
+    // Tag trap state - Claude USUALLY outputs <thinking>...</thinking> first, which we hide.
+    // After thinking, there may be <draft>, <dispatch>, or <needs> tags that we also hide.
+    // The model occasionally skips the leading <thinking> and goes straight to visible prose
+    // (more often on deep, long-context turns). We start in the thinking trap optimistically,
+    // but the first chunk decides: if the output does not actually begin with <thinking>, we
+    // bail out of the trap immediately so the reply is not swallowed and hidden.
     let isInsideThinking = true;
+    let sawThinkingOpener = false; // Becomes true only once we confirm a real <thinking> opener
     let isTrappingTags = false; // After thinking, buffer to check for hidden semantic tags
     let thinkingBuffer = '';
     let tagTrapBuffer = ''; // Buffer for checking semantic tags after thinking
@@ -2272,6 +2277,30 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
           if (isInsideThinking) {
             thinkingBuffer += event.text;
 
+            // The model is supposed to open with <thinking>, but it sometimes skips
+            // straight to the visible reply (more often on deep, long-context turns).
+            // Decide as soon as we have a non-whitespace prefix: if it cannot become a
+            // "<thinking>" opener, bail out of the trap so the reply is streamed instead
+            // of being swallowed and hidden (which would surface as an empty-response error).
+            if (!sawThinkingOpener) {
+              const trimmedStart = thinkingBuffer.replace(/^\s+/, '');
+              const opener = '<thinking';
+              if (trimmedStart.length > 0) {
+                if (trimmedStart.startsWith(opener)) {
+                  sawThinkingOpener = true;
+                } else if (!opener.startsWith(trimmedStart.slice(0, opener.length))) {
+                  // Definitely not a <thinking> opener — treat everything as visible output.
+                  logger.warn(`[sendMessageStream:${requestId}] Response did not open with <thinking>; routing ${thinkingBuffer.length} buffered chars as visible response.`);
+                  isInsideThinking = false;
+                  isTrappingTags = true; // Run it through the tag trap so any hidden tags are still caught
+                  tagTrapBuffer = thinkingBuffer;
+                  thinkingBuffer = '';
+                  continue;
+                }
+                // else: still ambiguous (e.g. "<th") — keep buffering.
+              }
+            }
+
             // Check for closing tag
             const closingTagIndex = thinkingBuffer.indexOf('</thinking>');
             if (closingTagIndex !== -1) {
@@ -2420,9 +2449,20 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
       // internal reasoning/tool planning than to salvage malformed output.
       // =========================================================================
       if (isInsideThinking && thinkingBuffer.length > 0) {
-        logger.warn(`[sendMessageStream:${requestId}] Stream ended while still in thinking trap. Buffer has ${thinkingBuffer.length} chars. Keeping it hidden.`);
-        processTagTrapBuffer(thinkingBuffer);
-        thinkingContent = thinkingBuffer;
+        if (sawThinkingOpener) {
+          // A genuine <thinking> block was opened but never closed. Keep it hidden:
+          // avoiding leaked chain-of-thought matters more than salvaging malformed output.
+          logger.warn(`[sendMessageStream:${requestId}] Stream ended while still in thinking trap. Buffer has ${thinkingBuffer.length} chars. Keeping it hidden.`);
+          processTagTrapBuffer(thinkingBuffer);
+          thinkingContent = thinkingBuffer;
+        } else {
+          // We never confirmed a <thinking> opener, so the buffered text is the visible
+          // reply — flush it rather than throwing an empty-response error. (Belt-and-suspenders:
+          // PHASE 1 normally bails out of the trap before we reach here.)
+          logger.warn(`[sendMessageStream:${requestId}] Stream ended with no <thinking> opener; flushing ${thinkingBuffer.length} buffered chars as visible response.`);
+          const cleanText = processTagTrapBuffer(thinkingBuffer);
+          sendCleanText(cleanText);
+        }
         thinkingBuffer = '';
         isInsideThinking = false;
       }
