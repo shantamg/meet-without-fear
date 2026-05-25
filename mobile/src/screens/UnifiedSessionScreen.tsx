@@ -3645,16 +3645,21 @@ export function UnifiedSessionScreen({
           ];
           const proposalCount = allProposals.length;
           if (proposalCount === 0) {
+            const isEmptyQualityReview = walkthrough.phase === 'QUALITY_REVIEW';
             return (
               <GuidedActionPanel
                 tone="needs"
-                eyebrow="What matters"
-                title="Start with the first need"
-                subtitle="Tap to explore what might honor each need."
+                eyebrow={isEmptyQualityReview ? 'What comes next' : 'What matters'}
+                title={isEmptyQualityReview ? 'Keep brainstorming' : 'Start with the first need'}
+                subtitle={
+                  isEmptyQualityReview
+                    ? 'No options captured yet. Keep talking in chat.'
+                    : 'Tap to explore what might honor each need.'
+                }
                 compact
                 pressable
                 primaryAction={{
-                  label: 'Open Stage 4',
+                  label: isEmptyQualityReview ? 'Open guidance' : 'Open Stage 4',
                   onPress: () => {
                     Keyboard.dismiss();
                     setShowStage4Drawer(true);
