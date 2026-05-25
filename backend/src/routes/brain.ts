@@ -19,7 +19,8 @@ const router = Router();
  * Authentication middleware for the Neural Monitor dashboard.
  * Accepts either:
  *   - X-Dashboard-Secret header matching DASHBOARD_API_SECRET env var
- *   - Clerk JWT Bearer token (verified via @clerk/express)
+ *   - Clerk JWT Bearer token (verified via @clerk/express) with an allowed
+ *     email or Clerk user id when allowlists are configured
  * If neither DASHBOARD_API_SECRET nor CLERK_SECRET_KEY is configured, skips auth (dev mode).
  */
 async function requireDashboardAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -56,6 +57,16 @@ async function requireDashboardAuth(req: Request, res: Response, next: NextFunct
       try {
         const token = authHeader.slice(7);
         const payload = await verifyToken(token, { secretKey: clerkSecretKey });
+
+        const allowedUserIds = process.env.DASHBOARD_ALLOWED_USER_IDS;
+        if (allowedUserIds) {
+          const userIdAllowList = allowedUserIds.split(',').map(id => id.trim()).filter(Boolean);
+          const userId = payload.sub;
+          if (userId && userIdAllowList.includes(userId)) {
+            next();
+            return;
+          }
+        }
 
         // Role-based auth: check email allowlist if configured
         const allowedEmails = process.env.DASHBOARD_ALLOWED_EMAILS;

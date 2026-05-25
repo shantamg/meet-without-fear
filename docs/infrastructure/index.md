@@ -146,6 +146,7 @@ Set `CHANNEL=<channel>` in the env so the emoji reaction handlers work.
 - **Docs site (this one)**: Vercel
 - **Marketing site**: Vercel (`website/`)
 - **Web app** (`app.meetwithoutfear.com`): Vercel — Expo Web build of `mobile/`, Vercel project `mwf-app`. Deployed via `.github/workflows/vercel-deploy-app.yml` on pushes to `main` that touch `mobile/**` or `shared/**`.
+- **Neural Monitor** (`monitor.meetwithoutfear.com`): Vercel (`tools/status-dashboard/`) — internal Clerk-gated dashboard for `/api/brain/*` activity, restricted in production to the Shantam and Darryl Clerk user IDs/email addresses.
 - **Test Dashboard**: Vercel (`mwf-test-dashboard`) — Browsable UI for e2e test runs, screenshots, and snapshots. Vercel Postgres (Neon) for run/snapshot metadata; Vercel Blob for screenshots. Deployed via `.github/workflows/vercel-deploy-test-dashboard.yml` on pushes to `main` that touch `tools/test-dashboard/**`. See [E2E Testing Architecture: Test Run Publishing & Dashboard](../e2e-testing/architecture.md#test-run-publishing--dashboard).
 
 See [deployment](../deployment/index.md) for release procedures and env var reference.
