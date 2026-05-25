@@ -315,6 +315,12 @@ export async function createSession(req: Request, res: Response): Promise<void> 
     }
 
     const { personId, inviteName, innerThoughtsId, linkedAtMessageId, context } = parseResult.data;
+    let inviteeDisplayName = inviteName?.trim() || undefined;
+
+    if (personId === user.id) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Cannot start a session with yourself', 400);
+      return;
+    }
 
     // Create or find relationship
     let relationship;
@@ -329,11 +335,51 @@ export async function createSession(req: Request, res: Response): Promise<void> 
             },
           },
         },
-        include: { relationship: true },
+        include: {
+          user: {
+            select: {
+              firstName: true,
+              name: true,
+            },
+          },
+          relationship: {
+            include: {
+              members: {
+                where: { userId: user.id },
+                select: { nickname: true },
+              },
+            },
+          },
+        },
       });
 
       if (existingMember) {
         relationship = existingMember.relationship;
+        inviteeDisplayName =
+          inviteeDisplayName ||
+          existingMember.relationship.members[0]?.nickname ||
+          existingMember.user.firstName ||
+          existingMember.user.name ||
+          undefined;
+      } else {
+        const existingUser = await prisma.user.findUnique({
+          where: { id: personId },
+          select: {
+            firstName: true,
+            name: true,
+          },
+        });
+
+        if (!existingUser) {
+          errorResponse(res, 'NOT_FOUND', 'Person not found', 404);
+          return;
+        }
+
+        inviteeDisplayName =
+          inviteeDisplayName ||
+          existingUser.firstName ||
+          existingUser.name ||
+          undefined;
       }
     }
 
@@ -342,10 +388,18 @@ export async function createSession(req: Request, res: Response): Promise<void> 
       relationship = await prisma.relationship.create({
         data: {
           members: {
-            create: {
-              userId: user.id,
-              nickname: inviteName || null, // Store what inviter calls the invitee
-            },
+            create: personId
+              ? [
+                  {
+                    userId: user.id,
+                    nickname: inviteName || null, // Store what inviter calls the invitee
+                  },
+                  { userId: personId },
+                ]
+              : {
+                  userId: user.id,
+                  nickname: inviteName || null, // Store what inviter calls the invitee
+                },
           },
         },
       });
@@ -399,7 +453,7 @@ export async function createSession(req: Request, res: Response): Promise<void> 
         data: {
           sessionId: sess.id,
           invitedById: user.id,
-          name: inviteName,
+          name: inviteeDisplayName,
           expiresAt,
         },
       });
@@ -483,8 +537,8 @@ export async function createSession(req: Request, res: Response): Promise<void> 
           createdAt: session.createdAt,
           // Include partner info with nickname for immediate display
           partner: {
-            id: '',
-            name: inviteName || null,
+            id: personId || '',
+            name: inviteeDisplayName || null,
             nickname: inviteName || null,
           },
         },

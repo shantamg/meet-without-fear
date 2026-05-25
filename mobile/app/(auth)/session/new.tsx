@@ -49,7 +49,8 @@ export default function NewSessionScreen() {
   const router = useRouter();
   const { palette } = useAppAppearance();
   const styles = useStyles();
-  const { partnerName, innerThoughtsId, linkedAtMessageId } = useLocalSearchParams<{
+  const { partnerId, partnerName, innerThoughtsId, linkedAtMessageId } = useLocalSearchParams<{
+    partnerId?: string;
     partnerName?: string;
     innerThoughtsId?: string;
     linkedAtMessageId?: string;
@@ -101,6 +102,20 @@ export default function NewSessionScreen() {
       setMode('new'); // Switch to new person mode since we have a name
     }
   }, [partnerName]);
+
+  // Pre-select an existing person when launched from their detail screen.
+  useEffect(() => {
+    if (!partnerId || selectedPerson) {
+      return;
+    }
+
+    const person = people.find((p) => p.id === partnerId);
+    if (person) {
+      setSelectedPerson(person);
+      setMode('pick');
+      setBypassDuplicateCheck(false);
+    }
+  }, [partnerId, people, selectedPerson]);
 
   // Determine if we have people to pick from
   const hasPeople = people.length > 0;
