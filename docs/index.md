@@ -31,6 +31,7 @@ Start here to find what you need.
 - [E2E Testing](e2e-testing/index.md) -- Test architecture and audit results
 - [Deployment](deployment/index.md) -- Deployment strategies and distribution options
 - [Infrastructure](infrastructure/index.md) -- Slam bot, EC2, Render, Vercel setup
+- [Processes](processes/multi-agent-workflow.md) -- Multi-agent issue execution and handoff workflow
 
 ### For planning work
 - `.planning/` -- Active planning directory (not in docs/). Documents have varying ages and may be stale; check file dates and cross-reference with current code before relying on them.
