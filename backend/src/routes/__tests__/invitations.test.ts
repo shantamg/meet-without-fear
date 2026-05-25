@@ -110,6 +110,63 @@ describe('Invitations API', () => {
       );
     });
 
+    it('uses the selected existing person name when creating an invitation', async () => {
+      const mockUser = { id: 'user-1', email: 'inviter@example.com', name: 'Inviter' };
+      const mockRelationship = {
+        id: 'rel-1',
+        members: [{ nickname: null }],
+      };
+      const mockSession = { id: 'session-1', status: 'CREATED', createdAt: new Date() };
+      const mockInvitation = { id: 'inv-1' };
+
+      (prisma.relationshipMember.findFirst as jest.Mock).mockResolvedValue({
+        relationship: mockRelationship,
+        user: {
+          firstName: 'Darryl',
+          name: 'Darryl Person',
+        },
+      });
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.session.create as jest.Mock).mockResolvedValue(mockSession);
+      (prisma.invitation.create as jest.Mock).mockResolvedValue(mockInvitation);
+      (prisma.stageProgress.create as jest.Mock).mockResolvedValue({});
+      (prisma.userVessel.create as jest.Mock).mockResolvedValue({});
+      (prisma.sharedVessel.create as jest.Mock).mockResolvedValue({});
+
+      const req = createMockRequest({
+        user: mockUser,
+        body: {
+          personId: 'user-2',
+        },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await createSession(req as Request, res as Response);
+
+      expect(prisma.relationship.create).not.toHaveBeenCalled();
+      expect(prisma.invitation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            name: 'Darryl',
+          }),
+        })
+      );
+      expect(statusMock).toHaveBeenCalledWith(201);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            session: expect.objectContaining({
+              partner: expect.objectContaining({
+                id: 'user-2',
+                name: 'Darryl',
+              }),
+            }),
+          }),
+        })
+      );
+    });
+
     it('requires authentication', async () => {
       const req = createMockRequest({
         body: { inviteName: 'Partner Name' },

@@ -1301,6 +1301,41 @@ export async function getInitialMessage(
     } else {
       // Inviter: partner name is from the invitation
       partnerName = invitation?.name || undefined;
+
+      // Older sessions created from an existing person may have a blank
+      // invitation name. Recover the display name from the relationship so the
+      // opening prompt does not ask who the user already selected.
+      if (!partnerName) {
+        const inviterMembership = await prisma.relationshipMember.findUnique({
+          where: {
+            relationshipId_userId: {
+              relationshipId: session.relationshipId,
+              userId: user.id,
+            },
+          },
+          select: { nickname: true },
+        });
+        const partnerMember = await prisma.relationshipMember.findFirst({
+          where: {
+            relationshipId: session.relationshipId,
+            userId: { not: user.id },
+          },
+          select: {
+            user: {
+              select: {
+                firstName: true,
+                name: true,
+              },
+            },
+          },
+        });
+
+        partnerName =
+          inviterMembership?.nickname ||
+          partnerMember?.user.firstName ||
+          partnerMember?.user.name ||
+          undefined;
+      }
     }
 
     // Check if this session originated from an Inner Thoughts session
