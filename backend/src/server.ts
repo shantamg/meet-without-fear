@@ -61,12 +61,25 @@ if (process.env.E2E_AUTH_BYPASS === 'true' && process.env.NODE_ENV === 'producti
   );
 }
 
-// Fail fast: FIELD_ENCRYPTION_KEY is required in production
+// Field encryption in production.
+// During the pre-launch test phase we deliberately run without a key so that
+// conversation content stays plaintext and can be inspected directly in the DB
+// for prompt debugging. When FIELD_ENCRYPTION_KEY is unset the encryption
+// middleware passes all fields through unchanged (see prisma-encryption-middleware.ts).
+// Set REQUIRE_FIELD_ENCRYPTION=true to re-enable fail-fast enforcement before launch.
 if (!process.env.FIELD_ENCRYPTION_KEY && process.env.NODE_ENV === 'production') {
-  throw new Error(
-    'FATAL: FIELD_ENCRYPTION_KEY is not set in a production environment. ' +
-    'All sensitive fields (messages, empathy drafts, conversation summaries) would be stored as plaintext. ' +
-    'Generate a key with: openssl rand -base64 32'
+  if (process.env.REQUIRE_FIELD_ENCRYPTION === 'true') {
+    throw new Error(
+      'FATAL: FIELD_ENCRYPTION_KEY is not set but REQUIRE_FIELD_ENCRYPTION=true. ' +
+      'All sensitive fields (messages, empathy drafts, conversation summaries) would be stored as plaintext. ' +
+      'Generate a key with: openssl rand -base64 32'
+    );
+  }
+  console.warn(
+    '[WARN] FIELD_ENCRYPTION_KEY is not set in production — sensitive fields ' +
+    '(messages, empathy drafts, conversation summaries) are stored as PLAINTEXT. ' +
+    'This is intentional for the test phase; set FIELD_ENCRYPTION_KEY (and optionally ' +
+    'REQUIRE_FIELD_ENCRYPTION=true) before launch.'
   );
 }
 
