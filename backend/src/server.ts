@@ -56,6 +56,15 @@ if (process.env.E2E_AUTH_BYPASS === 'true' && process.env.NODE_ENV === 'producti
   );
 }
 
+// Fail fast: FIELD_ENCRYPTION_KEY is required in production
+if (!process.env.FIELD_ENCRYPTION_KEY && process.env.NODE_ENV === 'production') {
+  throw new Error(
+    'FATAL: FIELD_ENCRYPTION_KEY is not set in a production environment. ' +
+    'All sensitive fields (messages, empathy drafts, conversation summaries) would be stored as plaintext. ' +
+    'Generate a key with: openssl rand -base64 32'
+  );
+}
+
 const PORT = process.env.PORT || 3000;
 
 // Create HTTP server from Express app (required for WebSocket upgrade handling)
