@@ -21,7 +21,8 @@ const router = Router();
  *   - X-Dashboard-Secret header matching DASHBOARD_API_SECRET env var
  *   - Clerk JWT Bearer token (verified via @clerk/express) with an allowed
  *     email or Clerk user id when allowlists are configured
- * If neither DASHBOARD_API_SECRET nor CLERK_SECRET_KEY is configured, skips auth (dev mode).
+ * If neither DASHBOARD_API_SECRET nor CLERK_SECRET_KEY is configured, allows
+ * local development and rejects production requests.
  */
 async function requireDashboardAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const dashboardSecret = process.env.DASHBOARD_API_SECRET;
@@ -59,22 +60,19 @@ async function requireDashboardAuth(req: Request, res: Response, next: NextFunct
         const payload = await verifyToken(token, { secretKey: clerkSecretKey });
 
         const allowedUserIds = process.env.DASHBOARD_ALLOWED_USER_IDS;
-        if (allowedUserIds) {
-          const userIdAllowList = allowedUserIds.split(',').map(id => id.trim()).filter(Boolean);
-          const userId = payload.sub;
-          if (userId && userIdAllowList.includes(userId)) {
-            next();
-            return;
-          }
-        }
-
-        // Role-based auth: check email allowlist if configured
         const allowedEmails = process.env.DASHBOARD_ALLOWED_EMAILS;
-        if (allowedEmails) {
-          const allowList = allowedEmails.split(',').map(e => e.trim().toLowerCase());
+
+        if (allowedUserIds || allowedEmails) {
+          const userIdAllowList = allowedUserIds?.split(',').map(id => id.trim()).filter(Boolean) ?? [];
+          const emailAllowList = allowedEmails?.split(',').map(e => e.trim().toLowerCase()).filter(Boolean) ?? [];
+          const userId = payload.sub;
           const email = (payload as any)?.email || (payload as any)?.sub_email;
-          if (!email || !allowList.includes(email.toLowerCase())) {
-            errorResponse(res, 'FORBIDDEN', 'Email not authorized for dashboard access', 403);
+
+          const userIdAllowed = Boolean(userId && userIdAllowList.includes(userId));
+          const emailAllowed = Boolean(email && emailAllowList.includes(email.toLowerCase()));
+
+          if (!userIdAllowed && !emailAllowed) {
+            errorResponse(res, 'FORBIDDEN', 'Not authorized for dashboard access', 403);
             return;
           }
         }

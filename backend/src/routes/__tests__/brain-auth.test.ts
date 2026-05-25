@@ -70,7 +70,19 @@ describe('brain dashboard auth', () => {
       .set('Authorization', 'Bearer valid-token');
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toMatchObject({ code: 'FORBIDDEN', message: 'Email not authorized for dashboard access' });
+    expect(res.body.error).toMatchObject({ code: 'FORBIDDEN', message: 'Not authorized for dashboard access' });
+  });
+
+  it('rejects Clerk tokens whose sub is not in DASHBOARD_ALLOWED_USER_IDS when only user ids are configured', async () => {
+    process.env.DASHBOARD_ALLOWED_USER_IDS = 'user_allowed';
+    verifyTokenMock.mockResolvedValue({ sub: 'user_blocked' } as any);
+
+    const res = await request(createApp())
+      .get('/brain/ably-token')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatchObject({ code: 'FORBIDDEN', message: 'Not authorized for dashboard access' });
   });
 
   it('rejects requests without a token when Clerk auth is configured', async () => {
