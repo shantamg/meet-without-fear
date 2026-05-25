@@ -246,6 +246,28 @@ Response without closing tag.`;
       expect(result.response).toBeTruthy();
     });
 
+    it('strips a leaked update_session_state tool-call XML block from the response', () => {
+      const raw = `<tool_calls>
+<invoke name="update_session_state">
+<parameter name="mode">ONBOARDING</parameter>
+<parameter name="ready_share">false</parameter>
+<parameter name="draft_topic"></parameter>
+<parameter name="memory_items">[]</parameter>
+</invoke>
+</tool_calls>
+
+Hey Shantam. First, let's write a short topic for Darryl so they know what this is about. What's going on?`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.response).toBe(
+        "Hey Shantam. First, let's write a short topic for Darryl so they know what this is about. What's going on?"
+      );
+      expect(result.response).not.toContain('<tool_calls>');
+      expect(result.response).not.toContain('<invoke');
+      expect(result.response).not.toContain('update_session_state');
+    });
+
     it('strips multiple tag types from response', () => {
       const raw = `<thinking>Analysis here</thinking>
 
