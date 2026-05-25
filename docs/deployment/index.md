@@ -62,6 +62,8 @@ Build profiles are defined in `mobile/eas.json`. Most profiles set `EXPO_PUBLIC_
 | Docs site | `docs-site/` | `npm run docs:deploy` (runs Vercel deploy in docs-site workspace) |
 | Status dashboard | `tools/status-dashboard/` | `npm run deploy:status` (runs `cd tools/status-dashboard && vercel --prod`) |
 
+The internal Neural Monitor dashboard is a standalone Vercel project served at `monitor.meetwithoutfear.com`. It is protected by Clerk in the browser and by backend API allowlists on `/api/brain/*`; production should set `DASHBOARD_ALLOWED_USER_IDS` and `DASHBOARD_ALLOWED_EMAILS`, and should not set `DASHBOARD_API_SECRET`.
+
 ### Web App: Vercel (Expo Web)
 
 The Expo mobile codebase also bundles for web and is served at `app.meetwithoutfear.com`.
@@ -125,7 +127,7 @@ The backend requires the following environment variables (see `backend/.env.exam
 | `APP_URL` | Public-facing app URL (e.g., `https://meetwithoutfear.com`) |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | AI services (AWS Bedrock) |
 
-Optional variables include Twilio SMS credentials, Neural Monitor dashboard settings (`DASHBOARD_API_SECRET`, `DASHBOARD_ALLOWED_EMAILS`, `DASHBOARD_URL`), model ID overrides (`BEDROCK_MODEL_ID`), and `FIELD_ENCRYPTION_KEY` (AES-256 key for application-level field encryption — gracefully degrades if not set).
+Optional variables include Twilio SMS credentials, Neural Monitor dashboard settings (`DASHBOARD_ALLOWED_USER_IDS`, `DASHBOARD_ALLOWED_EMAILS`, `DASHBOARD_URL`, local-only `DASHBOARD_API_SECRET`), model ID overrides (`BEDROCK_MODEL_ID`), and `FIELD_ENCRYPTION_KEY` (AES-256 key for application-level field encryption — gracefully degrades if not set).
 
 ### Testing & Development
 

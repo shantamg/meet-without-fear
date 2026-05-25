@@ -1,10 +1,12 @@
 import React, { Suspense } from 'react';
+import { RedirectToSignIn, SignedIn, SignedOut, useAuth } from '@clerk/clerk-react';
 import { Routes, Route } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import SessionDetail from './components/session/SessionDetail';
 import { ContextPage } from './components/context';
 import { SessionListPage } from './pages/SessionListPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { setAuthTokenProvider } from './services/api';
 
 // Lazy-loaded pages (less frequently visited)
 const DashboardPage = React.lazy(() =>
@@ -39,7 +41,7 @@ function PageErrorFallback() {
   );
 }
 
-function App() {
+function AppRoutes() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
@@ -53,6 +55,39 @@ function App() {
       </Route>
     </Routes>
   );
+}
+
+function ClerkGate() {
+  const { getToken, isLoaded } = useAuth();
+  const [authProviderReady, setAuthProviderReady] = React.useState(false);
+
+  React.useLayoutEffect(() => {
+    setAuthTokenProvider(() => getToken());
+    setAuthProviderReady(true);
+
+    return () => {
+      setAuthTokenProvider(null);
+      setAuthProviderReady(false);
+    };
+  }, [getToken]);
+
+  if (!isLoaded || !authProviderReady) return <LoadingSpinner />;
+
+  return (
+    <>
+      <SignedIn>
+        <AppRoutes />
+      </SignedIn>
+      <SignedOut>
+        <RedirectToSignIn />
+      </SignedOut>
+    </>
+  );
+}
+
+function App() {
+  if (!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY) return <AppRoutes />;
+  return <ClerkGate />;
 }
 
 export default App;

@@ -7,13 +7,28 @@ import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+type AuthTokenProvider = () => Promise<string | null>;
+
+let authTokenProvider: AuthTokenProvider | null = null;
+
+export function setAuthTokenProvider(provider: AuthTokenProvider | null): void {
+  authTokenProvider = provider;
+}
+
 /**
  * Resolves auth headers for API requests.
- * Sends X-Dashboard-Secret when VITE_DASHBOARD_SECRET is configured.
+ * Sends a Clerk Bearer token when Clerk is configured.
+ * Allows X-Dashboard-Secret only for local development.
  */
 export async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY && authTokenProvider) {
+    const token = await authTokenProvider();
+    if (token) return { Authorization: `Bearer ${token}` };
+  }
+
   const secret = import.meta.env.VITE_DASHBOARD_SECRET;
-  if (secret) return { 'X-Dashboard-Secret': secret };
+  if (secret && !import.meta.env.PROD) return { 'X-Dashboard-Secret': secret };
+
   return {};
 }
 

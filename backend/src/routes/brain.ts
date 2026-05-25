@@ -19,8 +19,10 @@ const router = Router();
  * Authentication middleware for the Neural Monitor dashboard.
  * Accepts either:
  *   - X-Dashboard-Secret header matching DASHBOARD_API_SECRET env var
- *   - Clerk JWT Bearer token (verified via @clerk/express)
- * If neither DASHBOARD_API_SECRET nor CLERK_SECRET_KEY is configured, skips auth (dev mode).
+ *   - Clerk JWT Bearer token (verified via @clerk/express) with an allowed
+ *     email or Clerk user id when allowlists are configured
+ * If neither DASHBOARD_API_SECRET nor CLERK_SECRET_KEY is configured, allows
+ * local development and rejects production requests.
  */
 async function requireDashboardAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const dashboardSecret = process.env.DASHBOARD_API_SECRET;
@@ -57,13 +59,20 @@ async function requireDashboardAuth(req: Request, res: Response, next: NextFunct
         const token = authHeader.slice(7);
         const payload = await verifyToken(token, { secretKey: clerkSecretKey });
 
-        // Role-based auth: check email allowlist if configured
+        const allowedUserIds = process.env.DASHBOARD_ALLOWED_USER_IDS;
         const allowedEmails = process.env.DASHBOARD_ALLOWED_EMAILS;
-        if (allowedEmails) {
-          const allowList = allowedEmails.split(',').map(e => e.trim().toLowerCase());
+
+        if (allowedUserIds || allowedEmails) {
+          const userIdAllowList = allowedUserIds?.split(',').map(id => id.trim()).filter(Boolean) ?? [];
+          const emailAllowList = allowedEmails?.split(',').map(e => e.trim().toLowerCase()).filter(Boolean) ?? [];
+          const userId = payload.sub;
           const email = (payload as any)?.email || (payload as any)?.sub_email;
-          if (!email || !allowList.includes(email.toLowerCase())) {
-            errorResponse(res, 'FORBIDDEN', 'Email not authorized for dashboard access', 403);
+
+          const userIdAllowed = Boolean(userId && userIdAllowList.includes(userId));
+          const emailAllowed = Boolean(email && emailAllowList.includes(email.toLowerCase()));
+
+          if (!userIdAllowed && !emailAllowed) {
+            errorResponse(res, 'FORBIDDEN', 'Not authorized for dashboard access', 403);
             return;
           }
         }
