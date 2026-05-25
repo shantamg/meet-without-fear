@@ -38,6 +38,7 @@ interface CreateSessionRequest {
 ### Validation Rules
 
 - Must provide `personId` OR `inviteName`
+- `personId` cannot be the caller's own user ID — returns `VALIDATION_ERROR` (400)
 - If `personId` has an existing `ACTIVE`/`CREATED`/`INVITED` session, that session is returned instead of creating a new one
 
 ### Invitation Delivery

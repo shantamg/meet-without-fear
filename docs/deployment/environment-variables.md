@@ -4,7 +4,7 @@ sidebar_position: 3
 description: All required environment variables for Meet Without Fear services.
 slug: /deployment/environment-variables
 created: 2026-03-11
-updated: 2026-05-15
+updated: 2026-05-25
 status: living
 ---
 # Environment Variables
@@ -26,12 +26,13 @@ All required environment variables for Meet Without Fear services.
 | `AWS_ACCESS_KEY_ID` | AWS credentials for Bedrock | `AKIA...` |
 | `AWS_SECRET_ACCESS_KEY` | AWS credentials for Bedrock | (secret) |
 | `AWS_REGION` | AWS region for Bedrock | `us-west-2` |
-| `FIELD_ENCRYPTION_KEY` | 32-byte base64 key for AES-256-GCM field encryption. Server refuses to start without it in production. Generate with `openssl rand -base64 32` | (secret) |
+| `FIELD_ENCRYPTION_KEY` | 32-byte base64 key for AES-256-GCM field encryption. When unset, sensitive fields are stored as plaintext and the server logs a warning (intentional during the test phase). Generate with `openssl rand -base64 32` | (optional pre-launch; required before public launch) |
 
 ### Optional
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `REQUIRE_FIELD_ENCRYPTION` | Set to `true` to make a missing `FIELD_ENCRYPTION_KEY` a fatal startup error. Re-enable before public launch. | `false` |
 | `REDIS_URL` | Redis connection string | (none - in-memory fallback) |
 | `LOG_LEVEL` | Logging verbosity | `info` |
 | `CORS_ORIGIN` | Allowed CORS origins | `*` |
@@ -120,7 +121,7 @@ Set via Render dashboard or `render.yaml`:
 - `JWT_REFRESH_SECRET`: Generate with `generateValue: true`
 - `ABLY_API_KEY`: Set manually (secret)
 - `AWS_*`: Set manually (secrets)
-- `FIELD_ENCRYPTION_KEY`: Generate with `openssl rand -base64 32` (secret)
+- `FIELD_ENCRYPTION_KEY`: Generate with `openssl rand -base64 32` (optional during test phase; required before public launch — also set `REQUIRE_FIELD_ENCRYPTION=true`)
 
 ## Secrets Management
 

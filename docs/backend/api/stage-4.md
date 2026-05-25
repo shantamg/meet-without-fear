@@ -3,7 +3,7 @@ title: "Stage 4 API: Strategic Repair"
 sidebar_position: 11
 description: Endpoints for collaborative strategy proposal, willingness selection, agreement documentation, and Tending check-ins.
 slug: /backend/api/stage-4
-updated: 2026-05-23
+updated: 2026-05-25
 ---
 # Stage 4 API: Strategic Repair
 
@@ -459,6 +459,8 @@ When no typed kind is supplied the heuristic defaults to **INDIVIDUAL_COMMITMENT
 > **Note:** `SHARED_AGREEMENT` closures are not handled by this function. They require the manual `POST /stage4/close` endpoint, which evaluates mutual WILLING selections and creates agreement records.
 
 Both auto-closure and manual `POST /stage4/close` filter needs using **OPEN and PARTIAL** coverage status when computing `openNeedIds` for the closure record.
+
+> **Share gate (POST /stage4/share-selections)**: Before sharing, the server verifies every **OPEN** (not partial) need is either addressed by a willing-active proposal or explicitly declined. Partially-covered needs no longer block sharing.
 
 ---
 
