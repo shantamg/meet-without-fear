@@ -349,7 +349,7 @@ describe('Messages API (Fire-and-Forget)', () => {
       (prisma.tendingCheckin.findMany as jest.Mock).mockResolvedValue([]);
 
       async function* llmStream() {
-        yield { type: 'text', text: 'Mode: STAGE4\n</thinking>\n' };
+        yield { type: 'text', text: '<thinking>\nMode: STAGE4\n</thinking>\n' };
         yield { type: 'text', text: aiMessage.content };
         yield { type: 'done' };
       }
@@ -479,7 +479,7 @@ describe('Messages API (Fire-and-Forget)', () => {
       });
 
       async function* llmStream() {
-        yield { type: 'text', text: 'Mode: WHAT_MATTERS\nNeedsReady:N\n</thinking>\n' };
+        yield { type: 'text', text: '<thinking>\nMode: WHAT_MATTERS\nNeedsReady:N\n</thinking>\n' };
         yield { type: 'text', text: aiMessage.content };
         yield { type: 'done' };
       }
@@ -575,7 +575,7 @@ describe('Messages API (Fire-and-Forget)', () => {
       async function* llmStream() {
         yield {
           type: 'text',
-          text: 'Mode: WITNESS\nUserIntensity: 4\nFeelHeardCheck:Y\nFeelHeardConfirmed:Y\nStrategy: transition\n</thinking>\n',
+          text: '<thinking>\nMode: WITNESS\nUserIntensity: 4\nFeelHeardCheck:Y\nFeelHeardConfirmed:Y\nStrategy: transition\n</thinking>\n',
         };
         yield {
           type: 'text',
@@ -683,7 +683,7 @@ describe('Messages API (Fire-and-Forget)', () => {
       (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue(null);
 
       async function* llmStream() {
-        yield { type: 'text', text: leakedReasoning };
+        yield { type: 'text', text: `<thinking>\n${leakedReasoning}` };
         yield { type: 'text', text: '</thinking>\n' };
         yield { type: 'text', text: visibleResponse };
         yield { type: 'done' };
@@ -779,7 +779,7 @@ describe('Messages API (Fire-and-Forget)', () => {
       (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue(null);
 
       async function* llmStream() {
-        yield { type: 'text', text: 'Mode: STRATEGIC_REPAIR\n</thinking>\n' };
+        yield { type: 'text', text: '<thinking>\nMode: STRATEGIC_REPAIR\n</thinking>\n' };
         yield { type: 'text', text: aiContent };
         yield { type: 'done' };
       }
@@ -806,6 +806,95 @@ describe('Messages API (Fire-and-Forget)', () => {
             gatesSatisfied: expect.objectContaining({
               stage4Walkthrough: expect.anything(),
             }),
+          }),
+        })
+      );
+    });
+
+    it('streams the reply when the model omits the leading <thinking> tag', async () => {
+      // Regression: the model occasionally skips <thinking> and goes straight to the
+      // visible reply. The thinking trap used to swallow the whole reply as hidden
+      // reasoning, throw "AI response was empty after tag stripping", and delete the
+      // user message — surfacing as a failed submit. The reply must stream instead.
+      const stage1Progress = {
+        id: 'progress-1',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 1,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      };
+      const session = {
+        id: mockSessionId,
+        status: 'ACTIVE',
+        relationship: {
+          members: [{ userId: mockUser.id }, { userId: 'partner-1' }],
+        },
+      };
+      const userMessage = {
+        id: 'msg-user-no-thinking',
+        sessionId: mockSessionId,
+        senderId: mockUser.id,
+        role: 'USER',
+        content: 'It has been a hard week.',
+        stage: 1,
+        timestamp: new Date('2026-05-25T16:00:00Z'),
+      };
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(session);
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue(session);
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(stage1Progress);
+      (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue(stage1Progress);
+      (prisma.message.create as jest.Mock).mockImplementation(async ({ data }) => (
+        data.role === 'USER'
+          ? { ...userMessage, content: data.content }
+          : {
+              id: 'msg-ai-no-thinking',
+              sessionId: mockSessionId,
+              senderId: null,
+              forUserId: mockUser.id,
+              role: 'AI',
+              content: data.content,
+              stage: data.stage,
+              timestamp: new Date('2026-05-25T16:00:02Z'),
+            }
+      ));
+      (prisma.message.findMany as jest.Mock).mockResolvedValue([userMessage]);
+      (prisma.message.count as jest.Mock).mockResolvedValue(1);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ name: 'Partner' });
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue(null);
+
+      // No <thinking> opener at all — visible prose streamed directly, split across chunks.
+      async function* llmStream() {
+        yield { type: 'text', text: 'I hear you - a hard week can weigh on everything. ' };
+        yield { type: 'text', text: "What's been the heaviest part for you?" };
+        yield { type: 'done' };
+      }
+      (getSonnetStreamingResponse as jest.Mock).mockReturnValue(llmStream());
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: { content: userMessage.content },
+      });
+      const { res, writeMock } = createMockResponse();
+
+      await sendMessageStream(req as Request, res as Response);
+
+      const sseOutput = writeMock.mock.calls.map(([chunk]) => String(chunk)).join('');
+      // Reply streamed to the client, not swallowed.
+      expect(sseOutput).toContain('a hard week can weigh on everything');
+      expect(sseOutput).toContain('the heaviest part for you');
+      // No empty-response failure.
+      expect(sseOutput).not.toContain('AI response was empty');
+      // User message kept (not cleaned up as a failed turn).
+      expect(prisma.message.delete).not.toHaveBeenCalled();
+      // AI reply persisted with the visible content.
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            role: 'AI',
+            content: expect.stringContaining('a hard week can weigh on everything'),
           }),
         })
       );
