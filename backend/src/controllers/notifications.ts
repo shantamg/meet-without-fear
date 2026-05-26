@@ -70,15 +70,25 @@ export async function getPendingActionsHandler(
 
     const actions: PendingAction[] = [];
 
-    // 1. Pending share offers (reconciler suggested sharing)
-    const shareOffers = await prisma.reconcilerShareOffer.findMany({
-      where: {
-        userId: user.id,
-        result: { sessionId },
-        status: { in: ['PENDING', 'OFFERED'] },
-      },
-      include: { result: true },
+    const userStageProgress = await prisma.stageProgress.findFirst({
+      where: { sessionId, userId: user.id },
+      orderBy: { stage: 'desc' },
+      select: { stage: true },
     });
+    const userMaxStage = userStageProgress?.stage ?? 0;
+
+    // 1. Pending share offers (reconciler suggested sharing). These are only
+    // actionable while the user is still in Stage 2.
+    const shareOffers = userMaxStage === 2
+      ? await prisma.reconcilerShareOffer.findMany({
+          where: {
+            userId: user.id,
+            result: { sessionId },
+            status: { in: ['PENDING', 'OFFERED'] },
+          },
+          include: { result: true },
+        })
+      : [];
 
     for (const offer of shareOffers) {
       actions.push({
@@ -124,13 +134,6 @@ export async function getPendingActionsHandler(
     // Only show if user has completed Stage 1 (advanced to stage >= 2).
     // Partner may share context before this user finishes Stage 1, but we
     // suppress the notification until the user is ready to see it.
-    const userStageProgress = await prisma.stageProgress.findFirst({
-      where: { sessionId, userId: user.id },
-      orderBy: { stage: 'desc' },
-      select: { stage: true },
-    });
-    const userMaxStage = userStageProgress?.stage ?? 0;
-
     if (userMaxStage >= 2) {
       const vessel = await prisma.userVessel.findUnique({
         where: { userId_sessionId: { userId: user.id, sessionId } },
@@ -217,14 +220,23 @@ export async function getBadgeCountHandler(
     for (const session of sessions) {
       let count = 0;
 
-      // Share offers
-      const shareOfferCount = await prisma.reconcilerShareOffer.count({
-        where: {
-          userId: user.id,
-          result: { sessionId: session.id },
-          status: { in: ['PENDING', 'OFFERED'] },
-        },
+      const badgeStageProgress = await prisma.stageProgress.findFirst({
+        where: { sessionId: session.id, userId: user.id },
+        orderBy: { stage: 'desc' },
+        select: { stage: true },
       });
+      const userMaxStage = badgeStageProgress?.stage ?? 0;
+
+      // Share offers are only actionable while the user is still in Stage 2.
+      const shareOfferCount = userMaxStage === 2
+        ? await prisma.reconcilerShareOffer.count({
+            where: {
+              userId: user.id,
+              result: { sessionId: session.id },
+              status: { in: ['PENDING', 'OFFERED'] },
+            },
+          })
+        : 0;
       count += shareOfferCount;
 
       // Unvalidated partner empathy
@@ -240,13 +252,7 @@ export async function getBadgeCountHandler(
 
       // Unread shared context messages (from partner, not self-sent)
       // Only count if user has completed Stage 1 (advanced to stage >= 2)
-      const badgeStageProgress = await prisma.stageProgress.findFirst({
-        where: { sessionId: session.id, userId: user.id },
-        orderBy: { stage: 'desc' },
-        select: { stage: true },
-      });
-
-      if ((badgeStageProgress?.stage ?? 0) >= 2) {
+      if (userMaxStage >= 2) {
         const vessel = await prisma.userVessel.findUnique({
           where: { userId_sessionId: { userId: user.id, sessionId: session.id } },
           select: { lastViewedShareTabAt: true },

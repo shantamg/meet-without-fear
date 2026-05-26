@@ -2283,6 +2283,24 @@ export async function getShareSuggestion(
       return;
     }
 
+    const progress = await prisma.stageProgress.findFirst({
+      where: {
+        sessionId,
+        userId: user.id,
+        status: { in: ['IN_PROGRESS', 'GATE_PENDING'] },
+      },
+      orderBy: { stage: 'desc' },
+      select: { stage: true },
+    });
+
+    if ((progress?.stage ?? 0) !== 2) {
+      successResponse(res, {
+        hasSuggestion: false,
+        suggestion: null,
+      });
+      return;
+    }
+
     // Get share suggestion from reconciler service
     const result = await getShareSuggestionForUser(sessionId, user.id);
 

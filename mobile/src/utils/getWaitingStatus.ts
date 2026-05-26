@@ -270,10 +270,12 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
 
   // User has validated the partner's empathy attempt, but the partner has not
   // validated the user's revealed attempt yet. There is no useful freeform
-  // user action here; the next gate belongs to the partner.
+  // user action here; the next gate belongs to the partner. This intentionally
+  // does not require a specific myAttempt status because the live cache can lag
+  // behind the partner-empathy optimistic validation result.
   if (
     myStage === Stage.PERSPECTIVE_STRETCH &&
-    empathyStatus?.myAttemptStatus === 'REVEALED' &&
+    hasPartnerEmpathy &&
     inputs.myValidation?.validated &&
     inputs.partnerValidated === false
   ) {

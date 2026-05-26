@@ -203,7 +203,7 @@ describe('ChatInterface', () => {
       expect(input.props.editable).toBe(false);
     });
 
-    it('keeps guided action panels below the chat input', () => {
+    it('keeps guided action panels above the chat input', () => {
       render(
         <ChatInterface
           messages={[]}
@@ -228,7 +228,7 @@ describe('ChatInterface', () => {
       const panelBranch = ancestor?.children.find((child: any) => typeof child !== 'string' && contains(child, panel));
 
       expect(ancestor).toBeTruthy();
-      expect(ancestor.children.indexOf(panelBranch)).toBeGreaterThan(ancestor.children.indexOf(inputBranch));
+      expect(ancestor.children.indexOf(panelBranch)).toBeLessThan(ancestor.children.indexOf(inputBranch));
     });
   });
 

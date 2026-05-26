@@ -1250,6 +1250,7 @@ export function ChatInterface({
           testID="chat-emotion-slider"
         />
       )}
+      {auxiliaryControls}
       {!hideInput && (
         <ChatInput
           onSend={onSendMessage}
@@ -1262,7 +1263,6 @@ export function ChatInterface({
           onPrefillConsumed={onPrefillConsumed}
         />
       )}
-      {auxiliaryControls}
     </View>
   );
 
