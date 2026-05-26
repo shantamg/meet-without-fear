@@ -306,6 +306,21 @@ describe('Priority 4: Stage 2 (Empathy)', () => {
     expect(computeWaitingStatus(inputs)).toBe('partner-validating-empathy');
   });
 
+  it('returns partner-validating-empathy during optimistic validation before my attempt status refetches', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      partnerStage: Stage.PERSPECTIVE_STRETCH,
+      hasPartnerEmpathy: true,
+      empathyStatus: {
+        myAttemptStatus: 'READY',
+      },
+      myValidation: { validated: true },
+      partnerValidated: false,
+    });
+
+    expect(computeWaitingStatus(inputs)).toBe('partner-validating-empathy');
+  });
+
   it('returns partner-revising-empathy after I send feedback on partner empathy', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,

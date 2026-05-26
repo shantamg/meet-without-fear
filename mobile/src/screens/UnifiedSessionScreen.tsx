@@ -1366,6 +1366,26 @@ export function UnifiedSessionScreen({
     }
   }, [invitationConfirmed, hasInvitationTransitionResponse]);
 
+  const hasEmpathyValidationFollowUp = useMemo(() => {
+    if (!partnerEmpathyData?.validatedAt) return false;
+    const validatedAt = new Date(partnerEmpathyData.validatedAt).getTime();
+    if (!Number.isFinite(validatedAt)) return false;
+
+    return messages.some((message) => {
+      if (message.role !== MessageRole.AI || message.stage !== Stage.PERSPECTIVE_STRETCH) {
+        return false;
+      }
+      const timestamp = new Date(message.timestamp).getTime();
+      return Number.isFinite(timestamp) && timestamp >= validatedAt;
+    });
+  }, [messages, partnerEmpathyData?.validatedAt]);
+
+  useEffect(() => {
+    if (!isAwaitingEmpathyValidationFollowUp || hasEmpathyValidationFollowUp) {
+      setIsAwaitingEmpathyValidationFollowUp(false);
+    }
+  }, [hasEmpathyValidationFollowUp, isAwaitingEmpathyValidationFollowUp]);
+
   const confirmInvitationAndAwaitFollowUp = useCallback(() => {
     setIsAwaitingInvitationFollowUp(true);
     handleConfirmInvitationMessage();
