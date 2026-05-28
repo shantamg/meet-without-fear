@@ -3550,7 +3550,6 @@ export function UnifiedSessionScreen({
             tone="needs"
             eyebrow="What matters"
             title={activeNeeds.length === 1 ? '1 need captured' : `${activeNeeds.length} needs captured`}
-            subtitle="Open your list to refine, remove, or send when ready."
             compact
             pressable
             primaryAction={{
@@ -3610,7 +3609,6 @@ export function UnifiedSessionScreen({
               tone="needs"
               eyebrow="What matters"
               title={needCount === 1 ? '1 need captured' : `${needCount} needs captured`}
-              subtitle="Open your list to refine or remove anything before sharing."
               compact
               pressable
               primaryAction={{
