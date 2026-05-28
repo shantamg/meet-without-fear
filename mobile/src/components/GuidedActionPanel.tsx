@@ -85,7 +85,8 @@ export function GuidedActionPanel({
   const actions = [secondaryAction, primaryAction].filter(Boolean) as GuidedActionButton[];
   const [panelWidth, setPanelWidth] = useState(0);
   const showPressableRow = pressable && !!primaryAction && !secondaryAction;
-  const centerSingleLinePressable = showPressableRow && compact && !eyebrow && !subtitle;
+  const shouldRenderSubtitle = Boolean(subtitle) && !(compact && showPressableRow);
+  const centerSingleLinePressable = showPressableRow && compact && !eyebrow && !shouldRenderSubtitle;
   const compactInlineActions =
     !showPressableRow &&
     compact &&
@@ -115,7 +116,7 @@ export function GuidedActionPanel({
             <Text style={[styles.eyebrow, compact && styles.eyebrowCompact, { color: accent }]}>{eyebrow}</Text>
           ) : null}
           <Text style={[styles.title, compact && styles.titleCompact, { color: palette.text }]}>{title}</Text>
-          {subtitle ? <Text style={[styles.subtitle, compact && styles.subtitleCompact, { color: palette.textMuted }]}>{subtitle}</Text> : null}
+          {shouldRenderSubtitle ? <Text style={[styles.subtitle, compact && styles.subtitleCompact, { color: palette.textMuted }]}>{subtitle}</Text> : null}
         </View>
         {!showPressableRow && actions.length > 0 ? (
           <View style={[
