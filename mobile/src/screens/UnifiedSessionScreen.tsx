@@ -548,30 +548,6 @@ function MeasuredAnimatedPanel({
   );
 }
 
-function SlidingPanel({
-  animationValue,
-  children,
-}: {
-  animationValue: Animated.Value;
-  children: ReactNode;
-}) {
-  return (
-    <Animated.View
-      style={{
-        transform: [{
-          translateY: animationValue.interpolate({
-            inputRange: [0, 1],
-            outputRange: [20, 0],
-          }),
-        }],
-      }}
-      pointerEvents="auto"
-    >
-      {children}
-    </Animated.View>
-  );
-}
-
 // ============================================================================
 // Component
 // ============================================================================
@@ -3570,25 +3546,23 @@ export function UnifiedSessionScreen({
 
       case 'needs-send':
         return (
-          <SlidingPanel animationValue={needsReviewAnim}>
-            <GuidedActionPanel
-              tone="needs"
-              eyebrow="What matters"
-              title={activeNeeds.length === 1 ? '1 need captured' : `${activeNeeds.length} needs captured`}
-              subtitle="Open your list to refine, remove, or send when ready."
-              compact
-              pressable
-              primaryAction={{
-                label: 'Review needs',
-                onPress: () => {
-                  Keyboard.dismiss();
-                  setShowNeedsDrawer(true);
-                },
-                testID: 'needs-drawer-open-button',
-              }}
-              testID="needs-drawer-panel"
-            />
-          </SlidingPanel>
+          <GuidedActionPanel
+            tone="needs"
+            eyebrow="What matters"
+            title={activeNeeds.length === 1 ? '1 need captured' : `${activeNeeds.length} needs captured`}
+            subtitle="Open your list to refine, remove, or send when ready."
+            compact
+            pressable
+            primaryAction={{
+              label: 'Review needs',
+              onPress: () => {
+                Keyboard.dismiss();
+                setShowNeedsDrawer(true);
+              },
+              testID: 'needs-drawer-open-button',
+            }}
+            testID="needs-drawer-panel"
+          />
         );
 
       case 'needs-reveal-validation':
