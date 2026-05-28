@@ -548,6 +548,30 @@ function MeasuredAnimatedPanel({
   );
 }
 
+function SlidingPanel({
+  animationValue,
+  children,
+}: {
+  animationValue: Animated.Value;
+  children: ReactNode;
+}) {
+  return (
+    <Animated.View
+      style={{
+        transform: [{
+          translateY: animationValue.interpolate({
+            inputRange: [0, 1],
+            outputRange: [20, 0],
+          }),
+        }],
+      }}
+      pointerEvents="auto"
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -3546,7 +3570,7 @@ export function UnifiedSessionScreen({
 
       case 'needs-send':
         return (
-          <MeasuredAnimatedPanel animationValue={needsReviewAnim}>
+          <SlidingPanel animationValue={needsReviewAnim}>
             <GuidedActionPanel
               tone="needs"
               eyebrow="What matters"
@@ -3564,7 +3588,7 @@ export function UnifiedSessionScreen({
               }}
               testID="needs-drawer-panel"
             />
-          </MeasuredAnimatedPanel>
+          </SlidingPanel>
         );
 
       case 'needs-reveal-validation':
