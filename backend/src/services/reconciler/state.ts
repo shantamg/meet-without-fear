@@ -396,7 +396,7 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
   // Use a Serializable transaction to prevent the TOCTOU race where two
   // concurrent callers both read "both READY" and both try to reveal.
   // Serializable isolation ensures the read-check-write is atomic.
-  const revealed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+  const revealResult = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Get both empathy attempts for this session
     const attempts = await tx.empathyAttempt.findMany({
       where: { sessionId },
@@ -423,6 +423,8 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
       transition(attempt.status as EmpathyStatus, 'MUTUAL_REVEAL');
     }
 
+    const attemptsToReveal = attempts.filter((a: EmpathyAttemptState) => a.status === 'READY');
+
     // Reveal any READY attempt. VALIDATED attempts were already revealed and
     // seen; leave their terminal state intact.
     const revealedNow = new Date();
@@ -440,14 +442,16 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
       },
     });
 
-    return attempts;
+    return { allAttempts: attempts, revealedAttempts: attemptsToReveal };
   }, {
     isolationLevel: 'Serializable',
   });
 
-  if (!revealed) {
+  if (!revealResult) {
     return false;
   }
+
+  const { allAttempts, revealedAttempts } = revealResult;
 
   // Notifications stay outside the transaction to avoid holding the DB
   // connection open during network I/O.
@@ -455,7 +459,7 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
   const { buildEmpathyExchangeStatusForBothUsers } = await import('../empathy-status');
   const allStatuses = await buildEmpathyExchangeStatusForBothUsers(sessionId);
 
-  for (const attempt of revealed) {
+  for (const attempt of revealedAttempts) {
     const userId = attempt.sourceUserId!;
     // Notify the guesser that their empathy was revealed to their partner
     // Include guesserUserId so mobile can filter - only the SUBJECT (non-guesser) should see validation_needed modal
@@ -470,9 +474,9 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
   // Create quality commentary messages so each subject knows what to expect
   // when reviewing their partner's empathy attempt (issue #497)
   try {
-    const justRevealed = revealed.filter((a: EmpathyAttemptState) => a.status === 'READY');
+    const justRevealed = revealedAttempts;
     if (justRevealed.length > 0) {
-      const allUserIds = revealed.map((a: EmpathyAttemptState) => a.sourceUserId!);
+      const allUserIds = allAttempts.map((a: EmpathyAttemptState) => a.sourceUserId!);
 
       // Get reconciler results and user names
       const [reconcilerResults, users] = await Promise.all([

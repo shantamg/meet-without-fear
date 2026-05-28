@@ -836,6 +836,59 @@ describe('Reconciler Service', () => {
       });
     });
 
+    it('does not notify or create review copy for an already VALIDATED direction', async () => {
+      (prisma.empathyAttempt.findMany as jest.Mock).mockResolvedValue([
+        { id: 'attempt-1', sessionId: 'session-1', sourceUserId: 'user-1', status: 'READY' },
+        { id: 'attempt-2', sessionId: 'session-1', sourceUserId: 'user-2', status: 'VALIDATED' },
+      ]);
+      (prisma.reconcilerResult.findMany as jest.Mock).mockResolvedValue([
+        {
+          sessionId: 'session-1',
+          guesserId: 'user-1',
+          subjectId: 'user-2',
+          gapSeverity: 'minor',
+        },
+        {
+          sessionId: 'session-1',
+          guesserId: 'user-2',
+          subjectId: 'user-1',
+          gapSeverity: 'moderate',
+        },
+      ]);
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([
+        { id: 'user-1', firstName: 'Ava', name: 'Ava Example' },
+        { id: 'user-2', firstName: 'Ben', name: 'Ben Example' },
+      ]);
+
+      await checkAndRevealBothIfReady('session-1');
+
+      const { notifyPartner } = require('../../services/realtime');
+      expect(notifyPartner).toHaveBeenCalledTimes(1);
+      expect(notifyPartner).toHaveBeenCalledWith(
+        'session-1',
+        'user-1',
+        'empathy.revealed',
+        expect.objectContaining({
+          guesserUserId: 'user-1',
+          forUserId: 'user-1',
+        })
+      );
+
+      expect(prisma.message.create).toHaveBeenCalledTimes(1);
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          forUserId: 'user-2',
+          content: expect.stringContaining("Ava's attempt to understand your experience"),
+        }),
+      });
+      expect(prisma.message.create).not.toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          forUserId: 'user-1',
+          content: expect.stringContaining("Ben's attempt to understand your experience"),
+        }),
+      });
+    });
+
     it('sets revealedAt and delivery status when revealing', async () => {
       (prisma.empathyAttempt.findMany as jest.Mock).mockResolvedValue([
         { id: 'attempt-1', sessionId: 'session-1', sourceUserId: 'user-1', status: 'READY' },

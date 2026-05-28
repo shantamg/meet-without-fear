@@ -106,7 +106,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
     // symmetric path runs for both directions. Without this guard, A's status
     // (already READY or AWAITING_SHARING) would be redundantly overwritten,
     // causing duplicate events and potential state confusion.
-    const alreadyProcessed = new Set(['READY', 'AWAITING_SHARING', 'REFINING', 'REVEALED']);
+    const alreadyProcessed = new Set(['READY', 'AWAITING_SHARING', 'REFINING', 'REVEALED', 'VALIDATED']);
     const [currentAttemptA, currentAttemptB] = await Promise.all([
       prisma.empathyAttempt.findFirst({ where: { sessionId, sourceUserId: userAId } }),
       prisma.empathyAttempt.findFirst({ where: { sessionId, sourceUserId: userBId } }),

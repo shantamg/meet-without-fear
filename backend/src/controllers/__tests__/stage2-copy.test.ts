@@ -57,6 +57,17 @@ describe('Stage 2 user-facing copy', () => {
     expect(source).not.toContain("recommendation.action === 'OFFER_OPTIONAL' &&");
   });
 
+  it('treats validated empathy attempts as already processed in symmetric reconciliation', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'stage2.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain(
+      "const alreadyProcessed = new Set(['READY', 'AWAITING_SHARING', 'REFINING', 'REVEALED', 'VALIDATED'])"
+    );
+  });
+
   it('does not frame Stage 2 empathy as repair or working things out', () => {
     const files = [
       path.join(__dirname, '..', 'stage2.ts'),
