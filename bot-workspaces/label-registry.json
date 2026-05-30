@@ -5,27 +5,26 @@
       "workspace": "slack-triage/",
       "entry_stage": "1-fetch-and-classify",
       "trigger": "cron",
-      "model": "sonnet"
+      "model": "haiku",
+      "fallback_provider": "codex"
     },
     "bot:github-respond": {
       "workspace": "github-respond/",
       "entry_stage": "respond",
-      "trigger": "webhook",
-      "effort": "max"
+      "trigger": "webhook"
     },
     "bot:review-pr": {
       "workspace": "github-respond/",
       "entry_stage": "review",
       "trigger": "webhook",
-      "persona": "engineer",
-      "effort": "max"
+      "persona": "engineer"
     },
     "bot:bug-fix": {
       "workspace": "bug-fix/",
       "entry_stage": "01-select",
       "trigger": "cron",
       "persona": "engineer",
-      "effort": "max"
+      "fallback_provider": "codex"
     },
     "bot:needs-info": {
       "workspace": "needs-info/",
@@ -33,7 +32,7 @@
       "trigger": "label",
       "keep_label": true,
       "cooldown_secs": 1800,
-      "model": "sonnet"
+      "model": "haiku"
     },
     "bot:health-check": {
       "workspace": "health-check/",
@@ -44,36 +43,33 @@
       "workspace": "stale-sweeper/",
       "entry_stage": "1-identify",
       "trigger": "cron",
-      "model": "sonnet"
+      "model": "haiku"
     },
     "bot:expert-review": {
       "workspace": "expert-review/",
       "entry_stage": "01-initialize",
       "trigger": "label",
       "keep_label": true,
-      "cooldown_secs": 0,
-      "effort": "max"
+      "cooldown_secs": 0
     },
     "bot:milestone-builder": {
       "workspace": "milestone-builder/",
       "entry_stage": "01-initialize",
       "trigger": "label",
       "keep_label": true,
-      "requires": "bot:milestone-planner",
-      "effort": "max"
+      "requires": "bot:milestone-planner"
     },
     "bot:spec-builder": {
       "workspace": "spec-builder/",
       "entry_stage": "01-initialize",
       "trigger": "label",
-      "keep_label": true,
-      "effort": "max"
+      "keep_label": true
     },
     "bot:pipeline-monitor": {
       "workspace": "pipeline-monitor/",
       "entry_stage": "tick",
       "trigger": "cron",
-      "model": "sonnet"
+      "model": "haiku"
     },
     "bot:security-audit": {
       "workspace": "security-audit/",
@@ -89,7 +85,8 @@
       "workspace": "docs-audit/",
       "entry_stage": "incremental",
       "trigger": "cron",
-      "model": "sonnet"
+      "model": "haiku",
+      "fallback_provider": "codex"
     },
     "bot:docs-audit-full": {
       "workspace": "docs-audit/",
@@ -100,7 +97,7 @@
       "workspace": "daily-strategy/",
       "entry_stage": "1-gather",
       "trigger": "cron",
-      "model": "sonnet"
+      "model": "haiku"
     },
     "bot:ci-monitor": {
       "workspace": "ci-monitor/",
@@ -111,33 +108,35 @@
       "workspace": "brainstorm/",
       "entry_stage": "1-digest",
       "trigger": "label",
-      "model": "sonnet"
+      "model": "haiku"
     },
     "bot:deploy": {
       "workspace": "deploy/",
       "entry_stage": "prepare",
       "trigger": "manual",
-      "model": "sonnet"
+      "model": "haiku"
     },
     "bot:do-later-review": {
       "workspace": "do-later-review/",
       "entry_stage": "01-scan",
       "trigger": "cron",
-      "model": "sonnet"
+      "model": "haiku"
     },
     "bot:pr": {
       "workspace": "general-pr/",
       "entry_stage": "01-implement",
       "trigger": "label",
       "persona": "engineer",
-      "effort": "max"
+      "effort": "max",
+      "fallback_provider": "codex"
     },
     "bot:pr-reviewer": {
       "workspace": "pr-reviewer/",
       "entry_stage": "01-scan",
       "trigger": "cron",
-      "model": "sonnet",
-      "persona": "engineer"
+      "model": "haiku",
+      "persona": "engineer",
+      "fallback_provider": "codex"
     },
     "bot:project-orchestrator": {
       "workspace": "project-orchestrator/",
@@ -157,15 +156,14 @@
     "bot:milestone-planner": {
       "workspace": "milestone-planner/",
       "entry_stage": "01-gather",
-      "trigger": "label",
-      "effort": "max"
+      "trigger": "label"
     },
     "bot:investigate": {
       "workspace": "bug-fix/",
       "entry_stage": "02-investigate",
       "trigger": "label",
       "persona": "engineer",
-      "effort": "max"
+      "fallback_provider": "codex"
     },
     "bot:research": {
       "workspace": "research/",
@@ -176,22 +174,20 @@
       "workspace": "pr-reviewer/",
       "entry_stage": "review-impl",
       "trigger": "label",
-      "keep_label": false,
-      "effort": "max"
+      "keep_label": false
     },
     "bot:verify": {
       "workspace": "verify/",
       "entry_stage": "01-check",
       "trigger": "label",
       "keep_label": false,
-      "persona": "engineer",
-      "effort": "max"
+      "persona": "engineer"
     },
     "bot:release-summary": {
       "workspace": "release-summary/",
       "entry_stage": "summarize",
       "trigger": "label",
-      "model": "sonnet"
+      "model": "haiku"
     }
   }
 }

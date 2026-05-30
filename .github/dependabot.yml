@@ -1,0 +1,23 @@
+# Dependabot — free, native dependency & CVE coverage (replaces the autonomous
+# security-audit workspace pre-launch). Grouped + weekly + low PR cap so it
+# stays quiet. Security updates/alerts are enabled separately in repo settings.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]
+    open-pull-requests-limit: 3
+    labels: ["dependencies"]
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      npm:
+        patterns: ["*"]
+    open-pull-requests-limit: 3
+    labels: ["dependencies"]

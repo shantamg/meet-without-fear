@@ -17,12 +17,17 @@
 
 # ── Scheduled workspace jobs ─────────────────────────────────────────────────
 # Scheduled jobs use MAX_CONCURRENT - 2 slots, reserving 2 for interactive work.
-0 * * * *   /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled bug-fix "Fix untouched bug issues" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
-0 */6 * * * /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled health-check "Run scheduled health check" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+# [cost/noise rework 2026-05-30] disabled — hourly effort:max executor -> now human-gated (bot:investigate/bot:pr)
+# 0 * * * *   /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled bug-fix "Fix untouched bug issues" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+# [cost/noise rework 2026-05-30] disabled — 6h prod check -> folded into daily digest
+# 0 */6 * * * /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled health-check "Run scheduled health check" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
 0 10 * * *  /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled docs-audit "Run incremental docs audit (24h lookback)" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
-0 11 * * 1  /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled security-audit "Run weekly security audit" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
-0 9 * * 1-5 /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled stale-sweeper "Sweep for stale items" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
-*/10 * * * * /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled pr-reviewer "Scan and review open bot PRs" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+# [cost/noise rework 2026-05-30] disabled — premature pre-users -> Dependabot/npm audit
+# 0 11 * * 1  /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled security-audit "Run weekly security audit" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+# [cost/noise rework 2026-05-30] disabled — replaced by one-time drain + governor
+# 0 9 * * 1-5 /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled stale-sweeper "Sweep for stale items" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+# [cost/noise rework 2026-05-30] disabled — autonomous review loop -> on-demand/Action, rebase-only
+# */10 * * * * /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled pr-reviewer "Scan and review open bot PRs" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
 0 14 * * *  /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled daily-strategy "Morning strategy briefing" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
 
 # ── Staging branch sync (keeps bot/staging in sync with main, PRs accumulated work) ──
@@ -34,7 +39,8 @@
 # workspace. The script remains available for manual / ad-hoc invocation.
 
 # ── Pipeline monitor (watches active milestone-builder runs) ────────────────
-*/10 * * * * /opt/slam-bot/scripts/pipeline-monitor.sh >> /var/log/slam-bot/pipeline-monitor.log 2>&1
+# [cost/noise rework 2026-05-30] disabled — feature pipeline retired
+# */10 * * * * /opt/slam-bot/scripts/pipeline-monitor.sh >> /var/log/slam-bot/pipeline-monitor.log 2>&1
 
 # ── Thread tracker (Slack thread follow-up) ─────────────────────────────────
 */30 * * * * /opt/slam-bot/scripts/thread-tracker.sh >> /var/log/slam-bot/thread-tracker.log 2>&1
@@ -54,7 +60,10 @@
 # if the dashboard ever feels too sparse.
 
 # ── API budget monitoring ────────────────────────────────────────────────────
-* * * * * /opt/slam-bot/scripts/api-budget-monitor.sh >> /var/log/slam-bot/cron.log 2>&1
+# [cost/noise rework 2026-05-30] disabled — over-instrumentation for a small team
+# * * * * * /opt/slam-bot/scripts/api-budget-monitor.sh >> /var/log/slam-bot/cron.log 2>&1
 # Post daily API consumption summary to #bot-ops + check for over-budget workspaces
-30 7 * * * /opt/slam-bot/scripts/api-budget-summary.sh --post >> /var/log/slam-bot/cron.log 2>&1
-30 7 * * * /opt/slam-bot/scripts/api-budget-summary.sh --alert >> /var/log/slam-bot/cron.log 2>&1
+# [cost/noise rework 2026-05-30] disabled — Slack noise -> removed
+# 30 7 * * * /opt/slam-bot/scripts/api-budget-summary.sh --post >> /var/log/slam-bot/cron.log 2>&1
+# [cost/noise rework 2026-05-30] disabled — Slack noise -> removed
+# 30 7 * * * /opt/slam-bot/scripts/api-budget-summary.sh --alert >> /var/log/slam-bot/cron.log 2>&1
