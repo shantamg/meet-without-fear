@@ -16,9 +16,10 @@ import {
   useInvitation,
   useAcceptInvitation,
   useDeclineInvitation,
+  useConfirmInvitationMessage,
   sessionKeys,
 } from '../useSessions';
-import { SessionStatus } from '@meet-without-fear/shared';
+import { SessionStatus, StageStatus } from '@meet-without-fear/shared';
 
 // Import mocked functions
 import * as api from '../../lib/api';
@@ -50,6 +51,11 @@ function createWrapper(): React.FC<{ children: React.ReactNode }> {
       },
     },
   });
+  return ({ children }) =>
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
+}
+
+function createWrapperWithClient(queryClient: QueryClient): React.FC<{ children: React.ReactNode }> {
   return ({ children }) =>
     React.createElement(QueryClientProvider, { client: queryClient }, children);
 }
@@ -390,6 +396,89 @@ describe('useSessions', () => {
       expect(mockPost).toHaveBeenCalledWith('/invitations/inv-123/decline', {
         reason: undefined,
       });
+    });
+  });
+
+  describe('useConfirmInvitationMessage hook', () => {
+    it('updates cached session status to INVITED when invitation confirmation advances to witness', async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: false,
+          },
+        },
+      });
+
+      queryClient.setQueryData(sessionKeys.state('session-123'), {
+        session: {
+          id: 'session-123',
+          status: SessionStatus.CREATED,
+          currentStage: 0,
+          stageStatus: StageStatus.IN_PROGRESS,
+          relationshipId: 'relationship-123',
+          partner: { id: 'user-456', name: 'Partner', nickname: null },
+          myProgress: { stage: 0, status: StageStatus.IN_PROGRESS },
+          createdAt: '2024-01-01T00:00:00.000Z',
+          resolvedAt: null,
+          lastViewedAt: null,
+          partnerLastViewedAt: null,
+          partnerLastActiveAt: null,
+          lastSeenChatItemId: null,
+          sourceInnerThoughts: null,
+        },
+        progress: {
+          sessionId: 'session-123',
+          myProgress: {
+            stage: 0,
+            status: StageStatus.IN_PROGRESS,
+            startedAt: null,
+            completedAt: null,
+            gatesSatisfied: {},
+          },
+          partnerProgress: {
+            stage: 0,
+            status: StageStatus.IN_PROGRESS,
+            startedAt: null,
+            completedAt: null,
+          },
+          canAdvance: false,
+          milestones: {
+            witnessStartedAt: null,
+            feelHeardConfirmedAt: null,
+          },
+        },
+        messages: [],
+        invitation: {
+          id: 'inv-123',
+          messageConfirmed: false,
+          messageConfirmedAt: null,
+          topicFrame: 'house chores',
+        },
+        compact: null,
+      });
+
+      mockPost.mockResolvedValueOnce({
+        confirmed: true,
+        invitation: {
+          id: 'inv-123',
+          messageConfirmed: true,
+          messageConfirmedAt: '2024-01-01T00:01:00.000Z',
+          topicFrame: 'house chores',
+        },
+        advancedToStage: 1,
+      });
+
+      const { result } = renderHook(() => useConfirmInvitationMessage(), {
+        wrapper: createWrapperWithClient(queryClient),
+      });
+
+      await act(async () => {
+        await result.current.mutateAsync({ sessionId: 'session-123' });
+      });
+
+      expect(mockPost).toHaveBeenCalledWith('/sessions/session-123/invitation/confirm', {});
+      expect(queryClient.getQueryData<any>(sessionKeys.state('session-123'))?.session.status)
+        .toBe(SessionStatus.INVITED);
     });
   });
 
