@@ -1,5 +1,13 @@
 # Stage: Strategize and Post
 
+> **CONSOLIDATION OVERRIDE (2026-05-30):** Post exactly **one** short digest to
+> **#bot-ops** and nothing else. Do **not** post a separate comprehensive
+> briefing, and do **not** post to #most-important-thing, #daily-summary, or
+> #agentic-devs. Keep the single post to **≤8 lines**, link-don't-paste, and pass
+> `--digest` to `slack-post.sh`. If there is nothing material to report, skip
+> posting entirely. The detailed multi-channel steps below are superseded by this
+> rule wherever they conflict.
+
 ## Input
 
 - Gathered data from all sub-agents (stage 1)

@@ -1,6 +1,6 @@
 # Dispatch: BUG
 
-**Goal:** Create a GitHub issue with `bot:investigate` label so the bug-fix workspace handles it visibly.
+**Goal:** Capture the bug as a GitHub issue labeled `bug` and STOP. Triage does **not** start an investigation or a fix. A human decides when code runs by applying a `bot:*` trigger label (`bot:investigate` for a full investigation, `bot:pr` to implement) after reviewing the issue.
 
 ## Steps
 
@@ -21,12 +21,12 @@
    - Do NOT check Sentry, Render logs, Mixpanel, or run diagnostics — those belong in the `bot:investigate` workspace. Write "No immediate leads — needs full investigation" if nothing is obvious from the codebase.
    - Do NOT use `gh api` for anything — triage creates issues, it does not investigate (see API budget policy in workspace CLAUDE.md)
 
-   Create issue with `bot:investigate` label:
+   Create the issue labeled `bug` only (no trigger label — a human starts the work):
    ```bash
    gh issue create --repo shantamg/meet-without-fear \
      --title "<concise bug description, <80 chars>" \
      --body "<bug details + initial findings + provenance block>" \
-     --label "bug,bot:investigate"
+     --label "bug"
    ```
 
    Body format:
@@ -53,7 +53,7 @@
    ```bash
    ${SLAM_BOT_SCRIPTS:-/opt/slam-bot/scripts}/slack-post.sh \
      --channel CHANNEL_ID \
-     --text "Got it — tracking this here: <ISSUE_URL|Issue #N>. Investigating now." \
+     --text "Got it — filed <ISSUE_URL|Issue #N>. We'll pick it up when it's prioritized." \
      --thread-ts "MESSAGE_THREAD_TS"
    ```
    See `references/response-templates.md` for BUG reply templates.
@@ -73,5 +73,5 @@
 
 ## Do NOT
 
-- Attempt to fix the bug inline. The bug-fix workspace (`bot:investigate`) will handle investigation and fixes with full audit trail.
-- Create issues without the `bot:investigate` label — unlabeled issues won't be dispatched.
+- Attempt to fix the bug inline. Investigation and fixes happen later, only after a human applies a `bot:*` trigger label.
+- Apply a `bot:*` trigger label (`bot:investigate`, `bot:pr`) at triage. Capture stops at a `bug`-labeled issue; the human gate decides what runs.
