@@ -148,6 +148,8 @@ interface UnifiedSessionScreenProps {
 
 const NEEDS_REVIEW_PANEL_EXPANDED_MAX_HEIGHT = 420;
 const NEEDS_REVIEW_PANEL_ENTER_OFFSET = 20;
+const FIRE_AND_FORGET_RECOVERY_INTERVAL_MS = 10_000;
+const FIRE_AND_FORGET_RECOVERY_MAX_ATTEMPTS = 6;
 
 /**
  * Get brief status text for the header based on session status
@@ -1390,6 +1392,30 @@ export function UnifiedSessionScreen({
     setIsAwaitingInvitationFollowUp(true);
     handleConfirmInvitationMessage();
   }, [handleConfirmInvitationMessage]);
+
+  // If a fire-and-forget AI response is missed via Ably, poll persisted messages
+  // for a bounded window. The derived message checks above clear these latches
+  // as soon as the missing AI message lands in the cache.
+  useEffect(() => {
+    if (!isAwaitingInvitationFollowUp && !isAwaitingEmpathyValidationFollowUp) return;
+
+    let attempts = 0;
+    const recoveryTimer = setInterval(() => {
+      attempts += 1;
+      console.log('[UnifiedSessionScreen] Fire-and-forget recovery: refetching persisted messages', {
+        attempts,
+      });
+      refetchPersistedMessages();
+
+      if (attempts >= FIRE_AND_FORGET_RECOVERY_MAX_ATTEMPTS) {
+        setIsAwaitingInvitationFollowUp(false);
+        setIsAwaitingEmpathyValidationFollowUp(false);
+        clearInterval(recoveryTimer);
+      }
+    }, FIRE_AND_FORGET_RECOVERY_INTERVAL_MS);
+
+    return () => clearInterval(recoveryTimer);
+  }, [isAwaitingInvitationFollowUp, isAwaitingEmpathyValidationFollowUp, refetchPersistedMessages]);
 
   const shouldRunInvitationFollowUp =
     currentStage === Stage.ONBOARDING && !hasInvitationTransitionResponse;
