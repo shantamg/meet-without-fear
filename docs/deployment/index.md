@@ -3,7 +3,7 @@ title: Deployment
 sidebar_position: 1
 description: Production deployment targets and distribution options for the Meet Without Fear platform.
 created: 2026-03-11
-updated: 2026-04-20
+updated: 2026-05-26
 status: living
 ---
 # Deployment
@@ -127,7 +127,7 @@ The backend requires the following environment variables (see `backend/.env.exam
 | `APP_URL` | Public-facing app URL (e.g., `https://meetwithoutfear.com`) |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | AI services (AWS Bedrock) |
 
-Optional variables include Twilio SMS credentials, Neural Monitor dashboard settings (`DASHBOARD_ALLOWED_USER_IDS`, `DASHBOARD_ALLOWED_EMAILS`, `DASHBOARD_URL`, local-only `DASHBOARD_API_SECRET`), model ID overrides (`BEDROCK_MODEL_ID`), and `FIELD_ENCRYPTION_KEY` (AES-256 key for application-level field encryption — gracefully degrades if not set).
+Optional variables include Twilio SMS credentials, Neural Monitor dashboard settings (`DASHBOARD_ALLOWED_USER_IDS`, `DASHBOARD_ALLOWED_EMAILS`, `DASHBOARD_URL`, local-only `DASHBOARD_API_SECRET`), model ID overrides (`BEDROCK_MODEL_ID`), `FIELD_ENCRYPTION_KEY` (AES-256 key for application-level field encryption — gracefully degrades if not set), and `EXPO_ACCESS_TOKEN` (Expo push notification access token — required when Expo push security is enabled).
 
 ### Testing & Development
 

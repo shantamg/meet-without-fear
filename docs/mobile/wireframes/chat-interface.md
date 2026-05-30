@@ -2,7 +2,7 @@
 title: Chat Interface
 sidebar_position: 3
 description: The primary conversation interface where users interact with the AI.
-updated: 2026-05-15
+updated: 2026-05-26
 status: living
 ---
 # Chat Interface
@@ -285,6 +285,8 @@ flowchart TB
     end
 ```
 
+**Trigger condition (Stage 2):** This state is shown when `empathyValidated` is true and `hasPartnerEmpathy` is false — i.e., the user validated the partner's empathy attempt but the partner has not yet shared theirs. The condition checks `hasPartnerEmpathy` (whether the partner's `EmpathyAttempt` record exists) rather than the caller's own attempt status, making it resilient to optimistic-update cache lag.
+
 ### Session Not Started
 
 ```mermaid
@@ -301,6 +303,8 @@ flowchart TB
 ```
 
 ## Input Area Details
+
+**`auxiliaryControls` render position:** The `auxiliaryControls` slot in `ChatInterface` renders **above** the `ChatInput` row (between the message list and the text input field). Any controls passed via this prop appear before the input, not after it.
 
 ```mermaid
 flowchart TB

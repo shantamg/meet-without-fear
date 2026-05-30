@@ -22,7 +22,7 @@ Stage 4 is **sequential** (unlike stages 1-3 which are parallel). Both users mus
 ### Data persistence
 - Proposals → `StrategyProposal` with `kind` (SHARED_PROPOSAL | INDIVIDUAL_COMMITMENT), `source` (USER_SUBMITTED | AI_SUGGESTED | CURATED), and `status` (ACTIVE | REVISED | REMOVED | CONVERTED_TO_AGREEMENT). The redesigned walkthrough exposes a source label (current user, partner, AI, or unknown) so users understand where options came from.
 - Willingness selections → `Stage4ProposalSelection` per user per proposal
-- Coverage audit → `Stage4NeedCoverage` tracks which confirmed needs are addressed by proposals
+- Coverage audit → `Stage4NeedCoverage` tracks which confirmed needs are addressed by proposals. The `classifyCoverage` function scores each (need, proposal) pair using the following priority (first hit scores 1.0): (1) need's ID appears in `proposal.needsAddressed` (legacy string-ID match), (2) `proposal.needLinks` contains a `StrategyProposalNeed` join-table row with that `needId` (relational match — set when AI-suggested proposals are created via `POST /stage4/proposals/suggest` with a `needId`), (3) normalized text label match against `needsAddressed` entries, (4) direct mention / lexical / semantic heuristics. DB-relation matching takes precedence over text-label heuristics, ensuring proposals explicitly linked to a need are never missed by fuzzy scoring.
 - Walkthrough state → `StageProgress.gatesSatisfied.stage4Walkthrough` stores the caller's focused phase, current need, covered needs, and skipped needs
 - Closure → `Stage4Closure` records the final outcome kind (SHARED_AGREEMENT | NO_SHARED_AGREEMENT)
 - Agreements → `Agreement` rows linked to proposals via `proposalId`

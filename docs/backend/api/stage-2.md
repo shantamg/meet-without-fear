@@ -3,7 +3,7 @@ title: "Stage 2 API: Perspective Stretch"
 sidebar_position: 7
 description: Endpoints for building and exchanging empathy attempts.
 slug: /backend/api/stage-2
-updated: 2026-05-12
+updated: 2026-05-26
 status: living
 ---
 # Stage 2 API: Perspective Stretch
@@ -211,7 +211,7 @@ Besides the Phase-1 / Phase-2 core above, the routes file exposes these controll
 | `POST` | `/api/v1/sessions/:id/empathy/refine` | Run AI refinement on the caller's current draft (used by the validation feedback / coach loop) |
 | `POST` | `/api/v1/sessions/:id/empathy/resubmit` | After refinement, resubmit an updated `EmpathyAttempt` on top of an existing validation request. **Validation**: returns 400 `VALIDATION_ERROR` if the submitted content is identical to the previous attempt after whitespace normalization and case folding. |
 | `POST` | `/api/v1/sessions/:id/empathy/skip-refinement` | Accept or decline the current gap as a "willing-to-accept" difference and advance without further refinement; updates `skippedRefinement`, `willingToAccept`, `skipReason` on the caller's StageProgress |
-| `GET`  | `/api/v1/sessions/:id/empathy/share-suggestion` | Asymmetric reconciler: fetch a suggestion to help the caller close an empathy gap for the partner. The mobile client only surfaces this panel after the caller has consented to share their own empathy attempt (`alreadyConsented === true` on the `EmpathyDraftDTO`). |
+| `GET`  | `/api/v1/sessions/:id/empathy/share-suggestion` | Asymmetric reconciler: fetch a suggestion to help the caller close an empathy gap for the partner. The mobile client only surfaces this panel after the caller has consented to share their own empathy attempt (`alreadyConsented === true` on the `EmpathyDraftDTO`). The backend returns `{ hasSuggestion: false }` immediately if the caller's current stage progress is not Stage 2 — no reconciler work is performed for out-of-stage requests. |
 | `POST` | `/api/v1/sessions/:id/empathy/share-suggestion/respond` | Accept or decline a share suggestion |
 | `POST` | `/api/v1/sessions/:id/empathy/validation-feedback/draft` | Draft feedback via the "Feedback Coach" AI flow |
 | `POST` | `/api/v1/sessions/:id/empathy/validation-feedback/refine` | Iterate on feedback-coach output |
