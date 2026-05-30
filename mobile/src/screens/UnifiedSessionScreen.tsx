@@ -1391,6 +1391,20 @@ export function UnifiedSessionScreen({
     handleConfirmInvitationMessage();
   }, [handleConfirmInvitationMessage]);
 
+  // Recovery timer: if a fire-and-forget AI response is missed via Ably (transient
+  // network blip, timing gap during modal dismiss), refetch messages from the server
+  // after a timeout so the typing indicator doesn't stay stuck forever.
+  useEffect(() => {
+    if (!isAwaitingInvitationFollowUp && !isAwaitingEmpathyValidationFollowUp) return;
+
+    const recoveryTimer = setTimeout(() => {
+      console.log('[UnifiedSessionScreen] Fire-and-forget recovery: refetching messages after timeout');
+      refetchPersistedMessages();
+    }, 10_000);
+
+    return () => clearTimeout(recoveryTimer);
+  }, [isAwaitingInvitationFollowUp, isAwaitingEmpathyValidationFollowUp, refetchPersistedMessages]);
+
   const shouldRunInvitationFollowUp =
     currentStage === Stage.ONBOARDING && !hasInvitationTransitionResponse;
 
