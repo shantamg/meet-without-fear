@@ -3,7 +3,7 @@ title: Infrastructure
 sidebar_position: 1
 description: Slam bot (EC2), Render hosting, Vercel deploys, GitHub automation.
 created: 2026-03-11
-updated: 2026-05-08
+updated: 2026-05-30
 status: living
 ---
 
@@ -67,14 +67,14 @@ The crontab (installed by `deploy.sh`) covers roughly the following categories. 
 | every 1 min | `check-github.sh` | Monitor and enforce GitHub state (falls back to `gh` calls if state scanner is unavailable) |
 | every 1 min | `workspace-dispatcher.sh` | Drive label-based workspace dispatch |
 | every 1 min | `process-queue.sh` | Drain queued work items |
-| every 1 min | `api-budget-monitor.sh` | Track Claude API spend per workspace |
+| every 1 min | `api-budget-monitor.sh` | **[Disabled 2026-05-30]** — Track Claude API spend per workspace |
 | every 5 min | `clear-stale-locks.sh` | Unblock wedged dispatcher runs; auto-clear `waiting-human` markers when a non-bot reply is detected |
 | every 5 min | `check-socket-mode.sh` | Restart socket listener if Slack disconnects |
-| every 10 min | `pipeline-monitor.sh` | Watch PR / workflow state |
+| every 10 min | `pipeline-monitor.sh` | **[Disabled 2026-05-30]** — Watch PR / workflow state (feature pipeline retired) |
 | every 30 min | `thread-tracker.sh` | Reconcile Slack threads with GitHub activity |
-| daily | `sync-labels.sh`, `bot-health-check.sh`, `api-budget-summary.sh --post`, `api-budget-summary.sh --alert`, `prune-journal.sh`, `prune-claude-projects.sh` | Housekeeping + daily health + budget digest (post to `#bot-ops` + over-budget alert) |
+| daily | `sync-labels.sh`, `bot-health-check.sh`, `prune-journal.sh`, `prune-claude-projects.sh` | Housekeeping + daily health |
 | twice daily (08:00 / 20:00) | `sync-staging.sh` | Merge `main` → `bot/staging`; PR accumulated bot work back to `main` |
-| scheduled | `workspace-dispatcher.sh` variants | `bug-fix`, `health-check`, `docs-audit`, `security-audit`, `stale-sweeper`, `pr-reviewer`, `daily-strategy` runs |
+| scheduled | `workspace-dispatcher.sh` variants | `docs-audit` (10:00 daily), `daily-strategy` (14:00 daily). [Cost/noise rework 2026-05-30]: other jobs (bug-fix, health-check, security-audit, stale-sweeper, pr-reviewer, pipeline-monitor) disabled; bug routing now human-gated via `bot:investigate`/`bot:pr` labels |
 | on-demand only | `run-and-publish.sh` | E2E test runs published to dashboard — triggered via `@slam_paws test <scenario>` in Slack or manually via SSH. No scheduled cron (see `scripts/ec2-bot/crontab.txt`). |
 
 Local operator scripts live at `scripts/ec2-bot/`:
@@ -160,3 +160,4 @@ See [deployment](../deployment/index.md) for release procedures and env var refe
 - `.github/workflows/vercel-deploy-website.yml` — Push-to-`main` marketing site deploy: filters to pushes touching `website/**`, deploys to Vercel.
 - `.github/workflows/vercel-deploy-test-dashboard.yml` — Push-to-`main` test dashboard deploy: filters to pushes touching `tools/test-dashboard/**`, deploys Vite SPA + Vercel serverless functions to `mwf-test-dashboard` project. Also supports `workflow_dispatch`.
 - `.github/workflows/ota-update.yml` — Push-to-`main` OTA update: publishes an Expo OTA update to the `production` EAS branch for iOS whenever `mobile/**` or `shared/**` changes on `main`. Also supports `workflow_dispatch` with a custom message. Uses `EXPO_TOKEN` secret. Roll back a bad update with `eas update:delete <group-id> --non-interactive`.
+- **Dependabot** (`.github/dependabot.yml`) — Automated dependency updates for npm and GitHub Actions (replaces pre-launch autonomous security-audit workspace). Configured for weekly updates grouped by ecosystem with a 3-PR limit per group to minimize noise. Adds `dependencies` label to all PRs.
