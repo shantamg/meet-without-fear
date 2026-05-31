@@ -559,6 +559,60 @@ export async function sendPushNotifications(
 }
 
 /**
+ * Sends a diagnostic push notification with fixed content.
+ */
+export async function sendTestPushNotification(userId: string): Promise<boolean> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { pushToken: true },
+    });
+
+    if (!user?.pushToken) {
+      logger.info(`[Push] No push token for test notification user ${userId}`);
+      return false;
+    }
+
+    if (!Expo.isExpoPushToken(user.pushToken)) {
+      logger.warn(`[Push] Invalid test push token format for user ${userId}: ${user.pushToken}`);
+      return false;
+    }
+
+    const expo = getExpo();
+    const tickets = await expo.sendPushNotificationsAsync([
+      {
+        to: user.pushToken,
+        sound: 'default',
+        title: 'Push notification test',
+        body: 'This is your scheduled Meet Without Fear test notification.',
+        data: {
+          screen: 'settings',
+          event: 'test.push_notification',
+        },
+      },
+    ]);
+
+    const ticket = tickets[0];
+    if (ticket.status === 'ok') {
+      logger.info(`[Push] Sent test notification to user ${userId}`);
+      return true;
+    }
+
+    logger.error(`[Push] Failed to send test notification to user ${userId}:`, ticket.message);
+    if (ticket.details?.error === 'DeviceNotRegistered' || ticket.details?.error === 'InvalidCredentials') {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { pushToken: null },
+      });
+    }
+    return false;
+  } catch (error) {
+    logger.error(`[Push] Error sending test notification to user ${userId}:`, error);
+    return false;
+  }
+}
+
+/**
  * Validates if a string is a valid Expo push token.
  *
  * @param token - The token to validate
