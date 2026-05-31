@@ -3,7 +3,7 @@ title: External Integrations
 sidebar_position: 6
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-05-05
+updated: 2026-05-31
 status: living
 ---
 # External Integrations
@@ -95,6 +95,10 @@ status: living
     - Mobile (native): `mobile/src/services/mixpanel.ts`, `mobile/src/services/analytics.ts`, `mobile/src/components/MixpanelInitializer.tsx`
     - Mobile (Expo web build): `mobile/src/services/mixpanel.web.ts` (platform override using `mixpanel-browser`)
     - Website: Google Analytics via Next.js
+  - Analytics Opt-Out:
+    - Function: `setAnalyticsOptOut(optedOut: boolean)` (exported from `mixpanel.web.ts` for Expo web)
+    - Behavior: When opted out (`true`), all analytics operations are suppressed: `track()`, `identify()`, `alias()`, `setUserProperties()`, and `setUserPropertiesOnce()` become no-ops
+    - Integration point: Called from user privacy settings when user opts out of analytics collection
 
 ## Data Storage
 
