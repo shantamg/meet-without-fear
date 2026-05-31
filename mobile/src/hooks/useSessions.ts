@@ -690,6 +690,7 @@ export function useConfirmInvitationMessage(
         const newSession = data.advancedToStage !== undefined
           ? {
               ...existingState.session,
+              status: SessionStatus.INVITED,
               currentStage: data.advancedToStage,
               stageStatus: StageStatus.IN_PROGRESS,
               myProgress: {

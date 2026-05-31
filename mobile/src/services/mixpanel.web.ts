@@ -12,6 +12,7 @@ import mixpanel from 'mixpanel-browser';
 let didInit = false;
 let hasToken = false;
 let identifiedUserId: string | null = null;
+let analyticsOptedOut = false;
 
 const log = (message: string, ...args: unknown[]): void => {
   if (__DEV__) {
@@ -47,6 +48,7 @@ const assertInit = (): void => {
 
 export const track = (eventName: string, properties?: Record<string, unknown>): void => {
   assertInit();
+  if (analyticsOptedOut) return;
   if (__DEV__ && properties) {
     if ('session_id' in properties && !properties.session_id) {
       console.warn(`[Mixpanel DEV] "${eventName}" tracked with falsy session_id`);
@@ -64,6 +66,7 @@ export const track = (eventName: string, properties?: Record<string, unknown>): 
 
 export const identify = (userId: string): void => {
   assertInit();
+  if (analyticsOptedOut) return;
   if (identifiedUserId === userId) return;
   identifiedUserId = userId;
   if (!hasToken) {
@@ -79,6 +82,7 @@ export const identify = (userId: string): void => {
 
 export const alias = async (aliasId: string): Promise<boolean> => {
   assertInit();
+  if (analyticsOptedOut) return false;
   if (typeof aliasId !== 'string' || aliasId.trim().length === 0) {
     console.warn('[Mixpanel Web] alias() skipped: aliasId is not a valid string');
     return false;
@@ -101,6 +105,7 @@ export const alias = async (aliasId: string): Promise<boolean> => {
 
 export const setUserProperties = (properties: Record<string, unknown>): void => {
   assertInit();
+  if (analyticsOptedOut) return;
   if (!hasToken) {
     log('Set User Properties:', properties);
     return;
@@ -114,6 +119,7 @@ export const setUserProperties = (properties: Record<string, unknown>): void => 
 
 export const setUserPropertiesOnce = (properties: Record<string, unknown>): void => {
   assertInit();
+  if (analyticsOptedOut) return;
   if (!hasToken) {
     log('Set User Properties Once:', properties);
     return;
@@ -141,6 +147,10 @@ export const reset = (): void => {
     return;
   }
   mixpanel.reset();
+};
+
+export const setAnalyticsOptOut = (optedOut: boolean): void => {
+  analyticsOptedOut = optedOut;
 };
 
 export const isInitialized = (): boolean => didInit;
