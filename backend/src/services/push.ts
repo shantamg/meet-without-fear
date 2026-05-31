@@ -558,10 +558,15 @@ export async function sendPushNotifications(
   return results.filter(Boolean).length;
 }
 
+export interface TestPushNotificationResult {
+  sent: boolean;
+  reason?: string;
+}
+
 /**
  * Sends a diagnostic push notification with fixed content.
  */
-export async function sendTestPushNotification(userId: string): Promise<boolean> {
+export async function sendTestPushNotification(userId: string): Promise<TestPushNotificationResult> {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -570,12 +575,12 @@ export async function sendTestPushNotification(userId: string): Promise<boolean>
 
     if (!user?.pushToken) {
       logger.info(`[Push] No push token for test notification user ${userId}`);
-      return false;
+      return { sent: false, reason: 'No push token is registered for this account' };
     }
 
     if (!Expo.isExpoPushToken(user.pushToken)) {
       logger.warn(`[Push] Invalid test push token format for user ${userId}: ${user.pushToken}`);
-      return false;
+      return { sent: false, reason: 'The stored push token is not a valid Expo token' };
     }
 
     const expo = getExpo();
@@ -595,7 +600,7 @@ export async function sendTestPushNotification(userId: string): Promise<boolean>
     const ticket = tickets[0];
     if (ticket.status === 'ok') {
       logger.info(`[Push] Sent test notification to user ${userId}`);
-      return true;
+      return { sent: true };
     }
 
     logger.error(`[Push] Failed to send test notification to user ${userId}:`, ticket.message);
@@ -605,10 +610,13 @@ export async function sendTestPushNotification(userId: string): Promise<boolean>
         data: { pushToken: null },
       });
     }
-    return false;
+    return { sent: false, reason: ticket.message };
   } catch (error) {
     logger.error(`[Push] Error sending test notification to user ${userId}:`, error);
-    return false;
+    return {
+      sent: false,
+      reason: error instanceof Error ? error.message : 'Unknown push notification error',
+    };
   }
 }
 

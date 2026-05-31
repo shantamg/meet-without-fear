@@ -90,8 +90,19 @@ export default function SettingsScreen() {
         return;
       }
 
-      await post<{ scheduled: true; delaySeconds: number }>('/auth/test-push-notification');
-      Alert.alert('Test scheduled', 'A push notification will be sent in 10 seconds.');
+      const result = await post<{ sent: boolean; delaySeconds: number; reason?: string }>(
+        '/auth/test-push-notification'
+      );
+
+      if (!result.sent) {
+        Alert.alert(
+          'Test send failed',
+          result.reason || 'Expo did not accept the push notification.'
+        );
+        return;
+      }
+
+      Alert.alert('Test sent', 'Expo accepted the push notification.');
     } catch (error) {
       console.error('Test push notification failed:', error);
       Alert.alert('Test failed', 'Could not schedule the push notification test.');
