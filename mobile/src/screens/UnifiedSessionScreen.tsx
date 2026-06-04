@@ -130,6 +130,7 @@ import {
   trackShareTopicDeclined,
   trackShareTopicDismissed,
   trackShareDraftSent,
+  trackEmpathyValidated,
 } from '../services/analytics';
 import { shouldShowSessionEntryMoodCheck } from '../utils/sessionEntryMoodCheck';
 import { hasNewerDistinctEmpathyStatement, isSameEmpathyAttemptMessage } from '../utils/empathyMessageMatching';
@@ -2939,10 +2940,11 @@ export function UnifiedSessionScreen({
   }, [partnerEmpathyData?.attempt]);
 
   const handleValidationAccurate = useCallback(() => {
+    trackEmpathyValidated(sessionId, 'accurate');
     markLocalEmpathyValidation('accepted');
     setIsAwaitingEmpathyValidationFollowUp(true);
     handleValidatePartnerEmpathy(true);
-  }, [markLocalEmpathyValidation, handleValidatePartnerEmpathy]);
+  }, [sessionId, markLocalEmpathyValidation, handleValidatePartnerEmpathy]);
 
   const handleValidationNotQuite = useCallback(() => {
     setShowAccuracyFeedbackDrawer(true);
@@ -4497,18 +4499,21 @@ export function UnifiedSessionScreen({
           partnerName={partnerName}
           initialStep="feedback"
           onAccurate={() => {
+            trackEmpathyValidated(sessionId, 'accurate');
             markLocalEmpathyValidation('accepted');
             setIsAwaitingEmpathyValidationFollowUp(true);
             handleValidatePartnerEmpathy(true);
             setShowAccuracyFeedbackDrawer(false);
           }}
           onPartiallyAccurate={() => {
+            trackEmpathyValidated(sessionId, 'partial');
             markLocalEmpathyValidation('accepted');
             setIsAwaitingEmpathyValidationFollowUp(true);
             handleValidatePartnerEmpathy(true, 'Some parts are accurate');
             setShowAccuracyFeedbackDrawer(false);
           }}
           onInaccurate={(roughFeedback) => {
+            trackEmpathyValidated(sessionId, 'inaccurate');
             setShowAccuracyFeedbackDrawer(false);
             openFeedbackCoachWithRoughFeedback(roughFeedback);
           }}
