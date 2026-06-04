@@ -15,6 +15,7 @@ import {
   InfiniteData,
 } from '@tanstack/react-query';
 import { get, post, del, ApiClientError } from '../lib/api';
+import { trackInvitationAccepted, trackInvitationDeclined } from '../services/analytics';
 import {
   SessionSummaryDTO,
   SessionDetailDTO,
@@ -288,6 +289,7 @@ export function useAcceptInvitation(
       return post<AcceptInvitationResponse>(`/invitations/${invitationId}/accept`);
     },
     onSuccess: (data) => {
+      trackInvitationAccepted(data.session.id);
       queryClient.invalidateQueries({ queryKey: sessionKeys.lists() });
       queryClient.invalidateQueries({ queryKey: sessionKeys.invitations() });
 
@@ -321,7 +323,8 @@ export function useDeclineInvitation(
         reason,
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, { invitationId }) => {
+      trackInvitationDeclined(invitationId);
       queryClient.invalidateQueries({ queryKey: sessionKeys.invitations() });
     },
     ...options,
