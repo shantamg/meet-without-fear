@@ -7,6 +7,7 @@
  * - GET /sessions/:id/messages - Get conversation history
  */
 
+import crypto from 'crypto';
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { logger } from '../lib/logger';
@@ -1158,7 +1159,8 @@ export async function getConversationHistory(
     // Check for duplicate content (same content, same role, within 1 second)
     const contentMap = new Map<string, typeof messages>();
     messages.forEach(m => {
-      const key = `${m.role}:${m.content.substring(0, 100)}`;
+      const contentHash = crypto.createHash('sha256').update(m.content).digest('hex').substring(0, 12);
+      const key = `${m.role}:${contentHash}`;
       if (!contentMap.has(key)) {
         contentMap.set(key, []);
       }
@@ -2222,13 +2224,13 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
         const needMatch = buffer.match(/<need>([\s\S]*?)<\/need>/i);
         if (needMatch) {
           needTagContent = needMatch[1].trim();
-          logger.info(`[sendMessageStream:${requestId}] [HIDDEN NEED]:`, needTagContent.substring(0, 160) + (needTagContent.length > 160 ? '...' : ''));
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN NEED]: {length: ${needTagContent.length}}`);
         }
 
         const needActionMatch = buffer.match(/<need-action\b[^>]*>[\s\S]*?<\/need-action>|<need-action\b[^>]*\/>/i);
         if (needActionMatch) {
           needActionTagContent = needActionMatch[0].trim();
-          logger.info(`[sendMessageStream:${requestId}] [HIDDEN NEED ACTION]:`, needActionTagContent.substring(0, 160) + (needActionTagContent.length > 160 ? '...' : ''));
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN NEED ACTION]: {length: ${needActionTagContent.length}}`);
         }
 
         const needsMatch = buffer.match(/<needs>([\s\S]*?)<\/needs>/i);
@@ -2246,7 +2248,7 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
         const stage4WalkthroughMatch = buffer.match(/<stage4_walkthrough>([\s\S]*?)<\/stage4_walkthrough>/i);
         if (stage4WalkthroughMatch) {
           stage4WalkthroughTagContent = stage4WalkthroughMatch[1].trim();
-          logger.info(`[sendMessageStream:${requestId}] [HIDDEN STAGE 4 WALKTHROUGH]:`, stage4WalkthroughTagContent.substring(0, 160) + (stage4WalkthroughTagContent.length > 160 ? '...' : ''));
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN STAGE 4 WALKTHROUGH]: {length: ${stage4WalkthroughTagContent.length}}`);
         }
 
         // Extract dispatch tag if present - store for handling after streaming
@@ -2573,7 +2575,7 @@ Write only the user-facing conversational response. Do not include tool JSON, XM
       // =========================================================================
       const dispatchTag = dispatchTagContent || parsed.dispatchTag;
       if (dispatchTag) {
-        logger.info(`[sendMessageStream:${requestId}] Dispatch detected: ${dispatchTag}`);
+        logger.info(`[sendMessageStream:${requestId}] Dispatch detected: {length: ${dispatchTag.length}}`);
         isDispatchMessage = true;
 
         // Build dispatch context with conversation history and session state
