@@ -264,7 +264,7 @@ export async function generatePostShareContinuation(
   try {
     const parsed = extractJsonFromResponse(response) as { response?: string };
     if (parsed && typeof parsed.response === 'string') {
-      logger.debug('Generated continuation', { stage: currentStage, preview: parsed.response.substring(0, 50) });
+      logger.debug('Generated continuation', { stage: currentStage, contentLength: parsed.response.length });
       return parsed.response;
     }
   } catch (error) {
@@ -276,7 +276,7 @@ export async function generatePostShareContinuation(
   const responseMatch = stripped.match(/"response"\s*:\s*"((?:[^"\\]|\\.)*)"/);
   if (responseMatch) {
     const extracted = responseMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
-    logger.debug('Extracted response via regex', { preview: extracted.substring(0, 50) });
+    logger.debug('Extracted response via regex', { contentLength: extracted.length });
     return extracted;
   }
 
